@@ -21,138 +21,119 @@ struct StudyGuideView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                IBColors.navy.ignoresSafeArea()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: IBSpacing.lg) {
-                        headerSection
-                        if isGenerating && guideText.isEmpty { loadingSection }
-                        if !guideText.isEmpty { guideContent }
-                        if let err = error { errorSection(err) }
-                        if !isGenerating && guideText.isEmpty && error == nil { modeSelector }
-                    }.padding(IBSpacing.md).padding(.bottom, 60)
+            List {
+                summarySection
+
+                if isGenerating && guideText.isEmpty {
+                    loadingSection
+                }
+
+                if let err = error {
+                    errorSection(err)
+                }
+
+                if !guideText.isEmpty {
+                    guideContent
+                }
+
+                if !isGenerating && guideText.isEmpty && error == nil {
+                    modeSelector
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
+            .listStyle(.inset)
+            .controlSize(.small)
+            .navigationTitle("Study Guide")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
         }
     }
 
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: IBSpacing.sm) {
-            HStack(spacing: IBSpacing.sm) {
-                PulseOrb(size: 28)
-                Text("ARIA Study Guide").font(IBTypography.title).foregroundColor(IBColors.softWhite)
-            }
+    private var summarySection: some View {
+        Section("Context") {
             if let s = subject {
-                HStack(spacing: IBSpacing.xs) {
-                    Circle().fill(Color(hex: s.accentColorHex)).frame(width: 8, height: 8)
-                    Text(s.name).font(IBTypography.captionBold).foregroundColor(Color(hex: s.accentColorHex))
-                    Text(s.level).font(IBTypography.caption).foregroundColor(IBColors.mutedGray)
-                }
+                LabeledContent("Subject", value: "\(s.name) • \(s.level)")
+                LabeledContent("Topics", value: "\(s.cards.count)")
+                LabeledContent("Due cards", value: "\(s.dueCardsCount)")
             } else {
-                Text("All Subjects").font(IBTypography.caption).foregroundColor(IBColors.mutedGray)
+                Text("Guide will use information across all subjects.")
+                    .foregroundStyle(.secondary)
             }
+
+            LabeledContent("Suggested mode", value: mode.rawValue)
         }
     }
 
     private var loadingSection: some View {
-        GlassCard {
-            VStack(spacing: IBSpacing.md) {
-                ThinkingDots()
-                Text("ARIA is building your \(mode.rawValue)...")
-                    .font(IBTypography.caption).foregroundColor(IBColors.mutedGray)
-                Text("Analysing \(subject?.cards.count ?? 0) cards, session history, and IB difficulty data")
-                    .font(.system(size: 11)).foregroundColor(IBColors.mutedGray.opacity(0.7))
+        Section("Generating") {
+            HStack {
+                ProgressView()
+                Text("ARIA is building your \(mode.rawValue).")
             }
+
+            Text("Analysing \(subject?.cards.count ?? 0) cards, session history, and IB difficulty data.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
     private var guideContent: some View {
-        VStack(alignment: .leading, spacing: IBSpacing.md) {
-            // Render the guide as styled blocks
+        Group {
             ForEach(parseGuideBlocks(guideText), id: \.id) { block in
-                guideBlock(block)
-            }
-
-            // Action buttons
-            HStack(spacing: IBSpacing.md) {
-                Button {
-                    guideText = ""; error = nil
-                } label: {
-                    HStack { Image(systemName: "arrow.counterclockwise"); Text("New Guide") }
-                        .font(IBTypography.captionBold).foregroundColor(IBColors.electricBlue)
-                }
-                Spacer()
-                if isGenerating {
-                    HStack(spacing: 4) {
-                        ProgressView().tint(IBColors.electricBlue).scaleEffect(0.7)
-                        Text("Generating...").font(IBTypography.caption).foregroundColor(IBColors.mutedGray)
-                    }
+                Section(block.title ?? "Guide") {
+                    Text(block.content)
+                        .textSelection(.enabled)
                 }
             }
-        }
-    }
 
-    private func guideBlock(_ block: GuideBlock) -> some View {
-        GlassCard(cornerRadius: 14, padding: IBSpacing.md) {
-            VStack(alignment: .leading, spacing: IBSpacing.sm) {
-                if let title = block.title {
-                    HStack(spacing: IBSpacing.xs) {
-                        Image(systemName: block.icon).foregroundColor(block.iconColor)
-                        Text(title).font(IBTypography.headline).foregroundColor(IBColors.softWhite)
-                    }
+            Section {
+                Button("New Guide") {
+                    guideText = ""
+                    error = nil
                 }
-                Text(block.content).font(IBTypography.body).foregroundColor(IBColors.softWhite.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     private func errorSection(_ err: String) -> some View {
-        GlassCard {
-            HStack {
-                Image(systemName: "exclamationmark.triangle").foregroundColor(IBColors.danger)
-                Text(err).font(IBTypography.caption).foregroundColor(IBColors.danger)
-            }
+        Section("Error") {
+            Text(err)
+                .foregroundStyle(.red)
         }
     }
 
-    // MARK: - Mode Selector
     private var modeSelector: some View {
-        VStack(alignment: .leading, spacing: IBSpacing.md) {
-            Text("Choose guide type").font(IBTypography.headline).foregroundColor(IBColors.softWhite)
+        Section("Choose Guide Type") {
+            guideOption(mode: .preSession,
+                        title: "Pre-Session Brief",
+                        desc: "Quick summary of what to focus on right now.")
 
-            guideOption(mode: .preSession, icon: "bolt.fill", color: IBColors.warning,
-                        title: "Pre-Session Brief", desc: "Quick summary of what to focus on right now — prioritised by weakness × IB weighting")
+            guideOption(mode: .fullGuide,
+                        title: "Full Study Guide",
+                        desc: "Comprehensive topic-by-topic review guide.")
 
-            guideOption(mode: .fullGuide, icon: "book.fill", color: IBColors.electricBlue,
-                        title: "Full Study Guide", desc: "Comprehensive topic-by-topic guide with difficulty ratings, time estimates, and exam tips")
+            guideOption(mode: .weakTopics,
+                        title: "Weak Topics Focus",
+                        desc: "Target the areas with the biggest payoff.")
 
-            guideOption(mode: .weakTopics, icon: "target", color: IBColors.danger,
-                        title: "Weak Topics Focus", desc: "Zero in on your weakest areas — ranked by how much score improvement they'd yield")
-
-            guideOption(mode: .examPrep, icon: "flame.fill", color: IBColors.streakOrange,
-                        title: "Exam Prep Sprint", desc: "High-intensity plan for maximum score gain in minimum time")
+            guideOption(mode: .examPrep,
+                        title: "Exam Prep Sprint",
+                        desc: "A time-efficient exam preparation plan.")
         }
     }
 
-    private func guideOption(mode: GuideMode, icon: String, color: Color, title: String, desc: String) -> some View {
+    private func guideOption(mode: GuideMode, title: String, desc: String) -> some View {
         Button {
             generateGuide(mode: mode)
         } label: {
-            GlassCard(cornerRadius: 14, padding: IBSpacing.md) {
-                HStack(spacing: IBSpacing.md) {
-                    Image(systemName: icon).font(.title2).foregroundColor(color).frame(width: 36)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(IBTypography.captionBold).foregroundColor(IBColors.softWhite)
-                        Text(desc).font(.system(size: 11)).foregroundColor(IBColors.mutedGray).fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right").foregroundColor(IBColors.mutedGray)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(desc)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
