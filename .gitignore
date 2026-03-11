@@ -1,0 +1,12 @@
+# OS
+.DS_Store
+*.swp
+
+# Materials (too large for GitHub - stored locally)
+IBVault/Materials/
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcworkspacedata
