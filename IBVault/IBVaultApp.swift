@@ -42,7 +42,7 @@ struct RootView: View {
                     }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
     }
 
     private func seedAchievements() {

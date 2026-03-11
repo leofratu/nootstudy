@@ -1,0 +1,31 @@
+name: IBVault
+options:
+  bundleIdPrefix: com.nootstudy
+  deploymentTarget:
+    macOS: "14.0"
+targets:
+  IBVault:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: IBVault
+        excludes:
+          - Materials
+      - path: IBVault/Materials
+        type: folder
+    info:
+      path: Info.plist
+      properties:
+        LSMinimumSystemVersion: "14.0"
+    settings:
+      CODE_SIGN_IDENTITY: "-"
+      DEVELOPMENT_TEAM: "" # Allows local build
+      ENABLE_PREVIEWS: YES
+      SWIFT_VERSION: 5.0
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.IBVault
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 NootStudy. All rights reserved."
+      INFOPLIST_KEY_NSPrincipalClass: NSApplication
+      INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
