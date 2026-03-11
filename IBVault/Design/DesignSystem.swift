@@ -5,7 +5,7 @@ import AppKit
 import UIKit
 #endif
 
-// MARK: - Color Palette — Light, native macOS
+// MARK: - Color Palette — macOS native with subtle accents
 struct IBColors {
     // Backgrounds
 #if os(macOS)
@@ -51,7 +51,7 @@ struct IBColors {
     static let danger = Color(hex: "FB7185")
     static let streakOrange = Color(hex: "FF7A45")
 
-    // Subject accents — richer, more saturated
+    // Subject accents
     static let englishColor = Color(hex: "9B72FF")
     static let russianColor = Color(hex: "F472B6")
     static let biologyColor = Color(hex: "22D3A3")
@@ -59,17 +59,17 @@ struct IBColors {
     static let economicsColor = Color(hex: "FBB940")
     static let businessColor = Color(hex: "F06060")
 
-    // Gradients kept intentionally subtle
+    // Gradients — subtle but visible
     static let blueGradient = LinearGradient(
-        colors: [electricBlue, electricBlue],
+        colors: [Color(hex: "5BA4FF"), Color(hex: "7B6CF6")],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
     static let surfaceGradient = LinearGradient(
-        colors: [surface, surface],
+        colors: [Color.white.opacity(0.95), Color(hex: "F0F4FA")],
         startPoint: .top, endPoint: .bottom
     )
     static let meshGlow = RadialGradient(
-        colors: [Color.clear, Color.clear],
+        colors: [Color(hex: "5BA4FF").opacity(0.06), Color.clear],
         center: .topTrailing, startRadius: 0, endRadius: 400
     )
 
@@ -103,7 +103,7 @@ extension Color {
     }
 }
 
-// MARK: - Typography — simpler, more native macOS
+// MARK: - Typography
 struct IBTypography {
     static let largeTitle = Font.system(.largeTitle, design: .default, weight: .bold)
     static let title = Font.system(.title2, design: .default, weight: .semibold)
@@ -114,8 +114,8 @@ struct IBTypography {
     static let caption = Font.system(.caption, design: .default, weight: .regular)
     static let captionBold = Font.system(.caption, design: .default, weight: .semibold)
     static let mono = Font.system(.footnote, design: .monospaced, weight: .medium)
-    static let stat = Font.system(size: 28, weight: .bold, design: .default)
-    static let bigStat = Font.system(size: 42, weight: .heavy, design: .default)
+    static let stat = Font.system(size: 28, weight: .bold, design: .rounded)
+    static let bigStat = Font.system(size: 42, weight: .heavy, design: .rounded)
 }
 
 // MARK: - Spacing
@@ -137,7 +137,7 @@ struct IBRadius {
     static let card: CGFloat = 12
 }
 
-// MARK: - Simple Card Modifier
+// MARK: - Glass Card Modifier
 struct GlassCardModifier: ViewModifier {
     var cornerRadius: CGFloat = IBRadius.card
     var borderOpacity: Double = 0.5
@@ -147,29 +147,45 @@ struct GlassCardModifier: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(IBColors.cardBackground.opacity(backgroundOpacity))
+                    .fill(.background)
+                    .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius)
-                            .stroke(IBColors.cardBorder.opacity(borderOpacity), lineWidth: 1)
+                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
                     )
             )
-            .shadow(color: IBColors.cardInnerShadow, radius: 2, x: 0, y: 1)
     }
 }
 
-// MARK: - Glow Modifier
+// MARK: - Glow Modifier — subtle halo
 struct GlowModifier: ViewModifier {
     var color: Color = IBColors.electricBlue
     var radius: CGFloat = 12
     func body(content: Content) -> some View {
         content
+            .shadow(color: color.opacity(0.2), radius: radius, x: 0, y: 0)
     }
 }
 
 // MARK: - Shimmer Effect
 struct ShimmerModifier: ViewModifier {
+    @State private var phase: CGFloat = 0
     func body(content: Content) -> some View {
         content
+            .overlay(
+                LinearGradient(
+                    colors: [.clear, .white.opacity(0.15), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .offset(x: phase)
+                .onAppear {
+                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                        phase = 300
+                    }
+                }
+            )
+            .clipped()
     }
 }
 
@@ -187,7 +203,7 @@ extension View {
     }
 
     func premiumShadow() -> some View {
-        self.shadow(color: IBColors.cardInnerShadow, radius: 2, x: 0, y: 1)
+        self.shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
     }
 }
 
@@ -212,7 +228,7 @@ struct IBHaptics {
 #endif
 }
 
-// MARK: - Premium Spring Animations
+// MARK: - Animations
 struct IBAnimation {
     static let snappy = Animation.spring(response: 0.3, dampingFraction: 0.7)
     static let smooth = Animation.spring(response: 0.5, dampingFraction: 0.85)

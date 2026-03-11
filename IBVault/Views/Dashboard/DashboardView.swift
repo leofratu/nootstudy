@@ -22,15 +22,36 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                overviewSection
-                assistantSection
-                toolsSection
-                reviewSection
-                subjectsSection
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Hero stats bar
+                    statsHeader
+                        .padding(.horizontal, 24)
+                        .padding(.top, 20)
+                        .padding(.bottom, 8)
+
+                    // ARIA greeting
+                    ariaGreetingCard
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 8)
+
+                    // Review + Subjects grid
+                    HStack(alignment: .top, spacing: 16) {
+                        // Left column: review queue
+                        reviewCard
+                        // Right column: tools
+                        toolsCard
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 8)
+
+                    // Subjects list
+                    subjectsCard
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 24)
+                }
             }
-            .listStyle(.inset)
-            .controlSize(.small)
+            .background(.background)
             .navigationTitle("Dashboard")
             .sheet(isPresented: $showReview) {
                 ReviewSessionView()
@@ -38,15 +59,50 @@ struct DashboardView: View {
         }
     }
 
-    private var overviewSection: some View {
-        Section("Overview") {
-            Text(greeting)
-                .foregroundStyle(.secondary)
+    // MARK: - Stats Header
+    private var statsHeader: some View {
+        HStack(spacing: 0) {
+            StatCard(
+                value: "\(dueCards.count)",
+                label: "Due Today",
+                color: dueCards.isEmpty ? IBColors.success : IBColors.streakOrange,
+                icon: "clock.badge.exclamationmark"
+            )
+            Divider().frame(height: 50)
+            StatCard(
+                value: "\(profile?.totalXP ?? 0)",
+                label: "Total XP",
+                color: IBColors.electricBlue,
+                icon: "star.fill"
+            )
+            Divider().frame(height: 50)
 
-            LabeledContent("Cards due today", value: "\(dueCards.count)")
-            LabeledContent("Total XP", value: "\(profile?.totalXP ?? 0)")
-            LabeledContent("Current streak", value: "\(profile?.currentStreak ?? 0)")
+            // Streak with fire
+            VStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    Text("🔥")
+                        .font(.system(size: 18))
+                    Text("\(profile?.currentStreak ?? 0)")
+                        .font(IBTypography.stat)
+                        .foregroundColor(IBColors.streakOrange)
+                }
+                Text("Day Streak")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+
+            Divider().frame(height: 50)
+            StatCard(
+                value: "\(profile?.rank.emoji ?? "⚡") \(profile?.rank.rawValue ?? "—")",
+                label: "Current Rank",
+                color: IBColors.englishColor,
+                icon: nil
+            )
         }
+        .padding(.vertical, 16)
+        .glassCard()
+        .padding(.vertical, 4)
     }
 
     private var greeting: String {
@@ -56,60 +112,142 @@ struct DashboardView: View {
         return "Good evening"
     }
 
-    private var assistantSection: some View {
-        Section("ARIA") {
-            Text(ariaService.generateGreeting(context: context))
-                .textSelection(.enabled)
-        }
-    }
-
-    private var toolsSection: some View {
-        Section("Tools") {
-            NavigationLink {
-                EffectivenessView()
-            } label: {
-                Label("Effectiveness", systemImage: "chart.line.uptrend.xyaxis")
+    // MARK: - ARIA Greeting
+    private var ariaGreetingCard: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(IBColors.electricBlue.opacity(0.1))
+                    .frame(width: 38, height: 38)
+                Image(systemName: "sparkles")
+                    .foregroundStyle(IBColors.electricBlue)
+                    .font(.system(size: 16, weight: .semibold))
             }
-
-            NavigationLink {
-                ADHDTrackerView()
-            } label: {
-                Label("Medication", systemImage: "pills")
-            }
-
-            NavigationLink {
-                MaterialsLibraryView()
-            } label: {
-                Label("Materials", systemImage: "books.vertical")
-            }
-        }
-    }
-
-    private var reviewSection: some View {
-        Section("Review Queue") {
-            LabeledContent("Ready now", value: "\(dueCards.count)")
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Progress")
-                    .font(.caption)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ARIA")
+                    .font(.caption.bold())
+                    .foregroundStyle(IBColors.electricBlue)
+                Text(ariaService.generateGreeting(context: context))
+                    .font(.callout)
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .glassCard()
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - Review Queue
+    private var reviewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "brain.head.profile")
+                    .foregroundStyle(.tint)
+                Text("Review Queue")
+                    .font(.headline)
+                Spacer()
+                Text("\(dueCards.count) due")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(dueCards.isEmpty ? Color.green.opacity(0.1) : Color.orange.opacity(0.12)))
+                    .foregroundStyle(dueCards.isEmpty ? .green : .orange)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: reviewProgress)
+                    .tint(IBColors.electricBlue)
                 Text("\(Int(reviewProgress * 100))% of cards are currently not due")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             if dueCards.isEmpty {
-                Text("No cards are due right now.")
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("All caught up!")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.callout)
             } else {
-                Button("Start Review") {
+                Button {
                     IBHaptics.medium()
                     showReview = true
+                } label: {
+                    HStack {
+                        Image(systemName: "play.fill")
+                        Text("Start Review")
+                    }
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
         }
+        .padding(16)
+        .glassCard()
+    }
+
+    // MARK: - Tools
+    private var toolsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "wrench.and.screwdriver.fill")
+                    .foregroundStyle(.tint)
+                Text("Tools")
+                    .font(.headline)
+            }
+
+            NavigationLink {
+                EffectivenessView()
+            } label: {
+                toolRow(icon: "chart.line.uptrend.xyaxis", color: .blue, label: "Effectiveness", desc: "Review performance insights")
+            }
+
+            NavigationLink {
+                ADHDTrackerView()
+            } label: {
+                toolRow(icon: "pills.fill", color: .purple, label: "Medication", desc: "ADHD med tracker")
+            }
+
+            NavigationLink {
+                MaterialsLibraryView()
+            } label: {
+                toolRow(icon: "books.vertical.fill", color: .orange, label: "Materials", desc: "Study resources library")
+            }
+
+            NavigationLink {
+                AnalyticsView()
+            } label: {
+                toolRow(icon: "chart.bar.fill", color: .cyan, label: "Analytics", desc: "Weekly stats & retention")
+            }
+        }
+        .padding(16)
+        .glassCard()
+    }
+
+    private func toolRow(icon: String, color: Color, label: String, desc: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.callout.weight(.medium))
+                Text(desc)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
     }
 
     private var reviewProgress: Double {
@@ -118,45 +256,102 @@ struct DashboardView: View {
         return Double(reviewed) / Double(allCards.count)
     }
 
-    private var subjectsSection: some View {
-        Section("Subjects") {
-            if sortedSubjects.isEmpty {
-                Text("No subjects available yet.")
+    // MARK: - Subjects
+    private var subjectsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "books.vertical.fill")
+                    .foregroundStyle(.tint)
+                Text("Subjects")
+                    .font(.headline)
+                Spacer()
+                Text("\(sortedSubjects.count) enrolled")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if sortedSubjects.isEmpty {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 8) {
+                        Image(systemName: "books.vertical")
+                            .font(.largeTitle)
+                            .foregroundStyle(.tertiary)
+                        Text("No subjects available yet.")
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 20)
+                    Spacer()
+                }
             } else {
                 ForEach(sortedSubjects, id: \.id) { subject in
                     NavigationLink(destination: SubjectDetailView(subject: subject)) {
                         DashboardSubjectRow(subject: subject)
                     }
+                    .buttonStyle(.plain)
+                    if subject.id != sortedSubjects.last?.id {
+                        Divider()
+                    }
                 }
             }
         }
+        .padding(16)
+        .glassCard()
     }
 }
 
+// MARK: - Subject Row
 private struct DashboardSubjectRow: View {
     let subject: Subject
 
+    private var color: Color { Color(hex: subject.accentColorHex) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(subject.name)
-                Spacer()
-                Text(subject.level)
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            // Color indicator
+            RoundedRectangle(cornerRadius: 4)
+                .fill(color)
+                .frame(width: 4, height: 40)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(subject.name)
+                        .font(.callout.weight(.medium))
+                    Text(subject.level)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(color.opacity(0.1)))
+                        .foregroundStyle(color)
+                }
+
+                HStack(spacing: 12) {
+                    Label("\(subject.cards.count) topics", systemImage: "square.stack")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if subject.dueCardsCount > 0 {
+                        Label("\(subject.dueCardsCount) due", systemImage: "clock")
+                            .font(.caption.bold())
+                            .foregroundStyle(.orange)
+                    } else {
+                        Label("All clear", systemImage: "checkmark")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+                }
             }
 
-            HStack {
-                Text("\(subject.cards.count) topics")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(subject.dueCardsCount == 0 ? "No cards due" : "\(subject.dueCardsCount) due")
-                    .foregroundStyle(subject.dueCardsCount == 0 ? Color.secondary : Color.orange)
-            }
-            .font(.caption)
+            Spacer()
 
-            ProgressView(value: subject.masteryProgress)
+            ProgressRing(
+                progress: subject.masteryProgress,
+                lineWidth: 4,
+                size: 36,
+                color: color
+            )
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }

@@ -1,0 +1,564 @@
+import SwiftUI
+import SwiftData
+
+struct NewStudySessionView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @Query private var subjects: [Subject]
+
+    @State private var step = 0
+    @State private var selectedSubject: Subject?
+    @State private var selectedTopic = ""
+    @State private var selectedSubtopic = ""
+    @State private var scheduledDate = Date()
+    @State private var durationMinutes = 60
+    @State private var planMarkdown = ""
+    @State private var isGeneratingPlan = false
+    @State private var chatMessages: [(role: String, text: String)] = []
+    @State private var chatInput = ""
+    @State private var isChatting = false
+
+    private let durations = [30, 45, 60, 90, 120]
+
+    private var curriculum: [CurriculumUnit] {
+        guard let subject = selectedSubject else { return [] }
+        return SyllabusSeeder.curriculum(for: subject.name)
+    }
+
+    private var allTopics: [(unit: String, topic: CurriculumTopic)] {
+        curriculum.flatMap { unit in
+            unit.topics.map { (unit: unit.name, topic: $0) }
+        }
+    }
+
+    // Default schedule: today or tomorrow at 4pm
+    private var defaultSchedule: Date {
+        let cal = Calendar.current
+        let now = Date()
+        let hour = cal.component(.hour, from: now)
+        var target = cal.startOfDay(for: now)
+        if hour >= 16 {
+            target = cal.date(byAdding: .day, value: 1, to: target)!
+        }
+        return cal.date(bySettingHour: 16, minute: 0, second: 0, of: target)!
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Step indicator
+                stepIndicator
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+
+                Divider().padding(.top, 12)
+
+                // Content
+                ScrollView {
+                    Group {
+                        switch step {
+                        case 0: subjectPicker
+                        case 1: topicPicker
+                        case 2: schedulePicker
+                        case 3: planView
+                        default: EmptyView()
+                        }
+                    }
+                    .padding(24)
+                }
+
+                Divider()
+
+                // Navigation
+                navigationBar
+                    .padding(16)
+                    .background(.ultraThinMaterial)
+            }
+            .background(.background)
+            .navigationTitle("New Study Session")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .onAppear {
+                scheduledDate = defaultSchedule
+            }
+        }
+        .frame(minWidth: 600, minHeight: 550)
+    }
+
+    // MARK: - Step Indicator
+    private var stepIndicator: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<4, id: \.self) { i in
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(i <= step ? IBColors.electricBlue : Color.secondary.opacity(0.3))
+                        .frame(width: 8, height: 8)
+                    Text(["Subject", "Topic", "Schedule", "Plan"][i])
+                        .font(.caption)
+                        .foregroundStyle(i <= step ? .primary : .secondary)
+                }
+                if i < 3 {
+                    Rectangle()
+                        .fill(i < step ? IBColors.electricBlue : Color.secondary.opacity(0.2))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    // MARK: - Step 0: Subject
+    private var subjectPicker: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("What would you like to study?")
+                .font(.title3.bold())
+            Text("Pick a subject to focus on.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12)], spacing: 12) {
+                ForEach(subjects, id: \.id) { subject in
+                    Button {
+                        selectedSubject = subject
+                        IBHaptics.light()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(Color(hex: subject.accentColorHex))
+                                .frame(width: 10, height: 10)
+                            Text(subject.name)
+                                .font(.callout.weight(.medium))
+                            Spacer()
+                            Text(subject.level)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(selectedSubject?.id == subject.id ? Color(hex: subject.accentColorHex).opacity(0.08) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(selectedSubject?.id == subject.id ? Color(hex: subject.accentColorHex) : Color.secondary.opacity(0.15), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    // MARK: - Step 1: Topic
+    private var topicPicker: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Choose a topic")
+                .font(.title3.bold())
+            if let subject = selectedSubject {
+                Text("From \(subject.name) \(subject.level) curriculum")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(curriculum, id: \.name) { unit in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(unit.name)
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+
+                    ForEach(unit.topics, id: \.name) { topic in
+                        Button {
+                            selectedTopic = topic.name
+                            selectedSubtopic = ""
+                            IBHaptics.light()
+                        } label: {
+                            HStack {
+                                Image(systemName: selectedTopic == topic.name ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(
+                                        selectedTopic == topic.name
+                                            ? AnyShapeStyle(IBColors.electricBlue)
+                                            : AnyShapeStyle(.secondary)
+                                    )
+                                Text(topic.name)
+                                    .font(.callout)
+                                Spacer()
+                                Text("\(topic.subtopics.count) subtopics")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        // Show subtopics if selected
+                        if selectedTopic == topic.name {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(topic.subtopics, id: \.self) { sub in
+                                    Button {
+                                        selectedSubtopic = sub
+                                        IBHaptics.light()
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: selectedSubtopic == sub ? "smallcircle.filled.circle.fill" : "circle")
+                                                .font(.system(size: 10))
+                                                .foregroundStyle(
+                                                    selectedSubtopic == sub
+                                                        ? AnyShapeStyle(IBColors.electricBlue)
+                                                        : AnyShapeStyle(.tertiary)
+                                                )
+                                            Text(sub)
+                                                .font(.caption)
+                                            Spacer()
+                                        }
+                                        .padding(.vertical, 2)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.leading, 28)
+                        }
+
+                        if topic.name != unit.topics.last?.name {
+                            Divider()
+                        }
+                    }
+                }
+                .padding(12)
+                .glassCard()
+            }
+        }
+    }
+
+    // MARK: - Step 2: Schedule
+    private var schedulePicker: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("When do you want to study?")
+                .font(.title3.bold())
+            Text("School finishes at 4pm — we'll default to after school.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 12) {
+                DatePicker("Date & Time", selection: $scheduledDate, displayedComponents: [.date, .hourAndMinute])
+                    .datePickerStyle(.graphical)
+
+                Divider()
+
+                Picker("Duration:", selection: $durationMinutes) {
+                    ForEach(durations, id: \.self) { d in
+                        Text("\(d) minutes").tag(d)
+                    }
+                }
+
+                HStack(spacing: 4) {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                    Text("Session ends at \(endTimeFormatted)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .glassCard()
+        }
+    }
+
+    private var endTimeFormatted: String {
+        let end = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: scheduledDate) ?? scheduledDate
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        return fmt.string(from: end)
+    }
+
+    // MARK: - Step 3: Plan
+    private var planView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if planMarkdown.isEmpty && !isGeneratingPlan {
+                // Generate prompt
+                VStack(spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 30))
+                        .foregroundStyle(IBColors.electricBlue)
+                    Text("Ready to generate your study plan!")
+                        .font(.callout)
+                    Text("ARIA will create a personalised plan for \(selectedTopic) based on your current mastery and IB exam requirements.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 400)
+
+                    Button {
+                        generatePlan()
+                    } label: {
+                        HStack {
+                            Image(systemName: "sparkles")
+                            Text("Generate Plan with ARIA")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+            } else if isGeneratingPlan {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("ARIA is creating your study plan…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+            } else {
+                // Show plan
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "doc.text.fill")
+                            .foregroundStyle(IBColors.electricBlue)
+                        Text("Your Study Plan")
+                            .font(.headline)
+                    }
+
+                    Text(planMarkdown)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .glassCard()
+                }
+
+                // Chat to refine
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .foregroundStyle(IBColors.electricBlue)
+                        Text("Refine with ARIA")
+                            .font(.headline)
+                    }
+
+                    ForEach(chatMessages.indices, id: \.self) { i in
+                        let msg = chatMessages[i]
+                        HStack(alignment: .top) {
+                            if msg.role == "user" { Spacer() }
+                            Text(msg.text)
+                                .font(.callout)
+                                .padding(10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(msg.role == "user" ? IBColors.electricBlue.opacity(0.1) : Color.secondary.opacity(0.05))
+                                )
+                                .frame(maxWidth: 400, alignment: msg.role == "user" ? .trailing : .leading)
+                            if msg.role == "model" { Spacer() }
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        TextField("Ask ARIA to modify the plan…", text: $chatInput)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { sendChatMessage() }
+
+                        Button {
+                            sendChatMessage()
+                        } label: {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.title3)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(chatInput.isEmpty || isChatting)
+                    }
+                }
+                .padding(16)
+                .glassCard()
+            }
+        }
+    }
+
+    // MARK: - Navigation Bar
+    private var navigationBar: some View {
+        HStack {
+            if step > 0 {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { step -= 1 }
+                } label: {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Spacer()
+
+            if step < 3 {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { step += 1 }
+                } label: {
+                    HStack {
+                        Text(step == 2 ? "Generate Plan" : "Next")
+                        Image(systemName: "chevron.right")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    (step == 0 && selectedSubject == nil) ||
+                    (step == 1 && selectedTopic.isEmpty)
+                )
+            } else {
+                Button {
+                    saveSession()
+                } label: {
+                    HStack {
+                        Image(systemName: "checkmark")
+                        Text("Schedule Session")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(planMarkdown.isEmpty)
+            }
+        }
+    }
+
+    // MARK: - Logic
+    private func generatePlan() {
+        guard let subject = selectedSubject else { return }
+        isGeneratingPlan = true
+
+        Task {
+            do {
+                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
+                    throw GeminiError.noAPIKey
+                }
+
+                let subtopicPart = selectedSubtopic.isEmpty ? "" : ", focus on: \(selectedSubtopic)"
+                let prompt = """
+                Create a structured study plan for an IB \(subject.level) \(subject.name) student.
+                Topic: \(selectedTopic)\(subtopicPart)
+                Duration: \(durationMinutes) minutes
+                Scheduled: \(scheduledDate.formatted())
+
+                Create a practical, time-blocked study plan with:
+                1. **Warm-up** (5 min): Quick recall of key concepts
+                2. **Active Learning** (main block): Specific activities with time allocations
+                3. **Practice** (15-20 min): Exam-style questions or applications
+                4. **Review** (5 min): Summary and spaced repetition card review
+                5. **Key objectives**: What the student should be able to do after this session
+
+                Make it IB-exam focused. Include specific concepts to cover, practice question types, and mark scheme hints.
+                Keep it concise and actionable — no fluff.
+                """
+
+                let systemPrompt = """
+                You are ARIA, an IB study planner. Generate a structured, time-blocked study plan. Be specific about what to study and how. Reference IB exam requirements and mark schemes. Keep it practical and concise.
+                """
+
+                let response = try await GeminiService.generateContent(
+                    messages: [GeminiMessage(role: "user", text: prompt)],
+                    systemInstruction: systemPrompt,
+                    apiKey: apiKey
+                )
+
+                ARIAService.recordStudyPlanDraft(
+                    subjectName: subject.name,
+                    topicName: selectedTopic,
+                    subtopicName: selectedSubtopic,
+                    scheduledDate: scheduledDate,
+                    durationMinutes: durationMinutes,
+                    planMarkdown: response
+                )
+
+                await MainActor.run {
+                    planMarkdown = response
+                    isGeneratingPlan = false
+                }
+            } catch {
+                await MainActor.run {
+                    planMarkdown = "Failed to generate plan: \(error.localizedDescription)\n\nTry again or write your own plan."
+                    isGeneratingPlan = false
+                }
+            }
+        }
+    }
+
+    private func sendChatMessage() {
+        guard !chatInput.isEmpty, !isChatting else { return }
+        let userMsg = chatInput
+        chatMessages.append((role: "user", text: userMsg))
+        chatInput = ""
+        isChatting = true
+
+        Task {
+            do {
+                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else { return }
+
+                let prompt = """
+                The current study plan is:
+                \(planMarkdown)
+
+                The user says: \(userMsg)
+
+                Update the study plan based on the user's request. Return the FULL updated plan.
+                """
+
+                let response = try await GeminiService.generateContent(
+                    messages: [GeminiMessage(role: "user", text: prompt)],
+                    systemInstruction: "You are ARIA. Update the study plan based on user feedback. Return the complete updated plan. Be concise.",
+                    apiKey: apiKey
+                )
+
+                ARIAService.recordStudyPlanRevision(
+                    subjectName: selectedSubject?.name ?? "Unknown Subject",
+                    topicName: selectedTopic,
+                    subtopicName: selectedSubtopic,
+                    userRequest: userMsg,
+                    updatedPlanMarkdown: response,
+                    sourceReference: "NewStudySessionView.sendChatMessage"
+                )
+
+                await MainActor.run {
+                    chatMessages.append((role: "model", text: "Plan updated! ✅"))
+                    planMarkdown = response
+                    isChatting = false
+                }
+            } catch {
+                await MainActor.run {
+                    chatMessages.append((role: "model", text: "Error: \(error.localizedDescription)"))
+                    isChatting = false
+                }
+            }
+        }
+    }
+
+    private func saveSession() {
+        guard let subject = selectedSubject else { return }
+
+        let plan = StudyPlan(
+            subjectName: subject.name,
+            topicName: selectedTopic,
+            subtopicName: selectedSubtopic,
+            planMarkdown: planMarkdown,
+            scheduledDate: scheduledDate,
+            durationMinutes: durationMinutes
+        )
+        context.insert(plan)
+
+        // Record to ARIA context
+        ARIAService.recordStudyPlan(
+            subjectName: subject.name,
+            topicName: selectedTopic,
+            subtopicName: selectedSubtopic,
+            scheduledDate: scheduledDate,
+            durationMinutes: durationMinutes,
+            planMarkdown: planMarkdown
+        )
+
+        try? context.save()
+        IBHaptics.success()
+        dismiss()
+    }
+}

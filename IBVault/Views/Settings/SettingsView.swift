@@ -7,7 +7,7 @@ struct SettingsView: View {
     @Query private var subjects: [Subject]
     @State private var apiKey = ""
     @State private var showAPIKey = false
-    @State private var hasKey = KeychainService.hasAPIKey
+    @State private var hasKey = false
     @State private var savedConfirmation = false
     @State private var showReportUpload = false
     @State private var presetApplied = false
@@ -15,13 +15,15 @@ struct SettingsView: View {
     @State private var showBackups = false
     @State private var isBackingUp = false
     @State private var showModelPicker = false
+    @State private var backupCount = 0
+    @State private var latestBackupDate: Date?
 
     // ARIA Settings
     @AppStorage("geminiModel") private var selectedModel = "gemini-2.0-flash"
     @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
     @AppStorage("ariaMaxTokens") private var ariaMaxTokens = 4096
     @AppStorage("ariaAutoCompact") private var ariaAutoCompact = true
-    @AppStorage("ariaContextWindow") private var ariaContextWindow = 20  // messages
+    @AppStorage("ariaContextWindow") private var ariaContextWindow = 20
 
     // Study Settings
     @AppStorage("showMasteryPercent") private var showMasteryPercent = true
@@ -49,23 +51,28 @@ struct SettingsView: View {
             dataSection
             aboutSection
         }
+        .formStyle(.grouped)
         .navigationTitle("Settings")
         .sheet(isPresented: $showReportUpload) { ReportUploadView() }
         .sheet(isPresented: $showModelPicker) { GeminiModelPickerView(selectedModel: $selectedModel) }
+        .onAppear { refreshViewState() }
     }
 
     // MARK: - Student Preset
     private var presetSection: some View {
         Section {
             if let p = profile {
-                HStack {
-                    Image(systemName: "person.fill").foregroundColor(IBColors.electricBlue)
+                HStack(spacing: 10) {
+                    Image(systemName: "person.fill")
+                        .foregroundStyle(.tint)
                     TextField("Your Name", text: Binding(
                         get: { p.studentName }, set: { p.studentName = $0; try? context.save() }
-                    )).foregroundColor(IBColors.softWhite)
+                    ))
                 }
-                HStack {
-                    Image(systemName: "calendar").foregroundColor(IBColors.electricBlue)
+
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar")
+                        .foregroundStyle(.tint)
                     Picker("IB Year", selection: Binding(
                         get: { p.ibYear }, set: { p.ibYear = $0; try? context.save() }
                     )) {
@@ -75,10 +82,11 @@ struct SettingsView: View {
                     }.pickerStyle(.menu)
                 }
 
-                VStack(alignment: .leading, spacing: IBSpacing.sm) {
-                    HStack {
-                        Image(systemName: "gauge.with.dots.needle.67percent").foregroundColor(IBColors.electricBlue)
-                        Text("Study Intensity").foregroundColor(IBColors.softWhite)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "gauge.with.dots.needle.67percent")
+                            .foregroundStyle(.tint)
+                        Text("Study Intensity")
                     }
                     Picker("Intensity", selection: Binding(
                         get: { p.studyIntensity }, set: { p.studyIntensity = $0; try? context.save() }
@@ -88,11 +96,13 @@ struct SettingsView: View {
                         }
                     }.pickerStyle(.segmented)
                     Text("Suggests \(p.studyIntensity.dailyCardSuggestion) cards/day • \(String(format: "%.1f", p.studyIntensity.xpMultiplier))× XP")
-                        .font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
-                HStack {
-                    Image(systemName: "target").foregroundColor(IBColors.electricBlue)
+                HStack(spacing: 10) {
+                    Image(systemName: "target")
+                        .foregroundStyle(.tint)
                     Stepper("Target Score: \(p.targetIBScore)/45", value: Binding(
                         get: { p.targetIBScore }, set: { p.targetIBScore = $0; try? context.save() }
                     ), in: 12...45)
@@ -106,8 +116,8 @@ struct SettingsView: View {
                     HStack {
                         Image(systemName: "wand.and.stars")
                         Text("Apply Preset")
-                        if presetApplied { Spacer(); Text("✓ Applied!").foregroundColor(IBColors.success) }
-                    }.font(IBTypography.captionBold).foregroundColor(IBColors.electricBlue)
+                        if presetApplied { Spacer(); Text("✓ Applied!").foregroundStyle(.green) }
+                    }
                 }
             }
         } header: {
@@ -121,30 +131,36 @@ struct SettingsView: View {
     private var reportSection: some View {
         Section {
             Button { showReportUpload = true } label: {
-                HStack {
-                    Image(systemName: "doc.text.fill").foregroundColor(IBColors.electricBlue)
+                HStack(spacing: 10) {
+                    Image(systemName: "doc.text.fill")
+                        .foregroundStyle(.tint)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Upload Report Card").foregroundColor(IBColors.softWhite)
+                        Text("Upload Report Card")
                         if let date = profile?.reportLastUploaded {
                             Text("Last updated: \(date, style: .relative) ago")
-                                .font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         } else {
                             Text("Enter grades for all subjects at once")
-                                .font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
-                    Image(systemName: "chevron.right").foregroundColor(IBColors.mutedGray)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
                 }
             }
 
             Button { autoRankFromGrades() } label: {
-                HStack {
-                    Image(systemName: "sparkles").foregroundColor(IBColors.warning)
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(.orange)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("AI Auto-Update Rank").foregroundColor(IBColors.softWhite)
+                        Text("AI Auto-Update Rank")
                         Text("ARIA analyses your grades & reviews to set your rank")
-                            .font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -156,18 +172,23 @@ struct SettingsView: View {
     // MARK: - ARIA Configuration
     private var ariaSection: some View {
         Section {
-            // API Key
-            VStack(alignment: .leading, spacing: IBSpacing.sm) {
-                Text("Gemini API Key").font(IBTypography.captionBold).foregroundColor(IBColors.softWhite)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Gemini API Key")
+                    .font(.headline)
                 HStack {
                     if showAPIKey {
-                        TextField("Enter API Key", text: $apiKey).textFieldStyle(.plain).font(IBTypography.mono)
+                        TextField("Enter API Key", text: $apiKey)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
                     } else {
-                        SecureField("Enter API Key", text: $apiKey).textFieldStyle(.plain)
+                        SecureField("Enter API Key", text: $apiKey)
+                            .textFieldStyle(.roundedBorder)
                     }
                     Button { showAPIKey.toggle() } label: {
-                        Image(systemName: showAPIKey ? "eye.slash" : "eye").foregroundColor(IBColors.mutedGray)
+                        Image(systemName: showAPIKey ? "eye.slash" : "eye")
+                            .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(.borderless)
                 }
                 HStack {
                     Button("Save to Keychain") {
@@ -175,37 +196,50 @@ struct SettingsView: View {
                             hasKey = true; savedConfirmation = true; IBHaptics.success()
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { savedConfirmation = false }
                         }
-                    }.font(IBTypography.captionBold).foregroundColor(IBColors.electricBlue)
-                    if savedConfirmation { Text("✓ Saved").font(IBTypography.caption).foregroundColor(IBColors.success) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+
+                    if savedConfirmation {
+                        Text("✓ Saved")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
                     Spacer()
                     if hasKey {
-                        Button("Delete") {
+                        Button("Delete Key", role: .destructive) {
                             _ = KeychainService.deleteAPIKey(); hasKey = false; apiKey = ""; IBHaptics.warning()
-                        }.font(IBTypography.caption).foregroundColor(IBColors.danger)
+                        }
+                        .controlSize(.small)
                     }
                 }
-                Text(hasKey ? "✓ API key stored in Keychain" : "No API key configured — ARIA requires a Gemini API key")
-                    .font(.system(size: 11)).foregroundColor(hasKey ? IBColors.success : IBColors.mutedGray)
+                HStack(spacing: 6) {
+                    Image(systemName: hasKey ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(hasKey ? .green : .orange)
+                        .font(.caption)
+                    Text(hasKey ? "API key stored in Keychain" : "No API key configured — ARIA requires a Gemini API key")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             NavigationLink("ARIA Memory Manager") { ARIAMemoryView() }
 
-            // Context Window Size
             VStack(alignment: .leading, spacing: 4) {
                 Stepper("Context Window: \(ariaContextWindow) messages", value: $ariaContextWindow, in: 5...50, step: 5)
                 Text("How many past messages ARIA remembers per conversation. More = better context, higher token usage.")
-                    .font(.system(size: 10)).foregroundColor(IBColors.mutedGray)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
-            // Auto-compact toggle
             Toggle(isOn: $ariaAutoCompact) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto-Compact Memory").foregroundColor(IBColors.softWhite)
+                    Text("Auto-Compact Memory")
                     Text("Automatically summarise old conversations to save tokens")
-                        .font(.system(size: 10)).foregroundColor(IBColors.mutedGray)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-            }.tint(IBColors.electricBlue)
-
+            }
         } header: {
             Label("ARIA Configuration", systemImage: "brain.head.profile")
         }
@@ -215,39 +249,41 @@ struct SettingsView: View {
     private var geminiModelSection: some View {
         Section {
             Button { showModelPicker = true } label: {
-                HStack {
-                    Image(systemName: "cpu.fill").foregroundColor(IBColors.electricBlue)
+                HStack(spacing: 10) {
+                    Image(systemName: "cpu.fill")
+                        .foregroundStyle(.tint)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("AI Model").foregroundColor(IBColors.softWhite)
+                        Text("AI Model")
                         Text(selectedModel)
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundColor(IBColors.electricBlue)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.tint)
                     }
                     Spacer()
-                    Image(systemName: "chevron.right").foregroundColor(IBColors.mutedGray)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
                 }
             }
 
-            // Temperature
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("Temperature: \(String(format: "%.1f", ariaTemperature))")
-                        .foregroundColor(IBColors.softWhite)
                     Spacer()
                     Button("Reset") { ariaTemperature = 0.7 }
-                        .font(.system(size: 11)).foregroundColor(IBColors.electricBlue)
+                        .font(.caption)
+                        .buttonStyle(.borderless)
                 }
                 Slider(value: $ariaTemperature, in: 0...2, step: 0.1)
-                    .tint(IBColors.electricBlue)
+                    .tint(.accentColor)
                 Text(temperatureDescription)
-                    .font(.system(size: 10)).foregroundColor(IBColors.mutedGray)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
-            // Max Tokens
             VStack(alignment: .leading, spacing: 4) {
                 Stepper("Max Output: \(ariaMaxTokens) tokens", value: $ariaMaxTokens, in: 1024...65536, step: 1024)
                 Text("Maximum length of ARIA's responses. More tokens = longer answers.")
-                    .font(.system(size: 10)).foregroundColor(IBColors.mutedGray)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         } header: {
             Label("Gemini Provider", systemImage: "sparkle")
@@ -276,12 +312,13 @@ struct SettingsView: View {
 
                 HStack {
                     Text("Streak Freezes"); Spacer()
-                    Text("\(p.streakFreezes)").foregroundColor(IBColors.warning)
-                    Image(systemName: "snowflake").foregroundColor(IBColors.electricBlueLight)
+                    Text("\(p.streakFreezes)")
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "snowflake")
+                        .foregroundStyle(.cyan)
                 }
             }
 
-            // Review order
             Picker("Review Order", selection: $reviewOrder) {
                 Text("Spaced (SM-2)").tag("spaced")
                 Text("Weakest First").tag("weakest")
@@ -290,19 +327,16 @@ struct SettingsView: View {
 
             Toggle(isOn: $autoPlayNext) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto-Advance Cards").foregroundColor(IBColors.softWhite)
+                    Text("Auto-Advance Cards")
                     Text("Automatically show next card after rating")
-                        .font(.system(size: 10)).foregroundColor(IBColors.mutedGray)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-            }.tint(IBColors.electricBlue)
+            }
 
-            Toggle(isOn: $showMasteryPercent) {
-                Text("Show Mastery % on Cards").foregroundColor(IBColors.softWhite)
-            }.tint(IBColors.electricBlue)
+            Toggle("Show Mastery % on Cards", isOn: $showMasteryPercent)
 
-            Toggle(isOn: $showDueCountBadge) {
-                Text("Due Count Badge").foregroundColor(IBColors.softWhite)
-            }.tint(IBColors.electricBlue)
+            Toggle("Due Count Badge", isOn: $showDueCountBadge)
         } header: {
             Label("Study", systemImage: "book.fill")
         }
@@ -314,15 +348,15 @@ struct SettingsView: View {
             NavigationLink {
                 ADHDTrackerView()
             } label: {
-                HStack {
-                    Image(systemName: "pills.fill").foregroundColor(IBColors.electricBlue)
+                HStack(spacing: 10) {
+                    Image(systemName: "pills.fill")
+                        .foregroundStyle(.purple)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("ADHD Med Tracker").foregroundColor(IBColors.softWhite)
+                        Text("ADHD Med Tracker")
                         Text("Ritalin IR \(adhdDoseMg)mg • 3× daily")
-                            .font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right").foregroundColor(IBColors.mutedGray)
                 }
             }
 
@@ -339,52 +373,62 @@ struct SettingsView: View {
     private var backupSection: some View {
         Section {
             Button { createBackup() } label: {
-                HStack {
-                    Image(systemName: "arrow.down.doc.fill").foregroundColor(IBColors.electricBlue)
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.down.doc.fill")
+                        .foregroundStyle(.tint)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Create Backup").foregroundColor(IBColors.softWhite)
-                        if let lastDate = BackupService.latestBackupDate {
+                        Text("Create Backup")
+                        if let lastDate = latestBackupDate {
                             Text("Last backup: \(lastDate, style: .relative) ago")
-                                .font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         } else {
                             Text("Save all data to Documents folder")
-                                .font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
-                    if isBackingUp { ProgressView().tint(IBColors.electricBlue) }
+                    if isBackingUp { ProgressView().controlSize(.small) }
                 }
             }.disabled(isBackingUp)
 
             Button { restoreBackup() } label: {
-                HStack {
-                    Image(systemName: "arrow.up.doc.fill").foregroundColor(IBColors.success)
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.up.doc.fill")
+                        .foregroundStyle(.green)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Restore from Backup").foregroundColor(IBColors.softWhite)
+                        Text("Restore from Backup")
                         Text("Restore your most recent backup")
-                            .font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
 
             Button { showBackups = true } label: {
-                HStack {
-                    Image(systemName: "folder.fill").foregroundColor(IBColors.warning)
-                    Text("View All Backups").foregroundColor(IBColors.softWhite)
+                HStack(spacing: 10) {
+                    Image(systemName: "folder.fill")
+                        .foregroundStyle(.orange)
+                    Text("View All Backups")
                     Spacer()
-                    Text("\(BackupService.listBackups().count)")
-                        .font(IBTypography.captionBold).foregroundColor(IBColors.mutedGray)
-                    Image(systemName: "chevron.right").foregroundColor(IBColors.mutedGray)
+                    Text("\(backupCount)")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
                 }
             }
 
             if !backupStatus.isEmpty {
-                Text(backupStatus).font(.system(size: 12)).foregroundColor(IBColors.success)
+                Text(backupStatus)
+                    .font(.caption)
+                    .foregroundStyle(backupStatus.hasPrefix("✓") ? .green : .red)
             }
         } header: {
             Label("Backup & Recovery", systemImage: "externaldrive.fill")
         } footer: {
-            Text("Backups are saved to Files → On My iPhone → IBVault Backups. Each backup contains your profile, subjects, cards, grades, ARIA memory, and study history as JSON files.")
+            Text("Backups are saved to your Documents folder. Each backup contains your profile, subjects, cards, grades, ARIA memory, and study history as JSON files.")
         }
         .sheet(isPresented: $showBackups) { BackupListView() }
     }
@@ -395,6 +439,7 @@ struct SettingsView: View {
             do {
                 let url = try BackupService.exportBackup(context: context)
                 DispatchQueue.main.async {
+                    refreshViewState()
                     isBackingUp = false; backupStatus = "✓ Saved to \(url.lastPathComponent)"; IBHaptics.success()
                 }
             } catch {
@@ -408,15 +453,22 @@ struct SettingsView: View {
     private func restoreBackup() {
         do {
             try BackupService.restoreFromLatest(context: context)
+            refreshViewState()
             backupStatus = "✓ Restored successfully!"; IBHaptics.success()
         } catch {
             backupStatus = "✗ Restore failed: \(error.localizedDescription)"; IBHaptics.error()
         }
     }
 
+    private func refreshViewState() {
+        hasKey = KeychainService.hasAPIKey
+        latestBackupDate = BackupService.latestBackupDate
+        backupCount = BackupService.listBackups().count
+    }
+
     // MARK: - Notifications
     private var notificationSection: some View {
-        Section("Notifications") {
+        Section {
             if let p = profile {
                 DatePicker("Daily Reminder", selection: Binding(
                     get: {
@@ -430,10 +482,13 @@ struct SettingsView: View {
                         NotificationService.scheduleDailyReminder(hour: p.notificationHour, minute: p.notificationMinute, dueCount: 0)
                     }
                 ), displayedComponents: .hourAndMinute)
+
                 Button("Enable Streak Warnings") {
                     NotificationService.scheduleStreakWarning(); IBHaptics.light()
                 }
             }
+        } header: {
+            Label("Notifications", systemImage: "bell.fill")
         }
     }
 
@@ -441,11 +496,12 @@ struct SettingsView: View {
     private var appearanceSection: some View {
         Section {
             Toggle(isOn: $hapticFeedback) {
-                HStack {
-                    Image(systemName: "waveform").foregroundColor(IBColors.electricBlue)
-                    Text("Haptic Feedback").foregroundColor(IBColors.softWhite)
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform")
+                        .foregroundStyle(.tint)
+                    Text("Haptic Feedback")
                 }
-            }.tint(IBColors.electricBlue)
+            }
         } header: {
             Label("Appearance & Feel", systemImage: "paintbrush.fill")
         }
@@ -453,31 +509,27 @@ struct SettingsView: View {
 
     // MARK: - Data
     private var dataSection: some View {
-        Section("Data") {
+        Section {
             Button("Reset All Data", role: .destructive) { }
-                .foregroundColor(IBColors.danger)
+        } header: {
+            Label("Data", systemImage: "trash")
         }
     }
 
     // MARK: - About
     private var aboutSection: some View {
-        Section("About") {
-            HStack { Text("Version"); Spacer(); Text("1.0.0").foregroundColor(IBColors.mutedGray) }
-            HStack { Text("iOS"); Spacer(); Text("17.0+").foregroundColor(IBColors.mutedGray) }
-            HStack {
-                Text("AI Model"); Spacer()
+        Section {
+            LabeledContent("Version", value: "1.0.0")
+            LabeledContent("Platform", value: "macOS 14.0+")
+            LabeledContent("AI Model") {
                 Text(selectedModel)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundColor(IBColors.electricBlue)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tint)
             }
-            HStack {
-                Text("Temperature"); Spacer()
-                Text(String(format: "%.1f", ariaTemperature)).foregroundColor(IBColors.mutedGray)
-            }
-            HStack {
-                Text("Max Tokens"); Spacer()
-                Text("\(ariaMaxTokens)").foregroundColor(IBColors.mutedGray)
-            }
+            LabeledContent("Temperature", value: String(format: "%.1f", ariaTemperature))
+            LabeledContent("Max Tokens", value: "\(ariaMaxTokens)")
+        } header: {
+            Label("About", systemImage: "info.circle")
         }
     }
 
@@ -502,7 +554,6 @@ struct GeminiModelPickerView: View {
     @State private var errorMessage: String?
     @State private var searchText = ""
 
-    // Categorised model groups
     private var filteredModels: [GeminiModel] {
         if searchText.isEmpty { return models }
         return models.filter {
@@ -520,20 +571,20 @@ struct GeminiModelPickerView: View {
             List {
                 if isLoading {
                     Section {
-                        HStack {
-                            ProgressView()
-                            Text("Fetching models...")
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("Fetching models…")
+                                .foregroundStyle(.secondary)
                         }
                     }
                 } else if let error = errorMessage {
                     Section("Error") {
-                        Text(error)
-                            .foregroundStyle(.red)
+                        Text(error).foregroundStyle(.red)
                         Button("Retry") { loadModels() }
                     }
                 } else {
-                    Section("Search") {
-                        TextField("Search models...", text: $searchText)
+                    Section {
+                        TextField("Search models…", text: $searchText)
                     }
 
                     Section("Current Model") {
@@ -544,11 +595,9 @@ struct GeminiModelPickerView: View {
                     if !flashModels.isEmpty {
                         modelSection("Flash Models", subtitle: "Fast & efficient", models: flashModels)
                     }
-
                     if !proModels.isEmpty {
                         modelSection("Pro Models", subtitle: "Most capable", models: proModels)
                     }
-
                     if !otherModels.isEmpty {
                         modelSection("Other Models", subtitle: "Experimental & specialized", models: otherModels)
                     }
@@ -561,12 +610,13 @@ struct GeminiModelPickerView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { loadModels() } label: {
-                        Image(systemName: "arrow.clockwise").foregroundColor(IBColors.electricBlue)
+                        Image(systemName: "arrow.clockwise")
                     }
                 }
             }
             .onAppear { loadModels() }
         }
+        .frame(minWidth: 500, minHeight: 400)
     }
 
     private func modelSection(_ title: String, subtitle: String, models: [GeminiModel]) -> some View {
@@ -638,13 +688,14 @@ struct ReportUploadView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: IBSpacing.lg) {
-                    VStack(alignment: .leading, spacing: IBSpacing.xs) {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text("Upload Report Card")
-                            .font(IBTypography.title).foregroundColor(IBColors.softWhite)
+                            .font(.title2.bold())
                         Text("Enter your latest grades — ARIA will auto-analyse gaps and update your rank")
-                            .font(IBTypography.caption).foregroundColor(IBColors.mutedGray)
-                    }.padding(.horizontal, IBSpacing.md)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal)
 
                     ForEach(subjects, id: \.id) { subject in
                         subjectGradeCard(subject)
@@ -655,34 +706,41 @@ struct ReportUploadView: View {
                             Image(systemName: "checkmark.circle.fill")
                             Text("Save Report & Auto-Update Rank")
                         }
-                        .font(IBTypography.headline).foregroundColor(.white)
-                        .frame(maxWidth: .infinity).padding()
-                        .background(RoundedRectangle(cornerRadius: IBRadius.md).fill(IBColors.blueGradient))
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, IBSpacing.md)
-                    .padding(.bottom, IBSpacing.xxl)
-                }.padding(.top, IBSpacing.md)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .padding(.horizontal)
+                    .padding(.bottom, 24)
+                }
+                .padding(.top)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
             .onAppear { initGrades() }
         }
+        .frame(minWidth: 600, minHeight: 500)
     }
 
     private func subjectGradeCard(_ subject: Subject) -> some View {
         let color = Color(hex: subject.accentColorHex)
         return GroupBox {
-            VStack(alignment: .leading, spacing: IBSpacing.md) {
-                HStack {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
                     Circle().fill(color).frame(width: 10, height: 10)
-                    Text(subject.name).font(IBTypography.headline).foregroundColor(IBColors.softWhite)
-                    Text(subject.level).font(IBTypography.caption).foregroundColor(IBColors.mutedGray)
+                    Text(subject.name).font(.headline)
+                    Text(subject.level)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 ForEach(components, id: \.self) { comp in
                     HStack {
-                        Text(comp).font(IBTypography.caption).foregroundColor(IBColors.mutedGray).frame(width: 70, alignment: .leading)
+                        Text(comp)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 70, alignment: .leading)
                         Spacer()
                         ForEach(1...7, id: \.self) { score in
                             let isSelected = grades[subject.name]?[comp] == score
@@ -691,15 +749,16 @@ struct ReportUploadView: View {
                             } label: {
                                 Text("\(score)")
                                     .font(.system(size: 14, weight: isSelected ? .bold : .regular, design: .rounded))
-                                    .foregroundColor(isSelected ? .white : IBColors.mutedGray)
+                                    .foregroundColor(isSelected ? .white : .secondary)
                                     .frame(width: 28, height: 28)
-                                    .background(Circle().fill(isSelected ? color : IBColors.cardBorder))
+                                    .background(Circle().fill(isSelected ? color : Color.secondary.opacity(0.15)))
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
             }
-        }.padding(.horizontal, IBSpacing.md)
+        }.padding(.horizontal)
     }
 
     private func initGrades() {

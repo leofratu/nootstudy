@@ -51,20 +51,26 @@ enum UserRank: String, Codable, CaseIterable {
     case electron = "Electron"
     case atom = "Atom"
     case molecule = "Molecule"
+    case catalyst = "Catalyst"
     case cell = "Cell"
+    case nucleus = "Nucleus"
     case organism = "Organism"
     case ecosystem = "Ecosystem"
     case universe = "Universe"
+    case supernova = "Supernova"
 
     var emoji: String {
         switch self {
         case .electron: return "⚡"
         case .atom: return "⚛️"
         case .molecule: return "🧬"
+        case .catalyst: return "🔥"
         case .cell: return "🔬"
+        case .nucleus: return "💫"
         case .organism: return "🌱"
         case .ecosystem: return "🌍"
         case .universe: return "🌌"
+        case .supernova: return "✨"
         }
     }
 
@@ -73,10 +79,28 @@ enum UserRank: String, Codable, CaseIterable {
         case .electron: return 0
         case .atom: return 100
         case .molecule: return 300
-        case .cell: return 600
-        case .organism: return 1200
-        case .ecosystem: return 2500
-        case .universe: return 5000
+        case .catalyst: return 500
+        case .cell: return 800
+        case .nucleus: return 1200
+        case .organism: return 1800
+        case .ecosystem: return 2800
+        case .universe: return 4500
+        case .supernova: return 7000
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .electron: return "Just getting started"
+        case .atom: return "Building foundations"
+        case .molecule: return "Connecting concepts"
+        case .catalyst: return "Accelerating learning"
+        case .cell: return "Deep understanding"
+        case .nucleus: return "Core mastery"
+        case .organism: return "Growing expertise"
+        case .ecosystem: return "System thinker"
+        case .universe: return "Knowledge master"
+        case .supernova: return "IB Legend"
         }
     }
 
@@ -201,15 +225,16 @@ final class UserProfile {
 
     /// Auto-update rank from grades (called by ARIA)
     func autoUpdateFromGrades(averageGrade: Double, totalReviews: Int) {
-        // Rank based on grade + consistency combo
-        let gradeScore = averageGrade / 7.0  // 0-1
-        let consistencyScore = min(Double(totalReviews) / 200.0, 1.0)  // 0-1
+        let gradeScore = averageGrade / 7.0
+        let consistencyScore = min(Double(totalReviews) / 200.0, 1.0)
         let combined = (gradeScore * 0.6 + consistencyScore * 0.4)
 
-        if combined >= 0.85 { if rank.xpRequired < UserRank.ecosystem.xpRequired { rank = .ecosystem; totalXP = max(totalXP, 2500) } }
-        else if combined >= 0.7 { if rank.xpRequired < UserRank.organism.xpRequired { rank = .organism; totalXP = max(totalXP, 1200) } }
-        else if combined >= 0.55 { if rank.xpRequired < UserRank.cell.xpRequired { rank = .cell; totalXP = max(totalXP, 600) } }
-        else if combined >= 0.4 { if rank.xpRequired < UserRank.molecule.xpRequired { rank = .molecule; totalXP = max(totalXP, 300) } }
+        if combined >= 0.9 { if rank.xpRequired < UserRank.universe.xpRequired { rank = .universe; totalXP = max(totalXP, 4500) } }
+        else if combined >= 0.8 { if rank.xpRequired < UserRank.ecosystem.xpRequired { rank = .ecosystem; totalXP = max(totalXP, 2800) } }
+        else if combined >= 0.7 { if rank.xpRequired < UserRank.organism.xpRequired { rank = .organism; totalXP = max(totalXP, 1800) } }
+        else if combined >= 0.6 { if rank.xpRequired < UserRank.nucleus.xpRequired { rank = .nucleus; totalXP = max(totalXP, 1200) } }
+        else if combined >= 0.5 { if rank.xpRequired < UserRank.cell.xpRequired { rank = .cell; totalXP = max(totalXP, 800) } }
+        else if combined >= 0.4 { if rank.xpRequired < UserRank.catalyst.xpRequired { rank = .catalyst; totalXP = max(totalXP, 500) } }
     }
 
     init() {

@@ -1,5 +1,7 @@
 import Foundation
+import SwiftData
 import UserNotifications
+import SwiftData
 
 struct NotificationService {
     static func requestPermission() {
@@ -74,5 +76,30 @@ struct NotificationService {
 
     static func cancelAll() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    }
+
+    /// Schedule a notification for due cards grouped by subject
+    static func scheduleDueCardReminders(context: ModelContext) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["due-cards-reminder"])
+
+        let now = Date()
+        let pred = #Predicate<StudyCard> { $0.nextReviewDate <= now }
+        guard let dueCards = try? context.fetch(FetchDescriptor(predicate: pred)),
+              !dueCards.isEmpty else { return }
+
+        // Group by subject
+        let grouped = Dictionary(grouping: dueCards) { $0.subject?.name ?? "Unknown" }
+        let summary = grouped.map { "\($0.value.count) \($0.key)" }.joined(separator: ", ")
+
+        let content = UNMutableNotificationContent()
+        content.title = "📚 Cards Due for Review"
+        content.body = "\(dueCards.count) cards need attention: \(summary)"
+        content.sound = .default
+
+        // Notify in 4 hours
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 4 * 3600, repeats: false)
+        let request = UNNotificationRequest(identifier: "due-cards-reminder", content: content, trigger: trigger)
+        center.add(request)
     }
 }

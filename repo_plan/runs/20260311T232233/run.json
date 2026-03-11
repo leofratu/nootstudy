@@ -1,0 +1,49 @@
+{
+  "task_id": "fix-xcode-build-study-target-sync",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.xcode.target_study_sources",
+      "iface.study_views.shape_style_compat"
+    ],
+    "files": [
+      "IBVault.xcodeproj/project.pbxproj",
+      "IBVault/Views/Study/StudyCalendarView.swift",
+      "IBVault/Views/Study/ActiveStudySessionView.swift",
+      "IBVault/Views/Study/NewStudySessionView.swift"
+    ],
+    "evidence": [
+      "xcodebuild through the active developer directory failed because xcode-select pointed at /Library/Developer/CommandLineTools instead of full Xcode.",
+      "Running /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild exposed the project error: IBVaultApp.swift could not find StudyPlan because StudyPlan.swift and the Study views were missing from the target sources.",
+      "After wiring those files into the project, the remaining failures were SwiftUI foregroundStyle ternaries in the Study views that mixed Color with hierarchical ShapeStyle values."
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.xcode.target_study_sources",
+        "iface.study_views.shape_style_compat"
+      ]
+    }
+  ],
+  "files_changed": [
+    "IBVault.xcodeproj/project.pbxproj",
+    "IBVault/Views/Study/StudyCalendarView.swift",
+    "IBVault/Views/Study/ActiveStudySessionView.swift",
+    "IBVault/Views/Study/NewStudySessionView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json",
+    "repo_plan/runs/20260311T232233/run.json"
+  ],
+  "implemented_interfaces": [
+    "iface.xcode.target_study_sources",
+    "iface.study_views.shape_style_compat"
+  ],
+  "tested_interfaces": [
+    "iface.xcode.target_study_sources",
+    "iface.study_views.shape_style_compat"
+  ]
+}
