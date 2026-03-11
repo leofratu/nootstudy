@@ -6,12 +6,28 @@ struct ADHDTrackerView: View {
     @AppStorage("adhdDose1Min") private var dose1Min = 0
     @AppStorage("adhdDoseInterval") private var doseIntervalMin = 270 // 4h30m in minutes
 
-    @State private var selectedTime: Int? = nil
-    @State private var animateGraph = false
-
     // PK data from user-provided clinical estimates
-    private var pkData: [(time: String, hour: Double, level: Double)] {
+    private var basePKData: [(time: String, hour: Double, level: Double)] {
         doseMg == 20 ? pk20mg : pk10mg
+    }
+
+    private var pkData: [(time: String, hour: Double, level: Double)] {
+        basePKData.map { point in
+            (time: formattedTime(offsetMinutes: Int(point.hour * 60)), hour: point.hour, level: point.level)
+        }
+    }
+
+    private var doseSchedule: [(label: String, time: String, peak: String, peakLevel: String)] {
+        let peakLevels = doseMg == 20 ? ["8.6", "12.8", "14.0"] : ["4.3", "6.4", "7.0"]
+        return (0..<3).map { index in
+            let offset = index * doseIntervalMin
+            return (
+                label: "Dose \(index + 1)",
+                time: formattedTime(offsetMinutes: offset),
+                peak: formattedTime(offsetMinutes: offset + 120),
+                peakLevel: peakLevels[index]
+            )
+        }
     }
 
     // 10 mg IR, 3x daily, 4h30m intervals
@@ -41,19 +57,20 @@ struct ADHDTrackerView: View {
     private var currentStatus: (level: Double, status: String, color: Color) {
         let now = Date()
         let cal = Calendar.current
-        let currentHour = cal.component(.hour, from: now)
-        let currentMin = cal.component(.minute, from: now)
-        let hoursSince9 = Double(currentHour - 9) + Double(currentMin) / 60.0
+        let currentMinutes = cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now)
+        let doseStart = dose1Hour * 60 + dose1Min
+        let adjustedCurrent = currentMinutes < doseStart ? currentMinutes + 24 * 60 : currentMinutes
+        let hoursSinceFirstDose = Double(adjustedCurrent - doseStart) / 60.0
 
-        if hoursSince9 < 0 || hoursSince9 > 15 {
+        if hoursSinceFirstDose < 0 || hoursSinceFirstDose > 15 {
             return (0, "Not active", IBColors.mutedGray)
         }
 
         // Interpolate level
         var level = 0.0
         for i in 0..<pkData.count - 1 {
-            if hoursSince9 >= pkData[i].hour && hoursSince9 <= pkData[i+1].hour {
-                let t = (hoursSince9 - pkData[i].hour) / (pkData[i+1].hour - pkData[i].hour)
+            if hoursSinceFirstDose >= pkData[i].hour && hoursSinceFirstDose <= pkData[i+1].hour {
+                let t = (hoursSinceFirstDose - pkData[i].hour) / (pkData[i+1].hour - pkData[i].hour)
                 level = pkData[i].level + t * (pkData[i+1].level - pkData[i].level)
                 break
             }
@@ -70,327 +87,122 @@ struct ADHDTrackerView: View {
     }
 
     var body: some View {
-        ZStack {
-            IBColors.navy.ignoresSafeArea()
-            IBColors.meshGlow.ignoresSafeArea()
-
-            ScrollView {
-                VStack(spacing: IBSpacing.lg) {
-                    currentStatusCard
-                    dosePicker
-                    concentrationGraph
-                    doseScheduleCard
-                    disclaimerCard
-                }
-                .padding(.horizontal, IBSpacing.md)
-                .padding(.bottom, 100)
-            }
+        List {
+            currentStatusSection
+            doseSection
+            scheduleSection
+            concentrationSection
+            notesSection
         }
-        .navigationTitle("ADHD Med Tracker")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            withAnimation(.easeOut(duration: 1).delay(0.2)) {
-                animateGraph = true
-            }
+        .listStyle(.inset)
+        .controlSize(.small)
+        .navigationTitle("Medication")
+    }
+
+    private var currentStatusSection: some View {
+        Section("Current Status") {
+            LabeledContent("Estimated state", value: currentStatus.status)
+            LabeledContent("Estimated level", value: String(format: "%.1f ng/mL", currentStatus.level))
+            ProgressView(value: min(currentStatus.level / maxLevel, 1.0))
+                .tint(currentStatus.color)
+
+            Text("Reference window starts at \(formattedTime(offsetMinutes: 0)) and runs for roughly 15 hours.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
-    // MARK: - Current Status
-    private var currentStatusCard: some View {
-        GlassCard {
-            VStack(spacing: IBSpacing.md) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Current Status")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundColor(IBColors.secondaryText)
-                            .textCase(.uppercase).tracking(1.2)
-                        Text(currentStatus.status)
-                            .font(IBTypography.title)
-                            .foregroundColor(currentStatus.color)
-                    }
-                    Spacer()
-                    VStack(spacing: 4) {
-                        Text(String(format: "%.1f", currentStatus.level))
-                            .font(.system(size: 36, weight: .heavy, design: .rounded))
-                            .foregroundColor(currentStatus.color)
-                        Text("ng/mL")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(IBColors.mutedGray)
-                    }
-                }
-
-                // Mini status bar
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4).fill(IBColors.cardBorder.opacity(0.3))
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(
-                                LinearGradient(
-                                    colors: [currentStatus.color.opacity(0.5), currentStatus.color],
-                                    startPoint: .leading, endPoint: .trailing
-                                )
-                            )
-                            .frame(width: geo.size.width * min(currentStatus.level / maxLevel, 1.0))
-                            .shadow(color: currentStatus.color.opacity(0.4), radius: 4)
-                    }
-                }
-                .frame(height: 6)
+    private var doseSection: some View {
+        Section("Regimen") {
+            Picker("Dose", selection: $doseMg) {
+                Text("10 mg").tag(10)
+                Text("20 mg").tag(20)
             }
+            .pickerStyle(.segmented)
+
+            LabeledContent("First dose", value: formattedTime(offsetMinutes: 0))
+            LabeledContent("Interval", value: formattedDuration(minutes: doseIntervalMin))
+            LabeledContent("Daily frequency", value: "3 doses")
         }
     }
 
-    // MARK: - Dose Picker
-    private var dosePicker: some View {
-        GlassCard(cornerRadius: IBRadius.md, padding: 12) {
-            HStack(spacing: IBSpacing.md) {
-                Text("Dose:")
-                    .font(IBTypography.captionBold).foregroundColor(IBColors.secondaryText)
-                ForEach([10, 20], id: \.self) { mg in
-                    Button {
-                        withAnimation(IBAnimation.snappy) { doseMg = mg; animateGraph = false }
-                        withAnimation(.easeOut(duration: 0.8).delay(0.1)) { animateGraph = true }
-                        IBHaptics.soft()
-                    } label: {
-                        Text("\(mg) mg")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundColor(doseMg == mg ? .white : IBColors.mutedGray)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .fill(doseMg == mg ? IBColors.blueGradient : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom))
-                                    .overlay(
-                                        Capsule().stroke(doseMg == mg ? Color.clear : IBColors.cardBorder, lineWidth: 0.8)
-                                    )
-                            )
-                            .shadow(color: doseMg == mg ? IBColors.electricBlue.opacity(0.3) : .clear, radius: 6)
-                    }
-                }
-                Spacer()
-                Text("3× daily")
-                    .font(.system(size: 11, weight: .medium)).foregroundColor(IBColors.mutedGray)
-            }
-        }
-    }
-
-    // MARK: - Concentration Graph
-    private var concentrationGraph: some View {
-        VStack(alignment: .leading, spacing: IBSpacing.sm) {
-            HStack {
-                Text("Plasma Methylphenidate")
-                    .font(IBTypography.headline).foregroundColor(IBColors.softWhite)
-                Spacer()
-                if let idx = selectedTime {
-                    Text("\(pkData[idx].time): \(String(format: "%.1f", pkData[idx].level)) ng/mL")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundColor(IBColors.electricBlue)
-                        .transition(.opacity)
-                }
-            }
-
-            GlassCard(cornerRadius: IBRadius.lg, padding: IBSpacing.md) {
-                VStack(spacing: 0) {
-                    // Graph
-                    GeometryReader { geo in
-                        let w = geo.size.width
-                        let h = geo.size.height
-                        let maxY = maxLevel * 1.15
-
-                        ZStack {
-                            // Therapeutic zone
-                            let thMin = h - (therapeuticMin / maxY * h)
-                            let thMax = h - (maxLevel * 0.85 / maxY * h)
-                            Rectangle()
-                                .fill(IBColors.electricBlue.opacity(0.05))
-                                .frame(height: thMin - thMax)
-                                .offset(y: thMax - h / 2 + (thMin - thMax) / 2)
-
-                            // Therapeutic line
-                            Path { path in
-                                let y = h - (therapeuticMin / maxY * h)
-                                path.move(to: CGPoint(x: 0, y: y))
-                                path.addLine(to: CGPoint(x: w, y: y))
-                            }
-                            .stroke(IBColors.success.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-
-                            // Dose markers
-                            ForEach([0, 4.5, 9], id: \.self) { doseHour in
-                                let x = doseHour / 15.0 * w
-                                Path { path in
-                                    path.move(to: CGPoint(x: x, y: 0))
-                                    path.addLine(to: CGPoint(x: x, y: h))
-                                }
-                                .stroke(IBColors.warning.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [3, 5]))
-                            }
-
-                            // Gradient fill under curve
-                            if animateGraph {
-                                Path { path in
-                                    path.move(to: CGPoint(x: 0, y: h))
-                                    for dp in pkData {
-                                        let x = dp.hour / 15.0 * w
-                                        let y = h - (dp.level / maxY * h)
-                                        if dp.hour == 0 { path.addLine(to: CGPoint(x: x, y: y)) }
-                                        else { path.addLine(to: CGPoint(x: x, y: y)) }
-                                    }
-                                    path.addLine(to: CGPoint(x: w, y: h))
-                                    path.closeSubpath()
-                                }
-                                .fill(
-                                    LinearGradient(
-                                        colors: [IBColors.electricBlue.opacity(0.2), IBColors.electricBlue.opacity(0.02)],
-                                        startPoint: .top, endPoint: .bottom
-                                    )
-                                )
-                                .transition(.opacity)
-                            }
-
-                            // Line
-                            if animateGraph {
-                                Path { path in
-                                    for (i, dp) in pkData.enumerated() {
-                                        let x = dp.hour / 15.0 * w
-                                        let y = h - (dp.level / maxY * h)
-                                        if i == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                                        else { path.addLine(to: CGPoint(x: x, y: y)) }
-                                    }
-                                }
-                                .stroke(
-                                    LinearGradient(
-                                        colors: [IBColors.electricBlue, Color(hex: "7C5CFC")],
-                                        startPoint: .leading, endPoint: .trailing
-                                    ),
-                                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
-                                )
-                                .shadow(color: IBColors.electricBlue.opacity(0.4), radius: 4)
-                                .transition(.opacity)
-                            }
-
-                            // Data points
-                            if animateGraph {
-                                ForEach(Array(pkData.enumerated()), id: \.offset) { index, dp in
-                                    let x = dp.hour / 15.0 * w
-                                    let y = h - (dp.level / maxY * h)
-                                    Circle()
-                                        .fill(selectedTime == index ? IBColors.electricBlue : Color(hex: "1A1F3A"))
-                                        .frame(width: selectedTime == index ? 10 : 6, height: selectedTime == index ? 10 : 6)
-                                        .overlay(
-                                            Circle().stroke(IBColors.electricBlue, lineWidth: selectedTime == index ? 2 : 1.5)
-                                        )
-                                        .shadow(color: IBColors.electricBlue.opacity(selectedTime == index ? 0.5 : 0.2), radius: 4)
-                                        .position(x: x, y: y)
-                                        .onTapGesture {
-                                            withAnimation(IBAnimation.snappy) {
-                                                selectedTime = selectedTime == index ? nil : index
-                                            }
-                                            IBHaptics.soft()
-                                        }
-                                }
-                            }
-
-                            // Current time indicator
-                            let now = Date()
-                            let cal = Calendar.current
-                            let hoursSince9 = Double(cal.component(.hour, from: now) - 9) + Double(cal.component(.minute, from: now)) / 60.0
-                            if hoursSince9 >= 0 && hoursSince9 <= 15 {
-                                let nx = hoursSince9 / 15.0 * w
-                                VStack(spacing: 0) {
-                                    Circle().fill(IBColors.danger).frame(width: 6, height: 6)
-                                    Rectangle().fill(IBColors.danger.opacity(0.5)).frame(width: 1, height: h)
-                                }
-                                .position(x: nx, y: h / 2)
-                            }
-                        }
-                    }
-                    .frame(height: 200)
-
-                    // X-axis labels
+    private var scheduleSection: some View {
+        Section("Dose Schedule") {
+            ForEach(doseSchedule.indices, id: \.self) { index in
+                let item = doseSchedule[index]
+                VStack(alignment: .leading, spacing: 2) {
                     HStack {
-                        Text("9 AM").font(.system(size: 9)).foregroundColor(IBColors.mutedGray)
+                        Text(item.label)
                         Spacer()
-                        Text("1:30 PM").font(.system(size: 9)).foregroundColor(IBColors.warning.opacity(0.7))
-                        Spacer()
-                        Text("6 PM").font(.system(size: 9)).foregroundColor(IBColors.warning.opacity(0.7))
-                        Spacer()
-                        Text("12 AM").font(.system(size: 9)).foregroundColor(IBColors.mutedGray)
+                        Text(item.time)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.top, 6)
+                    Text("Peak around \(item.peak) at ~\(item.peakLevel) ng/mL")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-            }
-
-            // Legend
-            HStack(spacing: IBSpacing.md) {
-                legendItem(color: IBColors.electricBlue, text: "Plasma level")
-                legendItem(color: IBColors.success, text: "Therapeutic min")
-                legendItem(color: IBColors.warning, text: "Dose times")
-                legendItem(color: IBColors.danger, text: "Now")
-            }
-            .font(.system(size: 10))
-        }
-    }
-
-    private func legendItem(color: Color, text: String) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(color).frame(width: 5, height: 5)
-            Text(text).foregroundColor(IBColors.mutedGray)
-        }
-    }
-
-    // MARK: - Dose Schedule
-    private var doseScheduleCard: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: IBSpacing.md) {
-                Text("Dose Schedule")
-                    .font(IBTypography.headline).foregroundColor(IBColors.softWhite)
-
-                ForEach(Array(["9:00 AM", "1:30 PM", "6:00 PM"].enumerated()), id: \.offset) { index, time in
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(IBColors.warning.opacity(0.15))
-                                .frame(width: 32, height: 32)
-                            Text("\(index + 1)")
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundColor(IBColors.warning)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Dose \(index + 1) — \(doseMg) mg IR")
-                                .font(IBTypography.captionBold).foregroundColor(IBColors.softWhite)
-                            Text(time)
-                                .font(.system(size: 12)).foregroundColor(IBColors.secondaryText)
-                        }
-                        Spacer()
-                        let peakTime = ["~11 AM", "~3 PM", "~8 PM"][index]
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("Peak: \(peakTime)")
-                                .font(.system(size: 11, weight: .medium)).foregroundColor(IBColors.electricBlue)
-                            let peakLevel = doseMg == 20 ? ["8.6", "12.8", "14.0"][index] : ["4.3", "6.4", "7.0"][index]
-                            Text("\(peakLevel) ng/mL")
-                                .font(.system(size: 10)).foregroundColor(IBColors.mutedGray)
-                        }
-                    }
-                    if index < 2 { PremiumDivider() }
-                }
+                .padding(.vertical, 2)
             }
         }
     }
 
-    // MARK: - Disclaimer
-    private var disclaimerCard: some View {
-        GlassCard(cornerRadius: IBRadius.sm, padding: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "info.circle.fill")
-                    .foregroundColor(IBColors.electricBlueMuted)
-                    .font(.system(size: 14))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Important Notes")
-                        .font(.system(size: 12, weight: .semibold)).foregroundColor(IBColors.secondaryText)
-                    Text("These are evidence-based PK estimates anchored to FDA-reviewed data, NOT direct measurements for your exact schedule. Actual concentrations vary significantly between individuals. 20 mg × 3 = 60 mg/day matches the labelled adult maximum. This tool is for awareness only — always follow your prescriber's guidance.")
-                        .font(.system(size: 11))
-                        .foregroundColor(IBColors.mutedGray)
-                        .lineSpacing(3)
+    private var concentrationSection: some View {
+        Section("Reference Timeline") {
+            LabeledContent("Therapeutic minimum", value: String(format: "%.1f ng/mL", therapeuticMin))
+
+            ForEach(Array(pkData.enumerated()), id: \.offset) { _, point in
+                HStack {
+                    Text(point.time)
+                    Spacer()
+                    Text(String(format: "%.1f ng/mL", point.level))
+                        .foregroundStyle(.secondary)
+                    Text(statusText(for: point.level))
+                        .foregroundStyle(statusColor(for: point.level))
                 }
+                .font(.caption)
             }
         }
+    }
+
+    private var notesSection: some View {
+        Section("Notes") {
+            Text("This is a reference estimate based on the configured dose timing and clinical PK examples. It is not a direct measurement and should not replace medical guidance.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func statusText(for level: Double) -> String {
+        if level >= therapeuticMin * 1.5 { return "Peak" }
+        if level >= therapeuticMin { return "In range" }
+        if level > 0 { return "Wearing off" }
+        return "Inactive"
+    }
+
+    private func statusColor(for level: Double) -> Color {
+        if level >= therapeuticMin * 1.5 { return IBColors.success }
+        if level >= therapeuticMin { return IBColors.electricBlue }
+        if level > 0 { return IBColors.warning }
+        return IBColors.mutedGray
+    }
+
+    private func formattedTime(offsetMinutes: Int) -> String {
+        let total = (dose1Hour * 60 + dose1Min + offsetMinutes + 24 * 60) % (24 * 60)
+        let hour = total / 60
+        let minute = total % 60
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        var components = DateComponents()
+        components.hour = hour
+        components.minute = minute
+        let date = Calendar.current.date(from: components) ?? Date()
+        return formatter.string(from: date)
+    }
+
+    private func formattedDuration(minutes: Int) -> String {
+        let hours = minutes / 60
+        let mins = minutes % 60
+        if mins == 0 { return "\(hours)h" }
+        return "\(hours)h \(mins)m"
     }
 }
