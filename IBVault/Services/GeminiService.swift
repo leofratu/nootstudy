@@ -1,0 +1,260 @@
+import Foundation
+
+struct GeminiMessage {
+    let role: String // "user" or "model"
+    let text: String
+}
+
+struct GeminiService {
+    private static let apiBase = "https://generativelanguage.googleapis.com/v1beta"
+
+    static var selectedModel: String {
+        UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-2.0-flash"
+    }
+
+    private static var modelURL: String {
+        "\(apiBase)/models/\(selectedModel)"
+    }
+
+    // MARK: - List Available Models
+
+    static func listModels(apiKey: String) async throws -> [GeminiModel] {
+        let url = URL(string: "\(apiBase)/models?key=\(apiKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 15
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw GeminiError.invalidResponse
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = json["models"] as? [[String: Any]] else {
+            throw GeminiError.parseError
+        }
+
+        return models.compactMap { dict -> GeminiModel? in
+            guard let name = dict["name"] as? String,
+                  let displayName = dict["displayName"] as? String else { return nil }
+            let desc = dict["description"] as? String ?? ""
+            let inputLimit = dict["inputTokenLimit"] as? Int ?? 0
+            let outputLimit = dict["outputTokenLimit"] as? Int ?? 0
+            let methods = dict["supportedGenerationMethods"] as? [String] ?? []
+            // Only include models that support content generation
+            guard methods.contains("generateContent") else { return nil }
+            // Extract model ID from "models/gemini-2.0-flash" format
+            let modelId = name.hasPrefix("models/") ? String(name.dropFirst(7)) : name
+            return GeminiModel(
+                id: modelId,
+                displayName: displayName,
+                description: desc,
+                inputTokenLimit: inputLimit,
+                outputTokenLimit: outputLimit,
+                supportsStreaming: methods.contains("streamGenerateContent")
+            )
+        }.sorted { $0.displayName < $1.displayName }
+    }
+
+    // MARK: - Non-Streaming
+
+    static func generateContent(
+        messages: [GeminiMessage],
+        systemInstruction: String,
+        apiKey: String
+    ) async throws -> String {
+        let url = URL(string: "\(modelURL):generateContent?key=\(apiKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body = buildRequestBody(messages: messages, systemInstruction: systemInstruction)
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await retryRequest(request: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GeminiError.invalidResponse
+        }
+
+        if httpResponse.statusCode != 200 {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
+        }
+
+        return try parseResponse(data: data)
+    }
+
+    // MARK: - Streaming
+
+    static func streamContent(
+        messages: [GeminiMessage],
+        systemInstruction: String,
+        apiKey: String
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let url = URL(string: "\(modelURL):streamGenerateContent?alt=sse&key=\(apiKey)")!
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                    let body = buildRequestBody(messages: messages, systemInstruction: systemInstruction)
+                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+                    guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                        throw GeminiError.invalidResponse
+                    }
+
+                    var buffer = ""
+                    for try await line in bytes.lines {
+                        if line.hasPrefix("data: ") {
+                            let jsonStr = String(line.dropFirst(6))
+                            if let jsonData = jsonStr.data(using: .utf8),
+                               let text = try? parseStreamChunk(data: jsonData) {
+                                continuation.yield(text)
+                            }
+                        }
+                    }
+
+                    _ = buffer // suppress unused warning
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Request Body Builder
+
+    private static func buildRequestBody(messages: [GeminiMessage], systemInstruction: String) -> [String: Any] {
+        var body: [String: Any] = [:]
+
+        // System instruction
+        if !systemInstruction.isEmpty {
+            body["system_instruction"] = [
+                "parts": [["text": systemInstruction]]
+            ]
+        }
+
+        // Contents (multi-turn)
+        let contents = messages.map { msg -> [String: Any] in
+            [
+                "role": msg.role,
+                "parts": [["text": msg.text]]
+            ]
+        }
+        body["contents"] = contents
+
+        // Generation config (reads from user settings)
+        let temp = UserDefaults.standard.double(forKey: "ariaTemperature")
+        let maxTokens = UserDefaults.standard.integer(forKey: "ariaMaxTokens")
+        body["generationConfig"] = [
+            "temperature": temp > 0 ? temp : 0.7,
+            "topP": 0.95,
+            "maxOutputTokens": maxTokens > 0 ? maxTokens : 4096
+        ]
+
+        return body
+    }
+
+    // MARK: - Response Parsing
+
+    private static func parseResponse(data: Data) throws -> String {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let candidates = json["candidates"] as? [[String: Any]],
+              let first = candidates.first,
+              let content = first["content"] as? [String: Any],
+              let parts = content["parts"] as? [[String: Any]],
+              let text = parts.first?["text"] as? String else {
+            throw GeminiError.parseError
+        }
+        return text
+    }
+
+    private static func parseStreamChunk(data: Data) throws -> String? {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let candidates = json["candidates"] as? [[String: Any]],
+              let first = candidates.first,
+              let content = first["content"] as? [String: Any],
+              let parts = content["parts"] as? [[String: Any]],
+              let text = parts.first?["text"] as? String else {
+            return nil
+        }
+        return text
+    }
+
+    // MARK: - Retry Logic
+
+    private static func retryRequest(request: URLRequest, maxRetries: Int = 3) async throws -> (Data, URLResponse) {
+        var lastError: Error?
+        for attempt in 0..<maxRetries {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse {
+                    if httpResponse.statusCode == 429 || httpResponse.statusCode == 503 {
+                        let delay = pow(2.0, Double(attempt)) + Double.random(in: 0...1)
+                        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        continue
+                    }
+                }
+                return (data, response)
+            } catch {
+                lastError = error
+                let delay = pow(2.0, Double(attempt))
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+        throw lastError ?? GeminiError.maxRetriesExceeded
+    }
+}
+
+// MARK: - Errors
+
+enum GeminiError: Error, LocalizedError {
+    case invalidResponse
+    case apiError(statusCode: Int, message: String)
+    case parseError
+    case noAPIKey
+    case maxRetriesExceeded
+    case offline
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse: return "Invalid response from Gemini API"
+        case .apiError(let code, let msg): return "API Error (\(code)): \(msg)"
+        case .parseError: return "Failed to parse Gemini response"
+        case .noAPIKey: return "No Gemini API key configured"
+        case .maxRetriesExceeded: return "Max retries exceeded"
+        case .offline: return "No network connection"
+        }
+    }
+}
+
+// MARK: - Gemini Model
+
+struct GeminiModel: Identifiable, Hashable {
+    let id: String
+    let displayName: String
+    let description: String
+    let inputTokenLimit: Int
+    let outputTokenLimit: Int
+    let supportsStreaming: Bool
+
+    var shortDescription: String {
+        if description.count > 80 {
+            return String(description.prefix(77)) + "..."
+        }
+        return description
+    }
+
+    var tokenInfo: String {
+        let inK = inputTokenLimit / 1000
+        let outK = outputTokenLimit / 1000
+        return "\(inK > 1000 ? "\(inK/1000)M" : "\(inK)K") in → \(outK > 1000 ? "\(outK/1000)M" : "\(outK)K") out"
+    }
+}
