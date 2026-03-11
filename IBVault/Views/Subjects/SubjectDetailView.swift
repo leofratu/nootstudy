@@ -3,208 +3,110 @@ import SwiftData
 
 struct SubjectDetailView: View {
     let subject: Subject
-    @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
     @State private var showAddGrade = false
     @State private var showReview = false
     @State private var showStudyGuide = false
 
     private var color: Color { Color(hex: subject.accentColorHex) }
+    private var sortedCards: [StudyCard] { subject.cards.sorted { $0.topicName < $1.topicName } }
+    private var sortedGrades: [Grade] { subject.grades.sorted { $0.date > $1.date } }
 
     var body: some View {
-        ZStack {
-            IBColors.navy.ignoresSafeArea()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: IBSpacing.lg) {
-                    headerSection
-                    proficiencyBreakdown
-                    topicsSection
-                    gradesSection
-                }
-                .padding(.horizontal, IBSpacing.md)
-                .padding(.bottom, 100)
-            }
+        List {
+            overviewSection
+            actionsSection
+            proficiencySection
+            topicsSection
+            gradesSection
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                SubjectBadge(name: subject.name, level: subject.level)
-            }
-        }
+        .navigationTitle(subject.name)
         .sheet(isPresented: $showAddGrade) {
             AddGradeView(subject: subject)
         }
         .sheet(isPresented: $showStudyGuide) {
             StudyGuideView(subject: subject, mode: .fullGuide)
         }
-        .fullScreenCover(isPresented: $showReview) {
+        .sheet(isPresented: $showReview) {
             ReviewSessionView(filterSubject: subject)
         }
     }
 
-    // MARK: - Header
-    private var headerSection: some View {
-        GlassCard {
-            VStack(spacing: IBSpacing.md) {
+    private var overviewSection: some View {
+        Section("Overview") {
+            LabeledContent("Level", value: subject.level)
+            LabeledContent("Topics", value: "\(subject.cards.count)")
+            LabeledContent("Cards due now", value: "\(subject.dueCardsCount)")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Mastery")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ProgressView(value: subject.masteryProgress)
+                    .tint(color)
+                Text("\(Int(subject.masteryProgress * 100))% complete")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var actionsSection: some View {
+        Section("Actions") {
+            if subject.dueCardsCount > 0 {
+                Button("Review Due Cards") {
+                    showReview = true
+                    IBHaptics.medium()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Button("Open ARIA Study Guide") {
+                showStudyGuide = true
+                IBHaptics.light()
+            }
+        }
+    }
+
+    private var proficiencySection: some View {
+        Section("Proficiency") {
+            let breakdown = subject.overallProficiencyBreakdown
+            ForEach(ProficiencyLevel.allCases, id: \.self) { level in
                 HStack {
-                    VStack(alignment: .leading) {
-                        Text(subject.name)
-                            .font(IBTypography.title)
-                            .foregroundColor(IBColors.softWhite)
-                        Text("\(subject.level) • \(subject.cards.count) topics")
-                            .font(IBTypography.caption)
-                            .foregroundColor(IBColors.mutedGray)
-                    }
+                    Text(level.emoji)
+                    Text(level.rawValue)
                     Spacer()
-                    ProgressRing(progress: subject.masteryProgress, size: 56, color: color)
-                }
-
-                if subject.dueCardsCount > 0 {
-                    Button {
-                        showReview = true
-                        IBHaptics.medium()
-                    } label: {
-                        HStack {
-                            Image(systemName: "play.fill")
-                            Text("Review \(subject.dueCardsCount) Due Cards")
-                        }
-                        .font(IBTypography.captionBold)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(color))
-                    }
-                }
-
-                // Study Guide button
-                Button {
-                    showStudyGuide = true
-                    IBHaptics.light()
-                } label: {
-                    HStack {
-                        Image(systemName: "sparkles")
-                        Text("ARIA Study Guide")
-                    }
-                    .font(IBTypography.captionBold)
-                    .foregroundColor(color)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.5)))
+                    Text("\(breakdown[level] ?? 0)")
+                        .foregroundStyle(.secondary)
                 }
             }
         }
     }
 
-    // MARK: - Proficiency Breakdown
-    private var proficiencyBreakdown: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: IBSpacing.sm) {
-                Text("Proficiency")
-                    .font(IBTypography.headline)
-                    .foregroundColor(IBColors.softWhite)
-
-                let breakdown = subject.overallProficiencyBreakdown
-                ForEach(ProficiencyLevel.allCases, id: \.self) { level in
-                    HStack {
-                        Text(level.emoji)
-                        Text(level.rawValue)
-                            .font(IBTypography.caption)
-                            .foregroundColor(IBColors.softWhite)
-                        Spacer()
-                        Text("\(breakdown[level] ?? 0)")
-                            .font(IBTypography.captionBold)
-                            .foregroundColor(IBColors.mutedGray)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Topics
     private var topicsSection: some View {
-        VStack(alignment: .leading, spacing: IBSpacing.sm) {
-            Text("Topics")
-                .font(IBTypography.headline)
-                .foregroundColor(IBColors.softWhite)
-
-            ForEach(subject.cards.sorted(by: { $0.topicName < $1.topicName }), id: \.id) { card in
-                GlassCard(cornerRadius: 12, padding: IBSpacing.sm) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(card.topicName)
-                                .font(IBTypography.body)
-                                .foregroundColor(IBColors.softWhite)
-                            HStack(spacing: IBSpacing.sm) {
-                                Text(card.proficiency.emoji)
-                                Text(card.proficiency.rawValue)
-                                    .font(IBTypography.caption)
-                                    .foregroundColor(IBColors.mutedGray)
-                                if card.isDue {
-                                    Text("• Due now")
-                                        .font(IBTypography.captionBold)
-                                        .foregroundColor(IBColors.warning)
-                                } else {
-                                    Text("• Due in \(card.daysUntilDue)d")
-                                        .font(IBTypography.caption)
-                                        .foregroundColor(IBColors.mutedGray)
-                                }
-                            }
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(IBColors.mutedGray)
-                    }
+        Section("Topics") {
+            if sortedCards.isEmpty {
+                Text("No topics available yet.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(sortedCards, id: \.id) { card in
+                    SubjectTopicRow(card: card)
                 }
             }
         }
     }
 
-    // MARK: - Grades
     private var gradesSection: some View {
-        VStack(alignment: .leading, spacing: IBSpacing.sm) {
-            HStack {
-                Text("Grades")
-                    .font(IBTypography.headline)
-                    .foregroundColor(IBColors.softWhite)
-                Spacer()
-                Button {
-                    showAddGrade = true
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundColor(color)
-                }
+        Section("Grades") {
+            Button("Add Grade") {
+                showAddGrade = true
             }
 
-            if subject.grades.isEmpty {
-                GlassCard(cornerRadius: 12) {
-                    Text("No grades recorded yet")
-                        .font(IBTypography.caption)
-                        .foregroundColor(IBColors.mutedGray)
-                        .frame(maxWidth: .infinity)
-                }
+            if sortedGrades.isEmpty {
+                Text("No grades recorded yet.")
+                    .foregroundStyle(.secondary)
             } else {
-                ForEach(subject.grades.sorted(by: { $0.date > $1.date }), id: \.id) { grade in
-                    GlassCard(cornerRadius: 12, padding: IBSpacing.sm) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(grade.component)
-                                    .font(IBTypography.body)
-                                    .foregroundColor(IBColors.softWhite)
-                                if !grade.teacherFeedback.isEmpty {
-                                    Text(grade.teacherFeedback)
-                                        .font(IBTypography.caption)
-                                        .foregroundColor(IBColors.mutedGray)
-                                        .lineLimit(2)
-                                }
-                            }
-                            Spacer()
-                            Text("\(grade.score)")
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
-                                .foregroundColor(gradeColor(grade.score))
-                        }
-                    }
+                ForEach(sortedGrades, id: \.id) { grade in
+                    GradeSummaryRow(grade: grade, color: gradeColor(grade.score))
                 }
             }
         }
@@ -234,42 +136,36 @@ struct AddGradeView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                IBColors.navy.ignoresSafeArea()
-
-                Form {
-                    Section("Component") {
-                        Picker("Component", selection: $component) {
-                            ForEach(components, id: \.self) { c in
-                                Text(c).tag(c)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
-
-                    Section("Score (1-7)") {
-                        Stepper(value: $score, in: 1...7) {
-                            Text("\(score)")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
+            Form {
+                Section("Component") {
+                    Picker("Component", selection: $component) {
+                        ForEach(components, id: \.self) { c in
+                            Text(c).tag(c)
                         }
                     }
+                    .pickerStyle(.menu)
+                }
 
-                    Section("Predicted Grade (1-7)") {
-                        Stepper(value: $predictedGrade, in: 1...7) {
-                            Text("\(predictedGrade)")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
-                        }
-                    }
-
-                    Section("Teacher Feedback") {
-                        TextEditor(text: $feedback)
-                            .frame(minHeight: 60)
+                Section("Score (1-7)") {
+                    Stepper(value: $score, in: 1...7) {
+                        Text("\(score)")
+                            .font(.title)
                     }
                 }
-                .scrollContentBackground(.hidden)
+
+                Section("Predicted Grade (1-7)") {
+                    Stepper(value: $predictedGrade, in: 1...7) {
+                        Text("\(predictedGrade)")
+                            .font(.title)
+                    }
+                }
+
+                Section("Teacher Feedback") {
+                    TextEditor(text: $feedback)
+                        .frame(minHeight: 60)
+                }
             }
             .navigationTitle("Add Grade")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -291,5 +187,52 @@ struct AddGradeView: View {
                 }
             }
         }
+    }
+}
+
+private struct SubjectTopicRow: View {
+    let card: StudyCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(card.topicName)
+            HStack(spacing: 8) {
+                Text(card.proficiency.emoji)
+                Text(card.proficiency.rawValue)
+                    .foregroundStyle(.secondary)
+                Text(card.isDue ? "Due now" : "Due in \(card.daysUntilDue)d")
+                    .foregroundStyle(card.isDue ? Color.orange : Color.secondary)
+            }
+            .font(.caption)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct GradeSummaryRow: View {
+    let grade: Grade
+    let color: Color
+
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(grade.component)
+                Text(grade.date, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if !grade.teacherFeedback.isEmpty {
+                    Text(grade.teacherFeedback)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+            Text("\(grade.score)")
+                .font(.title3.bold())
+                .foregroundColor(color)
+        }
+        .padding(.vertical, 2)
     }
 }
