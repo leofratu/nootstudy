@@ -7,8 +7,8 @@ struct MaterialCategory: Identifiable {
     let name: String
     let icon: String
     let color: Color
-    let subject: String  // maps to IB subject
-    let subfolder: String  // relative path inside Materials
+    let subject: String
+    let subfolder: String
     let description: String
 }
 
@@ -40,7 +40,7 @@ struct MaterialFile: Identifiable, Hashable {
         case "pdf": return IBColors.danger
         case "pptx", "ppt": return IBColors.streakOrange
         case "js": return IBColors.warning
-        default: return IBColors.mutedGray
+        default: return .gray
         }
     }
 }
@@ -83,31 +83,55 @@ struct MaterialsLibraryView: View {
     ]
 
     var body: some View {
-        List {
-            Section("Search") {
-                TextField("Search materials...", text: $searchText)
-            }
+        ScrollView {
+            VStack(spacing: 16) {
+                // Search + summary
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("Search materials…", text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
 
-            Section("Library Summary") {
-                let allFiles = getAllFiles()
-                let totalMB = allFiles.reduce(0) { $0 + $1.size } / 1_000_000
-                LabeledContent("Collections", value: "\(categories.count)")
-                LabeledContent("Files", value: "\(allFiles.count)")
-                LabeledContent("Total Size", value: "\(totalMB) MB")
-            }
+                // Library stats
+                librarySummary
+                    .padding(.horizontal, 24)
 
-            Section("Collections") {
-                ForEach(filteredCategories) { cat in
-                    NavigationLink {
-                        MaterialFolderView(category: cat, previewURL: $previewURL)
-                    } label: {
-                        categoryRow(cat)
+                // Collection grid
+                let columns = [GridItem(.adaptive(minimum: 280, maximum: 400), spacing: 16)]
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(filteredCategories) { cat in
+                        NavigationLink {
+                            MaterialFolderView(category: cat, previewURL: $previewURL)
+                        } label: {
+                            CollectionCard(category: cat, fileCount: getFileCount(for: cat))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
         }
+        .background(.background)
         .navigationTitle("Materials Library")
         .quickLookPreview($previewURL)
+    }
+
+    private var librarySummary: some View {
+        HStack(spacing: 0) {
+            let allFiles = getAllFiles()
+            let totalMB = allFiles.reduce(0) { $0 + $1.size } / 1_000_000
+            StatCard(value: "\(categories.count)", label: "Collections", color: IBColors.electricBlue, icon: "folder.fill")
+            Divider().frame(height: 40)
+            StatCard(value: "\(allFiles.count)", label: "Files", color: .orange, icon: "doc.fill")
+            Divider().frame(height: 40)
+            StatCard(value: "\(totalMB) MB", label: "Total Size", color: .green, icon: "externaldrive.fill")
+        }
+        .padding(.vertical, 12)
+        .glassCard()
     }
 
     private var filteredCategories: [MaterialCategory] {
@@ -116,26 +140,6 @@ struct MaterialsLibraryView: View {
             $0.name.localizedCaseInsensitiveContains(searchText) ||
             $0.subject.localizedCaseInsensitiveContains(searchText) ||
             $0.description.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
-    private func categoryRow(_ cat: MaterialCategory) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Label(cat.name, systemImage: cat.icon)
-                    .foregroundStyle(cat.color)
-                Spacer()
-                Text(cat.subject)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text(cat.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text("\(getFileCount(for: cat)) files")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -159,6 +163,50 @@ struct MaterialsLibraryView: View {
     }
 }
 
+// MARK: - Collection Card
+struct CollectionCard: View {
+    let category: MaterialCategory
+    let fileCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(category.color.opacity(0.12))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: category.icon)
+                        .foregroundStyle(category.color)
+                        .font(.system(size: 16, weight: .semibold))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.name)
+                        .font(.callout.weight(.semibold))
+                    Text(category.subject)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(fileCount)")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(category.color.opacity(0.1)))
+                    .foregroundStyle(category.color)
+            }
+
+            Text(category.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .padding(14)
+        .glassCard()
+        .contentShape(Rectangle())
+    }
+}
+
 // MARK: - Material Folder View
 struct MaterialFolderView: View {
     let category: MaterialCategory
@@ -170,15 +218,9 @@ struct MaterialFolderView: View {
 
     var body: some View {
         List {
-            Section("Summary") {
-                LabeledContent("Subject", value: category.subject)
-                LabeledContent("Folders", value: "\(subfolders.count)")
-                LabeledContent("Files", value: "\(files.count)")
-            }
-
             if files.count + subfolders.count > 5 {
-                Section("Filter") {
-                    TextField("Filter...", text: $searchText)
+                Section {
+                    TextField("Filter…", text: $searchText)
                 }
             }
 
@@ -188,14 +230,15 @@ struct MaterialFolderView: View {
                         NavigationLink {
                             SubfolderView(name: folder.name, url: folder.url, color: category.color, previewURL: $previewURL)
                         } label: {
-                            Label(folder.name, systemImage: "folder")
+                            Label(folder.name, systemImage: "folder.fill")
+                                .foregroundStyle(category.color)
                         }
                     }
                 }
             }
 
             if !filteredFiles.isEmpty {
-                Section("Files") {
+                Section("Files (\(filteredFiles.count))") {
                     ForEach(filteredFiles) { file in
                         fileRow(file)
                     }
@@ -220,16 +263,18 @@ struct MaterialFolderView: View {
         Button {
             previewURL = file.url
         } label: {
-            HStack {
+            HStack(spacing: 10) {
+                Image(systemName: file.icon)
+                    .foregroundStyle(file.iconColor)
+                    .frame(width: 20)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(file.name.replacingOccurrences(of: ".\(file.ext)", with: ""))
+                        .lineLimit(1)
                     Text("\(file.ext.uppercased()) • \(file.sizeFormatted)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: file.icon)
-                    .foregroundStyle(file.iconColor)
             }
         }
     }
@@ -259,28 +304,31 @@ struct SubfolderView: View {
                         NavigationLink {
                             SubfolderView(name: folder.name, url: folder.url, color: color, previewURL: $previewURL)
                         } label: {
-                            Label(folder.name, systemImage: "folder")
+                            Label(folder.name, systemImage: "folder.fill")
+                                .foregroundStyle(color)
                         }
                     }
                 }
             }
 
             if !files.isEmpty {
-                Section("Files") {
+                Section("Files (\(files.count))") {
                     ForEach(files) { file in
                         Button {
                             previewURL = file.url
                         } label: {
-                            HStack {
+                            HStack(spacing: 10) {
+                                Image(systemName: file.icon)
+                                    .foregroundStyle(file.iconColor)
+                                    .frame(width: 20)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(file.name.replacingOccurrences(of: ".\(file.ext)", with: ""))
+                                        .lineLimit(1)
                                     Text("\(file.ext.uppercased()) • \(file.sizeFormatted)")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Image(systemName: file.icon)
-                                    .foregroundStyle(file.iconColor)
                             }
                         }
                     }
@@ -298,11 +346,9 @@ struct SubfolderView: View {
 // MARK: - Helpers
 
 func getMaterialsURL(for subfolder: String) -> URL {
-    // Materials are bundled as a folder reference in macOS, so they sit directly in Resources
     if let url = Bundle.main.url(forResource: subfolder, withExtension: nil, subdirectory: "Materials") {
         return url
     }
-    // Fallback: project directory (dev mode) if Bundle fails
     return URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("Materials/\(subfolder)")
@@ -316,11 +362,7 @@ func listFiles(in url: URL) -> [MaterialFile] {
               values.isRegularFile == true else { continue }
         let name = fileURL.lastPathComponent
         guard !name.hasPrefix(".") else { continue }
-        files.append(MaterialFile(
-            name: name, url: fileURL,
-            size: Int64(values.fileSize ?? 0),
-            ext: fileURL.pathExtension
-        ))
+        files.append(MaterialFile(name: name, url: fileURL, size: Int64(values.fileSize ?? 0), ext: fileURL.pathExtension))
     }
     return files.sorted { $0.name < $1.name }
 }

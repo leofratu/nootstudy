@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "updated_at": "2026-03-11T23:29:44+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, and expand ARIA context specs so more study actions and development updates are persisted.",
+  "nodes": [
+    {
+      "id": "entry.ibvault_app",
+      "kind": "entrypoint",
+      "path": "IBVault/IBVaultApp.swift",
+      "summary": "SwiftUI app entrypoint that registers SwiftData models, including StudyPlan."
+    },
+    {
+      "id": "iface.xcode.target_study_sources",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault.xcodeproj/project.pbxproj"
+      ],
+      "summary": "IBVault target includes StudyPlan.swift and the Study views in the project graph and Sources build phase."
+    },
+    {
+      "id": "iface.study_views.shape_style_compat",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Study/StudyCalendarView.swift",
+        "IBVault/Views/Study/ActiveStudySessionView.swift",
+        "IBVault/Views/Study/NewStudySessionView.swift"
+      ],
+      "summary": "Study views use ShapeStyle-erased foregroundStyle branches so the macOS SwiftUI compiler accepts mixed accent colors and hierarchical styles."
+    },
+    {
+      "id": "dep.design_system",
+      "kind": "dependency_root",
+      "path": "IBVault/Design/DesignSystem.swift",
+      "summary": "Defines IBColors, which are used by the repaired foregroundStyle expressions."
+    },
+    {
+      "id": "iface.aria.spec_logging",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Services/ARIAService.swift",
+        "IBVault/Views/Study/NewStudySessionView.swift",
+        "IBVault/Views/Study/ActiveStudySessionView.swift",
+        "IBVault/Views/Review/ReviewSessionView.swift"
+      ],
+      "summary": "ARIA records study-plan drafts, plan revisions, ARIA chat exchanges, flashcard generation, review completion, and development updates into persistent action specs."
+    }
+  ],
+  "edges": [
+    {
+      "from": "entry.ibvault_app",
+      "to": "iface.xcode.target_study_sources",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study_views.shape_style_compat",
+      "to": "dep.design_system",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.xcode.target_study_sources",
+      "to": "iface.study_views.shape_style_compat",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study_views.shape_style_compat",
+      "to": "iface.aria.spec_logging",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.spec_logging",
+      "to": "entry.ibvault_app",
+      "type": "data_flow"
+    }
+  ],
+  "work_plan": [
+    {
+      "id": "iface.xcode.target_study_sources",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study_views.shape_style_compat",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.spec_logging",
+      "status": "tested"
+    }
+  ]
+}

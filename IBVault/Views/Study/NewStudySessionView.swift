@@ -463,6 +463,15 @@ struct NewStudySessionView: View {
                     apiKey: apiKey
                 )
 
+                ARIAService.recordStudyPlanDraft(
+                    subjectName: subject.name,
+                    topicName: selectedTopic,
+                    subtopicName: selectedSubtopic,
+                    scheduledDate: scheduledDate,
+                    durationMinutes: durationMinutes,
+                    planMarkdown: response
+                )
+
                 await MainActor.run {
                     planMarkdown = response
                     isGeneratingPlan = false
@@ -500,6 +509,15 @@ struct NewStudySessionView: View {
                     messages: [GeminiMessage(role: "user", text: prompt)],
                     systemInstruction: "You are ARIA. Update the study plan based on user feedback. Return the complete updated plan. Be concise.",
                     apiKey: apiKey
+                )
+
+                ARIAService.recordStudyPlanRevision(
+                    subjectName: selectedSubject?.name ?? "Unknown Subject",
+                    topicName: selectedTopic,
+                    subtopicName: selectedSubtopic,
+                    userRequest: userMsg,
+                    updatedPlanMarkdown: response,
+                    sourceReference: "NewStudySessionView.sendChatMessage"
                 )
 
                 await MainActor.run {

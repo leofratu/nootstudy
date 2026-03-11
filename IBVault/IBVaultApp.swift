@@ -16,8 +16,14 @@ struct IBVaultApp: App {
             Achievement.self,
             ARIAMemory.self,
             ChatMessage.self,
-            StudyActivity.self
+            StudyActivity.self,
+            StudySession.self,
+            StudyPlan.self
         ])
+        #if os(macOS)
+        .defaultSize(width: 1100, height: 750)
+        .windowToolbarStyle(.unified)
+        #endif
     }
 }
 
@@ -42,7 +48,6 @@ struct RootView: View {
                     }
             }
         }
-        .preferredColorScheme(.light)
     }
 
     private func seedAchievements() {

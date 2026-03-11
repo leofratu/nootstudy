@@ -13,10 +13,10 @@ struct ARIAMemoryView: View {
             List {
                 addNoteSection
 
-                ForEach(MemoryCategory.allCases, id: \.self) { cat in
-                    let items = memories.filter { $0.category == cat }
+                ForEach(MemoryCategory.allCases, id: \.self) { category in
+                    let items = memories.filter { $0.category == category }
                     if !items.isEmpty {
-                        categorySection(cat, items: items)
+                        categorySection(category, items: items)
                     }
                 }
             }
@@ -43,18 +43,19 @@ struct ARIAMemoryView: View {
 
             Button("Save Note") {
                 guard !newNote.isEmpty else { return }
-                let mem = ARIAMemory(category: selectedCategory, content: newNote)
-                context.insert(mem)
+                let memory = ARIAMemory(category: selectedCategory, content: newNote)
+                context.insert(memory)
                 try? context.save()
                 newNote = ""
                 IBHaptics.success()
             }
             .buttonStyle(.borderedProminent)
+            .disabled(newNote.isEmpty)
         }
     }
 
     private func categorySection(_ category: MemoryCategory, items: [ARIAMemory]) -> some View {
-        Section(category.rawValue) {
+        Section {
             ForEach(items, id: \.id) { item in
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -70,9 +71,13 @@ struct ARIAMemoryView: View {
                         try? context.save()
                     } label: {
                         Image(systemName: "trash")
+                            .font(.caption)
                     }
+                    .buttonStyle(.borderless)
                 }
             }
+        } header: {
+            Label(category.rawValue, systemImage: category.icon)
         }
     }
 }

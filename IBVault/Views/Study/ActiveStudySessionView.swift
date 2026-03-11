@@ -723,6 +723,14 @@ struct ActiveStudySessionView: View {
                     apiKey: apiKey
                 )
 
+                ARIAService.recordARIAChatExchange(
+                    subjectName: plan.subjectName,
+                    topicNames: [plan.topicName, plan.subtopicName].filter { !$0.isEmpty },
+                    userMessage: userMsg,
+                    assistantReply: response,
+                    sourceReference: "ActiveStudySessionView.sendMessage"
+                )
+
                 await MainActor.run {
                     chatMessages.append((role: "model", text: response))
                     isChatting = false
@@ -771,6 +779,14 @@ struct ActiveStudySessionView: View {
                 )
 
                 let parsed = parseFlashcards(response)
+
+                ARIAService.recordFlashcardGeneration(
+                    subjectName: plan.subjectName,
+                    topicName: plan.topicName,
+                    subtopicName: plan.subtopicName,
+                    generatedCards: parsed,
+                    sourceReference: "ActiveStudySessionView.generateFlashcards"
+                )
 
                 await MainActor.run {
                     generatedCards.append(contentsOf: parsed)

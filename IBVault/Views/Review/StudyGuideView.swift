@@ -4,7 +4,7 @@ import SwiftData
 struct StudyGuideView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    let subject: Subject?  // nil = all subjects
+    let subject: Subject?
     let mode: GuideMode
 
     @State private var ariaService = ARIAService()
@@ -21,152 +21,220 @@ struct StudyGuideView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                summarySection
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Context header
+                    contextCard
+                        .padding(.horizontal, 24)
+                        .padding(.top, 20)
 
-                if isGenerating && guideText.isEmpty {
-                    loadingSection
-                }
+                    if isGenerating && guideText.isEmpty {
+                        loadingCard
+                            .padding(.horizontal, 24)
+                    }
 
-                if let err = error {
-                    errorSection(err)
-                }
+                    if let err = error {
+                        errorCard(err)
+                            .padding(.horizontal, 24)
+                    }
 
-                if !guideText.isEmpty {
-                    guideContent
-                }
+                    if !guideText.isEmpty {
+                        guideContent
+                            .padding(.horizontal, 24)
+                    }
 
-                if !isGenerating && guideText.isEmpty && error == nil {
-                    modeSelector
+                    if !isGenerating && guideText.isEmpty && error == nil {
+                        modeSelector
+                            .padding(.horizontal, 24)
+                    }
                 }
+                .padding(.bottom, 24)
             }
-            .listStyle(.inset)
-            .controlSize(.small)
+            .background(.background)
             .navigationTitle("Study Guide")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             }
         }
+        .frame(minWidth: 600, minHeight: 500)
     }
 
-    private var summarySection: some View {
-        Section("Context") {
+    // MARK: - Context
+    private var contextCard: some View {
+        HStack(spacing: 16) {
             if let s = subject {
-                LabeledContent("Subject", value: "\(s.name) • \(s.level)")
-                LabeledContent("Topics", value: "\(s.cards.count)")
-                LabeledContent("Due cards", value: "\(s.dueCardsCount)")
-            } else {
-                Text("Guide will use information across all subjects.")
-                    .foregroundStyle(.secondary)
-            }
-
-            LabeledContent("Suggested mode", value: mode.rawValue)
-        }
-    }
-
-    private var loadingSection: some View {
-        Section("Generating") {
-            HStack {
-                ProgressView()
-                Text("ARIA is building your \(mode.rawValue).")
-            }
-
-            Text("Analysing \(subject?.cards.count ?? 0) cards, session history, and IB difficulty data.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var guideContent: some View {
-        Group {
-            ForEach(parseGuideBlocks(guideText), id: \.id) { block in
-                Section(block.title ?? "Guide") {
-                    Text(block.content)
-                        .textSelection(.enabled)
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: s.accentColorHex).opacity(0.1))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: "book.fill")
+                        .foregroundStyle(Color(hex: s.accentColorHex))
                 }
-            }
 
-            Section {
-                Button("New Guide") {
-                    guideText = ""
-                    error = nil
-                }
-            }
-        }
-    }
-
-    private func errorSection(_ err: String) -> some View {
-        Section("Error") {
-            Text(err)
-                .foregroundStyle(.red)
-        }
-    }
-
-    private var modeSelector: some View {
-        Section("Choose Guide Type") {
-            guideOption(mode: .preSession,
-                        title: "Pre-Session Brief",
-                        desc: "Quick summary of what to focus on right now.")
-
-            guideOption(mode: .fullGuide,
-                        title: "Full Study Guide",
-                        desc: "Comprehensive topic-by-topic review guide.")
-
-            guideOption(mode: .weakTopics,
-                        title: "Weak Topics Focus",
-                        desc: "Target the areas with the biggest payoff.")
-
-            guideOption(mode: .examPrep,
-                        title: "Exam Prep Sprint",
-                        desc: "A time-efficient exam preparation plan.")
-        }
-    }
-
-    private func guideOption(mode: GuideMode, title: String, desc: String) -> some View {
-        Button {
-            generateGuide(mode: mode)
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(desc)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(s.name)
+                            .font(.headline)
+                        Text(s.level)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color(hex: s.accentColorHex).opacity(0.1)))
+                            .foregroundStyle(Color(hex: s.accentColorHex))
+                    }
+                    HStack(spacing: 12) {
+                        Label("\(s.cards.count) topics", systemImage: "square.stack")
+                        Label("\(s.dueCardsCount) due", systemImage: "clock")
+                    }
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(IBColors.electricBlue.opacity(0.1))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: "books.vertical.fill")
+                        .foregroundStyle(IBColors.electricBlue)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("All Subjects")
+                        .font(.headline)
+                    Text("Guide will use info from all enrolled subjects")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(16)
+        .glassCard()
+    }
+
+    private var loadingCard: some View {
+        HStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ARIA is building your \(mode.rawValue)…")
+                    .font(.callout.weight(.medium))
+                Text("Analysing \(subject?.cards.count ?? 0) cards, session history, and IB difficulty data.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .glassCard()
+    }
+
+    private func errorCard(_ err: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(err).foregroundStyle(.red)
+        }
+        .padding(16)
+        .glassCard()
+    }
+
+    // MARK: - Guide Content
+    private var guideContent: some View {
+        VStack(spacing: 12) {
+            ForEach(parseGuideBlocks(guideText), id: \.id) { block in
+                VStack(alignment: .leading, spacing: 10) {
+                    if let title = block.title {
+                        HStack(spacing: 8) {
+                            Image(systemName: block.icon)
+                                .foregroundStyle(block.iconColor)
+                            Text(title)
+                                .font(.headline)
+                        }
+                    }
+                    Text(block.content)
+                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(16)
+                .glassCard()
+            }
+
+            Button {
+                guideText = ""; error = nil
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.counterclockwise")
+                    Text("Generate New Guide")
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
+    }
+
+    // MARK: - Mode Selector
+    private var modeSelector: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose Guide Type")
+                .font(.headline)
+                .padding(.horizontal, 4)
+
+            let modes: [(mode: GuideMode, icon: String, color: Color, title: String, desc: String)] = [
+                (.preSession, "bolt.fill", .orange, "Pre-Session Brief", "Quick summary of what to focus on right now"),
+                (.fullGuide, "book.fill", IBColors.electricBlue, "Full Study Guide", "Comprehensive topic-by-topic review guide"),
+                (.weakTopics, "target", .red, "Weak Topics Focus", "Target the areas with the biggest payoff"),
+                (.examPrep, "flame.fill", .purple, "Exam Prep Sprint", "Maximum score improvement in minimum time")
+            ]
+
+            ForEach(modes, id: \.title) { m in
+                Button { generateGuide(mode: m.mode) } label: {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(m.color.opacity(0.1))
+                                .frame(width: 40, height: 40)
+                            Image(systemName: m.icon)
+                                .foregroundStyle(m.color)
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(m.title)
+                                .font(.callout.weight(.semibold))
+                            Text(m.desc)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.03)))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
     // MARK: - Generate
     private func generateGuide(mode: GuideMode) {
         guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-            error = "No Gemini API key configured. Add one in Settings."
-            return
+            error = "No Gemini API key configured. Add one in Settings."; return
         }
-
         isGenerating = true; error = nil; guideText = ""; IBHaptics.light()
-
         Task {
             do {
                 let prompt = buildGuidePrompt(mode: mode)
                 let systemPrompt = await ariaService.buildSystemPrompt(context: context)
-
                 let stream = GeminiService.streamContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: systemPrompt,
-                    apiKey: apiKey
+                    systemInstruction: systemPrompt, apiKey: apiKey
                 )
-
                 for try await token in stream {
                     await MainActor.run { guideText += token }
                 }
-
                 await MainActor.run { isGenerating = false }
             } catch {
-                await MainActor.run {
-                    self.error = error.localizedDescription
-                    isGenerating = false
-                }
+                await MainActor.run { self.error = error.localizedDescription; isGenerating = false }
             }
         }
     }
@@ -176,12 +244,11 @@ struct StudyGuideView: View {
         if let s = subject {
             let weak = ProficiencyTracker.weakTopics(for: s).map(\.topicName).joined(separator: ", ")
             let mastery = Int(ProficiencyTracker.masteryPercentage(for: s) * 100)
-            let dueCards = s.dueCardsCount
             let gradeInfo = s.grades.sorted { $0.date > $1.date }.prefix(3).map { "\($0.component): \($0.score)/7" }.joined(separator: ", ")
             subjectContext = """
             Subject: \(s.name) \(s.level)
             Mastery: \(mastery)%
-            Due cards: \(dueCards)
+            Due cards: \(s.dueCardsCount)
             Weak topics: \(weak.isEmpty ? "None identified yet" : weak)
             Latest grades: \(gradeInfo.isEmpty ? "No grades recorded" : gradeInfo)
             Total cards: \(s.cards.count)
@@ -259,13 +326,12 @@ func parseGuideBlocks(_ text: String) -> [GuideBlock] {
     var currentContent: [String] = []
 
     let icons = ["bolt.fill", "book.fill", "target", "flame.fill", "lightbulb.fill", "chart.bar.fill", "star.fill", "brain.head.profile"]
-    let colors: [Color] = [IBColors.warning, IBColors.electricBlue, IBColors.danger, IBColors.streakOrange, IBColors.success, IBColors.electricBlueLight, IBColors.warning, IBColors.electricBlue]
+    let colors: [Color] = [.orange, IBColors.electricBlue, .red, IBColors.streakOrange, .green, .cyan, .yellow, .purple]
     var blockIndex = 0
 
     for line in lines {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("##") || trimmed.hasPrefix("**") && trimmed.hasSuffix("**") {
-            // Save previous block
             if !currentContent.isEmpty || currentTitle != nil {
                 let idx = blockIndex % icons.count
                 blocks.append(GuideBlock(title: currentTitle, content: currentContent.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines), icon: icons[idx], iconColor: colors[idx]))
@@ -278,13 +344,11 @@ func parseGuideBlocks(_ text: String) -> [GuideBlock] {
         }
     }
 
-    // Last block
     if !currentContent.isEmpty {
         let idx = blockIndex % icons.count
         blocks.append(GuideBlock(title: currentTitle, content: currentContent.joined(separator: "\n"), icon: icons[idx], iconColor: colors[idx]))
     }
 
-    // If no headers found, return as single block
     if blocks.isEmpty && !text.isEmpty {
         blocks.append(GuideBlock(title: nil, content: text, icon: "book.fill", iconColor: IBColors.electricBlue))
     }

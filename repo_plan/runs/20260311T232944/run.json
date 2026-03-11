@@ -1,0 +1,57 @@
+{
+  "task_id": "expand-aria-spec-logging-and-seed-dev-spec",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.xcode.target_study_sources",
+      "iface.study_views.shape_style_compat",
+      "iface.aria.spec_logging"
+    ],
+    "files": [
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Views/Study/NewStudySessionView.swift",
+      "IBVault/Views/Study/ActiveStudySessionView.swift",
+      "IBVault/Views/Review/ReviewSessionView.swift",
+      "IBVault.xcodeproj/project.pbxproj",
+      "IBVault/Views/Study/StudyCalendarView.swift"
+    ],
+    "evidence": [
+      "ARIA already had a persistent Application Support spec store, but only some study actions were writing into it.",
+      "ReviewSessionView had a recordReviewSession helper available in ARIAService, but the view never called it on completion.",
+      "Plan generation, plan revision, active-session ARIA chat, flashcard generation, and this development repair session all needed explicit spec writes so ARIA could reuse the context later."
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.xcode.target_study_sources",
+        "iface.study_views.shape_style_compat",
+        "iface.aria.spec_logging"
+      ]
+    }
+  ],
+  "files_changed": [
+    "IBVault.xcodeproj/project.pbxproj",
+    "IBVault/Services/ARIAService.swift",
+    "IBVault/Views/Study/StudyCalendarView.swift",
+    "IBVault/Views/Study/ActiveStudySessionView.swift",
+    "IBVault/Views/Study/NewStudySessionView.swift",
+    "IBVault/Views/Review/ReviewSessionView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json",
+    "repo_plan/runs/20260311T232944/run.json"
+  ],
+  "implemented_interfaces": [
+    "iface.xcode.target_study_sources",
+    "iface.study_views.shape_style_compat",
+    "iface.aria.spec_logging"
+  ],
+  "tested_interfaces": [
+    "iface.xcode.target_study_sources",
+    "iface.study_views.shape_style_compat",
+    "iface.aria.spec_logging"
+  ]
+}
