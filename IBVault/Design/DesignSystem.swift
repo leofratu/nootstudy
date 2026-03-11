@@ -1,13 +1,26 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
-// MARK: - Color Palette — Premium macOS
+// MARK: - Color Palette — Light, native macOS
 struct IBColors {
-    // Backgrounds — rich, layered depth
-    static let navy = Color(hex: "0C1021")
-    static let deepNavy = Color(hex: "070A14")
-    static let surface = Color(hex: "12162B")         // Raised surface
-    static let surfaceHover = Color(hex: "181D38")     // Hover state
-    static let overlay = Color(hex: "1A1F3A")          // Modal/sheet overlay
+    // Backgrounds
+#if os(macOS)
+    static let navy = Color(nsColor: .windowBackgroundColor)
+    static let deepNavy = Color(nsColor: .underPageBackgroundColor)
+    static let surface = Color(nsColor: .controlBackgroundColor)
+    static let surfaceHover = Color(nsColor: .controlBackgroundColor)
+    static let overlay = Color(nsColor: .textBackgroundColor)
+#else
+    static let navy = Color(hex: "F6F7FB")
+    static let deepNavy = Color(hex: "EFF2F7")
+    static let surface = Color.white
+    static let surfaceHover = Color(hex: "F2F4F8")
+    static let overlay = Color(hex: "FBFCFE")
+#endif
 
     // Accents
     static let electricBlue = Color(hex: "5BA4FF")
@@ -15,15 +28,22 @@ struct IBColors {
     static let electricBlueMuted = Color(hex: "3A6CA8")
 
     // Text
-    static let softWhite = Color(hex: "EDF0F7")
-    static let secondaryText = Color(hex: "A0A8C4")
-    static let mutedGray = Color(hex: "5E6687")
-    static let tertiaryText = Color(hex: "3D4466")
+#if os(macOS)
+    static let softWhite = Color(nsColor: .labelColor)
+    static let secondaryText = Color(nsColor: .secondaryLabelColor)
+    static let mutedGray = Color(nsColor: .secondaryLabelColor)
+    static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
+#else
+    static let softWhite = Color(hex: "1C2434")
+    static let secondaryText = Color(hex: "556070")
+    static let mutedGray = Color(hex: "6E7785")
+    static let tertiaryText = Color(hex: "8A93A3")
+#endif
 
-    // Cards — macOS vibrancy
-    static let cardBackground = Color(hex: "141933").opacity(0.85)
-    static let cardBorder = Color(hex: "252B4A").opacity(0.6)
-    static let cardInnerShadow = Color.black.opacity(0.15)
+    // Cards
+    static let cardBackground = Color.white.opacity(0.96)
+    static let cardBorder = Color.black.opacity(0.08)
+    static let cardInnerShadow = Color.black.opacity(0.04)
 
     // Semantic
     static let success = Color(hex: "34D399")
@@ -39,17 +59,17 @@ struct IBColors {
     static let economicsColor = Color(hex: "FBB940")
     static let businessColor = Color(hex: "F06060")
 
-    // Gradients
+    // Gradients kept intentionally subtle
     static let blueGradient = LinearGradient(
-        colors: [Color(hex: "4A90F7"), Color(hex: "7C5CFC")],
+        colors: [electricBlue, electricBlue],
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
     static let surfaceGradient = LinearGradient(
-        colors: [Color(hex: "141933").opacity(0.9), Color(hex: "0E1228").opacity(0.95)],
+        colors: [surface, surface],
         startPoint: .top, endPoint: .bottom
     )
     static let meshGlow = RadialGradient(
-        colors: [Color(hex: "5BA4FF").opacity(0.06), Color.clear],
+        colors: [Color.clear, Color.clear],
         center: .topTrailing, startRadius: 0, endRadius: 400
     )
 
@@ -83,19 +103,19 @@ extension Color {
     }
 }
 
-// MARK: - Typography — SF Pro Rounded, premium weight hierarchy
+// MARK: - Typography — simpler, more native macOS
 struct IBTypography {
-    static let largeTitle = Font.system(.largeTitle, design: .rounded, weight: .bold)
-    static let title = Font.system(.title2, design: .rounded, weight: .semibold)
-    static let title3 = Font.system(.title3, design: .rounded, weight: .medium)
-    static let headline = Font.system(.headline, design: .rounded, weight: .semibold)
+    static let largeTitle = Font.system(.largeTitle, design: .default, weight: .bold)
+    static let title = Font.system(.title2, design: .default, weight: .semibold)
+    static let title3 = Font.system(.title3, design: .default, weight: .medium)
+    static let headline = Font.system(.headline, design: .default, weight: .semibold)
     static let body = Font.system(.body, design: .default, weight: .regular)
     static let callout = Font.system(.callout, design: .default, weight: .medium)
     static let caption = Font.system(.caption, design: .default, weight: .regular)
-    static let captionBold = Font.system(.caption, design: .rounded, weight: .semibold)
+    static let captionBold = Font.system(.caption, design: .default, weight: .semibold)
     static let mono = Font.system(.footnote, design: .monospaced, weight: .medium)
-    static let stat = Font.system(size: 28, weight: .bold, design: .rounded)
-    static let bigStat = Font.system(size: 42, weight: .heavy, design: .rounded)
+    static let stat = Font.system(size: 28, weight: .bold, design: .default)
+    static let bigStat = Font.system(size: 42, weight: .heavy, design: .default)
 }
 
 // MARK: - Spacing
@@ -108,16 +128,16 @@ struct IBSpacing {
     static let xxl: CGFloat = 48
 }
 
-// MARK: - Corner Radii — macOS-style
+// MARK: - Corner Radii
 struct IBRadius {
-    static let sm: CGFloat = 10
-    static let md: CGFloat = 14
-    static let lg: CGFloat = 20
-    static let xl: CGFloat = 24
-    static let card: CGFloat = 18
+    static let sm: CGFloat = 8
+    static let md: CGFloat = 10
+    static let lg: CGFloat = 14
+    static let xl: CGFloat = 18
+    static let card: CGFloat = 12
 }
 
-// MARK: - Premium Glass Card Modifier
+// MARK: - Simple Card Modifier
 struct GlassCardModifier: ViewModifier {
     var cornerRadius: CGFloat = IBRadius.card
     var borderOpacity: Double = 0.5
@@ -126,82 +146,30 @@ struct GlassCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(
-                ZStack {
-                    // Base fill with gradient
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(hex: "161C38").opacity(backgroundOpacity),
-                                    Color(hex: "0F1329").opacity(backgroundOpacity + 0.1)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-
-                    // Top highlight — macOS-style inner light edge
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.06), Color.clear],
-                                startPoint: .top,
-                                endPoint: .center
-                            )
-                        )
-
-                    // Border
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.1 * borderOpacity),
-                                    Color(hex: "252B4A").opacity(0.3 * borderOpacity),
-                                    Color.clear
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.8
-                        )
-                }
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(IBColors.cardBackground.opacity(backgroundOpacity))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .stroke(IBColors.cardBorder.opacity(borderOpacity), lineWidth: 1)
+                    )
             )
-            // Outer shadow — subtle depth
-            .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 4)
-            .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+            .shadow(color: IBColors.cardInnerShadow, radius: 2, x: 0, y: 1)
     }
 }
 
-// MARK: - Glow Modifier — refined
+// MARK: - Glow Modifier
 struct GlowModifier: ViewModifier {
     var color: Color = IBColors.electricBlue
     var radius: CGFloat = 12
     func body(content: Content) -> some View {
         content
-            .shadow(color: color.opacity(0.2), radius: radius, x: 0, y: 0)
-            .shadow(color: color.opacity(0.1), radius: radius * 2, x: 0, y: 4)
     }
 }
 
 // MARK: - Shimmer Effect
 struct ShimmerModifier: ViewModifier {
-    @State private var phase: CGFloat = 0
     func body(content: Content) -> some View {
         content
-            .overlay(
-                LinearGradient(
-                    colors: [Color.clear, Color.white.opacity(0.05), Color.clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .offset(x: phase)
-                .onAppear {
-                    withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
-                        phase = UIScreen.main.bounds.width
-                    }
-                }
-            )
-            .clipped()
     }
 }
 
@@ -219,13 +187,21 @@ extension View {
     }
 
     func premiumShadow() -> some View {
-        self.shadow(color: .black.opacity(0.2), radius: 16, x: 0, y: 8)
-            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        self.shadow(color: IBColors.cardInnerShadow, radius: 2, x: 0, y: 1)
     }
 }
 
 // MARK: - Haptics
 struct IBHaptics {
+#if os(macOS)
+    static func light() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default) }
+    static func medium() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .default) }
+    static func soft() { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .default) }
+    static func rigid() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
+    static func success() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
+    static func warning() { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now) }
+    static func error() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
+#else
     static func light() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
     static func medium() { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
     static func soft() { UIImpactFeedbackGenerator(style: .soft).impactOccurred() }
@@ -233,6 +209,7 @@ struct IBHaptics {
     static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
     static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
     static func error() { UINotificationFeedbackGenerator().notificationOccurred(.error) }
+#endif
 }
 
 // MARK: - Premium Spring Animations

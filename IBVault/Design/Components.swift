@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Glass Card View — Premium macOS
+// MARK: - Glass Card View
 struct GlassCard<Content: View>: View {
     let content: Content
     var cornerRadius: CGFloat = IBRadius.card
@@ -19,7 +19,7 @@ struct GlassCard<Content: View>: View {
     }
 }
 
-// MARK: - Progress Ring — Gradient stroke with glow
+// MARK: - Progress Ring
 struct ProgressRing: View {
     let progress: Double
     var lineWidth: CGFloat = 5
@@ -32,19 +32,11 @@ struct ProgressRing: View {
                 .stroke(IBColors.cardBorder.opacity(0.4), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: min(progress, 1.0))
-                .stroke(
-                    AngularGradient(
-                        gradient: Gradient(colors: [color.opacity(0.3), color, color.opacity(0.8)]),
-                        center: .center, startAngle: .degrees(-90), endAngle: .degrees(270)
-                    ),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(IBAnimation.smooth, value: progress)
-                .shadow(color: color.opacity(0.4), radius: 6)
-            // Center percentage
             Text("\(Int(min(progress, 1.0) * 100))")
-                .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
+                .font(.system(size: size * 0.28, weight: .bold, design: .default))
                 .foregroundColor(IBColors.softWhite)
         }
         .frame(width: size, height: size)
@@ -66,61 +58,29 @@ struct AnimatedCounter: View {
     }
 }
 
-// MARK: - Pulse Orb — ARIA Avatar (refined glow)
+// MARK: - Pulse Orb
 struct PulseOrb: View {
-    @State private var isAnimating = false
     var size: CGFloat = 44
     var color: Color = IBColors.electricBlue
 
     var body: some View {
         ZStack {
-            // Ambient glow
             Circle()
-                .fill(
-                    RadialGradient(
-                        gradient: Gradient(colors: [color.opacity(0.25), color.opacity(0)]),
-                        center: .center, startRadius: size * 0.15, endRadius: size
-                    )
-                )
-                .frame(width: size * 1.8, height: size * 1.8)
-                .scaleEffect(isAnimating ? 1.15 : 0.85)
-                .opacity(isAnimating ? 0.7 : 0.3)
+                .fill(color.opacity(0.12))
+                .frame(width: size * 1.5, height: size * 1.5)
 
-            // Core orb — layered gradient
             Circle()
-                .fill(
-                    RadialGradient(
-                        gradient: Gradient(colors: [
-                            color.opacity(0.95), color.opacity(0.6),
-                            Color(hex: "2A3070").opacity(0.8), IBColors.deepNavy
-                        ]),
-                        center: UnitPoint(x: 0.35, y: 0.35),
-                        startRadius: 0, endRadius: size * 0.55
-                    )
-                )
+                .fill(color)
                 .frame(width: size, height: size)
-                .shadow(color: color.opacity(0.5), radius: 8)
-
-            // Specular highlight — glass feel
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.25), Color.clear],
-                        startPoint: .topLeading, endPoint: .center
-                    )
+                .overlay(
+                    Circle()
+                        .stroke(color.opacity(0.25), lineWidth: 1)
                 )
-                .frame(width: size * 0.65, height: size * 0.65)
-                .offset(x: -size * 0.08, y: -size * 0.08)
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
-                isAnimating = true
-            }
         }
     }
 }
 
-// MARK: - Subject Badge — pill with subtle gradient
+// MARK: - Subject Badge
 struct SubjectBadge: View {
     let name: String
     let level: String
@@ -131,11 +91,8 @@ struct SubjectBadge: View {
     var body: some View {
         HStack(spacing: IBSpacing.xs) {
             Circle()
-                .fill(
-                    RadialGradient(colors: [color, color.opacity(0.6)], center: .center, startRadius: 0, endRadius: 6)
-                )
+                .fill(color)
                 .frame(width: compact ? 7 : 9, height: compact ? 7 : 9)
-                .shadow(color: color.opacity(0.5), radius: 3)
             Text(compact ? String(name.prefix(3)).uppercased() : name)
                 .font(compact ? IBTypography.captionBold : IBTypography.caption)
                 .foregroundColor(IBColors.softWhite)
@@ -151,17 +108,13 @@ struct SubjectBadge: View {
             Capsule()
                 .fill(color.opacity(0.12))
                 .overlay(
-                    Capsule().stroke(
-                        LinearGradient(colors: [color.opacity(0.4), color.opacity(0.15)],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                        lineWidth: 0.8
-                    )
+                    Capsule().stroke(color.opacity(0.2), lineWidth: 1)
                 )
         )
     }
 }
 
-// MARK: - Mastery Bar — gradient fill with glow tip
+// MARK: - Mastery Bar
 struct MasteryBar: View {
     let progress: Double
     var height: CGFloat = 6
@@ -173,14 +126,8 @@ struct MasteryBar: View {
                 RoundedRectangle(cornerRadius: height / 2)
                     .fill(IBColors.cardBorder.opacity(0.3))
                 RoundedRectangle(cornerRadius: height / 2)
-                    .fill(
-                        LinearGradient(
-                            colors: [color.opacity(0.5), color, color.opacity(0.85)],
-                            startPoint: .leading, endPoint: .trailing
-                        )
-                    )
+                    .fill(color)
                     .frame(width: geo.size.width * min(progress, 1.0))
-                    .shadow(color: color.opacity(0.4), radius: 4, x: 2, y: 0)
                     .animation(IBAnimation.smooth, value: progress)
             }
         }
@@ -188,29 +135,23 @@ struct MasteryBar: View {
     }
 }
 
-// MARK: - Streak Fire — animated with gradient text
+// MARK: - Streak Fire
 struct StreakFire: View {
-    @State private var flicker = false
     let streakCount: Int
 
     var body: some View {
         HStack(spacing: IBSpacing.xs) {
             Text("🔥")
                 .font(.title2)
-                .scaleEffect(flicker ? 1.15 : 0.95)
-                .rotationEffect(.degrees(flicker ? 3 : -3))
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: flicker)
             AnimatedCounter(value: streakCount, font: IBTypography.headline, color: IBColors.streakOrange)
         }
-        .onAppear { flicker = true }
     }
 }
 
-// MARK: - Prompt Chip — premium pill
+// MARK: - Prompt Chip
 struct PromptChip: View {
     let text: String
     let action: () -> Void
-    @State private var isPressed = false
 
     var body: some View {
         Button(action: { action(); IBHaptics.soft() }) {
@@ -223,56 +164,23 @@ struct PromptChip: View {
                     Capsule()
                         .fill(IBColors.electricBlue.opacity(0.08))
                         .overlay(
-                            Capsule().stroke(
-                                LinearGradient(
-                                    colors: [IBColors.electricBlue.opacity(0.35), IBColors.electricBlue.opacity(0.12)],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 0.8
-                            )
+                            Capsule().stroke(IBColors.electricBlue.opacity(0.2), lineWidth: 1)
                         )
                 )
-                .shadow(color: IBColors.electricBlue.opacity(0.1), radius: 4)
         }
-        .scaleEffect(isPressed ? 0.95 : 1)
-        .animation(IBAnimation.snappy, value: isPressed)
     }
 }
 
-// MARK: - Thinking Dots — smoother wave
+// MARK: - Thinking Indicator
 struct ThinkingDots: View {
-    @State private var dotOffset: [CGFloat] = [0, 0, 0]
-
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [IBColors.electricBlue, IBColors.electricBlueLight],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 7, height: 7)
-                    .offset(y: dotOffset[index])
-                    .shadow(color: IBColors.electricBlue.opacity(0.4), radius: 3)
-            }
-        }
-        .onAppear {
-            for i in 0..<3 {
-                withAnimation(
-                    .easeInOut(duration: 0.55)
-                    .repeatForever(autoreverses: true)
-                    .delay(Double(i) * 0.12)
-                ) {
-                    dotOffset[i] = -8
-                }
-            }
-        }
+        ProgressView()
+            .controlSize(.small)
+            .tint(IBColors.electricBlue)
     }
 }
 
-// MARK: - Quality Rating Button — glassmorphic
+// MARK: - Quality Rating Button
 struct QualityButton: View {
     let label: String
     let color: Color
@@ -292,23 +200,8 @@ struct QualityButton: View {
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: IBRadius.sm)
-                        .fill(
-                            LinearGradient(
-                                colors: [color, color.opacity(0.75)],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: IBRadius.sm)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.white.opacity(0.15), Color.clear],
-                                        startPoint: .top, endPoint: .center
-                                    )
-                                )
-                        )
+                        .fill(color)
                 )
-                .shadow(color: color.opacity(0.3), radius: 8, y: 4)
         }
         .scaleEffect(isPressed ? 0.93 : 1)
         .animation(IBAnimation.snappy, value: isPressed)
@@ -329,12 +222,7 @@ struct EmptyStateView: View {
                     .frame(width: 88, height: 88)
                 Image(systemName: icon)
                     .font(.system(size: 36, weight: .light))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [IBColors.mutedGray, IBColors.mutedGray.opacity(0.5)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
+                    .foregroundColor(IBColors.mutedGray)
             }
             Text(title)
                 .font(IBTypography.headline)
@@ -353,12 +241,7 @@ struct EmptyStateView: View {
 struct PremiumDivider: View {
     var body: some View {
         Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [Color.clear, IBColors.cardBorder, Color.clear],
-                    startPoint: .leading, endPoint: .trailing
-                )
-            )
+            .fill(IBColors.cardBorder)
             .frame(height: 0.5)
     }
 }
