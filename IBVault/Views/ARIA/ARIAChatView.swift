@@ -12,91 +12,75 @@ struct ARIAChatView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                IBColors.navy.ignoresSafeArea()
-                VStack(spacing: 0) {
-                    chatHeader
-                    Divider().background(IBColors.cardBorder)
-                    messagesScroll
-                    if !ariaService.isLoading && messages.isEmpty { suggestedPrompts }
-                    inputBar
-                }
-            }
-            .navigationBarHidden(true)
-            .sheet(isPresented: $showMemory) { ARIAMemoryView() }
-        }
-    }
+            VStack(spacing: 0) {
+                List {
+                    Section("Status") {
+                        LabeledContent("Assistant", value: "ARIA")
+                        LabeledContent("State", value: ariaService.isLoading ? "Thinking…" : "Ready")
 
-    private var chatHeader: some View {
-        HStack(spacing: IBSpacing.md) {
-            PulseOrb(size: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("ARIA").font(IBTypography.headline).foregroundColor(IBColors.softWhite)
-                Text(ariaService.isLoading ? "Thinking..." : "Online")
-                    .font(IBTypography.caption).foregroundColor(ariaService.isLoading ? IBColors.warning : IBColors.success)
-            }
-            Spacer()
-            Button { showMemory = true } label: {
-                Image(systemName: "brain").font(.title3).foregroundColor(IBColors.electricBlue)
-            }
-        }.padding(IBSpacing.md)
-    }
-
-    private var messagesScroll: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: IBSpacing.md) {
-                    ForEach(messages, id: \.id) { message in
-                        MessageBubble(message: message).id(message.id)
-                    }
-                    if ariaService.isLoading {
-                        if streamingText.isEmpty {
-                            HStack { ThinkingDots(); Spacer() }.padding(.horizontal, IBSpacing.md).id("thinking")
-                        } else {
-                            streamingBubble.id("streaming")
+                        if let err = errorMessage {
+                            Text(err)
+                                .foregroundStyle(.red)
                         }
                     }
-                    if let err = errorMessage {
-                        Text(err).font(IBTypography.caption).foregroundColor(IBColors.danger).padding()
+
+                    if messages.isEmpty && !ariaService.isLoading {
+                        Section("Suggested Prompts") {
+                            ForEach(ariaService.suggestedPrompts, id: \.self) { prompt in
+                                Button(prompt) { sendMessage(prompt) }
+                            }
+                        }
                     }
-                }.padding(.vertical, IBSpacing.md)
-            }
-            .onChange(of: messages.count) { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
-            .onChange(of: streamingText) { proxy.scrollTo("streaming", anchor: .bottom) }
-        }
-    }
 
-    private var streamingBubble: some View {
-        HStack(alignment: .top, spacing: IBSpacing.sm) {
-            PulseOrb(size: 24)
-            Text(streamingText).font(IBTypography.body).foregroundColor(IBColors.softWhite)
-                .padding(IBSpacing.md).glassCard(cornerRadius: 16)
-            Spacer(minLength: 40)
-        }.padding(.horizontal, IBSpacing.md)
-    }
+                    Section("Conversation") {
+                        if messages.isEmpty && streamingText.isEmpty && !ariaService.isLoading {
+                            Text("Start a conversation with ARIA.")
+                                .foregroundStyle(.secondary)
+                        }
 
-    private var suggestedPrompts: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: IBSpacing.sm) {
-                ForEach(ariaService.suggestedPrompts, id: \.self) { prompt in
-                    PromptChip(text: prompt) { sendMessage(prompt) }
+                        ForEach(messages, id: \.id) { message in
+                            MessageRow(message: message)
+                        }
+
+                        if ariaService.isLoading {
+                            if streamingText.isEmpty {
+                                HStack {
+                                    ProgressView()
+                                    Text("ARIA is responding…")
+                                }
+                            } else {
+                                StreamingMessageRow(text: streamingText)
+                            }
+                        }
+                    }
                 }
-            }.padding(.horizontal, IBSpacing.md).padding(.vertical, IBSpacing.sm)
-        }
-    }
+                .listStyle(.inset)
+                .controlSize(.small)
 
-    private var inputBar: some View {
-        HStack(spacing: IBSpacing.sm) {
-            TextField("Ask ARIA...", text: $inputText, axis: .vertical)
-                .font(IBTypography.body).foregroundColor(IBColors.softWhite)
-                .padding(.horizontal, IBSpacing.md).padding(.vertical, IBSpacing.sm)
-                .background(RoundedRectangle(cornerRadius: 20).fill(IBColors.cardBackground).overlay(RoundedRectangle(cornerRadius: 20).stroke(IBColors.cardBorder)))
-                .lineLimit(1...4)
-            Button { sendMessage(inputText) } label: {
-                Image(systemName: "arrow.up.circle.fill").font(.system(size: 32))
-                    .foregroundColor(inputText.isEmpty || ariaService.isLoading ? IBColors.mutedGray : IBColors.electricBlue)
-            }.disabled(inputText.isEmpty || ariaService.isLoading)
-        }.padding(IBSpacing.md).background(IBColors.deepNavy)
+                Divider()
+
+                HStack(alignment: .bottom, spacing: 12) {
+                    TextField("Ask ARIA...", text: $inputText, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(1...4)
+
+                    Button("Send") {
+                        sendMessage(inputText)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading)
+                    .keyboardShortcut(.defaultAction)
+                }
+                .padding()
+            }
+            .navigationTitle("ARIA")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Notes") { showMemory = true }
+                }
+            }
+            .sheet(isPresented: $showMemory) { ARIAMemoryView() }
+        }
     }
 
     private func sendMessage(_ text: String) {
@@ -110,23 +94,33 @@ struct ARIAChatView: View {
     }
 }
 
-struct MessageBubble: View {
+struct MessageRow: View {
     let message: ChatMessage
-    var isUser: Bool { message.role == "user" }
+
+    private var isUser: Bool { message.role == "user" }
 
     var body: some View {
-        HStack(alignment: .top, spacing: IBSpacing.sm) {
-            if isUser { Spacer(minLength: 40) }
-            else { PulseOrb(size: 24) }
-            Text(message.content).font(IBTypography.body)
-                .foregroundColor(isUser ? .white : IBColors.softWhite)
-                .padding(IBSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(isUser ? IBColors.electricBlue : IBColors.cardBackground.opacity(0.8))
-                        .overlay(isUser ? nil : RoundedRectangle(cornerRadius: 16).stroke(IBColors.cardBorder, lineWidth: 1))
-                )
-            if !isUser { Spacer(minLength: 40) }
-        }.padding(.horizontal, IBSpacing.md)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(isUser ? "You" : "ARIA")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(message.content)
+                .textSelection(.enabled)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct StreamingMessageRow: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("ARIA")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(text)
+        }
+        .padding(.vertical, 2)
     }
 }
