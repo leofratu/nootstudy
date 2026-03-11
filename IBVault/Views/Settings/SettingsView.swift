@@ -36,25 +36,20 @@ struct SettingsView: View {
     private var profile: UserProfile? { profiles.first }
 
     var body: some View {
-        ZStack {
-            IBColors.navy.ignoresSafeArea()
-            Form {
-                presetSection
-                reportSection
-                ariaSection
-                geminiModelSection
-                studySection
-                adhdSection
-                backupSection
-                notificationSection
-                appearanceSection
-                dataSection
-                aboutSection
-            }
-            .scrollContentBackground(.hidden)
+        Form {
+            presetSection
+            reportSection
+            ariaSection
+            geminiModelSection
+            studySection
+            adhdSection
+            backupSection
+            notificationSection
+            appearanceSection
+            dataSection
+            aboutSection
         }
         .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showReportUpload) { ReportUploadView() }
         .sheet(isPresented: $showModelPicker) { GeminiModelPickerView(selectedModel: $selectedModel) }
     }
@@ -522,75 +517,49 @@ struct GeminiModelPickerView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                IBColors.navy.ignoresSafeArea()
-
+            List {
                 if isLoading {
-                    VStack(spacing: IBSpacing.lg) {
-                        PulseOrb(size: 48)
-                        Text("Fetching models...").font(IBTypography.caption).foregroundColor(IBColors.secondaryText)
+                    Section {
+                        HStack {
+                            ProgressView()
+                            Text("Fetching models...")
+                        }
                     }
                 } else if let error = errorMessage {
-                    VStack(spacing: IBSpacing.md) {
-                        Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundColor(IBColors.warning)
-                        Text("Failed to load models").font(IBTypography.headline).foregroundColor(IBColors.softWhite)
-                        Text(error).font(IBTypography.caption).foregroundColor(IBColors.mutedGray).multilineTextAlignment(.center)
+                    Section("Error") {
+                        Text(error)
+                            .foregroundStyle(.red)
                         Button("Retry") { loadModels() }
-                            .font(IBTypography.captionBold).foregroundColor(IBColors.electricBlue)
-                    }.padding()
+                    }
                 } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: IBSpacing.lg) {
-                            // Search
-                            HStack(spacing: 8) {
-                                Image(systemName: "magnifyingglass").foregroundColor(IBColors.mutedGray)
-                                TextField("Search models...", text: $searchText)
-                                    .font(IBTypography.body).foregroundColor(IBColors.softWhite)
-                            }
-                            .padding(10)
-                            .glassCard(cornerRadius: IBRadius.sm)
+                    Section("Search") {
+                        TextField("Search models...", text: $searchText)
+                    }
 
-                            // Current model
-                            GlassCard(cornerRadius: IBRadius.md, padding: 12) {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "checkmark.circle.fill").foregroundColor(IBColors.success)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Currently Active").font(.system(size: 11, weight: .medium)).foregroundColor(IBColors.success)
-                                        Text(selectedModel)
-                                            .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                            .foregroundColor(IBColors.softWhite)
-                                    }
-                                    Spacer()
-                                }
-                            }
+                    Section("Current Model") {
+                        Text(selectedModel)
+                            .font(.system(.body, design: .monospaced))
+                    }
 
-                            // Flash Models
-                            if !flashModels.isEmpty {
-                                modelSection("⚡ Flash Models", subtitle: "Fast & efficient", models: flashModels)
-                            }
+                    if !flashModels.isEmpty {
+                        modelSection("Flash Models", subtitle: "Fast & efficient", models: flashModels)
+                    }
 
-                            // Pro Models
-                            if !proModels.isEmpty {
-                                modelSection("🧠 Pro Models", subtitle: "Most capable", models: proModels)
-                            }
+                    if !proModels.isEmpty {
+                        modelSection("Pro Models", subtitle: "Most capable", models: proModels)
+                    }
 
-                            // Other Models
-                            if !otherModels.isEmpty {
-                                modelSection("🔬 Other Models", subtitle: "Experimental & specialized", models: otherModels)
-                            }
-                        }
-                        .padding(.horizontal, IBSpacing.md)
-                        .padding(.bottom, 100)
+                    if !otherModels.isEmpty {
+                        modelSection("Other Models", subtitle: "Experimental & specialized", models: otherModels)
                     }
                 }
             }
             .navigationTitle("Select Model")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button { loadModels() } label: {
                         Image(systemName: "arrow.clockwise").foregroundColor(IBColors.electricBlue)
                     }
@@ -601,46 +570,40 @@ struct GeminiModelPickerView: View {
     }
 
     private func modelSection(_ title: String, subtitle: String, models: [GeminiModel]) -> some View {
-        VStack(alignment: .leading, spacing: IBSpacing.sm) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(IBTypography.headline).foregroundColor(IBColors.softWhite)
-                Text(subtitle).font(.system(size: 11)).foregroundColor(IBColors.mutedGray)
-            }
-
-            ForEach(models) { model in
+        Section {
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(models, id: \.id) { model in
                 let isSelected = model.id == selectedModel
                 Button {
                     selectedModel = model.id
                     IBHaptics.medium()
                 } label: {
-                    GlassCard(cornerRadius: IBRadius.sm, padding: 12) {
-                        HStack(spacing: 10) {
-                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(isSelected ? IBColors.electricBlue : IBColors.tertiaryText)
-                                .font(.system(size: 18))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(model.displayName)
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                    .foregroundColor(isSelected ? IBColors.electricBlue : IBColors.softWhite)
-                                Text(model.id)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundColor(IBColors.mutedGray)
-                                HStack(spacing: 8) {
-                                    Label(model.tokenInfo, systemImage: "arrow.left.arrow.right")
-                                        .font(.system(size: 10))
-                                    if model.supportsStreaming {
-                                        Label("Stream", systemImage: "waveform")
-                                            .font(.system(size: 10))
-                                    }
+                    HStack(spacing: 10) {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(model.displayName)
+                            Text(model.id)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                Label(model.tokenInfo, systemImage: "arrow.left.arrow.right")
+                                    .font(.caption)
+                                if model.supportsStreaming {
+                                    Label("Stream", systemImage: "waveform")
+                                        .font(.caption)
                                 }
-                                .foregroundColor(IBColors.tertiaryText)
                             }
-                            Spacer()
+                            .foregroundStyle(.secondary)
                         }
+                        Spacer()
                     }
                 }
-                .buttonStyle(.plain)
             }
+        } header: {
+            Text(title)
         }
     }
 
@@ -674,37 +637,32 @@ struct ReportUploadView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                IBColors.navy.ignoresSafeArea()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: IBSpacing.lg) {
-                        VStack(alignment: .leading, spacing: IBSpacing.xs) {
-                            Text("Upload Report Card")
-                                .font(IBTypography.title).foregroundColor(IBColors.softWhite)
-                            Text("Enter your latest grades — ARIA will auto-analyse gaps and update your rank")
-                                .font(IBTypography.caption).foregroundColor(IBColors.mutedGray)
-                        }.padding(.horizontal, IBSpacing.md)
+            ScrollView {
+                VStack(alignment: .leading, spacing: IBSpacing.lg) {
+                    VStack(alignment: .leading, spacing: IBSpacing.xs) {
+                        Text("Upload Report Card")
+                            .font(IBTypography.title).foregroundColor(IBColors.softWhite)
+                        Text("Enter your latest grades — ARIA will auto-analyse gaps and update your rank")
+                            .font(IBTypography.caption).foregroundColor(IBColors.mutedGray)
+                    }.padding(.horizontal, IBSpacing.md)
 
-                        ForEach(subjects, id: \.id) { subject in
-                            subjectGradeCard(subject)
-                        }
+                    ForEach(subjects, id: \.id) { subject in
+                        subjectGradeCard(subject)
+                    }
 
-                        Button { saveAllGrades() } label: {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                Text("Save Report & Auto-Update Rank")
-                            }
-                            .font(IBTypography.headline).foregroundColor(.white)
-                            .frame(maxWidth: .infinity).padding()
-                            .background(RoundedRectangle(cornerRadius: IBRadius.md).fill(IBColors.blueGradient))
-                            .shadow(color: IBColors.electricBlue.opacity(0.3), radius: 10, y: 4)
+                    Button { saveAllGrades() } label: {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Save Report & Auto-Update Rank")
                         }
-                        .padding(.horizontal, IBSpacing.md)
-                        .padding(.bottom, IBSpacing.xxl)
-                    }.padding(.top, IBSpacing.md)
-                }
+                        .font(IBTypography.headline).foregroundColor(.white)
+                        .frame(maxWidth: .infinity).padding()
+                        .background(RoundedRectangle(cornerRadius: IBRadius.md).fill(IBColors.blueGradient))
+                    }
+                    .padding(.horizontal, IBSpacing.md)
+                    .padding(.bottom, IBSpacing.xxl)
+                }.padding(.top, IBSpacing.md)
             }
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
@@ -714,7 +672,7 @@ struct ReportUploadView: View {
 
     private func subjectGradeCard(_ subject: Subject) -> some View {
         let color = Color(hex: subject.accentColorHex)
-        return GlassCard {
+        return GroupBox {
             VStack(alignment: .leading, spacing: IBSpacing.md) {
                 HStack {
                     Circle().fill(color).frame(width: 10, height: 10)
