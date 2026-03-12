@@ -354,7 +354,7 @@ struct CardBackup: Codable {
 struct GradeBackup: Codable {
     let id: UUID; let component: String; let score: Int; let predictedGrade: Int?
     let date: Date; let teacherFeedback: String; let subjectName: String
-    let assessmentTitle: String
+    let assessmentTitle: String?
     let assessmentCategory: String?
     let achievedPoints: Double?
     let maxPoints: Double?
@@ -380,7 +380,7 @@ struct GradeBackup: Codable {
             score: score,
             predictedGrade: predictedGrade,
             teacherFeedback: teacherFeedback,
-            assessmentTitle: assessmentTitle,
+            assessmentTitle: assessmentTitle ?? "",
             assessmentCategory: assessmentCategory,
             achievedPoints: achievedPoints,
             maxPoints: maxPoints,

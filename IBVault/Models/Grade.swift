@@ -9,7 +9,7 @@ final class Grade {
     var predictedGrade: Int? // 1-7
     var date: Date
     var teacherFeedback: String
-    var assessmentTitle: String
+    var assessmentTitle: String?
     var assessmentCategory: String?
     var achievedPoints: Double?
     var maxPoints: Double?
@@ -40,7 +40,7 @@ final class Grade {
     }
 
     var hasDetailedBreakdown: Bool {
-        assessmentTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+        (assessmentTitle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ||
         achievedPoints != nil ||
         maxPoints != nil ||
         weightPercent != nil ||
@@ -48,7 +48,7 @@ final class Grade {
     }
 
     var displayTitle: String {
-        let trimmedTitle = assessmentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = assessmentTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmedTitle.isEmpty ? component : trimmedTitle
     }
 
@@ -85,7 +85,8 @@ final class Grade {
         self.predictedGrade = predictedGrade
         self.date = Date()
         self.teacherFeedback = teacherFeedback
-        self.assessmentTitle = assessmentTitle
+        let trimmedAssessmentTitle = assessmentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.assessmentTitle = trimmedAssessmentTitle.isEmpty ? nil : trimmedAssessmentTitle
         self.assessmentCategory = assessmentCategory
         self.achievedPoints = achievedPoints
         self.maxPoints = maxPoints

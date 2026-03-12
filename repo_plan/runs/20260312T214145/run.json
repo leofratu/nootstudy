@@ -1,0 +1,52 @@
+{
+  "task_id": "20260312T214145_grade_migration_fix",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.grades.assessment_import",
+      "iface.persistence.grade_migration_compatibility"
+    ],
+    "files": [
+      "IBVault/Models/Grade.swift",
+      "IBVault/Services/BackupService.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Models/Grade.swift IBVault/Services/BackupService.swift IBVault/Services/ARIAService.swift IBVault/Views/Subjects/SubjectDetailView.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.persistence.grade_migration_compatibility"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312j build",
+      "ok": true,
+      "interfaces": [
+        "iface.persistence.grade_migration_compatibility",
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-release-build-20260312j/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.persistence.grade_migration_compatibility"
+  ],
+  "tested_interfaces": [
+    "iface.persistence.grade_migration_compatibility",
+    "iface.release.dmg_distribution"
+  ],
+  "files_changed": [
+    "IBVault/Models/Grade.swift",
+    "IBVault/Services/BackupService.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ]
+}
