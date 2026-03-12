@@ -1,6 +1,11 @@
 import Foundation
 import SwiftData
 
+enum StudyPlanKind: String, Codable {
+    case studySession
+    case followUpReview
+}
+
 @Model
 final class StudyPlan {
     var id: UUID
@@ -14,6 +19,27 @@ final class StudyPlan {
     var isCompleted: Bool
     var notes: String
     var durationMinutes: Int
+    var kindRaw: String
+    var reviewIntervalDays: Int?
+
+    var kind: StudyPlanKind {
+        get { StudyPlanKind(rawValue: kindRaw) ?? .studySession }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var isFollowUpReview: Bool {
+        kind == .followUpReview
+    }
+
+    var scheduleLabel: String {
+        if isFollowUpReview {
+            if let reviewIntervalDays {
+                return "Review • Day \(reviewIntervalDays)"
+            }
+            return "Review"
+        }
+        return topicName
+    }
 
     var scheduledTimeFormatted: String {
         let fmt = DateFormatter()
@@ -46,7 +72,9 @@ final class StudyPlan {
         planMarkdown: String = "",
         scheduledDate: Date,
         durationMinutes: Int = 60,
-        notes: String = ""
+        notes: String = "",
+        kind: StudyPlanKind = .studySession,
+        reviewIntervalDays: Int? = nil
     ) {
         self.id = UUID()
         self.subjectName = subjectName
@@ -59,5 +87,9 @@ final class StudyPlan {
         self.isCompleted = false
         self.notes = notes
         self.durationMinutes = durationMinutes
+        self.kindRaw = kind.rawValue
+        self.reviewIntervalDays = reviewIntervalDays
     }
 }
+
+extension StudyPlan: Identifiable {}

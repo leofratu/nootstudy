@@ -61,8 +61,10 @@ struct SM2Engine {
         card.nextReviewDate = result.nextReviewDate
         card.lastReviewedDate = Date()
 
-        // Update consecutive correct count
+        // Track effectiveness for AI-generated cards
+        card.totalReviewCount += 1
         if quality == .good || quality == .easy {
+            card.successfulReviewCount += 1
             card.consecutiveCorrect += 1
         } else {
             card.consecutiveCorrect = 0
