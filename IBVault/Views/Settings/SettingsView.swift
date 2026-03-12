@@ -5,6 +5,14 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
+    @Query private var studyCards: [StudyCard]
+    @Query private var reviewSessions: [ReviewSession]
+    @Query private var studySessions: [StudySession]
+    @Query private var studyActivities: [StudyActivity]
+    @Query private var achievements: [Achievement]
+    @Query private var grades: [Grade]
+    @Query private var studyPlans: [StudyPlan]
+    @Query private var ariaMemories: [ARIAMemory]
     @State private var apiKey = ""
     @State private var showAPIKey = false
     @State private var hasKey = false
@@ -17,6 +25,8 @@ struct SettingsView: View {
     @State private var showModelPicker = false
     @State private var backupCount = 0
     @State private var latestBackupDate: Date?
+    @State private var showResetConfirmation = false
+    @State private var isResetting = false
 
     // ARIA Settings
     @AppStorage("geminiModel") private var selectedModel = "gemini-2.0-flash"
@@ -94,7 +104,7 @@ struct SettingsView: View {
                         ForEach(StudyIntensity.allCases, id: \.self) { intensity in
                             HStack { Text(intensity.emoji); Text(intensity.rawValue) }.tag(intensity)
                         }
-                    }.pickerStyle(.segmented)
+                    }.pickerStyle(.menu)
                     Text("Suggests \(p.studyIntensity.dailyCardSuggestion) cards/day • \(String(format: "%.1f", p.studyIntensity.xpMultiplier))× XP")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -192,7 +202,9 @@ struct SettingsView: View {
                 }
                 HStack {
                     Button("Save to Keychain") {
-                        if KeychainService.saveAPIKey(apiKey) {
+                        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmedKey.isEmpty else { return }
+                        if KeychainService.saveAPIKey(trimmedKey) {
                             hasKey = true; savedConfirmation = true; IBHaptics.success()
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { savedConfirmation = false }
                         }
@@ -268,9 +280,11 @@ struct SettingsView: View {
                 HStack {
                     Text("Temperature: \(String(format: "%.1f", ariaTemperature))")
                     Spacer()
-                    Button("Reset") { ariaTemperature = 0.7 }
-                        .font(.caption)
-                        .buttonStyle(.borderless)
+                    Button("Reset") {
+                        ariaTemperature = 0.7
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
                 }
                 Slider(value: $ariaTemperature, in: 0...2, step: 0.1)
                     .tint(.accentColor)
@@ -462,6 +476,9 @@ struct SettingsView: View {
 
     private func refreshViewState() {
         hasKey = KeychainService.hasAPIKey
+        if hasKey, let loadedKey = KeychainService.loadAPIKey() {
+            apiKey = loadedKey
+        }
         latestBackupDate = BackupService.latestBackupDate
         backupCount = BackupService.listBackups().count
     }
@@ -510,10 +527,44 @@ struct SettingsView: View {
     // MARK: - Data
     private var dataSection: some View {
         Section {
-            Button("Reset All Data", role: .destructive) { }
+            Button("Reset All Data", role: .destructive) {
+                showResetConfirmation = true
+            }
+            .alert("Reset All Data?", isPresented: $showResetConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Reset", role: .destructive) {
+                    resetAllData()
+                }
+            } message: {
+                Text("This will delete all your study data including subjects, cards, and progress. This action cannot be undone.")
+            }
         } header: {
             Label("Data", systemImage: "trash")
         }
+    }
+    
+    private func resetAllData() {
+        isResetting = true
+        
+        // Clear all SwiftData
+        for profile in profiles { context.delete(profile) }
+        for subject in subjects { context.delete(subject) }
+        for card in studyCards { context.delete(card) }
+        for session in reviewSessions { context.delete(session) }
+        for session in studySessions { context.delete(session) }
+        for activity in studyActivities { context.delete(activity) }
+        for achievement in achievements { context.delete(achievement) }
+        for grade in grades { context.delete(grade) }
+        for plan in studyPlans { context.delete(plan) }
+        for memory in ariaMemories { context.delete(memory) }
+        
+        // Clear UserDefaults
+        let domain = Bundle.main.bundleIdentifier!
+        UserDefaults.standard.removePersistentDomain(forName: domain)
+        
+        try? context.save()
+        
+        isResetting = false
     }
 
     // MARK: - About
