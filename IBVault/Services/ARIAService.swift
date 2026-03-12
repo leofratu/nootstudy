@@ -3,23 +3,84 @@ import SwiftData
 import SwiftUI
 
 @Observable
+@MainActor
 class ARIAService {
     var isLoading = false
     var currentStreamText = ""
     var isOnline = true
-    var suggestedPrompts: [String] = [
-        "What should I study today?",
-        "Analyse my weakest subject",
-        "Make me a study plan for this week",
-        "Quiz me on Biology Cell Theory"
-    ]
+    var suggestedPrompts: [String] = []
 
-    private let tokenThreshold = 8000
-    private let maxMemoryItems = 6
-    private let maxContextSubjects = 3
-    private let maxHistoryMessages = 18
-    private let minMessagesBeforeCompaction = 24
-    private let minMessagesToKeepAfterCompaction = 12
+    private let tokenThreshold = 12000
+    private let maxMemoryItems = 8
+    private let maxContextSubjects = 4
+    private let maxHistoryMessages = 24
+    private let minMessagesBeforeCompaction = 16
+    private let minMessagesToKeepAfterCompaction = 8
+
+    init() {
+        suggestedPrompts = [
+            "What should I study today?",
+            "Give me a study plan",
+            "Quiz me on my weakest topic",
+            "How can I improve my grades?"
+        ]
+    }
+
+    @MainActor
+    func updateSuggestedPrompts(context: ModelContext) {
+        var prompts: [String] = []
+        
+        // Get user profile
+        if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first {
+            let streak = profile.currentStreak
+            let target = profile.targetIBScore
+            
+            if streak == 0 {
+                prompts.append("Let's get back on track! What should I study today?")
+            } else if streak > 0 {
+                prompts.append("Keep my streak going! What's due today?")
+            }
+            
+            prompts.append("I want to get to \(target)/45 - what should I focus on?")
+        }
+        
+        // Get subjects
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        
+        if !subjects.isEmpty {
+            // Find weakest subjects
+            let weakSubjects = subjects
+                .map { ($0, ProficiencyTracker.masteryPercentage(for: $0)) }
+                .sorted { $0.1 < $1.1 }
+                .prefix(2)
+            
+            for (subject, mastery) in weakSubjects {
+                let masteryPercent = Int(mastery * 100)
+                prompts.append("Help me improve \(subject.name) (\(masteryPercent)% mastery)")
+            }
+            
+            // Get subjects with due cards
+            let now = Date()
+            let subjectsWithDue = subjects.filter { subject in
+                subject.cards.contains { $0.nextReviewDate <= now }
+            }
+            
+            if let randomSubject = subjectsWithDue.randomElement() {
+                let dueCount = randomSubject.cards.filter { $0.nextReviewDate <= now }.count
+                prompts.append("Review \(dueCount) cards from \(randomSubject.name)")
+            }
+        }
+        
+        // Always include general prompts
+        prompts.append(contentsOf: [
+            "Make me a weekly study plan",
+            "What's my weakest topic?",
+            "Quiz me!"
+        ])
+        
+        // Limit and deduplicate
+        suggestedPrompts = Array(Set(prompts)).prefix(4).map { $0 }
+    }
 
     private static let stopWords: Set<String> = [
         "about", "after", "again", "also", "because", "could", "from", "have", "into", "just",
@@ -65,11 +126,11 @@ class ARIAService {
         var historyCharacterBudget: Int {
             switch intent {
             case .studyPlan, .performanceReview:
-                return 6000
+                return 8000
             case .flashcards, .quiz:
-                return 4500
+                return 6000
             case .explanation, .general:
-                return 5000
+                return 7000
             }
         }
 
@@ -226,6 +287,19 @@ class ARIAService {
     }
 
     // MARK: - System Prompt Builder
+    @MainActor
+    private func checkIfUserHasData(context: ModelContext) -> Bool {
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first
+        let cards = subjects.flatMap { $0.cards }
+        
+        let hasProfile = profile?.studentName.isEmpty == false
+        let hasSubjects = !subjects.isEmpty
+        let hasCards = !cards.isEmpty
+        let hasGrades = subjects.contains { !$0.grades.isEmpty }
+        
+        return hasProfile || hasSubjects || hasCards || hasGrades
+    }
 
     @MainActor
     func buildSystemPrompt(context: ModelContext) async -> String {
@@ -239,6 +313,9 @@ class ARIAService {
 
     @MainActor
     private func buildSystemPrompt(context: ModelContext, queryProfile: QueryProfile) async -> String {
+        // Check if user is new
+        let hasData = checkIfUserHasData(context: context)
+        
         var prompt = """
         You are ARIA (Adaptive Retrieval Intelligence Assistant), the most efficient AI study companion ever built for IB students.
 
@@ -254,11 +331,18 @@ class ARIAService {
         - If the user's streak broke or grades dropped, acknowledge empathetically before pivoting to action
         - Use occasional emojis for warmth, but keep it professional
 
+        \(hasData ? "" : "NEW USER BEHAVIOR: This user hasn't set up their subjects yet. Help them get started by asking what IB subjects they're taking, then guide them to add subjects in the app. Don't assume any subject knowledge.")
+
         RESPONSE FORMATTING:
         - Use clean Markdown for structure: short paragraphs, bullet lists, and **bold** for key takeaways
         - When writing maths or science equations, use LaTeX: inline as $...$ and display equations as $$...$$
+        - Use code blocks with ```language for any code examples
         - Keep emoji use light and helpful, not excessive
         - Do not dump raw JSON unless the user explicitly asks for it
+        - ALWAYS use proper spacing: separate sections with blank lines, use headers (###) for major sections
+        - Lists should use dash (-) or asterisk (*) bullets, not numbers unless sequential order matters
+        - When providing definitions, use: **Term**: Definition format
+        - When providing steps, use numbered lists with clear action verbs
 
         STUDY GUIDE CAPABILITIES:
         - Generate session-specific study guides that target weak areas first
@@ -290,6 +374,9 @@ class ARIAService {
         - Explain concepts, structure essays, clarify mark schemes at IB level
         - Track session-by-session and subject-by-subject progress
         - Produce study guides with difficulty ratings and time allocations
+        - TRACK FLASHCARD EFFECTIVENESS: You know which AI-generated flashcards are working (high review success) vs struggling (low review success). Use this to recommend regeneration of weak cards.
+        - XP & MASTERY TRACKING: You have full access to student's XP, rank progression, and subject mastery percentages. Reference this to motivate students ("You're 200XP away from leveling up to Atom!").
+        - SUBJECT MASTERY: You can see per-subject mastery percentages and use this to recommend which subjects need more attention based on their target IB score.
 
         FLASHCARD GENERATION:
         When the user asks you to create flashcards, generate them in this exact format:
@@ -421,7 +508,7 @@ class ARIAService {
             predicate: #Predicate { !$0.isArchived },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
-        descriptor.fetchLimit = 24
+        descriptor.fetchLimit = 30
 
         guard let memories = try? context.fetch(descriptor) else { return "" }
 
@@ -438,13 +525,27 @@ class ARIAService {
 
         var selected: [ARIAMemory] = []
         var categoryCounts: [MemoryCategory: Int] = [:]
+        var subjectCounts: [String: Int] = [:]
+        
+        let maxSubjects = 2
 
         for item in ranked {
             guard selected.count < maxMemoryItems else { break }
             guard item.score > 0 || item.0.category == .userNotes else { continue }
 
-            let limitPerCategory = item.0.category == .conversationHistory ? 1 : 2
+            let limitPerCategory: Int
+            switch item.0.category {
+            case .conversationHistory: limitPerCategory = 1
+            case .sessionSummary: limitPerCategory = 2
+            case .weakTopics, .grades, .subjectInsight: limitPerCategory = 3
+            default: limitPerCategory = 2
+            }
             if categoryCounts[item.0.category, default: 0] >= limitPerCategory { continue }
+            
+            if let subjectName = item.0.subjectName, !subjectName.isEmpty {
+                if subjectCounts[subjectName, default: 0] >= maxSubjects { continue }
+                subjectCounts[subjectName, default: 0] += 1
+            }
 
             selected.append(item.0)
             categoryCounts[item.0.category, default: 0] += 1
@@ -454,16 +555,57 @@ class ARIAService {
 
         let grouped = Dictionary(grouping: selected) { $0.category }
         var lines: [String] = []
+        
+        let temporalMarkers = determineTemporalContext(memories: selected)
 
         for category in MemoryCategory.allCases {
             guard let items = grouped[category], !items.isEmpty else { continue }
             lines.append("[\(category.rawValue)]")
             for item in items {
-                lines.append("- \(trimmedContextLine(item.content, limit: item.isCompacted ? 260 : 180))")
+                let ageContext = formatTemporalContext(for: item)
+                let content = trimmedContextLine(item.content, limit: item.isCompacted ? 260 : 180)
+                lines.append("- \(ageContext)\(content)")
             }
         }
 
         return lines.joined(separator: "\n")
+    }
+    
+    private func determineTemporalContext(memories: [ARIAMemory]) -> String {
+        let now = Date()
+        guard let oldest = memories.min(by: { $0.timestamp < $1.timestamp }),
+              let newest = memories.max(by: { $0.timestamp < $1.timestamp }) else {
+            return ""
+        }
+        
+        let spanDays = Calendar.current.dateComponents([.day], from: oldest.timestamp, to: newest.timestamp).day ?? 0
+        
+        if spanDays > 30 {
+            return "[Recent] "
+        } else if spanDays > 7 {
+            return "[This Week] "
+        }
+        return ""
+    }
+    
+    private func formatTemporalContext(for memory: ARIAMemory) -> String {
+        let now = Date()
+        let days = Calendar.current.dateComponents([.day], from: memory.timestamp, to: now).day ?? 0
+        
+        if days == 0 {
+            return "[Today] "
+        } else if days == 1 {
+            return "[Yesterday] "
+        } else if days < 7 {
+            return "[\(days)d ago] "
+        } else if days < 30 {
+            let weeks = days / 7
+            return "[\(weeks)w ago] "
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d"
+            return "[\(formatter.string(from: memory.timestamp))] "
+        }
     }
 
     // MARK: - App State Snapshot
@@ -496,6 +638,13 @@ class ARIAService {
         }
 
         let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        
+        if subjects.isEmpty {
+            lines.append("- No subjects configured yet - user needs to add subjects first")
+            lines.append("- Ask user which IB subjects they're taking")
+            return lines.joined(separator: "\n")
+        }
+        
         let selectedSubjects = prioritizedSubjects(from: subjects, queryProfile: queryProfile, now: now)
         if !selectedSubjects.isEmpty {
             lines.append("- Priority subjects:")
@@ -513,11 +662,13 @@ class ARIAService {
             lines.append("- Latest grades: \(recentGrades.joined(separator: "; "))")
         }
 
-        return lines.isEmpty ? "- No student data available yet." : lines.joined(separator: "\n")
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Conversation History
 
+    private let tokenToCharRatio = 4
+    
     @MainActor
     private func buildConversationHistory(context: ModelContext, queryProfile: QueryProfile, sessionID: UUID) async -> [GeminiMessage] {
         let windowSize = UserDefaults.standard.integer(forKey: "ariaContextWindow")
@@ -529,21 +680,39 @@ class ARIAService {
 
         guard let messages = try? context.fetch(descriptor), !messages.isEmpty else { return [] }
 
+        let estimatedTokenBudget = queryProfile.historyCharacterBudget / tokenToCharRatio
+        
         var selected: [ChatMessage] = []
         var selectedIDs = Set<UUID>()
-        var totalCharacters = 0
+        var totalTokens = 0
+
+        let recentMessages = Array(messages.prefix(8))
+        for message in recentMessages {
+            let messageTokens = estimateTokens(in: message.content)
+            if totalTokens + messageTokens > estimatedTokenBudget / 2 {
+                break
+            }
+            selected.append(message)
+            selectedIDs.insert(message.id)
+            totalTokens += messageTokens
+        }
 
         for message in messages {
-            let messageCost = message.content.count
-            if selected.count >= 10 && totalCharacters + messageCost > queryProfile.historyCharacterBudget {
-                break
+            guard !selectedIDs.contains(message.id) else { continue }
+            
+            let messageTokens = estimateTokens(in: message.content)
+            
+            if totalTokens + messageTokens > estimatedTokenBudget {
+                if selected.count >= 3 {
+                    break
+                }
             }
 
             selected.append(message)
             selectedIDs.insert(message.id)
-            totalCharacters += messageCost
+            totalTokens += messageTokens
 
-            if selected.count >= maxHistoryMessages || totalCharacters >= queryProfile.historyCharacterBudget {
+            if selected.count >= maxHistoryMessages || totalTokens >= estimatedTokenBudget {
                 break
             }
         }
@@ -563,19 +732,47 @@ class ARIAService {
                 }
 
             for candidate in topicalCandidates {
-                let cost = candidate.0.content.count
+                let cost = estimateTokens(in: candidate.0.content)
                 guard selected.count < maxHistoryMessages else { break }
-                guard totalCharacters + cost <= queryProfile.historyCharacterBudget else { continue }
+                guard totalTokens + cost <= estimatedTokenBudget else { continue }
 
                 selected.append(candidate.0)
                 selectedIDs.insert(candidate.0.id)
-                totalCharacters += cost
+                totalTokens += cost
             }
         }
-
-        return selected.sorted { $0.timestamp < $1.timestamp }.map { msg in
+        
+        let systemMessages = buildSystemContextMessages(queryProfile: queryProfile)
+        
+        return systemMessages + selected.sorted { $0.timestamp < $1.timestamp }.map { msg in
             GeminiMessage(role: msg.role, text: msg.content)
         }
+    }
+    
+    private func estimateTokens(in text: String) -> Int {
+        return text.count / tokenToCharRatio
+    }
+    
+    private func buildSystemContextMessages(queryProfile: QueryProfile) -> [GeminiMessage] {
+        var messages: [GeminiMessage] = []
+        
+        let intentContext: String
+        switch queryProfile.intent {
+        case .studyPlan:
+            intentContext = "User is requesting a study plan. Focus on: weak topics, time availability, and exam relevance."
+        case .performanceReview:
+            intentContext = "User wants to review their performance. Focus on: grades, retention rates, and improvement trends."
+        case .flashcards, .quiz:
+            intentContext = "User wants to practice with flashcards or a quiz. Focus on: weak topics and key concepts."
+        case .explanation:
+            intentContext = "User wants an explanation. Focus on: clear, structured answers with examples."
+        case .general:
+            intentContext = "General conversation. Be helpful and contextually aware."
+        }
+        
+        messages.append(GeminiMessage(role: "system", text: "Current intent: \(intentContext)\nRelevant keywords: \(queryProfile.keywords.joined(separator: ", "))"))
+        
+        return messages
     }
 
     private func buildActionSpecPreamble(queryProfile: QueryProfile) -> String {
@@ -777,7 +974,20 @@ class ARIAService {
             $0.timestamp >= recentWindowStart
         }
 
+        let aiEffectiveness = ProficiencyTracker.overallAIEffectiveness(for: subject)
+        let effectiveCards = ProficiencyTracker.effectiveCards(for: subject).count
+        let strugglingCards = ProficiencyTracker.strugglingCards(for: subject).count
+        let aiCards = subject.cards.filter { $0.isAIGenerated == true }.count
+
         var headline = "  • \(subject.name) \(subject.level): mastery \(masteryPercent)%, due \(subject.dueCardsCount)/\(subject.cards.count)"
+        if aiCards > 0 {
+            let effPercent = Int(aiEffectiveness * 100)
+            headline += ", ARIA cards: \(aiCards) (\(effPercent)% effective"
+            if strugglingCards > 0 {
+                headline += ", \(strugglingCards) need review"
+            }
+            headline += ")"
+        }
         if let examDate = subject.examDate {
             let days = Calendar.current.dateComponents([.day], from: now, to: examDate).day ?? 0
             headline += days >= 0 ? ", exam in \(days)d" : ", exam passed"
@@ -798,6 +1008,9 @@ class ARIAService {
             let retention = Int(ProficiencyTracker.retentionRate(from: recentSessions) * 100)
             let avgQuality = Double(recentSessions.map(\.qualityRating).reduce(0, +)) / Double(max(1, recentSessions.count))
             lines.append("    last 14d: \(recentSessions.count) reviews, \(retention)% retention, quality \(String(format: "%.1f", avgQuality))/5")
+        }
+        if strugglingCards > 0 {
+            lines.append("    ⚠️ ARIA struggling cards: \(strugglingCards) - consider regenerating or reviewing these topics")
         }
 
         return lines
@@ -842,54 +1055,96 @@ class ARIAService {
     private func memoryRelevanceScore(for memory: ARIAMemory, queryProfile: QueryProfile) -> Int {
         var score = categoryWeight(for: memory.category, intent: queryProfile.intent)
         score += keywordOverlapScore(in: memory.content, keywords: queryProfile.keywords) * 6
-
+        
+        score += Int(memory.importanceScore)
+        score += Int(memory.relevanceBoost * 2)
+        
         if memory.category == .userNotes { score += 3 }
         if memory.isCompacted { score -= 1 }
-
+        
+        if let subjectName = memory.subjectName, !subjectName.isEmpty {
+            if queryProfile.normalizedQuery.lowercased().contains(subjectName.lowercased()) {
+                score += 5
+            }
+        }
+        
+        if let topicName = memory.topicName, !topicName.isEmpty {
+            if queryProfile.normalizedQuery.lowercased().contains(topicName.lowercased()) {
+                score += 4
+            }
+        }
+        
+        for tag in memory.tags {
+            if queryProfile.keywords.contains(tag.lowercased()) {
+                score += 3
+            }
+        }
+        
         let ageInDays = Calendar.current.dateComponents([.day], from: memory.timestamp, to: Date()).day ?? 0
         score += max(0, 7 - ageInDays)
-        return score
+        
+        score -= Int(memory.effectiveAge / 10)
+        
+        return max(0, score)
     }
 
     private func categoryWeight(for category: MemoryCategory, intent: QueryIntent) -> Int {
+        let basePriority = category.priority / 10
+        
         switch intent {
         case .studyPlan:
             switch category {
-            case .weakTopics: return 8
-            case .grades: return 7
-            case .studyHabits: return 7
-            case .goals: return 7
-            case .userNotes: return 5
+            case .weakTopics: return basePriority + 3
+            case .grades: return basePriority + 2
+            case .goals: return basePriority + 2
+            case .subjectInsight: return basePriority + 2
+            case .sessionSummary: return basePriority + 1
+            case .studyHabits: return basePriority + 1
+            case .achievement: return basePriority
+            case .struggle: return basePriority + 1
+            case .userNotes: return basePriority
             case .conversationHistory: return 2
             }
 
         case .performanceReview:
             switch category {
-            case .grades: return 8
-            case .weakTopics: return 8
-            case .studyHabits: return 5
-            case .goals: return 5
-            case .userNotes: return 4
+            case .grades: return basePriority + 3
+            case .weakTopics: return basePriority + 3
+            case .achievement: return basePriority + 2
+            case .sessionSummary: return basePriority + 1
+            case .subjectInsight: return basePriority + 1
+            case .studyHabits: return basePriority
+            case .goals: return basePriority
+            case .struggle: return basePriority
+            case .userNotes: return basePriority - 1
             case .conversationHistory: return 2
             }
 
         case .flashcards, .quiz, .explanation:
             switch category {
-            case .weakTopics: return 8
-            case .userNotes: return 6
-            case .grades: return 5
-            case .studyHabits: return 3
-            case .goals: return 3
+            case .weakTopics: return basePriority + 3
+            case .subjectInsight: return basePriority + 2
+            case .struggle: return basePriority + 2
+            case .sessionSummary: return basePriority + 1
+            case .userNotes: return basePriority
+            case .grades: return basePriority - 1
+            case .studyHabits: return basePriority - 2
+            case .goals: return basePriority - 2
+            case .achievement: return basePriority - 3
             case .conversationHistory: return 2
             }
 
         case .general:
             switch category {
-            case .userNotes: return 6
-            case .goals: return 5
-            case .studyHabits: return 5
-            case .grades: return 4
-            case .weakTopics: return 4
+            case .userNotes: return basePriority + 1
+            case .goals: return basePriority
+            case .studyHabits: return basePriority
+            case .achievement: return basePriority
+            case .grades: return basePriority - 1
+            case .weakTopics: return basePriority - 1
+            case .subjectInsight: return basePriority - 1
+            case .sessionSummary: return basePriority - 2
+            case .struggle: return basePriority - 2
             case .conversationHistory: return 2
             }
         }
