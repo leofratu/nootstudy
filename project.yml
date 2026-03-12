@@ -18,13 +18,19 @@ targets:
       path: Info.plist
       properties:
         LSMinimumSystemVersion: "14.0"
+        NSUserNotificationAlertStyle: "alert"
+    entitlements:
+      path: IBVault/IBVault.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
     settings:
       CODE_SIGN_IDENTITY: "-"
       DEVELOPMENT_TEAM: "" # Allows local build
       ENABLE_PREVIEWS: YES
       SWIFT_VERSION: 5.0
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-      PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.v2
+      PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.app
       INFOPLIST_KEY_UILaunchScreen_Generation: YES
       INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 NootStudy. All rights reserved."
       INFOPLIST_KEY_NSPrincipalClass: NSApplication
