@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12T10:33:17+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, and add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior.",
+  "updated_at": "2026-03-12T10:41:30+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, and add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -135,6 +135,24 @@
         "IBVault/Views/ARIA/ARIAChatView.swift"
       ],
       "summary": "ARIA chat remains scrollable even when assistant messages use embedded rich TeX rendering, by preventing nested web views from hijacking scroll gestures."
+    },
+    {
+      "id": "iface.aria.sidebar_toggle",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/ARIA/ARIAChatView.swift"
+      ],
+      "summary": "ARIA chat exposes a collapsible chats sidebar so users can minimize and restore the session list without leaving the chat view."
+    },
+    {
+      "id": "iface.aria.rich_renderer_gating",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/ARIA/ARIAChatView.swift"
+      ],
+      "summary": "ARIA only uses the WebKit/MathJax renderer for genuinely TeX-heavy assistant replies, leaving normal paragraphs and flashcard prose on native SwiftUI text rendering to cut unnecessary WebContent churn."
     }
   ],
   "edges": [
@@ -207,6 +225,16 @@
       "from": "iface.aria.chat_scroll_behavior",
       "to": "iface.aria.full_tex_renderer",
       "type": "dependency"
+    },
+    {
+      "from": "iface.aria.sidebar_toggle",
+      "to": "iface.aria.chat_sessions",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.rich_renderer_gating",
+      "to": "iface.aria.full_tex_renderer",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -256,6 +284,14 @@
     },
     {
       "id": "iface.aria.chat_scroll_behavior",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.sidebar_toggle",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.rich_renderer_gating",
       "status": "tested"
     }
   ]

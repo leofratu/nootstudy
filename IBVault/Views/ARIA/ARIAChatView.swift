@@ -7,6 +7,7 @@ struct ARIAChatView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \ChatMessage.timestamp) private var allMessages: [ChatMessage]
     @Query(sort: \ARIAChatSession.updatedAt, order: .reverse) private var sessions: [ARIAChatSession]
+    @AppStorage("ariaChatSidebarVisible") private var isSidebarVisible = true
     @State private var ariaService = ARIAService()
     @State private var inputText = ""
     @State private var streamingText = ""
@@ -34,9 +35,12 @@ struct ARIAChatView: View {
     var body: some View {
         NavigationStack {
             HStack(spacing: 0) {
-                sessionSidebar
+                if isSidebarVisible {
+                    sessionSidebar
+                        .transition(.move(edge: .leading).combined(with: .opacity))
 
-                Divider()
+                    Divider()
+                }
 
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in
@@ -88,6 +92,17 @@ struct ARIAChatView: View {
             .background(.background)
             .navigationTitle(selectedSession?.title ?? "ARIA")
             .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isSidebarVisible.toggle()
+                        }
+                    } label: {
+                        Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.right")
+                    }
+                    .help(isSidebarVisible ? "Hide Chats" : "Show Chats")
+                }
+
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         createNewChat()
@@ -311,6 +326,11 @@ struct ARIAChatView: View {
 
     @MainActor
     private func createNewChat() {
+        if !isSidebarVisible {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isSidebarVisible = true
+            }
+        }
         let session = ARIAChatSession()
         context.insert(session)
         try? context.save()
@@ -953,13 +973,7 @@ private struct FlashcardMessageView: View {
 
 enum FormattedMessageFormatter {
     static func shouldPreferRichRenderer(for source: String) -> Bool {
-        source.contains("$") ||
-        source.contains("FRONT:") ||
-        source.contains("BACK:") ||
-        source.contains("### ") ||
-        source.contains("\n- ") ||
-        source.contains("\n1. ") ||
-        source.contains("\n\n")
+        containsDisplayMath(source) || containsComplexTeX(source)
     }
 
     static func sections(from source: String) -> [FormattedMessageSection] {
@@ -1095,6 +1109,15 @@ enum FormattedMessageFormatter {
             .replacingOccurrences(of: "\\]", with: "$$")
             .replacingOccurrences(of: "\\(", with: "$")
             .replacingOccurrences(of: "\\)", with: "$")
+    }
+
+    private static func containsDisplayMath(_ source: String) -> Bool {
+        source.contains("$$")
+    }
+
+    private static func containsComplexTeX(_ source: String) -> Bool {
+        let pattern = #"\\(begin|frac|dfrac|tfrac|sqrt|sum|prod|int|left|right|matrix|aligned|align|cases|pmatrix|bmatrix|vmatrix|Vmatrix|array|overset|underset|boxed|operatorname|text|mathbb|mathbf|mathrm|vec|hat|bar|lim)\b"#
+        return source.range(of: pattern, options: .regularExpression) != nil
     }
 
     private static func appendMathAwareSections(from source: String, into sections: inout [FormattedMessageSection]) {

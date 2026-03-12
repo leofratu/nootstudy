@@ -227,14 +227,17 @@ class ARIAService {
 
     // MARK: - System Prompt Builder
 
+    @MainActor
     func buildSystemPrompt(context: ModelContext) async -> String {
         await buildSystemPrompt(context: context, seedQuery: "")
     }
 
+    @MainActor
     func buildSystemPrompt(context: ModelContext, seedQuery: String) async -> String {
         await buildSystemPrompt(context: context, queryProfile: analyzeQuery(seedQuery))
     }
 
+    @MainActor
     private func buildSystemPrompt(context: ModelContext, queryProfile: QueryProfile) async -> String {
         var prompt = """
         You are ARIA (Adaptive Retrieval Intelligence Assistant), the most efficient AI study companion ever built for IB students.
@@ -411,6 +414,7 @@ class ARIAService {
 
     // MARK: - Memory Preamble
 
+    @MainActor
     private func buildMemoryPreamble(context: ModelContext, queryProfile: QueryProfile) async -> String {
         var descriptor = FetchDescriptor<ARIAMemory>(
             predicate: #Predicate { !$0.isArchived },
@@ -463,6 +467,7 @@ class ARIAService {
 
     // MARK: - App State Snapshot
 
+    @MainActor
     private func buildAppStateSnapshot(context: ModelContext, queryProfile: QueryProfile) async -> String {
         let now = Date()
         var lines: [String] = []
@@ -512,6 +517,7 @@ class ARIAService {
 
     // MARK: - Conversation History
 
+    @MainActor
     private func buildConversationHistory(context: ModelContext, queryProfile: QueryProfile, sessionID: UUID) async -> [GeminiMessage] {
         let windowSize = UserDefaults.standard.integer(forKey: "ariaContextWindow")
         var descriptor = FetchDescriptor<ChatMessage>(

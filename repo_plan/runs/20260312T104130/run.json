@@ -1,0 +1,35 @@
+{
+  "task_id": "20260312T104130_aria_sidebar_and_renderer_noise_reduction",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.sidebar_toggle",
+      "iface.aria.rich_renderer_gating"
+    ],
+    "files": [
+      "IBVault/Views/ARIA/ARIAChatView.swift",
+      "IBVault/Services/ARIAService.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-aria-noise-build CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.sidebar_toggle",
+        "iface.aria.rich_renderer_gating"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.aria.sidebar_toggle",
+    "iface.aria.rich_renderer_gating"
+  ],
+  "tested_interfaces": [
+    "iface.aria.sidebar_toggle",
+    "iface.aria.rich_renderer_gating"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}

@@ -37,6 +37,9 @@ struct RootView: View {
             if let profile = profiles.first {
                 if profile.onboardingCompleted {
                     ContentView()
+                        .onAppear {
+                            NotificationService.requestPermission()
+                        }
                 } else {
                     OnboardingView()
                 }
