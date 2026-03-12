@@ -1,0 +1,125 @@
+{
+  "task_id": "20260312T201053-aria-release",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.study.scope_selection",
+      "iface.review.session_scoped_queue",
+      "iface.flashcards.unit_scoped_generation",
+      "iface.study.mastery_alignment",
+      "iface.aria.app_actions",
+      "iface.aria.shared_formatting",
+      "iface.persistence.update_safe_backups",
+      "iface.release.dmg_distribution"
+    ],
+    "files": [
+      "IBVault/Models/StudyPlan.swift",
+      "IBVault/Models/StudySession.swift",
+      "IBVault/Models/Subject.swift",
+      "IBVault/Engine/ProficiencyTracker.swift",
+      "IBVault/Services/SyllabusSeeder.swift",
+      "IBVault/Services/CardGeneratorService.swift",
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Services/BackupService.swift",
+      "IBVault/Views/ARIA/ARIAChatView.swift",
+      "IBVault/Views/Study/NewStudySessionView.swift",
+      "IBVault/Views/Study/ActiveStudySessionView.swift",
+      "IBVault/Views/Review/ReviewSessionView.swift",
+      "IBVault/Views/Study/StudyPlannerView.swift",
+      "IBVault/Views/Analytics/StudySessionLogView.swift",
+      "IBVault/IBVaultApp.swift",
+      "Info.plist"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Services/ARIAService.swift IBVault/Views/ARIA/ARIAChatView.swift IBVault/Models/ARIAMemory.swift IBVault/Models/UserProfile.swift IBVault/Models/StudyActivity.swift IBVault/Models/StudyCard.swift IBVault/Models/StudyPlan.swift IBVault/Models/StudySession.swift IBVault/Models/Subject.swift IBVault/Models/ReviewSession.swift IBVault/Engine/ProficiencyTracker.swift IBVault/Services/SyllabusSeeder.swift IBVault/Services/CardGeneratorService.swift IBVault/Views/Study/NewStudySessionView.swift IBVault/Views/Study/ActiveStudySessionView.swift IBVault/Views/Review/ReviewSessionView.swift IBVault/Views/Study/StudyPlannerView.swift IBVault/Views/Analytics/StudySessionLogView.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.study.scope_selection",
+        "iface.review.session_scoped_queue",
+        "iface.flashcards.unit_scoped_generation",
+        "iface.study.mastery_alignment",
+        "iface.aria.app_actions",
+        "iface.aria.shared_formatting"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312b build",
+      "ok": true,
+      "interfaces": [
+        "iface.study.scope_selection",
+        "iface.review.session_scoped_queue",
+        "iface.flashcards.unit_scoped_generation",
+        "iface.study.mastery_alignment",
+        "iface.aria.app_actions",
+        "iface.aria.shared_formatting",
+        "iface.persistence.update_safe_backups",
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-release-build-20260312b/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "hdiutil create -volname IBVault -srcfolder /tmp/IBVault-dmg-staging-20260312c -ov -format UDZO /Users/main/Documents/nootstudy/releases/IBVault-1.0-20260312.dmg",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.study.scope_selection",
+    "iface.review.session_scoped_queue",
+    "iface.flashcards.unit_scoped_generation",
+    "iface.study.mastery_alignment",
+    "iface.aria.app_actions",
+    "iface.aria.shared_formatting",
+    "iface.persistence.update_safe_backups",
+    "iface.release.dmg_distribution"
+  ],
+  "tested_interfaces": [
+    "iface.study.scope_selection",
+    "iface.review.session_scoped_queue",
+    "iface.flashcards.unit_scoped_generation",
+    "iface.study.mastery_alignment",
+    "iface.aria.app_actions",
+    "iface.aria.shared_formatting",
+    "iface.persistence.update_safe_backups",
+    "iface.release.dmg_distribution"
+  ],
+  "files_changed": [
+    "IBVault/Engine/ProficiencyTracker.swift",
+    "IBVault/IBVaultApp.swift",
+    "IBVault/Models/StudyPlan.swift",
+    "IBVault/Models/StudySession.swift",
+    "IBVault/Models/Subject.swift",
+    "IBVault/Services/ARIAService.swift",
+    "IBVault/Services/BackupService.swift",
+    "IBVault/Services/CardGeneratorService.swift",
+    "IBVault/Services/SyllabusSeeder.swift",
+    "IBVault/Views/ARIA/ARIAChatView.swift",
+    "IBVault/Views/Analytics/StudySessionLogView.swift",
+    "IBVault/Views/Review/ReviewSessionView.swift",
+    "IBVault/Views/Study/ActiveStudySessionView.swift",
+    "IBVault/Views/Study/NewStudySessionView.swift",
+    "IBVault/Views/Study/StudyPlannerView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "artifacts": {
+    "dmg_path": "/Users/main/Documents/nootstudy/releases/IBVault-1.0-20260312.dmg",
+    "dmg_sha256": "749ee97d263918ae3526702fa8ab5736f8677252095e8011fd1c5c1ccf676643",
+    "app_path": "/tmp/IBVault-release-build-20260312b/Build/Products/Release/IBVault.app"
+  },
+  "notes": [
+    "scripts/tools/rpg_builder.py and scripts/validate_rpg.py are missing in this checkout, so RPG artifacts were refreshed manually.",
+    "Release build completed with existing warnings in ActiveStudySessionView, SmartRecommendationsView, and StudyCalendarView."
+  ]
+}

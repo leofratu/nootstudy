@@ -27,6 +27,24 @@ final class StudySession {
         cardsReviewed == 0 ? 0 : correctCount * 100 / cardsReviewed
     }
 
+    var selectedTopicNames: [String] {
+        StudyScope.parseList(topicsCovered)
+    }
+
+    var studyScope: StudyScope {
+        StudyScope(
+            subjectName: subjectName,
+            unitNames: SyllabusSeeder.unitNames(for: subjectName, topicNames: selectedTopicNames),
+            topicNames: selectedTopicNames,
+            subtopicNames: []
+        )
+    }
+
+    var scopeSummary: String {
+        let summary = studyScope.summary
+        return summary.isEmpty ? subjectName : summary
+    }
+
     init(subjectName: String, topicsCovered: String, startDate: Date, endDate: Date = Date(), cardsReviewed: Int, correctCount: Int, xpEarned: Int) {
         self.id = UUID()
         self.subjectName = subjectName
@@ -38,3 +56,5 @@ final class StudySession {
         self.xpEarned = xpEarned
     }
 }
+
+extension StudySession: Identifiable {}

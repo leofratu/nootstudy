@@ -1,0 +1,43 @@
+{
+  "task_id": "aria-formatting-fix-20260312",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.shared_formatting"
+    ],
+    "files": [
+      "IBVault/Views/ARIA/ARIAChatView.swift",
+      "IBVault/Services/ARIAService.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Views/ARIA/ARIAChatView.swift IBVault/Services/ARIAService.swift IBVault/Models/ARIAMemory.swift IBVault/Models/UserProfile.swift IBVault/Models/StudyActivity.swift IBVault/Models/StudyCard.swift IBVault/Models/StudyPlan.swift IBVault/Models/StudySession.swift IBVault/Models/Subject.swift IBVault/Models/ReviewSession.swift IBVault/Engine/ProficiencyTracker.swift IBVault/Services/SyllabusSeeder.swift IBVault/Services/CardGeneratorService.swift IBVault/Views/Study/NewStudySessionView.swift IBVault/Views/Study/ActiveStudySessionView.swift IBVault/Views/Review/ReviewSessionView.swift IBVault/Views/Study/StudyPlannerView.swift IBVault/Views/Analytics/StudySessionLogView.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.shared_formatting"
+      ]
+    },
+    {
+      "cmd": "xcodebuild -list -project IBVault.xcodeproj",
+      "ok": false,
+      "interfaces": [],
+      "note": "Blocked by local developer directory using CommandLineTools instead of full Xcode (xcode-select error)."
+    }
+  ],
+  "files_changed": [
+    "IBVault/Views/ARIA/ARIAChatView.swift",
+    "IBVault/Services/ARIAService.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "implemented_interfaces": [
+    "iface.aria.shared_formatting"
+  ],
+  "tested_interfaces": [
+    "iface.aria.shared_formatting"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": 8
+}

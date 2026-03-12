@@ -3,6 +3,7 @@ import SwiftData
 
 struct BackupService {
     private static let folderName = "IBVault Backups"
+    private static let automaticBackupInterval: TimeInterval = 60 * 60 * 24
 
     static var backupDirectory: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
@@ -20,6 +21,16 @@ struct BackupService {
         return meta.date
     }
 
+    @discardableResult
+    static func autoBackupIfNeeded(context: ModelContext) throws -> URL? {
+        if let latestBackupDate,
+           Date().timeIntervalSince(latestBackupDate) < automaticBackupInterval {
+            return nil
+        }
+
+        return try exportBackup(context: context)
+    }
+
     // MARK: - Export All Data
 
     static func exportBackup(context: ModelContext) throws -> URL {
@@ -32,68 +43,67 @@ struct BackupService {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
-        // 1. Profile
+        var writtenFiles: [String] = []
+
         if let profiles = try? context.fetch(FetchDescriptor<UserProfile>()),
            let profile = profiles.first {
-            let profileData = ProfileBackup(from: profile)
-            let data = try encoder.encode(profileData)
-            try data.write(to: backupDir.appendingPathComponent("profile.json"))
+            try write(ProfileBackup(from: profile), named: "profile.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("profile.json")
         }
 
-        // 2. Subjects + Cards
         if let subjects = try? context.fetch(FetchDescriptor<Subject>()) {
-            let subjectBackups = subjects.map { SubjectBackup(from: $0) }
-            let data = try encoder.encode(subjectBackups)
-            try data.write(to: backupDir.appendingPathComponent("subjects.json"))
+            try write(subjects.map(SubjectBackup.init), named: "subjects.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("subjects.json")
         }
 
-        // 3. Grades
         if let grades = try? context.fetch(FetchDescriptor<Grade>()) {
-            let gradeBackups = grades.map { GradeBackup(from: $0) }
-            let data = try encoder.encode(gradeBackups)
-            try data.write(to: backupDir.appendingPathComponent("grades.json"))
+            try write(grades.map(GradeBackup.init), named: "grades.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("grades.json")
         }
 
-        // 4. Review Sessions
         if let sessions = try? context.fetch(FetchDescriptor<ReviewSession>()) {
-            let sessionBackups = sessions.map { SessionBackup(from: $0) }
-            let data = try encoder.encode(sessionBackups)
-            try data.write(to: backupDir.appendingPathComponent("review_sessions.json"))
+            try write(sessions.map(SessionBackup.init), named: "review_sessions.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("review_sessions.json")
         }
 
-        // 5. ARIA Memory
         if let memories = try? context.fetch(FetchDescriptor<ARIAMemory>()) {
-            let memBackups = memories.map { MemoryBackup(from: $0) }
-            let data = try encoder.encode(memBackups)
-            try data.write(to: backupDir.appendingPathComponent("aria_memory.json"))
+            try write(memories.map(MemoryBackup.init), named: "aria_memory.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("aria_memory.json")
         }
 
-        // 6. Chat History
+        if let chatSessions = try? context.fetch(FetchDescriptor<ARIAChatSession>()) {
+            try write(chatSessions.map(ChatSessionBackup.init), named: "aria_chat_sessions.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("aria_chat_sessions.json")
+        }
+
         if let chats = try? context.fetch(FetchDescriptor<ChatMessage>()) {
-            let chatBackups = chats.map { ChatBackup(from: $0) }
-            let data = try encoder.encode(chatBackups)
-            try data.write(to: backupDir.appendingPathComponent("chat_history.json"))
+            try write(chats.map(ChatBackup.init), named: "chat_history.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("chat_history.json")
         }
 
-        // 7. Study Activity
         if let activities = try? context.fetch(FetchDescriptor<StudyActivity>()) {
-            let actBackups = activities.map { ActivityBackup(from: $0) }
-            let data = try encoder.encode(actBackups)
-            try data.write(to: backupDir.appendingPathComponent("study_activity.json"))
+            try write(activities.map(ActivityBackup.init), named: "study_activity.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("study_activity.json")
         }
 
-        // 8. Achievements
+        if let studySessions = try? context.fetch(FetchDescriptor<StudySession>()) {
+            try write(studySessions.map(StudySessionBackup.init), named: "study_sessions.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("study_sessions.json")
+        }
+
+        if let studyPlans = try? context.fetch(FetchDescriptor<StudyPlan>()) {
+            try write(studyPlans.map(StudyPlanBackup.init), named: "study_plans.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("study_plans.json")
+        }
+
         if let achievements = try? context.fetch(FetchDescriptor<Achievement>()) {
-            let achBackups = achievements.map { AchievementBackup(from: $0) }
-            let data = try encoder.encode(achBackups)
-            try data.write(to: backupDir.appendingPathComponent("achievements.json"))
+            try write(achievements.map(AchievementBackup.init), named: "achievements.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("achievements.json")
         }
 
-        // Meta
-        let meta = BackupMeta(date: Date(), fileCount: 8, version: "1.0")
+        let meta = BackupMeta(date: Date(), fileCount: writtenFiles.count, version: appVersion())
         let metaData = try encoder.encode(meta)
         try metaData.write(to: backupDir.appendingPathComponent("backup_meta.json"))
-        // Also save to root for quick "last backup" check
         try metaData.write(to: dir.appendingPathComponent("backup_meta.json"))
 
         return backupDir
@@ -115,72 +125,83 @@ struct BackupService {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        // 1. Profile
-        let profileURL = directory.appendingPathComponent("profile.json")
-        if let data = try? Data(contentsOf: profileURL),
-           let backup = try? decoder.decode(ProfileBackup.self, from: data) {
-            // Clear existing
-            if let existing = try? context.fetch(FetchDescriptor<UserProfile>()) {
-                existing.forEach { context.delete($0) }
-            }
-            let profile = backup.toModel()
-            context.insert(profile)
+        clearAll(UserProfile.self, context: context)
+        clearAll(Subject.self, context: context)
+        clearAll(Grade.self, context: context)
+        clearAll(ReviewSession.self, context: context)
+        clearAll(ARIAMemory.self, context: context)
+        clearAll(ARIAChatSession.self, context: context)
+        clearAll(ChatMessage.self, context: context)
+        clearAll(StudyActivity.self, context: context)
+        clearAll(StudySession.self, context: context)
+        clearAll(StudyPlan.self, context: context)
+        clearAll(Achievement.self, context: context)
+
+        if let backup = decode(ProfileBackup.self, from: directory.appendingPathComponent("profile.json"), decoder: decoder) {
+            context.insert(backup.toModel())
         }
 
-        // 2. Subjects + Cards
-        let subjectsURL = directory.appendingPathComponent("subjects.json")
-        if let data = try? Data(contentsOf: subjectsURL),
-           let backups = try? decoder.decode([SubjectBackup].self, from: data) {
-            // Clear existing
-            if let existing = try? context.fetch(FetchDescriptor<Subject>()) {
-                existing.forEach { context.delete($0) }
-            }
-            for backup in backups {
-                let subject = backup.toModel()
-                context.insert(subject)
-            }
-        }
-
-        // 3. Grades
-        let gradesURL = directory.appendingPathComponent("grades.json")
-        if let data = try? Data(contentsOf: gradesURL),
-           let backups = try? decoder.decode([GradeBackup].self, from: data) {
-            if let existing = try? context.fetch(FetchDescriptor<Grade>()) {
-                existing.forEach { context.delete($0) }
-            }
+        if let backups = decode([SubjectBackup].self, from: directory.appendingPathComponent("subjects.json"), decoder: decoder) {
             for backup in backups {
                 context.insert(backup.toModel())
             }
         }
 
-        // 4. Study Activity
-        let actURL = directory.appendingPathComponent("study_activity.json")
-        if let data = try? Data(contentsOf: actURL),
-           let backups = try? decoder.decode([ActivityBackup].self, from: data) {
-            if let existing = try? context.fetch(FetchDescriptor<StudyActivity>()) {
-                existing.forEach { context.delete($0) }
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        let subjectsByName = Dictionary(uniqueKeysWithValues: subjects.map { ($0.name, $0) })
+
+        if let backups = decode([GradeBackup].self, from: directory.appendingPathComponent("grades.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel(subjectsByName: subjectsByName))
             }
-            for backup in backups { context.insert(backup.toModel()) }
         }
 
-        // 5. ARIA Memory
-        let memURL = directory.appendingPathComponent("aria_memory.json")
-        if let data = try? Data(contentsOf: memURL),
-           let backups = try? decoder.decode([MemoryBackup].self, from: data) {
-            if let existing = try? context.fetch(FetchDescriptor<ARIAMemory>()) {
-                existing.forEach { context.delete($0) }
+        if let backups = decode([SessionBackup].self, from: directory.appendingPathComponent("review_sessions.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
             }
-            for backup in backups { context.insert(backup.toModel()) }
         }
 
-        // 6. Achievements
-        let achURL = directory.appendingPathComponent("achievements.json")
-        if let data = try? Data(contentsOf: achURL),
-           let backups = try? decoder.decode([AchievementBackup].self, from: data) {
-            if let existing = try? context.fetch(FetchDescriptor<Achievement>()) {
-                existing.forEach { context.delete($0) }
+        if let backups = decode([MemoryBackup].self, from: directory.appendingPathComponent("aria_memory.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
             }
-            for backup in backups { context.insert(backup.toModel()) }
+        }
+
+        if let backups = decode([ChatSessionBackup].self, from: directory.appendingPathComponent("aria_chat_sessions.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
+            }
+        }
+
+        if let backups = decode([ChatBackup].self, from: directory.appendingPathComponent("chat_history.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
+            }
+        }
+
+        if let backups = decode([ActivityBackup].self, from: directory.appendingPathComponent("study_activity.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
+            }
+        }
+
+        if let backups = decode([StudySessionBackup].self, from: directory.appendingPathComponent("study_sessions.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
+            }
+        }
+
+        if let backups = decode([StudyPlanBackup].self, from: directory.appendingPathComponent("study_plans.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
+            }
+        }
+
+        if let backups = decode([AchievementBackup].self, from: directory.appendingPathComponent("achievements.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
+            }
         }
 
         try context.save()
@@ -204,6 +225,26 @@ struct BackupService {
 
     static func deleteBackup(at url: URL) throws {
         try FileManager.default.removeItem(at: url)
+    }
+
+    private static func clearAll<Model: PersistentModel>(_ type: Model.Type, context: ModelContext) {
+        if let existing = try? context.fetch(FetchDescriptor<Model>()) {
+            existing.forEach { context.delete($0) }
+        }
+    }
+
+    private static func write<Value: Encodable>(_ value: Value, named fileName: String, into directory: URL, encoder: JSONEncoder) throws {
+        let data = try encoder.encode(value)
+        try data.write(to: directory.appendingPathComponent(fileName))
+    }
+
+    private static func decode<Value: Decodable>(_ type: Value.Type, from fileURL: URL, decoder: JSONDecoder) -> Value? {
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return try? decoder.decode(type, from: data)
+    }
+
+    private static func appVersion() -> String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0"
     }
 }
 
@@ -273,69 +314,227 @@ struct SubjectBackup: Codable {
 }
 
 struct CardBackup: Codable {
-    let topicName: String; let subtopic: String; let front: String; let back: String
+    let id: UUID; let topicName: String; let subtopic: String; let front: String; let back: String
     let easeFactor: Double; let interval: Int; let repetitions: Int
     let nextReviewDate: Date; let proficiencyRaw: String; let consecutiveCorrect: Int
-    let isCustom: Bool
+    let isCustom: Bool; let isAIGenerated: Bool?; let createdDate: Date
+    let lastReviewedDate: Date?; let generationSource: String?
+    let totalReviewCount: Int; let successfulReviewCount: Int
 
     init(from c: StudyCard) {
-        topicName = c.topicName; subtopic = c.subtopic; front = c.front; back = c.back
+        id = c.id; topicName = c.topicName; subtopic = c.subtopic; front = c.front; back = c.back
         easeFactor = c.easeFactor; interval = c.interval; repetitions = c.repetitions
         nextReviewDate = c.nextReviewDate; proficiencyRaw = c.proficiencyRaw
         consecutiveCorrect = c.consecutiveCorrect; isCustom = c.isCustom
+        isAIGenerated = c.isAIGenerated; createdDate = c.createdDate
+        lastReviewedDate = c.lastReviewedDate; generationSource = c.generationSource
+        totalReviewCount = c.totalReviewCount; successfulReviewCount = c.successfulReviewCount
     }
 
     func toModel() -> StudyCard {
-        let c = StudyCard(topicName: topicName, subtopic: subtopic, front: front, back: back, isCustom: isCustom)
+        let c = StudyCard(
+            topicName: topicName,
+            subtopic: subtopic,
+            front: front,
+            back: back,
+            isCustom: isCustom,
+            isAIGenerated: isAIGenerated,
+            generationSource: generationSource
+        )
+        c.id = id
         c.easeFactor = easeFactor; c.interval = interval; c.repetitions = repetitions
         c.nextReviewDate = nextReviewDate; c.proficiencyRaw = proficiencyRaw
         c.consecutiveCorrect = consecutiveCorrect
+        c.createdDate = createdDate; c.lastReviewedDate = lastReviewedDate
+        c.totalReviewCount = totalReviewCount; c.successfulReviewCount = successfulReviewCount
         return c
     }
 }
 
 struct GradeBackup: Codable {
-    let component: String; let score: Int; let predictedGrade: Int?
+    let id: UUID; let component: String; let score: Int; let predictedGrade: Int?
     let date: Date; let teacherFeedback: String; let subjectName: String
 
     init(from g: Grade) {
-        component = g.component; score = g.score; predictedGrade = g.predictedGrade
+        id = g.id; component = g.component; score = g.score; predictedGrade = g.predictedGrade
         date = g.date; teacherFeedback = g.teacherFeedback; subjectName = g.subject?.name ?? ""
     }
 
-    func toModel() -> Grade { Grade(component: component, score: score, predictedGrade: predictedGrade, teacherFeedback: teacherFeedback) }
+    func toModel(subjectsByName: [String: Subject]) -> Grade {
+        let grade = Grade(
+            component: component,
+            score: score,
+            predictedGrade: predictedGrade,
+            teacherFeedback: teacherFeedback,
+            subject: subjectsByName[subjectName]
+        )
+        grade.id = id
+        grade.date = date
+        return grade
+    }
 }
 
 struct SessionBackup: Codable {
-    let timestamp: Date; let subjectName: String; let topicName: String
-    let qualityRating: Int; let sessionDuration: TimeInterval
+    let id: UUID; let timestamp: Date; let cardID: UUID; let subjectName: String; let topicName: String
+    let qualityRating: Int; let sessionDuration: TimeInterval; let wasCorrect: Bool
 
     init(from s: ReviewSession) {
-        timestamp = s.timestamp; subjectName = s.subjectName; topicName = s.topicName
-        qualityRating = s.qualityRating; sessionDuration = s.sessionDuration
+        id = s.id; timestamp = s.timestamp; cardID = s.cardID; subjectName = s.subjectName; topicName = s.topicName
+        qualityRating = s.qualityRating; sessionDuration = s.sessionDuration; wasCorrect = s.wasCorrect
+    }
+
+    func toModel() -> ReviewSession {
+        let session = ReviewSession(
+            cardID: cardID,
+            subjectName: subjectName,
+            topicName: topicName,
+            qualityRating: qualityRating,
+            sessionDuration: sessionDuration
+        )
+        session.id = id
+        session.timestamp = timestamp
+        session.wasCorrect = wasCorrect
+        return session
     }
 }
 
 struct MemoryBackup: Codable {
-    let categoryRaw: String; let content: String; let timestamp: Date; let isCompacted: Bool
+    let id: UUID; let categoryRaw: String; let content: String; let timestamp: Date
+    let isCompacted: Bool; let isArchived: Bool; let importanceRaw: Int
+    let subjectName: String?; let topicName: String?; let importanceScore: Double
+    let accessCount: Int; let lastAccessed: Date?; let relatedMemoryIDs: [UUID]; let tags: [String]
 
     init(from m: ARIAMemory) {
-        categoryRaw = m.categoryRaw; content = m.content; timestamp = m.timestamp; isCompacted = m.isCompacted
+        id = m.id; categoryRaw = m.categoryRaw; content = m.content; timestamp = m.timestamp
+        isCompacted = m.isCompacted; isArchived = m.isArchived; importanceRaw = m.importanceRaw
+        subjectName = m.subjectName; topicName = m.topicName; importanceScore = m.importanceScore
+        accessCount = m.accessCount; lastAccessed = m.lastAccessed; relatedMemoryIDs = m.relatedMemoryIDs; tags = m.tags
     }
+
     func toModel() -> ARIAMemory {
-        ARIAMemory(category: MemoryCategory(rawValue: categoryRaw) ?? .conversationHistory, content: content, isCompacted: isCompacted)
+        let memory = ARIAMemory(
+            category: MemoryCategory(rawValue: categoryRaw) ?? .conversationHistory,
+            content: content,
+            isCompacted: isCompacted,
+            importance: MemoryImportance(rawValue: importanceRaw) ?? .medium,
+            subjectName: subjectName,
+            topicName: topicName,
+            tags: tags
+        )
+        memory.id = id
+        memory.timestamp = timestamp
+        memory.isArchived = isArchived
+        memory.importanceRaw = importanceRaw
+        memory.importanceScore = importanceScore
+        memory.accessCount = accessCount
+        memory.lastAccessed = lastAccessed
+        memory.relatedMemoryIDs = relatedMemoryIDs
+        return memory
     }
 }
 
 struct ChatBackup: Codable {
-    let role: String; let content: String; let timestamp: Date
-    init(from c: ChatMessage) { role = c.role; content = c.content; timestamp = c.timestamp }
+    let id: UUID; let role: String; let content: String; let timestamp: Date; let sessionID: UUID?
+
+    init(from c: ChatMessage) {
+        id = c.id; role = c.role; content = c.content; timestamp = c.timestamp; sessionID = c.sessionID
+    }
+
+    func toModel() -> ChatMessage {
+        let message = ChatMessage(role: role, content: content, sessionID: sessionID)
+        message.id = id
+        message.timestamp = timestamp
+        return message
+    }
+}
+
+struct ChatSessionBackup: Codable {
+    let id: UUID; let title: String; let createdAt: Date; let updatedAt: Date
+    let lastMessagePreview: String; let isArchived: Bool
+
+    init(from session: ARIAChatSession) {
+        id = session.id; title = session.title; createdAt = session.createdAt; updatedAt = session.updatedAt
+        lastMessagePreview = session.lastMessagePreview; isArchived = session.isArchived
+    }
+
+    func toModel() -> ARIAChatSession {
+        let session = ARIAChatSession(title: title, lastMessagePreview: lastMessagePreview, isArchived: isArchived)
+        session.id = id
+        session.createdAt = createdAt
+        session.updatedAt = updatedAt
+        return session
+    }
 }
 
 struct ActivityBackup: Codable {
-    let date: Date; let cardsReviewed: Int; let minutesStudied: Double; let xpEarned: Int
-    init(from a: StudyActivity) { date = a.date; cardsReviewed = a.cardsReviewed; minutesStudied = a.minutesStudied; xpEarned = a.xpEarned }
-    func toModel() -> StudyActivity { StudyActivity(date: date, cardsReviewed: cardsReviewed, minutesStudied: minutesStudied, xpEarned: xpEarned) }
+    let id: UUID; let date: Date; let cardsReviewed: Int; let minutesStudied: Double; let xpEarned: Int
+
+    init(from a: StudyActivity) {
+        id = a.id; date = a.date; cardsReviewed = a.cardsReviewed; minutesStudied = a.minutesStudied; xpEarned = a.xpEarned
+    }
+
+    func toModel() -> StudyActivity {
+        let activity = StudyActivity(date: date, cardsReviewed: cardsReviewed, minutesStudied: minutesStudied, xpEarned: xpEarned)
+        activity.id = id
+        return activity
+    }
+}
+
+struct StudySessionBackup: Codable {
+    let id: UUID; let subjectName: String; let topicsCovered: String
+    let startDate: Date; let endDate: Date; let cardsReviewed: Int; let correctCount: Int; let xpEarned: Int
+
+    init(from session: StudySession) {
+        id = session.id; subjectName = session.subjectName; topicsCovered = session.topicsCovered
+        startDate = session.startDate; endDate = session.endDate; cardsReviewed = session.cardsReviewed
+        correctCount = session.correctCount; xpEarned = session.xpEarned
+    }
+
+    func toModel() -> StudySession {
+        let session = StudySession(
+            subjectName: subjectName,
+            topicsCovered: topicsCovered,
+            startDate: startDate,
+            endDate: endDate,
+            cardsReviewed: cardsReviewed,
+            correctCount: correctCount,
+            xpEarned: xpEarned
+        )
+        session.id = id
+        return session
+    }
+}
+
+struct StudyPlanBackup: Codable {
+    let id: UUID; let subjectName: String; let topicName: String; let subtopicName: String
+    let planMarkdown: String; let createdDate: Date; let scheduledDate: Date; let scheduledEndDate: Date
+    let isCompleted: Bool; let notes: String; let durationMinutes: Int; let kindRaw: String; let reviewIntervalDays: Int?
+
+    init(from plan: StudyPlan) {
+        id = plan.id; subjectName = plan.subjectName; topicName = plan.topicName; subtopicName = plan.subtopicName
+        planMarkdown = plan.planMarkdown; createdDate = plan.createdDate; scheduledDate = plan.scheduledDate
+        scheduledEndDate = plan.scheduledEndDate; isCompleted = plan.isCompleted; notes = plan.notes
+        durationMinutes = plan.durationMinutes; kindRaw = plan.kindRaw; reviewIntervalDays = plan.reviewIntervalDays
+    }
+
+    func toModel() -> StudyPlan {
+        let plan = StudyPlan(
+            subjectName: subjectName,
+            topicName: topicName,
+            subtopicName: subtopicName,
+            planMarkdown: planMarkdown,
+            scheduledDate: scheduledDate,
+            durationMinutes: durationMinutes,
+            notes: notes,
+            kind: StudyPlanKind(rawValue: kindRaw) ?? .studySession,
+            reviewIntervalDays: reviewIntervalDays
+        )
+        plan.id = id
+        plan.createdDate = createdDate
+        plan.scheduledEndDate = scheduledEndDate
+        plan.isCompleted = isCompleted
+        return plan
+    }
 }
 
 struct AchievementBackup: Codable {

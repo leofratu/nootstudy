@@ -17,12 +17,58 @@ class ARIAService {
     private let minMessagesBeforeCompaction = 16
     private let minMessagesToKeepAfterCompaction = 8
 
+    private struct PlannedAppAction: Codable {
+        let type: String
+        let subjectName: String?
+        let topics: [String]?
+        let subtopics: [String]?
+        let scheduledAt: String?
+        let durationMinutes: Int?
+        let cardCount: Int?
+        let masteryLevel: String?
+        let dailyGoal: Int?
+        let targetIBScore: Int?
+        let minutesStudied: Double?
+        let xpEarned: Int?
+        let notes: String?
+        let memoryCategory: String?
+        let searchText: String?
+        let frontText: String?
+        let backText: String?
+    }
+
+    private struct ActionExecutionSummary {
+        let completed: [String]
+        let failed: [String]
+
+        var isEmpty: Bool {
+            completed.isEmpty && failed.isEmpty
+        }
+
+        var promptContext: String {
+            guard !isEmpty else { return "" }
+            var lines = ["ARIA app actions executed in this turn:"]
+            if !completed.isEmpty {
+                lines.append("Completed:")
+                lines.append(contentsOf: completed.map { "- \($0)" })
+            }
+            if !failed.isEmpty {
+                lines.append("Failed:")
+                lines.append(contentsOf: failed.map { "- \($0)" })
+            }
+            return lines.joined(separator: "\n")
+        }
+    }
+
     init() {
         suggestedPrompts = [
             "What should I study today?",
             "Give me a study plan",
             "Quiz me on my weakest topic",
-            "How can I improve my grades?"
+            "How can I improve my grades?",
+            "Create a study session for Biology tomorrow at 6",
+            "Generate flashcards for my weakest Economics topic",
+            "Clean up weak flashcards and assign me a session from my weakest topic"
         ]
     }
 
@@ -178,9 +224,17 @@ class ARIAService {
             do {
                 let queryProfile = analyzeQuery(userMessage)
                 let loggingContext = inferredLoggingContext(context: context, queryProfile: queryProfile)
+                let actionSummary = try await self.planAndExecuteAppActions(
+                    for: userMessage,
+                    context: context,
+                    queryProfile: queryProfile
+                )
 
                 // Build context
-                let systemPrompt = await buildSystemPrompt(context: context, queryProfile: queryProfile)
+                var systemPrompt = await buildSystemPrompt(context: context, queryProfile: queryProfile)
+                if !actionSummary.isEmpty {
+                    systemPrompt += "\n\n\(actionSummary.promptContext)\nReference these concrete changes in your reply briefly before giving any next-step guidance."
+                }
                 let messages = await buildConversationHistory(context: context, queryProfile: queryProfile, sessionID: session.id)
 
                 var fullResponse = ""
@@ -236,6 +290,677 @@ class ARIAService {
         }
     }
 
+    @MainActor
+    private func planAndExecuteAppActions(
+        for userMessage: String,
+        context: ModelContext,
+        queryProfile: QueryProfile
+    ) async throws -> ActionExecutionSummary {
+        guard shouldAttemptAppActions(for: userMessage, queryProfile: queryProfile) else {
+            return ActionExecutionSummary(completed: [], failed: [])
+        }
+
+        guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
+            return ActionExecutionSummary(completed: [], failed: ["ARIA could not execute app actions because the API key is missing."])
+        }
+
+        let planningPrompt = buildActionPlanningPrompt(userMessage: userMessage, context: context)
+        let response = try await GeminiService.generateContent(
+            messages: [GeminiMessage(role: "user", text: planningPrompt)],
+            systemInstruction: """
+            You convert user requests into safe app actions for an IB study app.
+            Return ONLY raw JSON as an array.
+            Use [] when the user is not explicitly asking for the app to change data.
+            Supported action types:
+            - create_study_session
+            - assign_weakest_study_session
+            - create_review_session
+            - reschedule_study_session
+            - complete_study_session
+            - cancel_study_session
+            - generate_flashcards
+            - edit_flashcard
+            - delete_flashcards
+            - update_progress
+            - update_profile
+            - save_memory
+            Rules:
+            - Only create actions for explicit edit/create/assign/generate/set/update requests.
+            - Prefer concrete subject names that exist in the provided app state.
+            - Use ISO-8601 timestamps for scheduledAt.
+            - Keep topics/subtopics arrays empty rather than inventing values.
+            - Use frontText/backText when editing flashcards.
+            - Use searchText only when the user gives identifying wording for a card or asks to clean up/delete cards.
+            """,
+            apiKey: apiKey
+        )
+
+        let actions = parsePlannedAppActions(from: response)
+        guard !actions.isEmpty else {
+            return ActionExecutionSummary(completed: [], failed: [])
+        }
+
+        var completed: [String] = []
+        var failed: [String] = []
+
+        for action in actions.prefix(4) {
+            do {
+                if let summary = try await execute(action: action, context: context) {
+                    completed.append(summary)
+                }
+            } catch {
+                failed.append(error.localizedDescription)
+            }
+        }
+
+        if !completed.isEmpty || !failed.isEmpty {
+            try? context.save()
+        }
+
+        return ActionExecutionSummary(completed: completed, failed: failed)
+    }
+
+    private func shouldAttemptAppActions(for userMessage: String, queryProfile: QueryProfile) -> Bool {
+        let normalized = userMessage.lowercased()
+        if containsAny(normalized, phrases: [
+            "create", "schedule", "assign", "set up", "set", "update", "edit",
+            "change", "move", "reschedule", "generate", "make", "mark", "log"
+        ]) {
+            return true
+        }
+
+        switch queryProfile.intent {
+        case .studyPlan, .flashcards:
+            return containsAny(normalized, phrases: ["for me", "go ahead", "do it", "make it", "generate them"])
+        default:
+            return false
+        }
+    }
+
+    @MainActor
+    private func buildActionPlanningPrompt(userMessage: String, context: ModelContext) -> String {
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        let plans = (try? context.fetch(FetchDescriptor<StudyPlan>())) ?? []
+        let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first
+
+        let subjectLines = subjects.map { subject in
+            let topics = Array(Set(subject.cards.map(\.topicName))).sorted().prefix(10).joined(separator: ", ")
+            return "- \(subject.name) \(subject.level) | topics: \(topics)"
+        }
+
+        let upcomingPlans = plans
+            .filter { !$0.isCompleted }
+            .sorted { $0.scheduledDate < $1.scheduledDate }
+            .prefix(8)
+            .map { "- \( $0.subjectName) | \($0.selectionSummary) | \($0.scheduledDate.formatted(date: .abbreviated, time: .shortened))" }
+
+        var lines = [
+            "User request:",
+            userMessage,
+            "",
+            "Available subjects:",
+            subjectLines.joined(separator: "\n"),
+            "",
+            "Upcoming study plans:",
+            upcomingPlans.isEmpty ? "- none" : upcomingPlans.joined(separator: "\n")
+        ]
+
+        if let profile {
+            lines.append("")
+            lines.append("User profile:")
+            lines.append("- dailyGoal: \(profile.dailyGoal)")
+            lines.append("- targetIBScore: \(profile.targetIBScore)")
+        }
+
+        lines.append("")
+        lines.append("Return JSON array with fields: type, subjectName, topics, subtopics, scheduledAt, durationMinutes, cardCount, masteryLevel, dailyGoal, targetIBScore, minutesStudied, xpEarned, notes, memoryCategory, searchText, frontText, backText.")
+        return lines.joined(separator: "\n")
+    }
+
+    private func parsePlannedAppActions(from response: String) -> [PlannedAppAction] {
+        let cleaned = response
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let start = cleaned.firstIndex(of: "["),
+              let end = cleaned.lastIndex(of: "]") else {
+            return []
+        }
+
+        let json = String(cleaned[start...end])
+        guard let data = json.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([PlannedAppAction].self, from: data)) ?? []
+    }
+
+    @MainActor
+    private func execute(action: PlannedAppAction, context: ModelContext) async throws -> String? {
+        switch action.type {
+        case "create_study_session":
+            return try executeCreateStudySession(action: action, context: context)
+        case "assign_weakest_study_session":
+            return try executeAssignWeakestStudySession(action: action, context: context)
+        case "create_review_session":
+            return try executeCreateReviewSession(action: action, context: context)
+        case "reschedule_study_session":
+            return try executeRescheduleStudySession(action: action, context: context)
+        case "complete_study_session":
+            return try executeCompleteStudySession(action: action, context: context)
+        case "cancel_study_session":
+            return try executeCancelStudySession(action: action, context: context)
+        case "generate_flashcards":
+            return try await executeGenerateFlashcards(action: action, context: context)
+        case "edit_flashcard":
+            return try executeEditFlashcard(action: action, context: context)
+        case "delete_flashcards":
+            return try executeDeleteFlashcards(action: action, context: context)
+        case "update_progress":
+            return try executeUpdateProgress(action: action, context: context)
+        case "update_profile":
+            return try executeUpdateProfile(action: action, context: context)
+        case "save_memory":
+            return try executeSaveMemory(action: action, context: context)
+        default:
+            return nil
+        }
+    }
+
+    @MainActor
+    private func executeCreateStudySession(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let subject = resolveSubject(named: action.subjectName, context: context) else {
+            throw NSError(domain: "ARIAService", code: 1, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject to create that study session."])
+        }
+
+        let topics = sanitizedTopics(action.topics, subjectName: subject.name)
+        guard !topics.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 2, userInfo: [NSLocalizedDescriptionKey: "ARIA needs at least one valid topic to create a study session."])
+        }
+
+        let scheduledDate = parseScheduledDate(action.scheduledAt) ?? defaultScheduledDate()
+        let duration = min(max(action.durationMinutes ?? 60, 15), 180)
+        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: topics)
+
+        let plan = StudyPlan(
+            subjectName: subject.name,
+            topicName: topics.joined(separator: ", "),
+            subtopicName: subtopics.joined(separator: ", "),
+            planMarkdown: action.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            scheduledDate: scheduledDate,
+            durationMinutes: duration
+        )
+        context.insert(plan)
+
+        ARIAService.recordStudyPlan(
+            subjectName: subject.name,
+            topicName: plan.topicName,
+            subtopicName: plan.subtopicName,
+            scheduledDate: scheduledDate,
+            durationMinutes: duration,
+            planMarkdown: plan.planMarkdown
+        )
+
+        return "Created a \(duration)-minute study session for \(subject.name) on \(plan.selectionSummary) at \(scheduledDate.formatted(date: .abbreviated, time: .shortened))."
+    }
+
+    @MainActor
+    private func executeAssignWeakestStudySession(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let subject = resolveSubject(named: action.subjectName, context: context) else {
+            throw NSError(domain: "ARIAService", code: 15, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject to assign that study session."])
+        }
+
+        let topics = Array(uniqueWeakTopicNames(for: subject).prefix(2))
+        guard !topics.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 16, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find a weak topic to build that study session around."])
+        }
+
+        let scheduledDate = parseScheduledDate(action.scheduledAt) ?? defaultScheduledDate()
+        let duration = min(max(action.durationMinutes ?? 50, 15), 180)
+        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: topics)
+        let defaultNotes = """
+        ### ARIA focus session
+
+        - Start with the weakest concept first
+        - Review mark-scheme language for the selected topic
+        - Finish with one retrieval round and one exam-style application
+        """
+
+        let plan = StudyPlan(
+            subjectName: subject.name,
+            topicName: topics.joined(separator: ", "),
+            subtopicName: subtopics.joined(separator: ", "),
+            planMarkdown: action.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? defaultNotes,
+            scheduledDate: scheduledDate,
+            durationMinutes: duration
+        )
+        context.insert(plan)
+
+        ARIAService.recordStudyPlan(
+            subjectName: subject.name,
+            topicName: plan.topicName,
+            subtopicName: plan.subtopicName,
+            scheduledDate: scheduledDate,
+            durationMinutes: duration,
+            planMarkdown: plan.planMarkdown
+        )
+
+        return "Assigned a \(duration)-minute weakest-topic study session for \(subject.name) on \(plan.selectionSummary) at \(scheduledDate.formatted(date: .abbreviated, time: .shortened))."
+    }
+
+    @MainActor
+    private func executeCreateReviewSession(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let subject = resolveSubject(named: action.subjectName, context: context) else {
+            throw NSError(domain: "ARIAService", code: 12, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject to assign that review session."])
+        }
+
+        let requestedTopics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let topics = requestedTopics.isEmpty
+            ? Array(uniqueWeakTopicNames(for: subject).prefix(2))
+            : requestedTopics
+        guard !topics.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 13, userInfo: [NSLocalizedDescriptionKey: "ARIA could not determine which topics to review."])
+        }
+
+        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: topics)
+        let scheduledDate = parseScheduledDate(action.scheduledAt) ?? defaultScheduledDate()
+        let duration = min(max(action.durationMinutes ?? 30, 15), 90)
+
+        let plan = StudyPlan(
+            subjectName: subject.name,
+            topicName: topics.joined(separator: ", "),
+            subtopicName: subtopics.joined(separator: ", "),
+            planMarkdown: action.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "📝 **Review Session**\n\n1. Work through due cards\n2. Revisit weak explanations\n3. Finish with one exam-style question",
+            scheduledDate: scheduledDate,
+            durationMinutes: duration,
+            kind: .followUpReview,
+            reviewIntervalDays: nil
+        )
+        context.insert(plan)
+
+        return "Assigned a \(duration)-minute review session for \(subject.name) on \(plan.selectionSummary) at \(scheduledDate.formatted(date: .abbreviated, time: .shortened))."
+    }
+
+    @MainActor
+    private func executeRescheduleStudySession(action: PlannedAppAction, context: ModelContext) throws -> String {
+        let subjectName = action.subjectName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let targetTopics = action.topics ?? []
+        let plans = (try? context.fetch(FetchDescriptor<StudyPlan>())) ?? []
+        guard let plan = plans
+            .filter({ !$0.isCompleted && (subjectName.isEmpty || $0.subjectName.caseInsensitiveCompare(subjectName) == .orderedSame) })
+            .sorted(by: { $0.scheduledDate < $1.scheduledDate })
+            .first(where: { plan in
+                targetTopics.isEmpty || targetTopics.allSatisfy { plan.selectedTopicNames.contains($0) || plan.topicName.caseInsensitiveCompare($0) == .orderedSame }
+            }) else {
+            throw NSError(domain: "ARIAService", code: 3, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find a matching study session to reschedule."])
+        }
+
+        let newDate = parseScheduledDate(action.scheduledAt) ?? defaultScheduledDate()
+        plan.scheduledDate = newDate
+        plan.scheduledEndDate = Calendar.current.date(byAdding: .minute, value: action.durationMinutes ?? plan.durationMinutes, to: newDate) ?? newDate
+        if let duration = action.durationMinutes {
+            plan.durationMinutes = min(max(duration, 15), 180)
+        }
+
+        return "Rescheduled \(plan.subjectName) \(plan.selectionSummary) to \(newDate.formatted(date: .abbreviated, time: .shortened))."
+    }
+
+    @MainActor
+    private func executeCompleteStudySession(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let plan = findMatchingPlan(for: action, context: context) else {
+            throw NSError(domain: "ARIAService", code: 17, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find a matching study session to mark complete."])
+        }
+
+        plan.isCompleted = true
+        return "Marked the \(plan.subjectName) session on \(plan.selectionSummary) as completed."
+    }
+
+    @MainActor
+    private func executeCancelStudySession(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let plan = findMatchingPlan(for: action, context: context) else {
+            throw NSError(domain: "ARIAService", code: 18, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find a matching study session to cancel."])
+        }
+
+        let description = "\(plan.subjectName) \(plan.selectionSummary)"
+        context.delete(plan)
+        return "Cancelled the \(description) session."
+    }
+
+    @MainActor
+    private func executeGenerateFlashcards(action: PlannedAppAction, context: ModelContext) async throws -> String {
+        guard let subject = resolveSubject(named: action.subjectName, context: context) else {
+            throw NSError(domain: "ARIAService", code: 4, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject for flashcard generation."])
+        }
+
+        let requestedTopics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let topics = requestedTopics.isEmpty
+            ? Array(uniqueWeakTopicNames(for: subject).prefix(1))
+            : requestedTopics
+        guard !topics.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 11, userInfo: [NSLocalizedDescriptionKey: "ARIA could not determine which topic to generate flashcards for."])
+        }
+        let count = min(max(action.cardCount ?? 10, 1), 40)
+        var generatedTotal = 0
+
+        for topic in topics {
+            let validSubtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: [topic])
+            let cards = try await CardGeneratorService.generateCards(
+                subject: subject,
+                topicName: topic,
+                subtopic: validSubtopics.joined(separator: ", "),
+                count: count,
+                context: context
+            )
+
+            for card in cards {
+                context.insert(card)
+                subject.cards.append(card)
+            }
+            generatedTotal += cards.count
+
+            ARIAService.recordFlashcardGeneration(
+                subjectName: subject.name,
+                topicName: topic,
+                subtopicName: validSubtopics.joined(separator: ", "),
+                generatedCards: cards.map { ($0.front, $0.back) },
+                sourceReference: "ARIAService.executeGenerateFlashcards"
+            )
+        }
+
+        guard generatedTotal > 0 else {
+            throw NSError(domain: "ARIAService", code: 5, userInfo: [NSLocalizedDescriptionKey: "ARIA did not generate any flashcards for that request."])
+        }
+
+        return "Generated \(generatedTotal) flashcards for \(subject.name) across \(topics.joined(separator: ", "))."
+    }
+
+    @MainActor
+    private func executeEditFlashcard(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let subject = resolveSubject(named: action.subjectName, context: context) else {
+            throw NSError(domain: "ARIAService", code: 19, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject for that flashcard edit."])
+        }
+
+        let cards = matchingCards(for: action, subject: subject)
+        guard let card = cards.first else {
+            throw NSError(domain: "ARIAService", code: 20, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find a flashcard matching that edit request."])
+        }
+
+        var changes: [String] = []
+        if let frontText = action.frontText?.trimmingCharacters(in: .whitespacesAndNewlines), !frontText.isEmpty, frontText != card.front {
+            card.front = frontText
+            changes.append("front")
+        }
+        if let backText = action.backText?.trimmingCharacters(in: .whitespacesAndNewlines), !backText.isEmpty, backText != card.back {
+            card.back = backText
+            changes.append("back")
+        }
+
+        guard !changes.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 21, userInfo: [NSLocalizedDescriptionKey: "ARIA needs updated flashcard text before it can edit that card."])
+        }
+
+        card.isCustom = true
+        card.generationSource = "ARIA Edited"
+        return "Updated the \(changes.joined(separator: " and ")) of a flashcard in \(subject.name) for \(card.topicName)."
+    }
+
+    @MainActor
+    private func executeDeleteFlashcards(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let subject = resolveSubject(named: action.subjectName, context: context) else {
+            throw NSError(domain: "ARIAService", code: 22, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject for that flashcard cleanup."])
+        }
+
+        let cards = matchingCards(for: action, subject: subject)
+        guard !cards.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 23, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find flashcards matching that cleanup request."])
+        }
+
+        for card in cards {
+            subject.cards.removeAll { $0.id == card.id }
+            context.delete(card)
+        }
+
+        return "Deleted \(cards.count) flashcard\(cards.count == 1 ? "" : "s") from \(subject.name)."
+    }
+
+    @MainActor
+    private func executeUpdateProgress(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let subject = resolveSubject(named: action.subjectName, context: context) else {
+            throw NSError(domain: "ARIAService", code: 6, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject to update progress."])
+        }
+
+        let topics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let matchingCards = subject.cards.filter { card in
+            topics.isEmpty || topics.contains(card.topicName)
+        }
+
+        if let masteryLevel = action.masteryLevel?.lowercased() {
+            let proficiency = proficiencyLevel(from: masteryLevel)
+            guard !matchingCards.isEmpty else {
+                throw NSError(domain: "ARIAService", code: 7, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find cards matching that scope to update mastery."])
+            }
+
+            for card in matchingCards {
+                card.proficiency = proficiency
+                switch proficiency {
+                case .novice:
+                    card.repetitions = 0
+                    card.consecutiveCorrect = 0
+                    card.nextReviewDate = Date()
+                case .developing:
+                    card.repetitions = max(card.repetitions, 1)
+                    card.consecutiveCorrect = max(card.consecutiveCorrect, 2)
+                    card.nextReviewDate = Calendar.current.date(byAdding: .day, value: 2, to: Date()) ?? Date()
+                case .proficient:
+                    card.repetitions = max(card.repetitions, 3)
+                    card.consecutiveCorrect = max(card.consecutiveCorrect, 4)
+                    card.nextReviewDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+                case .mastered:
+                    card.repetitions = max(card.repetitions, 6)
+                    card.consecutiveCorrect = max(card.consecutiveCorrect, 7)
+                    card.nextReviewDate = Calendar.current.date(byAdding: .day, value: 21, to: Date()) ?? Date()
+                }
+            }
+
+            return "Updated \(matchingCards.count) cards in \(subject.name) to \(proficiency.rawValue.lowercased()) mastery."
+        }
+
+        let roundedMinutes = Int(action.minutesStudied ?? 0)
+        let xp = action.xpEarned ?? 0
+        guard roundedMinutes > 0 || xp > 0 else {
+            throw NSError(domain: "ARIAService", code: 8, userInfo: [NSLocalizedDescriptionKey: "ARIA needs a mastery level, minutes studied, or XP amount to update progress."])
+        }
+
+        let today = Calendar.current.startOfDay(for: Date())
+        let predicate = #Predicate<StudyActivity> { $0.date == today }
+        let activity = (try? context.fetch(FetchDescriptor(predicate: predicate)).first) ?? {
+            let activity = StudyActivity(date: today)
+            context.insert(activity)
+            return activity
+        }()
+
+        activity.minutesStudied += Double(max(roundedMinutes, 0))
+        activity.xpEarned += max(xp, 0)
+        if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first, xp > 0 {
+            profile.addXP(xp)
+        }
+
+        return "Logged \(roundedMinutes)m and \(xp) XP to today's study progress."
+    }
+
+    @MainActor
+    private func executeUpdateProfile(action: PlannedAppAction, context: ModelContext) throws -> String {
+        guard let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first else {
+            throw NSError(domain: "ARIAService", code: 9, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find a user profile to update."])
+        }
+
+        var changes: [String] = []
+        if let dailyGoal = action.dailyGoal, dailyGoal > 0 {
+            profile.dailyGoal = dailyGoal
+            changes.append("daily goal to \(dailyGoal) cards")
+        }
+        if let target = action.targetIBScore, (1...45).contains(target) {
+            profile.targetIBScore = target
+            changes.append("target score to \(target)/45")
+        }
+
+        guard !changes.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 10, userInfo: [NSLocalizedDescriptionKey: "ARIA did not receive a supported profile change."])
+        }
+
+        return "Updated your profile: \(changes.joined(separator: " and "))."
+    }
+
+    @MainActor
+    private func executeSaveMemory(action: PlannedAppAction, context: ModelContext) throws -> String {
+        let note = action.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !note.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 14, userInfo: [NSLocalizedDescriptionKey: "ARIA needs the note content before it can remember it."])
+        }
+
+        let category = memoryCategory(from: action.memoryCategory)
+        let memory = ARIAMemory(
+            category: category,
+            content: note,
+            importance: .high,
+            subjectName: action.subjectName?.trimmingCharacters(in: .whitespacesAndNewlines),
+            topicName: action.topics?.first,
+            tags: (action.topics ?? []) + (action.subtopics ?? [])
+        )
+        context.insert(memory)
+        return "Saved that to ARIA memory under \(category.rawValue)."
+    }
+
+    @MainActor
+    private func resolveSubject(named rawName: String?, context: ModelContext) -> Subject? {
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        guard let rawName = rawName?.trimmingCharacters(in: .whitespacesAndNewlines), !rawName.isEmpty else {
+            return subjects.first
+        }
+
+        if let exact = subjects.first(where: { $0.name.caseInsensitiveCompare(rawName) == .orderedSame }) {
+            return exact
+        }
+
+        let normalized = rawName.lowercased()
+        return subjects.first(where: { $0.name.lowercased().contains(normalized) || normalized.contains($0.name.lowercased()) })
+    }
+
+    @MainActor
+    private func findMatchingPlan(for action: PlannedAppAction, context: ModelContext) -> StudyPlan? {
+        let subjectName = action.subjectName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let targetTopics = (action.topics ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        let searchText = action.searchText?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+
+        let plans = ((try? context.fetch(FetchDescriptor<StudyPlan>())) ?? [])
+            .filter { !$0.isCompleted && (subjectName.isEmpty || $0.subjectName.caseInsensitiveCompare(subjectName) == .orderedSame) }
+            .sorted { $0.scheduledDate < $1.scheduledDate }
+
+        return plans.first { plan in
+            let matchesTopics = targetTopics.isEmpty || targetTopics.allSatisfy { target in
+                plan.selectedTopicNames.contains { $0.lowercased() == target } ||
+                plan.selectionSummary.lowercased().contains(target)
+            }
+            let matchesSearch = searchText.isEmpty ||
+                plan.selectionSummary.lowercased().contains(searchText) ||
+                plan.planMarkdown.lowercased().contains(searchText)
+            return matchesTopics && matchesSearch
+        }
+    }
+
+    private func matchingCards(for action: PlannedAppAction, subject: Subject) -> [StudyCard] {
+        let topics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let topicScope = topics.isEmpty ? uniqueTopicNames(for: subject) : topics
+        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: topicScope)
+        let searchTerms = [action.searchText, action.frontText]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+
+        return subject.cards.filter { card in
+            let matchesTopic = topics.isEmpty || topics.contains(card.topicName)
+            let matchesSubtopic = subtopics.isEmpty || subtopics.contains(card.subtopic)
+            let haystack = [card.front, card.back, card.topicName, card.subtopic]
+                .joined(separator: "\n")
+                .lowercased()
+            let matchesSearch = searchTerms.isEmpty || searchTerms.allSatisfy { haystack.contains($0) }
+            return matchesTopic && matchesSubtopic && matchesSearch
+        }
+        .sorted { $0.createdDate > $1.createdDate }
+    }
+
+    private func uniqueTopicNames(for subject: Subject) -> [String] {
+        var seen = Set<String>()
+        var topics: [String] = []
+
+        for card in subject.cards {
+            let topic = card.topicName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !topic.isEmpty else { continue }
+            let key = topic.lowercased()
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            topics.append(topic)
+        }
+
+        return topics
+    }
+
+    private func sanitizedTopics(_ topics: [String]?, subjectName: String) -> [String] {
+        let requested = (topics ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !requested.isEmpty else { return [] }
+        let valid = Set(SyllabusSeeder.curriculum(for: subjectName).flatMap { $0.topics.map(\.name) })
+        return requested.filter { valid.contains($0) }
+    }
+
+    private func sanitizedSubtopics(_ subtopics: [String]?, subjectName: String, topics: [String]) -> [String] {
+        let requested = (subtopics ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !requested.isEmpty else { return [] }
+        let valid = Set(topics.flatMap { SyllabusSeeder.subtopics(for: subjectName, topicName: $0) })
+        return requested.filter { valid.contains($0) }
+    }
+
+    private func parseScheduledDate(_ rawValue: String?) -> Date? {
+        guard let rawValue, !rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: rawValue) {
+            return date
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: rawValue)
+    }
+
+    private func defaultScheduledDate() -> Date {
+        let cal = Calendar.current
+        let now = Date()
+        let today = cal.startOfDay(for: now)
+        let base = cal.component(.hour, from: now) >= 16 ? (cal.date(byAdding: .day, value: 1, to: today) ?? today) : today
+        return cal.date(bySettingHour: 16, minute: 0, second: 0, of: base) ?? now
+    }
+
+    private func proficiencyLevel(from rawValue: String) -> ProficiencyLevel {
+        switch rawValue {
+        case "novice": return .novice
+        case "developing", "intermediate": return .developing
+        case "proficient", "strong": return .proficient
+        case "mastered", "mastery": return .mastered
+        default: return .developing
+        }
+    }
+
+    private func memoryCategory(from rawValue: String?) -> MemoryCategory {
+        let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        switch normalized {
+        case "grades", "targets": return .grades
+        case "weaktopics", "weak_topics": return .weakTopics
+        case "studyhabits", "study_habits", "habits": return .studyHabits
+        case "goals": return .goals
+        case "notes", "usernotes", "user_notes": return .userNotes
+        case "subjectinsight", "subject_insight": return .subjectInsight
+        case "sessionsummary", "session_summary": return .sessionSummary
+        case "achievement", "achievements": return .achievement
+        case "struggle", "struggles": return .struggle
+        default: return .userNotes
+        }
+    }
+
     private static func appendStreamChunk(_ chunk: String, to current: String) -> String {
         guard !chunk.isEmpty else { return current }
         guard !current.isEmpty else { return chunk }
@@ -269,6 +994,8 @@ class ARIAService {
 
         result = replaceRegex(pattern: #"(?m)^(#{1,6})([^ #\n])"#, template: "$1 $2", in: result)
         result = replaceRegex(pattern: #"(?m)(?<!\n)(#{1,6}\s)"#, template: "\n\n$1", in: result)
+        result = replaceRegex(pattern: #"(?m)^\s*#{1,6}\s*$"#, template: "", in: result)
+        result = replaceRegex(pattern: #"(?m)^\s*(?:[-*•]|\d+[.)])\s*$"#, template: "", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s+(?=((?:[-*•]|\d+[.)])\s))"#, template: "\n", in: result)
         result = replaceRegex(pattern: #"\n{3,}"#, template: "\n\n", in: result)
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -400,6 +1127,7 @@ class ARIAService {
         - Quiz using Socratic questioning for active recall
         - Explain concepts, structure essays, clarify mark schemes at IB level
         - Track session-by-session and subject-by-subject progress
+        - When the user explicitly asks, you can execute app actions: create, assign, reschedule, complete, or cancel study sessions; generate, edit, or delete flashcards in the library; and update progress/profile settings
         - Produce study guides with difficulty ratings and time allocations
         - TRACK FLASHCARD EFFECTIVENESS: You know which AI-generated flashcards are working (high review success) vs struggling (low review success). Use this to recommend regeneration of weak cards.
         - XP & MASTERY TRACKING: You have full access to student's XP, rank progression, and subject mastery percentages. Reference this to motivate students ("You're 200XP away from leveling up to Atom!").
@@ -583,8 +1311,6 @@ class ARIAService {
 
         let grouped = Dictionary(grouping: selected) { $0.category }
         var lines: [String] = []
-        
-        let temporalMarkers = determineTemporalContext(memories: selected)
 
         for category in MemoryCategory.allCases {
             guard let items = grouped[category], !items.isEmpty else { continue }
@@ -597,23 +1323,6 @@ class ARIAService {
         }
 
         return lines.joined(separator: "\n")
-    }
-    
-    private func determineTemporalContext(memories: [ARIAMemory]) -> String {
-        let now = Date()
-        guard let oldest = memories.min(by: { $0.timestamp < $1.timestamp }),
-              let newest = memories.max(by: { $0.timestamp < $1.timestamp }) else {
-            return ""
-        }
-        
-        let spanDays = Calendar.current.dateComponents([.day], from: oldest.timestamp, to: newest.timestamp).day ?? 0
-        
-        if spanDays > 30 {
-            return "[Recent] "
-        } else if spanDays > 7 {
-            return "[This Week] "
-        }
-        return ""
     }
     
     private func formatTemporalContext(for memory: ARIAMemory) -> String {
@@ -1064,7 +1773,6 @@ class ARIAService {
         }
 
         let aiEffectiveness = ProficiencyTracker.overallAIEffectiveness(for: subject)
-        let effectiveCards = ProficiencyTracker.effectiveCards(for: subject).count
         let strugglingCards = ProficiencyTracker.strugglingCards(for: subject).count
         let aiCards = subject.cards.filter { $0.isAIGenerated ?? false }.count
 

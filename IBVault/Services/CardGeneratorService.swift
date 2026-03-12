@@ -15,14 +15,16 @@ struct CardGeneratorService {
             throw GeminiError.noAPIKey
         }
 
-        let subtopicPart = subtopic.isEmpty ? "" : ", Subtopic: \(subtopic)"
+        let unitPart = SyllabusSeeder.unitName(for: subject.name, topicName: topicName).map { "\nUnit: \($0)" } ?? ""
+        let subtopicPart = subtopic.isEmpty ? "" : "\nSubtopic: \(subtopic)"
         let prompt = """
         Generate exactly \(count) high-quality IB flashcards for:
         Subject: \(subject.name) \(subject.level)
-        Topic: \(topicName)\(subtopicPart)
+        Topic: \(topicName)\(unitPart)\(subtopicPart)
 
         REQUIREMENTS:
         - Each card must test a SPECIFIC concept, fact, definition, or application
+        - Every card must stay anchored to the named IB unit/topic and avoid unrelated syllabus areas
         - Questions should match IB exam style and difficulty
         - Answers should be concise but comprehensive (2-4 sentences)
         - Include a mix of: definitions, explanations, applications, and analysis questions

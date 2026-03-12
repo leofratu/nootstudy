@@ -38,6 +38,34 @@ struct SyllabusSeeder {
         }
     }
 
+    static func unitName(for subjectName: String, topicName: String) -> String? {
+        curriculum(for: subjectName)
+            .first { unit in unit.topics.contains { $0.name == topicName } }?
+            .name
+    }
+
+    static func unitNames(for subjectName: String, topicNames: [String]) -> [String] {
+        var names: [String] = []
+        for topicName in topicNames {
+            guard let unitName = unitName(for: subjectName, topicName: topicName), !names.contains(unitName) else { continue }
+            names.append(unitName)
+        }
+        return names
+    }
+
+    static func topic(named topicName: String, in subjectName: String) -> CurriculumTopic? {
+        for unit in curriculum(for: subjectName) {
+            if let topic = unit.topics.first(where: { $0.name == topicName }) {
+                return topic
+            }
+        }
+        return nil
+    }
+
+    static func subtopics(for subjectName: String, topicName: String) -> [String] {
+        topic(named: topicName, in: subjectName)?.subtopics ?? []
+    }
+
     // MARK: - Create Subjects with Seed Cards
 
     private static func createSubjects() -> [Subject] {

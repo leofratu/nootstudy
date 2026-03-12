@@ -1,0 +1,61 @@
+{
+  "task_id": "20260312T183056_local_dmg_and_update_safe_backups",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.persistence.update_safe_backups",
+      "iface.release.dmg_distribution"
+    ],
+    "files": [
+      "IBVault/IBVaultApp.swift",
+      "IBVault/Services/BackupService.swift",
+      "repo_plan/file_index.json",
+      "repo_plan/rpg.json"
+    ],
+    "evidence": [
+      "BackupService previously skipped ARIA chat sessions, study sessions, study plans, and richer ARIA memory metadata during export/restore.",
+      "The Release app bundle copied the full Materials tree into Contents/Resources/Materials.",
+      "A local DMG was created from the rebuilt Release app under Documents/nootstudy/releases."
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-docs-release-build build",
+      "ok": true,
+      "interfaces": [
+        "iface.persistence.update_safe_backups",
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-docs-release-build/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.persistence.update_safe_backups",
+    "iface.release.dmg_distribution"
+  ],
+  "tested_interfaces": [
+    "iface.persistence.update_safe_backups",
+    "iface.release.dmg_distribution"
+  ],
+  "files_changed": [
+    "IBVault/IBVaultApp.swift",
+    "IBVault/Services/BackupService.swift",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "repo_plan/runs/20260312T183056/run.json"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null,
+  "notes": [
+    "Local DMG: /Users/main/Documents/nootstudy/releases/IBVault-1.0.0-local.dmg",
+    "DMG SHA-256: 5037ece59008971210a02d7c784a96657680abf5c82a47be6a0618e4d5bf026d",
+    "The release app remains ad hoc signed as Sign to Run Locally; no Apple notarization credentials are configured."
+  ]
+}

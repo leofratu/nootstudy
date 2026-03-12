@@ -36,6 +36,7 @@ struct IBVaultApp: App {
 struct RootView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
+    @State private var hasAttemptedAutomaticBackup = false
 
     var body: some View {
         Group {
@@ -44,6 +45,7 @@ struct RootView: View {
                     ContentView()
                         .onAppear {
                             NotificationService.requestPermission()
+                            triggerAutomaticBackupIfNeeded()
                         }
                 } else {
                     OnboardingView()
@@ -56,6 +58,17 @@ struct RootView: View {
                         seedAchievements()
                     }
             }
+        }
+    }
+
+    private func triggerAutomaticBackupIfNeeded() {
+        guard !hasAttemptedAutomaticBackup else { return }
+        hasAttemptedAutomaticBackup = true
+
+        do {
+            try BackupService.autoBackupIfNeeded(context: context)
+        } catch {
+            assertionFailure("Automatic backup failed: \(error.localizedDescription)")
         }
     }
 

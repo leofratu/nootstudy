@@ -1,0 +1,73 @@
+{
+  "task_id": "study-scope-and-mastery-fix-20260312",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.study.scope_selection",
+      "iface.review.session_scoped_queue",
+      "iface.flashcards.unit_scoped_generation",
+      "iface.study.mastery_alignment"
+    ],
+    "files": [
+      "IBVault/Models/StudyPlan.swift",
+      "IBVault/Models/StudySession.swift",
+      "IBVault/Models/Subject.swift",
+      "IBVault/Engine/ProficiencyTracker.swift",
+      "IBVault/Services/SyllabusSeeder.swift",
+      "IBVault/Services/CardGeneratorService.swift",
+      "IBVault/Views/Study/NewStudySessionView.swift",
+      "IBVault/Views/Study/ActiveStudySessionView.swift",
+      "IBVault/Views/Review/ReviewSessionView.swift",
+      "IBVault/Views/Study/StudyPlannerView.swift",
+      "IBVault/Views/Analytics/StudySessionLogView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Models/StudyPlan.swift IBVault/Models/StudySession.swift IBVault/Models/Subject.swift IBVault/Engine/ProficiencyTracker.swift IBVault/Services/SyllabusSeeder.swift IBVault/Views/Study/NewStudySessionView.swift IBVault/Views/Review/ReviewSessionView.swift IBVault/Views/Study/StudyPlannerView.swift IBVault/Views/Study/ActiveStudySessionView.swift IBVault/Views/Analytics/StudySessionLogView.swift IBVault/Services/CardGeneratorService.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.study.scope_selection",
+        "iface.review.session_scoped_queue",
+        "iface.flashcards.unit_scoped_generation",
+        "iface.study.mastery_alignment"
+      ]
+    },
+    {
+      "cmd": "xcodebuild -list -project IBVault.xcodeproj",
+      "ok": false,
+      "interfaces": [],
+      "note": "Blocked by local developer directory using CommandLineTools instead of full Xcode (xcode-select error)."
+    }
+  ],
+  "files_changed": [
+    "IBVault/Models/StudyPlan.swift",
+    "IBVault/Models/StudySession.swift",
+    "IBVault/Models/Subject.swift",
+    "IBVault/Engine/ProficiencyTracker.swift",
+    "IBVault/Services/SyllabusSeeder.swift",
+    "IBVault/Services/CardGeneratorService.swift",
+    "IBVault/Views/Study/NewStudySessionView.swift",
+    "IBVault/Views/Study/ActiveStudySessionView.swift",
+    "IBVault/Views/Review/ReviewSessionView.swift",
+    "IBVault/Views/Study/StudyPlannerView.swift",
+    "IBVault/Views/Analytics/StudySessionLogView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "implemented_interfaces": [
+    "iface.study.scope_selection",
+    "iface.review.session_scoped_queue",
+    "iface.flashcards.unit_scoped_generation",
+    "iface.study.mastery_alignment"
+  ],
+  "tested_interfaces": [
+    "iface.study.scope_selection",
+    "iface.review.session_scoped_queue",
+    "iface.flashcards.unit_scoped_generation",
+    "iface.study.mastery_alignment"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": 29
+}

@@ -8,6 +8,7 @@ struct StudyPlannerView: View {
     @Query private var subjects: [Subject]
     @State private var showNewSession = false
     @State private var selectedPlan: StudyPlan?
+    @State private var selectedReviewSession: StudySession?
 
     private var upcomingPlans: [StudyPlan] {
         allPlans.filter { $0.isUpcoming || $0.isActive }
@@ -85,10 +86,16 @@ struct StudyPlannerView: View {
             }
             .sheet(item: $selectedPlan) { plan in
                 if plan.isFollowUpReview {
-                    ReviewSessionView(filterSubject: subject(for: plan))
+                    ReviewSessionView(filterSubject: subject(for: plan), filterPlan: plan)
                 } else {
                     ActiveStudySessionView(plan: plan)
                 }
+            }
+            .sheet(item: $selectedReviewSession) { session in
+                ReviewSessionView(
+                    filterSubject: subject(named: session.subjectName),
+                    reviewScopeSession: session
+                )
             }
         }
     }
@@ -224,7 +231,7 @@ struct StudyPlannerView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
                     HStack(spacing: 6) {
-                        Text(plan.scheduleLabel)
+                        Text(plan.selectionSummary.isEmpty ? plan.scheduleLabel : plan.selectionSummary)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -290,35 +297,53 @@ struct StudyPlannerView: View {
             .padding(.leading, 4)
 
             ForEach(recentSessions.prefix(5), id: \.id) { session in
-                HStack(spacing: 14) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(subjectColor(session.subjectName))
-                        .frame(width: 3, height: 36)
+                Button {
+                    selectedReviewSession = session
+                    IBHaptics.light()
+                } label: {
+                    HStack(spacing: 14) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(subjectColor(session.subjectName))
+                            .frame(width: 3, height: 44)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(session.subjectName)
-                            .font(.system(size: 13, weight: .medium))
-                        HStack(spacing: 6) {
-                            if session.cardsReviewed > 0 {
-                                Label("\(session.cardsReviewed)", systemImage: "square.stack")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(session.subjectName)
+                                .font(.system(size: 13, weight: .medium))
+                            Text(session.scopeSummary)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                            HStack(spacing: 6) {
+                                if session.cardsReviewed > 0 {
+                                    Label("\(session.cardsReviewed)", systemImage: "square.stack")
+                                }
+                                Label(session.durationFormatted, systemImage: "clock")
                             }
-                            Label(session.durationFormatted, systemImage: "clock")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
                         }
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                    }
 
-                    Spacer()
+                        Spacer()
 
-                    if session.cardsReviewed > 0 {
-                        retentionBadge(session.retentionPercent)
+                        if session.cardsReviewed > 0 {
+                            retentionBadge(session.retentionPercent)
+                        }
+
+                        VStack(spacing: 4) {
+                            Image(systemName: "arrow.clockwise.circle.fill")
+                                .foregroundStyle(IBColors.electricBlue)
+                            Text("Revise")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(IBColors.electricBlue)
+                        }
                     }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.secondary.opacity(0.04))
+                    )
                 }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.secondary.opacity(0.04))
-                )
+                .buttonStyle(.plain)
             }
         }
     }
@@ -405,12 +430,25 @@ struct StudyPlannerView: View {
     private func scheduleSpacedReviews(for plan: StudyPlan) {
         let cal = Calendar.current
         let endDate = plan.scheduledDate
+        let existingPlans = (try? context.fetch(FetchDescriptor<StudyPlan>())) ?? []
         
         let reviewDays = [1, 3, 7]
         
         for days in reviewDays {
             guard let date = cal.date(byAdding: .day, value: days, to: endDate),
                   let scheduledAt = cal.date(bySettingHour: 16, minute: 0, second: 0, of: date) else { continue }
+
+            let duplicateExists = existingPlans.contains {
+                $0.isFollowUpReview &&
+                !$0.isCompleted &&
+                $0.subjectName == plan.subjectName &&
+                $0.topicName == plan.topicName &&
+                $0.subtopicName == plan.subtopicName &&
+                $0.reviewIntervalDays == days &&
+                Calendar.current.isDate($0.scheduledDate, equalTo: scheduledAt, toGranularity: .minute)
+            }
+
+            guard !duplicateExists else { continue }
             
             let review = StudyPlan(
                 subjectName: plan.subjectName,
@@ -419,7 +457,7 @@ struct StudyPlannerView: View {
                 planMarkdown: """
                 📝 **Spaced Repetition Review**
 
-                Revisit \(plan.topicName) from your session on \(plan.scheduledDate.formatted(date: .abbreviated, time: .omitted)).
+                Revisit \(plan.selectionSummary) from your session on \(plan.scheduledDate.formatted(date: .abbreviated, time: .omitted)).
 
                 **Quick Recall** (10 min): Try to recall key concepts without notes
 
@@ -442,5 +480,9 @@ struct StudyPlannerView: View {
 
     private func subject(for plan: StudyPlan) -> Subject? {
         subjects.first(where: { $0.name == plan.subjectName })
+    }
+
+    private func subject(named name: String) -> Subject? {
+        subjects.first(where: { $0.name == name })
     }
 }

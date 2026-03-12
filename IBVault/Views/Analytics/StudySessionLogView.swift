@@ -91,7 +91,7 @@ struct StudySessionLogView: View {
                     if !session.topicsCovered.isEmpty {
                         Text("•")
                             .foregroundStyle(.tertiary)
-                        Text(session.topicsCovered)
+                        Text(session.scopeSummary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

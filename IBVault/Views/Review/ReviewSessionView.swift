@@ -6,6 +6,8 @@ struct ReviewSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var profiles: [UserProfile]
     var filterSubject: Subject? = nil
+    var filterPlan: StudyPlan? = nil
+    var reviewScopeSession: StudySession? = nil
 
     @State private var cards: [StudyCard] = []
     @State private var currentIndex = 0
@@ -18,6 +20,13 @@ struct ReviewSessionView: View {
 
     private var currentCard: StudyCard? {
         currentIndex < cards.count ? cards[currentIndex] : nil
+    }
+    private var activeScope: StudyScope? {
+        reviewScopeSession?.studyScope ?? filterPlan?.studyScope
+    }
+    private var scopeSummary: String? {
+        let summary = activeScope?.summary.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return summary.isEmpty ? nil : summary
     }
     private var progress: Double {
         cards.isEmpty ? 0 : Double(currentIndex) / Double(cards.count)
@@ -39,7 +48,7 @@ struct ReviewSessionView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.background)
-            .navigationTitle(filterSubject?.name ?? "Review Session")
+            .navigationTitle(filterSubject?.name ?? activeScope?.subjectName ?? "Review Session")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
@@ -96,6 +105,18 @@ struct ReviewSessionView: View {
                         Text(card.proficiency.emoji + " " + card.proficiency.rawValue)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+                if let scopeSummary {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.caption2)
+                            .foregroundStyle(IBColors.electricBlue)
+                        Text(scopeSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        Spacer()
                     }
                 }
             }
@@ -207,13 +228,25 @@ struct ReviewSessionView: View {
     private func loadCards() {
         let now = Date()
         if let subject = filterSubject {
-            cards = subject.cards.filter { $0.nextReviewDate <= now }.sorted { $0.nextReviewDate < $1.nextReviewDate }
+            let dueCards = subject.cards.filter { $0.nextReviewDate <= now }
+            cards = filteredCards(from: dueCards)
         } else {
             let pred = #Predicate<StudyCard> { $0.nextReviewDate <= now }
             var desc = FetchDescriptor(predicate: pred); desc.sortBy = [SortDescriptor(\.nextReviewDate)]
-            cards = (try? context.fetch(desc)) ?? []
+            cards = filteredCards(from: (try? context.fetch(desc)) ?? [])
         }
         sessionStartTime = Date()
+    }
+
+    private func filteredCards(from candidates: [StudyCard]) -> [StudyCard] {
+        let scopedCards: [StudyCard]
+        if let activeScope, activeScope.hasFilters {
+            scopedCards = candidates.filter { activeScope.matches($0) }
+        } else {
+            scopedCards = candidates
+        }
+
+        return scopedCards.sorted { $0.nextReviewDate < $1.nextReviewDate }
     }
 
     private func rateCard(_ quality: RecallQuality) {
@@ -239,8 +272,12 @@ struct ReviewSessionView: View {
         }
 
         // Log StudySession
-        let topics = Set(cards.compactMap { $0.topicName }).joined(separator: ", ")
-        let subjectName = filterSubject?.name ?? cards.first?.subject?.name ?? "Mixed"
+        let topics = if let activeScope, !activeScope.topicNames.isEmpty {
+            activeScope.topicNames.joined(separator: ", ")
+        } else {
+            Set(cards.compactMap { $0.topicName }).sorted().joined(separator: ", ")
+        }
+        let subjectName = filterSubject?.name ?? activeScope?.subjectName ?? cards.first?.subject?.name ?? "Mixed"
         let session = StudySession(
             subjectName: subjectName,
             topicsCovered: topics,
@@ -282,7 +319,7 @@ struct ReviewSessionView: View {
             }
             Text("All Caught Up")
                 .font(.title2.bold())
-            Text("No cards are due for review right now. Come back later!")
+            Text(emptyStateMessage)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 350)
@@ -352,5 +389,12 @@ struct ReviewSessionView: View {
             Spacer()
         }
         .padding(24)
+    }
+
+    private var emptyStateMessage: String {
+        if let scopeSummary {
+            return "No cards are due for \(scopeSummary) right now. Try another recent study session or come back later."
+        }
+        return "No cards are due for review right now. Come back later!"
     }
 }

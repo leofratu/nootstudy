@@ -17,9 +17,7 @@ final class Subject {
     }
 
     var masteryProgress: Double {
-        guard !cards.isEmpty else { return 0 }
-        let masteredCount = cards.filter { $0.proficiency == .mastered }.count
-        return Double(masteredCount) / Double(cards.count)
+        ProficiencyTracker.masteryPercentage(for: self)
     }
 
     var overallProficiencyBreakdown: [ProficiencyLevel: Int] {

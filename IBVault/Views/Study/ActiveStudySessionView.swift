@@ -16,7 +16,7 @@ struct ActiveStudySessionView: View {
     @State private var showCompletion = false
     @State private var sessionNotes = ""
     @State private var selectedTab: SessionTab = .plan
-    @State private var generatedCards: [(front: String, back: String)] = []
+    @State private var generatedCards: [GeneratedFlashcard] = []
     @State private var isGeneratingCards = false
     @State private var flashcardError: String?
     @State private var showFlashcardPreview = false
@@ -29,6 +29,14 @@ struct ActiveStudySessionView: View {
         let date: Date
 
         var id: Int { day }
+    }
+
+    private struct GeneratedFlashcard: Identifiable {
+        let id = UUID()
+        let topicName: String
+        let subtopic: String
+        let front: String
+        let back: String
     }
 
     private var dedicatedMinutes: Int {
@@ -115,10 +123,10 @@ struct ActiveStudySessionView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(plan.subjectName)
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text(plan.topicName + (plan.subtopicName.isEmpty ? "" : " → \(plan.subtopicName)"))
+                Text(plan.selectionSummary)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
 
             Spacer()
@@ -211,7 +219,7 @@ struct ActiveStudySessionView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Session Ready")
                             .font(.system(size: 18, weight: .bold, design: .rounded))
-                        Text("This session does not have a generated plan yet. You can still use ARIA, take notes, and generate flashcards for \(plan.topicName).")
+                        Text("This session does not have a generated plan yet. You can still use ARIA, take notes, and generate flashcards for \(plan.selectionSummary).")
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .lineSpacing(3)
@@ -303,7 +311,7 @@ struct ActiveStudySessionView: View {
 
             // Input
             HStack(spacing: 8) {
-                TextField("Ask ARIA about \(plan.topicName)…", text: $chatInput)
+                TextField("Ask ARIA about \(plan.studyScope.title)…", text: $chatInput)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 13))
                     .onSubmit { sendMessage() }
@@ -345,7 +353,7 @@ struct ActiveStudySessionView: View {
                 .multilineTextAlignment(.center)
 
             VStack(spacing: 6) {
-                quickPrompt("Explain \(plan.topicName) simply")
+                quickPrompt("Explain \(plan.studyScope.title) simply")
                 quickPrompt("Give me a practice question")
                 quickPrompt("What are common exam mistakes here?")
                 quickPrompt("How is this assessed in the IB exam?")
@@ -441,8 +449,11 @@ struct ActiveStudySessionView: View {
                                 .foregroundStyle(.tertiary)
                                 .textCase(.uppercase)
                             Spacer()
+                            Text(card.topicName)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
                             Button {
-                                saveCardToSubject(front: card.front, back: card.back)
+                                saveCardToSubject(card)
                             } label: {
                                 HStack(spacing: 3) {
                                     Image(systemName: "plus.circle.fill")
@@ -873,14 +884,14 @@ struct ActiveStudySessionView: View {
 
                 // Add study plan context as first message
                 messages.append(GeminiMessage(role: "user", text: """
-                I'm in an active study session for \(plan.subjectName) — \(plan.topicName)\(plan.subtopicName.isEmpty ? "" : " (\(plan.subtopicName))").
+                I'm in an active study session for \(plan.subjectName) focused on \(plan.selectionSummary).
                 Duration: \(plan.durationMinutes) minutes. Time elapsed: \(Int(elapsed / 60)) minutes.
                 
                 My study plan:
                 \(plan.planMarkdown.prefix(1500))
                 \(sessionNotes.isEmpty ? "" : "\nMy notes so far: \(sessionNotes.prefix(500))")
                 """))
-                messages.append(GeminiMessage(role: "model", text: "Got it! I have full context on your study session. I'm here to help with \(plan.topicName). What would you like to know?"))
+                messages.append(GeminiMessage(role: "model", text: "Got it! I have full context on your study session. I'm here to help with \(plan.studyScope.title). What would you like to know?"))
 
                 // Add chat history
                 for msg in chatMessages {
@@ -895,7 +906,7 @@ struct ActiveStudySessionView: View {
 
                 ARIAService.recordARIAChatExchange(
                     subjectName: plan.subjectName,
-                    topicNames: [plan.topicName, plan.subtopicName].filter { !$0.isEmpty },
+                    topicNames: plan.studyScope.topicNames,
                     userMessage: userMsg,
                     assistantReply: response,
                     sourceReference: "ActiveStudySessionView.sendMessage"
@@ -930,39 +941,60 @@ struct ActiveStudySessionView: View {
                     flashcardError = nil
                 }
 
-                let prompt = """
-                Generate 30 strictly IB Diploma-level rigorous flashcards for:
-                Subject: \(plan.subjectName)
-                Topic: \(plan.topicName)\(plan.subtopicName.isEmpty ? "" : " — \(plan.subtopicName)")
-                
-                Study plan context:
-                \(plan.planMarkdown.prefix(800))
+                let selectedTopics = plan.selectedTopicNames.isEmpty ? [plan.topicName] : plan.selectedTopicNames
+                let cardsPerTopic = max(6, Int(ceil(30.0 / Double(max(selectedTopics.count, 1)))))
+                var generatedBatch: [GeneratedFlashcard] = []
 
-                Output contract:
-                - Return ONLY flashcards. No intro, no outro, no commentary.
-                - Each card must be exactly this shape:
-                FRONT: [question]
-                BACK: [answer]
-                - Leave one blank line between cards
-                - Keep any formulas, mark-scheme notes, or bullet points inside the BACK block
+                for topicName in selectedTopics {
+                    let unitName = SyllabusSeeder.unitName(for: plan.subjectName, topicName: topicName) ?? "Current Unit"
+                    let validSubtopics = plan.selectedSubtopicNames.filter {
+                        SyllabusSeeder.subtopics(for: plan.subjectName, topicName: topicName).contains($0)
+                    }
+                    let subtopicPart = validSubtopics.isEmpty ? "" : "\nFocus subtopics: \(validSubtopics.joined(separator: ", "))"
+                    let prompt = """
+                    Generate \(cardsPerTopic) strictly IB Diploma-level rigorous flashcards for:
+                    Subject: \(plan.subjectName)
+                    Unit: \(unitName)
+                    Topic: \(topicName)\(subtopicPart)
 
-                Rules:
-                - These must be TRUE IB DIFFICULTY, not easy recall.
-                - Use advanced IB command terms (evaluate, justify, compare and contrast, analyse).
-                - Test deep understanding of mechanisms, complex multi-step reasoning, and evaluation points.
-                - Include mark scheme hints (e.g. "[1 mark for definition, 2 for application]").
-                - Answers must be extremely precise to the rigorous IB curriculum standard.
-                """
+                    Study plan context:
+                    \(plan.planMarkdown.prefix(800))
 
-                let response = try await GeminiService.generateContent(
-                    messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You are the ultimate IB examiner and flashcard generator. You create cards with extremely high difficulty suited for students aiming for a 7/7. Each card must have FRONT: and BACK: lines.",
-                    apiKey: apiKey
-                )
+                    Output contract:
+                    - Return ONLY flashcards. No intro, no outro, no commentary.
+                    - Each card must be exactly this shape:
+                    FRONT: [question]
+                    BACK: [answer]
+                    - Leave one blank line between cards
+                    - Keep any formulas, mark-scheme notes, or bullet points inside the BACK block
 
-                let parsed = sanitizeGeneratedCards(FormattedMessageFormatter.extractFlashcards(from: response))
+                    Rules:
+                    - These must stay tightly scoped to the named IB unit/topic.
+                    - These must be TRUE IB DIFFICULTY, not easy recall.
+                    - Use advanced IB command terms (evaluate, justify, compare and contrast, analyse).
+                    - Test deep understanding of mechanisms, complex multi-step reasoning, and evaluation points.
+                    - Include mark scheme hints (e.g. "[1 mark for definition, 2 for application]").
+                    - Answers must be extremely precise to the rigorous IB curriculum standard.
+                    """
 
-                guard !parsed.isEmpty else {
+                    let response = try await GeminiService.generateContent(
+                        messages: [GeminiMessage(role: "user", text: prompt)],
+                        systemInstruction: "You are the ultimate IB examiner and flashcard generator. You create cards with extremely high difficulty suited for students aiming for a 7/7. Each card must have FRONT: and BACK: lines.",
+                        apiKey: apiKey
+                    )
+
+                    let parsed = sanitizeGeneratedCards(FormattedMessageFormatter.extractFlashcards(from: response))
+                    generatedBatch.append(contentsOf: parsed.map {
+                        GeneratedFlashcard(
+                            topicName: topicName,
+                            subtopic: validSubtopics.joined(separator: ", "),
+                            front: $0.front,
+                            back: $0.back
+                        )
+                    })
+                }
+
+                guard !generatedBatch.isEmpty else {
                     throw NSError(
                         domain: "IBVault.ActiveStudySessionView",
                         code: 1,
@@ -974,12 +1006,12 @@ struct ActiveStudySessionView: View {
                     subjectName: plan.subjectName,
                     topicName: plan.topicName,
                     subtopicName: plan.subtopicName,
-                    generatedCards: parsed,
+                    generatedCards: generatedBatch.map { ($0.front, $0.back) },
                     sourceReference: "ActiveStudySessionView.generateFlashcards"
                 )
 
                 await MainActor.run {
-                    generatedCards.append(contentsOf: parsed)
+                    generatedCards.append(contentsOf: generatedBatch)
                     isGeneratingCards = false
                 }
             } catch {
@@ -1006,7 +1038,9 @@ struct ActiveStudySessionView: View {
                 let prompt = """
                 Generate a rigorous Practice Exam paper for:
                 Subject: \(plan.subjectName)
-                Topic: \(plan.topicName)\(plan.subtopicName.isEmpty ? "" : " — \(plan.subtopicName)")
+                Units: \(plan.selectedUnitNames.joined(separator: ", "))
+                Topics: \(plan.selectedTopicNames.joined(separator: ", "))
+                \(plan.selectedSubtopicNames.isEmpty ? "" : "Focus subtopics: \(plan.selectedSubtopicNames.joined(separator: ", "))")
                 
                 Format rules:
                 - Output should mimic a true IB past paper format.
@@ -1050,13 +1084,13 @@ struct ActiveStudySessionView: View {
         }
     }
 
-    private func saveCardToSubject(front: String, back: String) {
+    private func saveCardToSubject(_ generatedCard: GeneratedFlashcard) {
         guard let subject = subjects.first(where: { $0.name == plan.subjectName }) else { return }
         let card = StudyCard(
-            topicName: plan.topicName,
-            subtopic: plan.subtopicName.isEmpty ? plan.topicName : plan.subtopicName,
-            front: front,
-            back: back,
+            topicName: generatedCard.topicName,
+            subtopic: generatedCard.subtopic,
+            front: generatedCard.front,
+            back: generatedCard.back,
             subject: subject
         )
         subject.cards.append(card)
@@ -1068,8 +1102,8 @@ struct ActiveStudySessionView: View {
         guard let subject = subjects.first(where: { $0.name == plan.subjectName }) else { return }
         for card in generatedCards {
             let studyCard = StudyCard(
-                topicName: plan.topicName,
-                subtopic: plan.subtopicName.isEmpty ? plan.topicName : plan.subtopicName,
+                topicName: card.topicName,
+                subtopic: card.subtopic,
                 front: card.front,
                 back: card.back,
                 subject: subject
@@ -1116,7 +1150,7 @@ struct ActiveStudySessionView: View {
                 subjectName: plan.subjectName,
                 topicName: plan.topicName,
                 subtopicName: plan.subtopicName,
-                planMarkdown: "📝 **Spaced Repetition Review**\n\nRevisit \(plan.topicName) from your session on \(Date().formatted(date: .abbreviated, time: .omitted)).\n\n1. **Quick Recall** (10 min): Try to recall key concepts without notes\n2. **Review Cards** (15 min): Work through due flashcards\n3. **Practice** (10 min): Attempt one exam-style question\n4. **Self-Assessment**: Rate your confidence 1-5\n\nInterval: Day \(entry.day) review • \(entry.day <= 3 ? "Critical retention window" : "Long-term consolidation")",
+                planMarkdown: "📝 **Spaced Repetition Review**\n\nRevisit \(plan.selectionSummary) from your session on \(Date().formatted(date: .abbreviated, time: .omitted)).\n\n1. **Quick Recall** (10 min): Try to recall key concepts without notes\n2. **Review Cards** (15 min): Work through due flashcards\n3. **Practice** (10 min): Attempt one exam-style question\n4. **Self-Assessment**: Rate your confidence 1-5\n\nInterval: Day \(entry.day) review • \(entry.day <= 3 ? "Critical retention window" : "Long-term consolidation")",
                 scheduledDate: entry.date,
                 durationMinutes: 30,
                 kind: .followUpReview,
@@ -1140,7 +1174,7 @@ struct ActiveStudySessionView: View {
         plan.notes = sessionNotes
 
         // Log StudySession
-        let topics = [plan.topicName, plan.subtopicName].filter { !$0.isEmpty }
+        let topics = plan.selectedTopicNames.isEmpty ? [plan.topicName] : plan.selectedTopicNames
         let session = StudySession(
             subjectName: plan.subjectName,
             topicsCovered: topics.joined(separator: ", "),

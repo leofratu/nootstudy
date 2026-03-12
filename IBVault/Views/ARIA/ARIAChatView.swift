@@ -204,7 +204,7 @@ struct ARIAChatView: View {
             VStack(spacing: 6) {
                 Text("Meet ARIA")
                     .font(.title2.bold())
-                Text("Your AI study companion. Ask about topics, request study guides, or get help with revision strategies.")
+                Text("Your AI study companion. Ask about topics, request study guides, or tell ARIA to assign sessions, clean up flashcards, and update your study setup directly.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -1027,9 +1027,8 @@ enum FormattedMessageFormatter {
     }
 
     static func attributedMarkdown(from source: String) -> AttributedString? {
-        let processed = convertInlineMathToReadableText(in: source)
-        var options = AttributedString.MarkdownParsingOptions()
-        options.interpretedSyntax = .inlineOnlyPreservingWhitespace
+        let processed = normalizeResponseText(convertInlineMathToReadableText(in: source))
+        let options = AttributedString.MarkdownParsingOptions()
         return try? AttributedString(markdown: processed, options: options)
     }
 
@@ -1040,9 +1039,13 @@ enum FormattedMessageFormatter {
         result = replaceRegex(pattern: #"(?<=[.!?])(?=[A-Z])"#, template: " ", in: result)
         result = replaceRegex(pattern: #"(?m)^(#{1,6})([^ #\n])"#, template: "$1 $2", in: result)
         result = replaceRegex(pattern: #"(?m)(?<!\n)(#{1,6}\s)"#, template: "\n\n$1", in: result)
+        result = replaceRegex(pattern: #"(?m)^\s*#{1,6}\s*$"#, template: "", in: result)
+        result = replaceRegex(pattern: #"(?m)^\s*(?:[-*•]|\d+[.)])\s*$"#, template: "", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s+((?:[-*•]|\d+[.)])\s)"#, template: "\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s*(FRONT:)"#, template: "\n\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s*(BACK:)"#, template: "\n$1", in: result)
+        result = replaceRegex(pattern: #"(?m)^(#{1,6}\s+.+)\n(#{1,6}\s+.+)$"#, template: "$1\n\n$2", in: result)
+        result = replaceRegex(pattern: #"(?m)(^\s*[*-]\s+\*\*[^*\n]+\*\*:)"#, template: "\n$1", in: result)
         result = replaceRegex(
             pattern: #"(?i)why it(?:'|\u2019)s critical for [^:]+:\s*"#,
             template: "\n\n### Why It Matters\n",
@@ -1055,6 +1058,7 @@ enum FormattedMessageFormatter {
         )
         // Preserve code blocks - don't collapse newlines inside them
         result = collapseNewlinesPreservingCodeBlocks(in: result)
+        result = replaceRegex(pattern: #"\n{3,}"#, template: "\n\n", in: result)
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

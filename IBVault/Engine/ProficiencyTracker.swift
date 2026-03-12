@@ -2,19 +2,22 @@ import Foundation
 import SwiftData
 
 struct ProficiencyTracker {
-    /// Update proficiency level based on consecutive correct recalls
+    /// Update proficiency using both recall streak and longer-term SM-2 stability.
     static func updateProficiency(for card: StudyCard) {
+        let successRate = card.effectivenessRate
+        let reviewCount = card.totalReviewCount
+
         let level: ProficiencyLevel
-        switch card.consecutiveCorrect {
-        case 0...1:
-            level = .novice
-        case 2...3:
-            level = .developing
-        case 4...6:
-            level = .proficient
-        default:
+        if card.repetitions >= 6 && card.interval >= 21 && successRate >= 0.85 {
             level = .mastered
+        } else if card.repetitions >= 3 && card.interval >= 7 && successRate >= 0.65 {
+            level = .proficient
+        } else if card.consecutiveCorrect >= 2 || reviewCount >= 2 {
+            level = .developing
+        } else {
+            level = .novice
         }
+
         card.proficiency = level
     }
 

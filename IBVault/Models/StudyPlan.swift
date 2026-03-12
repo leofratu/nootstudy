@@ -1,6 +1,66 @@
 import Foundation
 import SwiftData
 
+struct StudyScope: Equatable {
+    let subjectName: String
+    let unitNames: [String]
+    let topicNames: [String]
+    let subtopicNames: [String]
+
+    var hasFilters: Bool {
+        !topicNames.isEmpty || !subtopicNames.isEmpty || !unitNames.isEmpty
+    }
+
+    var title: String {
+        if !topicNames.isEmpty {
+            return topicNames.joined(separator: ", ")
+        }
+        if !unitNames.isEmpty {
+            return unitNames.joined(separator: ", ")
+        }
+        return subjectName
+    }
+
+    var summary: String {
+        var parts: [String] = []
+        if !unitNames.isEmpty {
+            parts.append(unitNames.joined(separator: ", "))
+        }
+        if !topicNames.isEmpty {
+            parts.append(topicNames.joined(separator: ", "))
+        }
+        if !subtopicNames.isEmpty {
+            parts.append(subtopicNames.joined(separator: ", "))
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    func matches(_ card: StudyCard) -> Bool {
+        if !subjectName.isEmpty, let cardSubjectName = card.subject?.name, cardSubjectName != subjectName {
+            return false
+        }
+
+        if !topicNames.isEmpty, !topicNames.contains(card.topicName) {
+            return false
+        }
+
+        guard !subtopicNames.isEmpty else { return true }
+        let normalizedCardSubtopic = card.subtopic.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedCardSubtopic.isEmpty, normalizedCardSubtopic != card.topicName else {
+            return true
+        }
+
+        return subtopicNames.contains(normalizedCardSubtopic)
+    }
+
+    static func parseList(_ rawValue: String) -> [String] {
+        rawValue
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+}
+
 enum StudyPlanKind: String, Codable {
     case studySession
     case followUpReview
@@ -63,6 +123,32 @@ final class StudyPlan {
 
     var isPast: Bool {
         isCompleted || scheduledEndDate < Date()
+    }
+
+    var selectedTopicNames: [String] {
+        StudyScope.parseList(topicName)
+    }
+
+    var selectedSubtopicNames: [String] {
+        StudyScope.parseList(subtopicName)
+    }
+
+    var selectedUnitNames: [String] {
+        SyllabusSeeder.unitNames(for: subjectName, topicNames: selectedTopicNames)
+    }
+
+    var studyScope: StudyScope {
+        StudyScope(
+            subjectName: subjectName,
+            unitNames: selectedUnitNames,
+            topicNames: selectedTopicNames,
+            subtopicNames: selectedSubtopicNames
+        )
+    }
+
+    var selectionSummary: String {
+        let summary = studyScope.summary
+        return summary.isEmpty ? topicName : summary
     }
 
     init(

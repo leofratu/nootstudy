@@ -1,6 +1,7 @@
 {
-  "generated_at": "2026-03-12T18:11:46+01:00",
+  "generated_at": "2026-03-12T20:10:53+01:00",
   "files": [
+    ".gitignore",
     "IBVault.xcodeproj/project.pbxproj",
     "IBVault.xcodeproj/xcuserdata/main.xcuserdatad/xcschemes/xcschememanagement.plist",
     "IBVault/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
@@ -60,6 +61,7 @@
     "IBVault/Views/Subjects/TopicBrowserView.swift",
     "Info.plist",
     "README.md",
+    "build_output.log",
     "project.yml",
     "repo_plan/file_index.json",
     "repo_plan/rpg.json",
@@ -76,6 +78,11 @@
     "repo_plan/runs/20260312T112450/run.json",
     "repo_plan/runs/20260312T173347/run.json",
     "repo_plan/runs/20260312T180119/run.json",
-    "repo_plan/runs/20260312T181146/run.json"
+    "repo_plan/runs/20260312T181146/run.json",
+    "repo_plan/runs/20260312T183056/run.json",
+    "repo_plan/runs/20260312T194835/run.json",
+    "repo_plan/runs/20260312T195445/run.json",
+    "repo_plan/runs/20260312T195635/run.json",
+    "repo_plan/runs/20260312T201053/run.json"
   ]
 }

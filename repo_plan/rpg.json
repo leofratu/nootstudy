@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12T18:11:46+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity, replace the last ARIA WebKit math path with native SwiftUI math block layout, fix broken study-session opening/dismiss behavior, make follow-up review sessions explicit and visible on the study schedule, track pending ARIA spec-logging wiring gaps found during review, implement a focused ARIA quality pass for richer context, cleaner rendering, sturdier flashcard generation, and more accurate time logging while restoring a passing Xcode build, then package and publish the first macOS DMG release to GitHub.",
+  "updated_at": "2026-03-12T20:10:53+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity, replace the last ARIA WebKit math path with native SwiftUI math block layout, fix broken study-session opening/dismiss behavior, make follow-up review sessions explicit and visible on the study schedule, track pending ARIA spec-logging wiring gaps found during review, implement a focused ARIA quality pass for richer context, cleaner rendering, sturdier flashcard generation, and more accurate time logging while restoring a passing Xcode build, package and publish the first macOS DMG release to GitHub, and harden update safety by expanding backup coverage and triggering automatic safety backups after onboarding., repair study-scope selection so sessions can span multiple topics within chosen units, align mastery calculations with proficiency tracking, and make review/flashcard generation honor the originating study-session scope., extend ARIA with safe app-action execution so chat can create or reschedule study sessions, generate flashcards into the library, and update progress/profile settings when the user explicitly asks., harden shared rich-text formatting so ARIA chat and all reused formatted content stop rendering orphan markdown markers and render headings/lists with full markdown parsing., expand ARIA app actions further so chat can assign weakest-topic sessions, complete or cancel sessions, and edit or delete flashcards safely before shipping an updated local DMG release.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -268,6 +268,88 @@
         "repo_plan/file_index.json"
       ],
       "summary": "The current main branch changes are committed, pushed to GitHub, and published as a tagged release with the DMG asset attached."
+    },
+    {
+      "id": "iface.persistence.update_safe_backups",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/IBVaultApp.swift",
+        "IBVault/Services/BackupService.swift",
+        "IBVault/Models/ARIAMemory.swift",
+        "IBVault/Models/StudyPlan.swift",
+        "IBVault/Models/StudySession.swift"
+      ],
+      "summary": "Update safety is improved by backing up chat sessions, study plans, study sessions, richer ARIA memory metadata, and triggering automatic backup snapshots after onboarding so replacing the app is less likely to cost user data."
+    },
+    {
+      "id": "iface.study.scope_selection",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Models/StudyPlan.swift",
+        "IBVault/Models/StudySession.swift",
+        "IBVault/Views/Study/NewStudySessionView.swift",
+        "IBVault/Views/Study/StudyPlannerView.swift"
+      ],
+      "summary": "Study sessions now preserve a reusable scope across units, multiple topics, and optional subtopics so planning and later review can target the same curriculum slice."
+    },
+    {
+      "id": "iface.review.session_scoped_queue",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Review/ReviewSessionView.swift",
+        "IBVault/Views/Study/StudyPlannerView.swift",
+        "IBVault/Models/StudyPlan.swift",
+        "IBVault/Models/StudySession.swift"
+      ],
+      "summary": "Review sessions can be launched from follow-up plans or recent study sessions and now filter due cards to that study scope instead of the whole subject."
+    },
+    {
+      "id": "iface.flashcards.unit_scoped_generation",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Study/ActiveStudySessionView.swift",
+        "IBVault/Services/CardGeneratorService.swift",
+        "IBVault/Services/SyllabusSeeder.swift"
+      ],
+      "summary": "Generated flashcards include unit/topic context and are saved with per-topic metadata so later spaced repetition stays relevant to the original study scope."
+    },
+    {
+      "id": "iface.study.mastery_alignment",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Models/Subject.swift",
+        "IBVault/Engine/ProficiencyTracker.swift"
+      ],
+      "summary": "Subject mastery now uses the same weighted proficiency model surfaced elsewhere, and card proficiency advancement reflects review stability instead of raw streaks alone."
+    },
+    {
+      "id": "iface.aria.app_actions",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Services/ARIAService.swift",
+        "IBVault/Views/ARIA/ARIAChatView.swift",
+        "IBVault/Services/CardGeneratorService.swift",
+        "IBVault/Models/StudyPlan.swift",
+        "IBVault/Models/UserProfile.swift",
+        "IBVault/Models/StudyActivity.swift"
+      ],
+      "summary": "ARIA can interpret explicit user requests into validated app actions, then create, assign, reschedule, complete, or cancel study sessions; generate, edit, or delete flashcards; save memory notes; and update progress/profile settings before replying with the outcome."
+    },
+    {
+      "id": "iface.aria.shared_formatting",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/ARIA/ARIAChatView.swift",
+        "IBVault/Services/ARIAService.swift"
+      ],
+      "summary": "Shared formatted message rendering now strips orphan markdown markers, preserves cleaner section spacing, and parses full markdown so ARIA chat, study guides, plans, and exam views render consistently."
     }
   ],
   "edges": [
@@ -410,6 +492,16 @@
       "from": "iface.release.dmg_distribution",
       "to": "iface.release.github_publication",
       "type": "dependency"
+    },
+    {
+      "from": "entry.ibvault_app",
+      "to": "iface.persistence.update_safe_backups",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.persistence.update_safe_backups",
+      "to": "iface.release.dmg_distribution",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -511,6 +603,34 @@
     },
     {
       "id": "iface.release.github_publication",
+      "status": "tested"
+    },
+    {
+      "id": "iface.persistence.update_safe_backups",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.scope_selection",
+      "status": "tested"
+    },
+    {
+      "id": "iface.review.session_scoped_queue",
+      "status": "tested"
+    },
+    {
+      "id": "iface.flashcards.unit_scoped_generation",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.mastery_alignment",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.app_actions",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.shared_formatting",
       "status": "tested"
     }
   ]
