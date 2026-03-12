@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12T09:35:23+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, and reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing.",
+  "updated_at": "2026-03-12T09:56:24+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -64,6 +64,35 @@
         "IBVault/Views/Materials/MaterialsLibraryView.swift"
       ],
       "summary": "Materials Library computes collection counts and aggregate size once per view lifecycle and reuses cached directory listings instead of recursively rescanning on every render."
+    },
+    {
+      "id": "iface.aria.chat_runtime_stability",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Services/ARIAService.swift",
+        "IBVault/Views/ARIA/ARIAChatView.swift"
+      ],
+      "summary": "ARIA chat keeps SwiftData ModelContext work on the main actor and defers streaming auto-scroll updates so macOS runtime warnings do not cascade during token streaming."
+    },
+    {
+      "id": "iface.aria.math_rendering",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/ARIA/ARIAChatView.swift"
+      ],
+      "summary": "ARIA chat renders mixed markdown and LaTeX-style equations locally with readable inline and block formatting instead of depending on a remote web view renderer."
+    },
+    {
+      "id": "iface.study.focus_interactive_graphs",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Insights/EffectivenessView.swift",
+        "IBVault/Views/Insights/ADHDTrackerView.swift"
+      ],
+      "summary": "Study effectiveness and focus screens expose interactive Charts-based graphs so users can inspect study momentum, method impact, and focus windows directly in the UI."
     }
   ],
   "edges": [
@@ -101,6 +130,21 @@
       "from": "iface.materials.library_index_cache",
       "to": "iface.aria.context_caching",
       "type": "dependency"
+    },
+    {
+      "from": "iface.aria.chat_runtime_stability",
+      "to": "iface.aria.context_caching",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.math_rendering",
+      "to": "iface.aria.chat_runtime_stability",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study.focus_interactive_graphs",
+      "to": "dep.design_system",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -122,6 +166,18 @@
     },
     {
       "id": "iface.materials.library_index_cache",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.chat_runtime_stability",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.math_rendering",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.focus_interactive_graphs",
       "status": "tested"
     }
   ]

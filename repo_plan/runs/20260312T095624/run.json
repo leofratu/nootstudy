@@ -1,0 +1,48 @@
+{
+  "task_id": "20260312T095624_math_and_focus_graphs",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.math_rendering",
+      "iface.study.focus_interactive_graphs"
+    ],
+    "files": [
+      "IBVault/Views/ARIA/ARIAChatView.swift",
+      "IBVault/Views/Insights/ADHDTrackerView.swift",
+      "IBVault/Views/Insights/EffectivenessView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-math-focus-build CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.math_rendering",
+        "iface.study.focus_interactive_graphs"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.aria.math_rendering",
+    "iface.study.focus_interactive_graphs"
+  ],
+  "tested_interfaces": [
+    "iface.aria.math_rendering",
+    "iface.study.focus_interactive_graphs"
+  ],
+  "files_changed": [
+    "IBVault/Views/ARIA/ARIAChatView.swift",
+    "IBVault/Views/Insights/ADHDTrackerView.swift",
+    "IBVault/Views/Insights/EffectivenessView.swift",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "repo_plan/runs/20260312T095624/run.json"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null,
+  "notes": [
+    "Removed the remote MathJax WKWebView path in favor of local readable math formatting.",
+    "Added interactive Charts-based focus and effectiveness visualizations."
+  ]
+}

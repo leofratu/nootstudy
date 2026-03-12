@@ -1,9 +1,11 @@
-import SwiftUI
+import Charts
 import SwiftData
+import SwiftUI
 
 struct EffectivenessView: View {
     @Query private var profiles: [UserProfile]
     @Query(sort: \StudyActivity.date, order: .reverse) private var activity: [StudyActivity]
+    @State private var selectedMomentumDate: Date?
 
     private var profile: UserProfile? { profiles.first }
 
@@ -32,6 +34,42 @@ struct EffectivenessView: View {
         activity.count > 7 ? 0.1 : 0.0
     }
 
+    private var momentumRows: [(date: Date, minutes: Double, cards: Int, xp: Int)] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let grouped = Dictionary(grouping: activity) { calendar.startOfDay(for: $0.date) }
+
+        return (0..<14).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset - 13, to: today) else { return nil }
+            let entries = grouped[date] ?? []
+            return (
+                date: date,
+                minutes: entries.reduce(0.0) { $0 + $1.minutesStudied },
+                cards: entries.reduce(0) { $0 + $1.cardsReviewed },
+                xp: entries.reduce(0) { $0 + $1.xpEarned }
+            )
+        }
+    }
+
+    private var selectedMomentumRow: (date: Date, minutes: Double, cards: Int, xp: Int)? {
+        if let selectedMomentumDate {
+            let target = Calendar.current.startOfDay(for: selectedMomentumDate)
+            return momentumRows.min(by: {
+                abs($0.date.timeIntervalSince(target)) < abs($1.date.timeIntervalSince(target))
+            })
+        }
+
+        return momentumRows.last(where: { $0.minutes > 0 || $0.cards > 0 || $0.xp > 0 }) ?? momentumRows.last
+    }
+
+    private var activeDays: Int {
+        momentumRows.filter { $0.minutes > 0 || $0.cards > 0 || $0.xp > 0 }.count
+    }
+
+    private var projectedRereadingHours: Double {
+        personalMultiplier == 0 ? 0 : personalMultiplier
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -39,6 +77,9 @@ struct EffectivenessView: View {
                 multiplierHero
                     .padding(.horizontal, 24)
                     .padding(.top, 20)
+
+                momentumCard
+                    .padding(.horizontal, 24)
 
                 // Method comparison
                 methodComparisonCard
@@ -117,6 +158,83 @@ struct EffectivenessView: View {
         .glassCard()
     }
 
+    private var momentumCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "chart.xyaxis.line")
+                    .foregroundStyle(.tint)
+                Text("Focus Effect")
+                    .font(.headline)
+                Spacer()
+                Text("Last 14 days")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Chart {
+                ForEach(momentumRows, id: \.date) { row in
+                    BarMark(
+                        x: .value("Day", row.date),
+                        y: .value("Minutes", row.minutes)
+                    )
+                    .foregroundStyle(IBColors.electricBlue.opacity(0.28))
+                    .cornerRadius(6)
+
+                    LineMark(
+                        x: .value("Day", row.date),
+                        y: .value("Cards", Double(row.cards))
+                    )
+                    .foregroundStyle(IBColors.success)
+                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                    .interpolationMethod(.catmullRom)
+
+                    PointMark(
+                        x: .value("Day", row.date),
+                        y: .value("Cards", Double(row.cards))
+                    )
+                    .foregroundStyle(IBColors.success)
+                    .symbolSize(selectedMomentumRow?.date == row.date ? 80 : 36)
+                }
+
+                if let selectedMomentumRow {
+                    RuleMark(x: .value("Selected", selectedMomentumRow.date))
+                        .foregroundStyle(Color.primary.opacity(0.2))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                }
+            }
+            .frame(height: 220)
+            .chartXSelection(value: $selectedMomentumDate)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day, count: 2)) { value in
+                    AxisTick()
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                        .foregroundStyle(Color.primary.opacity(0.08))
+                    AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+                }
+            }
+
+            if let selectedMomentumRow {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(selectedMomentumRow.date, format: .dateTime.weekday(.wide).day().month(.abbreviated))
+                            .font(.headline)
+                        Text("\(activeDays) active days in the last 14")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    statPill(value: "\(Int(selectedMomentumRow.minutes))m", label: "Study", color: IBColors.electricBlue)
+                    statPill(value: "\(selectedMomentumRow.cards)", label: "Cards", color: IBColors.success)
+                    statPill(value: "+\(selectedMomentumRow.xp)", label: "XP", color: .yellow)
+                }
+            }
+        }
+        .padding(16)
+        .glassCard()
+    }
+
     // MARK: - Method Comparison
     private var methodComparisonCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -125,6 +243,28 @@ struct EffectivenessView: View {
                     .foregroundStyle(.tint)
                 Text("Method Comparison")
                     .font(.headline)
+            }
+
+            Chart(methods, id: \.name) { method in
+                BarMark(
+                    x: .value("Multiplier", method.multiplier),
+                    y: .value("Method", method.name)
+                )
+                .foregroundStyle(method.color.gradient)
+                .cornerRadius(6)
+
+                RuleMark(x: .value("Your multiplier", personalMultiplier))
+                    .foregroundStyle(IBColors.electricBlue.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            }
+            .frame(height: 220)
+            .chartXAxis {
+                AxisMarks(position: .bottom, values: .stride(by: 0.25)) { value in
+                    AxisTick()
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                        .foregroundStyle(Color.primary.opacity(0.08))
+                    AxisValueLabel()
+                }
             }
 
             ForEach(methods, id: \.name) { method in
@@ -188,7 +328,7 @@ struct EffectivenessView: View {
                 Image(systemName: "clock")
                     .font(.title2)
                     .foregroundStyle(.secondary)
-                Text("1h 42m")
+                Text("\(Int((projectedRereadingHours * 60).rounded()))m")
                     .font(.title3.bold())
                 Text("of re-reading")
                     .font(.caption)
@@ -215,5 +355,22 @@ struct EffectivenessView: View {
         }
         .padding(16)
         .glassCard()
+    }
+
+    private func statPill(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.callout.bold())
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(color.opacity(0.08))
+        )
     }
 }

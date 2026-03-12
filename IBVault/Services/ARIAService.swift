@@ -573,6 +573,7 @@ class ARIAService {
 
     // MARK: - Context Compaction
 
+    @MainActor
     private func checkAndCompact(context: ModelContext, apiKey: String) async {
         let descriptor = FetchDescriptor<ChatMessage>(
             sortBy: [SortDescriptor(\.timestamp, order: .forward)]
@@ -621,18 +622,16 @@ class ARIAService {
                 apiKey: apiKey
             )
 
-            await MainActor.run {
-                // Save compacted summary
-                let memory = ARIAMemory(category: .conversationHistory, content: summary, isCompacted: true)
-                context.insert(memory)
+            // Save compacted summary
+            let memory = ARIAMemory(category: .conversationHistory, content: summary, isCompacted: true)
+            context.insert(memory)
 
-                // Archive old messages
-                for msg in toCompact {
-                    context.delete(msg)
-                }
-
-                try? context.save()
+            // Archive old messages
+            for msg in toCompact {
+                context.delete(msg)
             }
+
+            try? context.save()
         } catch {
             print("Compaction failed: \(error)")
         }

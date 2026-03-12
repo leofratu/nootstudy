@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct ADHDTrackerView: View {
@@ -5,6 +6,7 @@ struct ADHDTrackerView: View {
     @AppStorage("adhdDose1Hour") private var dose1Hour = 9
     @AppStorage("adhdDose1Min") private var dose1Min = 0
     @AppStorage("adhdDoseInterval") private var doseIntervalMin = 270
+    @State private var selectedHour: Double?
 
     private var basePKData: [(time: String, hour: Double, level: Double)] {
         doseMg == 20 ? pk20mg : pk10mg
@@ -49,6 +51,43 @@ struct ADHDTrackerView: View {
 
     private var maxLevel: Double { pkData.map(\.level).max() ?? 8 }
     private var therapeuticMin: Double { doseMg == 20 ? 5.0 : 2.5 }
+
+    private var currentHourOffset: Double? {
+        let now = Date()
+        let cal = Calendar.current
+        let currentMinutes = cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now)
+        let doseStart = dose1Hour * 60 + dose1Min
+        let adjustedCurrent = currentMinutes < doseStart ? currentMinutes + 24 * 60 : currentMinutes
+        let hoursSinceFirstDose = Double(adjustedCurrent - doseStart) / 60.0
+        guard (0...15).contains(hoursSinceFirstDose) else { return nil }
+        return hoursSinceFirstDose
+    }
+
+    private var highlightedPoint: (time: String, hour: Double, level: Double) {
+        let targetHour = selectedHour ?? currentHourOffset ?? pkData.max(by: { $0.level < $1.level })?.hour ?? 0
+        return pkData.min(by: { abs($0.hour - targetHour) < abs($1.hour - targetHour) }) ?? pkData[0]
+    }
+
+    private var focusWindows: [(label: String, start: Double, end: Double, peak: Double, color: Color)] {
+        doseSchedule.indices.map { index in
+            let start = Double(index * doseIntervalMin) / 60.0 + 0.75
+            let peak = Double(index * doseIntervalMin) / 60.0 + 2.0
+            let end = Double(index * doseIntervalMin) / 60.0 + 4.5
+            let color: Color
+            switch index {
+            case 0: color = IBColors.electricBlue
+            case 1: color = IBColors.success
+            default: color = IBColors.warning
+            }
+            return (label: "Dose \(index + 1)", start: start, end: end, peak: peak, color: color)
+        }
+    }
+
+    private var activeWindow: (label: String, start: Double, end: Double, peak: Double, color: Color)? {
+        let reference = selectedHour ?? currentHourOffset
+        guard let reference else { return nil }
+        return focusWindows.first { reference >= $0.start && reference <= $0.end }
+    }
 
     private var currentStatus: (level: Double, status: String, color: Color) {
         let now = Date()
@@ -98,6 +137,9 @@ struct ADHDTrackerView: View {
 
                 // PK timeline
                 timelineCard
+                    .padding(.horizontal, 24)
+
+                focusWindowsCard
                     .padding(.horizontal, 24)
 
                 // Notes
@@ -247,32 +289,169 @@ struct ADHDTrackerView: View {
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(Array(pkData.enumerated()), id: \.offset) { _, point in
-                HStack(spacing: 10) {
-                    Text(point.time)
-                        .font(.caption.weight(.medium))
-                        .frame(width: 60, alignment: .leading)
-
-                    MasteryBar(
-                        progress: point.level / maxLevel,
-                        height: 8,
-                        color: statusColor(for: point.level)
+            Chart {
+                ForEach(Array(pkData.enumerated()), id: \.offset) { _, point in
+                    AreaMark(
+                        x: .value("Hour", point.hour),
+                        y: .value("Level", point.level)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [IBColors.electricBlue.opacity(0.28), .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
 
-                    Text(String(format: "%.1f", point.level))
-                        .font(.caption.bold())
-                        .foregroundStyle(statusColor(for: point.level))
-                        .frame(width: 35, alignment: .trailing)
+                    LineMark(
+                        x: .value("Hour", point.hour),
+                        y: .value("Level", point.level)
+                    )
+                    .foregroundStyle(IBColors.electricBlue)
+                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
 
-                    Text(statusText(for: point.level))
-                        .font(.system(size: 10, weight: .medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(statusColor(for: point.level).opacity(0.1)))
-                        .foregroundStyle(statusColor(for: point.level))
-                        .frame(width: 75)
+                    PointMark(
+                        x: .value("Hour", point.hour),
+                        y: .value("Level", point.level)
+                    )
+                    .foregroundStyle(statusColor(for: point.level))
+                    .symbolSize(abs(highlightedPoint.hour - point.hour) < 0.01 ? 90 : 36)
                 }
-                .padding(.vertical, 1)
+
+                RuleMark(y: .value("Therapeutic minimum", therapeuticMin))
+                    .foregroundStyle(IBColors.warning.opacity(0.8))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
+                    .annotation(position: .topTrailing) {
+                        Text("Target")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(IBColors.warning)
+                    }
+
+                if let currentHourOffset {
+                    RuleMark(x: .value("Current", currentHourOffset))
+                        .foregroundStyle(Color.primary.opacity(0.22))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                }
+
+                RuleMark(x: .value("Selected", highlightedPoint.hour))
+                    .foregroundStyle(highlightedPoint.level >= therapeuticMin ? IBColors.success : IBColors.warning)
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+            }
+            .frame(height: 220)
+            .chartXSelection(value: $selectedHour)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 2)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                        .foregroundStyle(Color.primary.opacity(0.08))
+                    AxisTick()
+                    AxisValueLabel {
+                        if let hour = value.as(Double.self) {
+                            Text(formattedTime(offsetMinutes: Int(hour * 60)))
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(selectedHour == nil ? "Current focus" : "Selected point")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text(highlightedPoint.time)
+                        .font(.headline)
+                    Text(statusText(for: highlightedPoint.level))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(statusColor(for: highlightedPoint.level))
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(String(format: "%.1f ng/mL", highlightedPoint.level))
+                        .font(.title3.bold())
+                        .foregroundStyle(statusColor(for: highlightedPoint.level))
+                    Text(
+                        highlightedPoint.level >= therapeuticMin
+                            ? "Within your estimated focus band"
+                            : "Below the estimated effective band"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(16)
+        .glassCard()
+    }
+
+    private var focusWindowsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "scope")
+                    .foregroundStyle(.tint)
+                Text("Focus Windows")
+                    .font(.headline)
+                Spacer()
+                Text("Interactive dose map")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Chart {
+                ForEach(focusWindows, id: \.label) { window in
+                    BarMark(
+                        xStart: .value("Start", window.start),
+                        xEnd: .value("End", window.end),
+                        y: .value("Dose", window.label)
+                    )
+                    .clipShape(Capsule())
+                    .foregroundStyle(window.color.opacity(0.75))
+
+                    PointMark(
+                        x: .value("Peak", window.peak),
+                        y: .value("Dose", window.label)
+                    )
+                    .foregroundStyle(window.color)
+                    .symbol(.diamond)
+                    .symbolSize(80)
+                }
+
+                if let currentHourOffset {
+                    RuleMark(x: .value("Current", currentHourOffset))
+                        .foregroundStyle(Color.primary.opacity(0.22))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                }
+            }
+            .frame(height: 150)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: 2)) { value in
+                    AxisTick()
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                        .foregroundStyle(Color.primary.opacity(0.08))
+                    AxisValueLabel {
+                        if let hour = value.as(Double.self) {
+                            Text(formattedTime(offsetMinutes: Int(hour * 60)))
+                        }
+                    }
+                }
+            }
+
+            if let activeWindow {
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(activeWindow.color)
+                        .frame(width: 10, height: 10)
+                    Text("\(activeWindow.label) is in its estimated effect window")
+                        .font(.callout.weight(.medium))
+                    Spacer()
+                    Text("Peak around \(formattedTime(offsetMinutes: Int(activeWindow.peak * 60)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Select a point on the plasma chart to inspect how it lines up with each dose window.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(16)

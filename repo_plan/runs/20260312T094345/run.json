@@ -1,0 +1,46 @@
+{
+  "task_id": "stabilize-aria-chat-runtime-warnings",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.chat_runtime_stability"
+    ],
+    "files": [
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Views/ARIA/ARIAChatView.swift",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ],
+    "evidence": [
+      "ARIAService.checkAndCompact was using a main-queue ModelContext from a non-main async path, which matched the runtime 'ModelContext: Unbinding from the main queue' warning.",
+      "ARIAChatView used immediate onChange-driven auto-scroll updates during token streaming, which matched the repeated 'onChange(of: String) action tried to update multiple times per frame' warning.",
+      "The remaining WebKit and entitlement logs originate from embedded WKWebView / macOS subsystems and were not reproduced as build-breaking issues."
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-chat-runtime-fix CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.chat_runtime_stability"
+      ]
+    }
+  ],
+  "files_changed": [
+    "IBVault/Services/ARIAService.swift",
+    "IBVault/Views/ARIA/ARIAChatView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json",
+    "repo_plan/runs/20260312T094345/run.json"
+  ],
+  "implemented_interfaces": [
+    "iface.aria.chat_runtime_stability"
+  ],
+  "tested_interfaces": [
+    "iface.aria.chat_runtime_stability"
+  ],
+  "notes": [
+    "scripts/validate_rpg.py is referenced by AGENTS.md but is not present in this repository, so RPG validation could not be run."
+  ]
+}

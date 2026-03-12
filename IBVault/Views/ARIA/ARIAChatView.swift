@@ -1,6 +1,6 @@
-import SwiftUI
+import Foundation
 import SwiftData
-import WebKit
+import SwiftUI
 
 struct ARIAChatView: View {
     @Environment(\.modelContext) private var context
@@ -10,6 +10,7 @@ struct ARIAChatView: View {
     @State private var streamingText = ""
     @State private var showMemory = false
     @State private var errorMessage: String?
+    @State private var pendingScrollTarget: AnyHashable?
 
     var body: some View {
         NavigationStack {
@@ -39,13 +40,20 @@ struct ARIAChatView: View {
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
                     }
-                    .onChange(of: messages.count) { _, _ in
-                        if let last = messages.last {
-                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                        }
+                    .onChange(of: messages.last?.id) { _, newValue in
+                        guard let newValue else { return }
+                        pendingScrollTarget = AnyHashable(newValue)
                     }
-                    .onChange(of: streamingText) { _, _ in
-                        withAnimation { proxy.scrollTo("streaming", anchor: .bottom) }
+                    .onChange(of: streamingText.count) { _, newValue in
+                        guard ariaService.isLoading, newValue > 0 else { return }
+                        pendingScrollTarget = AnyHashable("streaming")
+                    }
+                    .task(id: pendingScrollTarget) {
+                        guard let pendingScrollTarget else { return }
+                        await Task.yield()
+                        withAnimation {
+                            proxy.scrollTo(pendingScrollTarget, anchor: .bottom)
+                        }
                     }
                 }
 
@@ -271,23 +279,13 @@ struct FormattedMessageContent: View {
         FormattedMessageFormatter.sections(from: text)
     }
 
-    private var containsMath: Bool {
-        MathMarkdownHTMLRenderer.containsMath(in: text)
-    }
-
     var body: some View {
-        Group {
-            if containsMath {
-                MathMarkdownContainer(markdown: text)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                        sectionView(section)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                sectionView(section)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -304,8 +302,8 @@ struct FormattedMessageContent: View {
 
         case .mathBlock(let latex):
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(verbatim: latex)
-                    .font(.system(.body, design: .monospaced))
+                Text(verbatim: MathExpressionFormatter.displayString(from: latex))
+                    .font(.system(size: 16, weight: .medium, design: .serif))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
@@ -321,90 +319,6 @@ struct FormattedMessageContent: View {
         }
     }
 }
-
-struct MathMarkdownContainer: View {
-    let markdown: String
-    @State private var contentHeight: CGFloat = 28
-
-    var body: some View {
-        MathMarkdownWebView(markdown: markdown, contentHeight: $contentHeight)
-            .frame(height: max(contentHeight, 28))
-    }
-}
-
-#if os(macOS)
-struct MathMarkdownWebView: NSViewRepresentable {
-    let markdown: String
-    @Binding var contentHeight: CGFloat
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(contentHeight: $contentHeight)
-    }
-
-    func makeNSView(context: Context) -> WKWebView {
-        let controller = WKUserContentController()
-        controller.add(context.coordinator, name: "heightUpdated")
-
-        let configuration = WKWebViewConfiguration()
-        configuration.userContentController = controller
-
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.navigationDelegate = context.coordinator
-        webView.setValue(false, forKey: "drawsBackground")
-
-        context.coordinator.load(markdown: markdown, into: webView)
-        return webView
-    }
-
-    func updateNSView(_ nsView: WKWebView, context: Context) {
-        context.coordinator.load(markdown: markdown, into: nsView)
-    }
-
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-        @Binding private var contentHeight: CGFloat
-        private var lastHTML = ""
-
-        init(contentHeight: Binding<CGFloat>) {
-            _contentHeight = contentHeight
-        }
-
-        func load(markdown: String, into webView: WKWebView) {
-            let html = MathMarkdownHTMLRenderer.document(for: markdown)
-            guard html != lastHTML else { return }
-            lastHTML = html
-            webView.loadHTMLString(html, baseURL: URL(string: "https://cdn.jsdelivr.net"))
-        }
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            reportHeight(for: webView)
-        }
-
-        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.name == "heightUpdated" else { return }
-
-            if let value = message.body as? Double {
-                DispatchQueue.main.async {
-                    self.contentHeight = ceil(value)
-                }
-            } else if let value = message.body as? CGFloat {
-                DispatchQueue.main.async {
-                    self.contentHeight = ceil(value)
-                }
-            }
-        }
-
-        private func reportHeight(for webView: WKWebView) {
-            webView.evaluateJavaScript("Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)") { result, _ in
-                if let value = result as? Double {
-                    DispatchQueue.main.async {
-                        self.contentHeight = ceil(value)
-                    }
-                }
-            }
-        }
-    }
-}
-#endif
 
 enum FormattedMessageSection {
     case markdown(String)
@@ -454,7 +368,7 @@ enum FormattedMessageFormatter {
     }
 
     static func attributedMarkdown(from source: String) -> AttributedString? {
-        let processed = convertInlineMathToMarkdownCode(in: source)
+        let processed = convertInlineMathToReadableText(in: source)
         return try? AttributedString(markdown: processed)
     }
 
@@ -466,7 +380,7 @@ enum FormattedMessageFormatter {
             .replacingOccurrences(of: "\\)", with: "$")
     }
 
-    private static func convertInlineMathToMarkdownCode(in source: String) -> String {
+    private static func convertInlineMathToReadableText(in source: String) -> String {
         var result = ""
         var index = source.startIndex
 
@@ -477,11 +391,11 @@ enum FormattedMessageFormatter {
                 if next < source.endIndex,
                    source[next] != "$",
                    let closing = source[next...].firstIndex(of: "$") {
-                    let candidate = String(source[next..<closing])
-                    let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+                   let candidate = String(source[next..<closing])
+                   let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
 
                     if !trimmed.isEmpty && !candidate.contains("\n") {
-                        result += "`\(candidate)`"
+                        result += MathExpressionFormatter.inlineString(from: candidate)
                         index = source.index(after: closing)
                         continue
                     }
@@ -496,116 +410,123 @@ enum FormattedMessageFormatter {
     }
 }
 
-enum MathMarkdownHTMLRenderer {
-    static func containsMath(in source: String) -> Bool {
-        let normalized = source
-            .replacingOccurrences(of: "\\[", with: "$$")
-            .replacingOccurrences(of: "\\]", with: "$$")
-            .replacingOccurrences(of: "\\(", with: "$")
-            .replacingOccurrences(of: "\\)", with: "$")
+enum MathExpressionFormatter {
+    private static let commandMap: [String: String] = [
+        "\\alpha": "α", "\\beta": "β", "\\gamma": "γ", "\\delta": "δ", "\\epsilon": "ϵ",
+        "\\theta": "θ", "\\lambda": "λ", "\\mu": "μ", "\\pi": "π", "\\sigma": "σ",
+        "\\phi": "φ", "\\omega": "ω", "\\Delta": "Δ", "\\Gamma": "Γ", "\\Lambda": "Λ",
+        "\\Pi": "Π", "\\Sigma": "Σ", "\\Omega": "Ω", "\\times": "×", "\\cdot": "·",
+        "\\pm": "±", "\\neq": "≠", "\\leq": "≤", "\\geq": "≥", "\\approx": "≈",
+        "\\infty": "∞", "\\to": "→", "\\rightarrow": "→", "\\left": "", "\\right": "",
+        "\\sum": "Σ", "\\prod": "∏", "\\int": "∫", "\\cdots": "⋯", "\\ldots": "…",
+        "\\sin": "sin", "\\cos": "cos", "\\tan": "tan", "\\log": "log", "\\ln": "ln",
+        "\\lim": "lim"
+    ]
 
-        return normalized.contains("$$") || normalized.contains("$")
+    private static let superscripts: [Character: String] = [
+        "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+        "+": "⁺", "-": "⁻", "=": "⁼", "(": "⁽", ")": "⁾", "n": "ⁿ", "i": "ⁱ"
+    ]
+
+    private static let subscripts: [Character: String] = [
+        "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
+        "+": "₊", "-": "₋", "=": "₌", "(": "₍", ")": "₎", "a": "ₐ", "e": "ₑ", "i": "ᵢ", "j": "ⱼ",
+        "k": "ₖ", "l": "ₗ", "m": "ₘ", "n": "ₙ", "o": "ₒ", "p": "ₚ", "r": "ᵣ", "s": "ₛ", "t": "ₜ",
+        "u": "ᵤ", "v": "ᵥ", "x": "ₓ"
+    ]
+
+    static func inlineString(from source: String) -> String {
+        prettified(source)
     }
 
-    static func document(for source: String) -> String {
-        let normalized = normalizeDelimiters(in: source)
-        var placeholders: [String: String] = [:]
-        let withDisplay = replaceDisplayMath(in: normalized, placeholders: &placeholders)
-        let withInline = replaceInlineMath(in: withDisplay, placeholders: &placeholders)
-        let htmlBody = restorePlaceholders(in: renderTextHTML(from: withInline), placeholders: placeholders)
-
-        return """
-        <!doctype html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-          <style>
-            :root { color-scheme: light dark; }
-            html, body {
-              margin: 0;
-              padding: 0;
-              background: transparent;
-              color: CanvasText;
-              font: 14px -apple-system, BlinkMacSystemFont, sans-serif;
-              line-height: 1.45;
-              overflow: hidden;
-            }
-            p { margin: 0 0 0.55em 0; }
-            p:last-child { margin-bottom: 0; }
-            ul { margin: 0.2em 0 0.55em 1.2em; padding: 0; }
-            li { margin: 0.12em 0; }
-            strong { font-weight: 650; }
-            code {
-              font: 13px Menlo, Monaco, monospace;
-              background: rgba(127, 127, 127, 0.12);
-              border-radius: 4px;
-              padding: 1px 4px;
-            }
-            .math-block {
-              margin: 0.45em 0;
-              overflow-x: auto;
-              overflow-y: hidden;
-            }
-          </style>
-          <script>
-            window.MathJax = {
-              tex: {
-                inlineMath: [['\\(','\\)']],
-                displayMath: [['\\[','\\]']]
-              },
-              options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'] },
-              startup: {
-                pageReady: () => {
-                  return MathJax.startup.defaultPageReady().then(() => {
-                    setTimeout(reportHeight, 50);
-                  });
-                }
-              }
-            };
-
-            function reportHeight() {
-              const height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-              if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.heightUpdated) {
-                window.webkit.messageHandlers.heightUpdated.postMessage(height);
-              }
-            }
-
-            window.addEventListener('load', () => setTimeout(reportHeight, 50));
-          </script>
-          <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
-        </head>
-        <body>
-          \(htmlBody)
-        </body>
-        </html>
-        """
+    static func displayString(from source: String) -> String {
+        prettified(source)
     }
 
-    private static func normalizeDelimiters(in source: String) -> String {
-        source
-            .replacingOccurrences(of: "\\[", with: "$$")
-            .replacingOccurrences(of: "\\]", with: "$$")
-            .replacingOccurrences(of: "\\(", with: "$")
-            .replacingOccurrences(of: "\\)", with: "$")
+    private static func prettified(_ source: String) -> String {
+        var result = source.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        result = replaceBinaryCommand("\\frac", in: result) { lhs, rhs in
+            "(\(lhs))/(\(rhs))"
+        }
+        result = replaceUnaryCommand("\\sqrt", in: result) { value in
+            "√(\(value))"
+        }
+        result = replaceUnaryCommand("\\text", in: result) { $0 }
+        result = replaceUnaryCommand("\\mathrm", in: result) { $0 }
+        result = replaceUnaryCommand("\\operatorname", in: result) { $0 }
+
+        for (command, symbol) in commandMap {
+            result = result.replacingOccurrences(of: command, with: symbol)
+        }
+
+        result = result
+            .replacingOccurrences(of: "{", with: "")
+            .replacingOccurrences(of: "}", with: "")
+            .replacingOccurrences(of: "\\", with: "")
+
+        result = applyScript(marker: "^", mapping: superscripts, to: result)
+        result = applyScript(marker: "_", mapping: subscripts, to: result)
+
+        return result
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func replaceDisplayMath(in source: String, placeholders: inout [String: String]) -> String {
+    private static func replaceUnaryCommand(_ command: String, in source: String, transform: (String) -> String) -> String {
+        replaceRegex(pattern: "\\\\\(command.dropFirst())\\{([^{}]+)\\}", in: source) { match in
+            let rawValue = match.numberOfRanges > 1 ? nsRange(match.range(at: 1), in: source).flatMap { Range($0, in: source) }.map { String(source[$0]) } : nil
+            return transform(prettified(rawValue ?? ""))
+        }
+    }
+
+    private static func replaceBinaryCommand(_ command: String, in source: String, transform: (String, String) -> String) -> String {
+        replaceRegex(pattern: "\\\\\(command.dropFirst())\\{([^{}]+)\\}\\{([^{}]+)\\}", in: source) { match in
+            let lhs = match.numberOfRanges > 1 ? nsRange(match.range(at: 1), in: source).flatMap { Range($0, in: source) }.map { String(source[$0]) } ?? "" : ""
+            let rhs = match.numberOfRanges > 2 ? nsRange(match.range(at: 2), in: source).flatMap { Range($0, in: source) }.map { String(source[$0]) } ?? "" : ""
+            return transform(prettified(lhs), prettified(rhs))
+        }
+    }
+
+    private static func replaceRegex(pattern: String, in source: String, replacement: (NSTextCheckingResult) -> String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return source }
+        let matches = regex.matches(in: source, range: NSRange(source.startIndex..., in: source))
+        guard !matches.isEmpty else { return source }
+
+        var result = source
+        for match in matches.reversed() {
+            let replacementText = replacement(match)
+            if let range = Range(match.range, in: result) {
+                result.replaceSubrange(range, with: replacementText)
+            }
+        }
+        return result == source ? source : replaceRegex(pattern: pattern, in: result, replacement: replacement)
+    }
+
+    private static func applyScript(marker: Character, mapping: [Character: String], to source: String) -> String {
         var result = ""
         var index = source.startIndex
-        var counter = 0
 
         while index < source.endIndex {
-            let remaining = source[index...]
-            if remaining.hasPrefix("$$") {
-                let start = source.index(index, offsetBy: 2)
-                if let endRange = source[start...].range(of: "$$") {
-                    let content = String(source[start..<endRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let token = "@@DISPLAY_\(counter)@@"
-                    placeholders[token] = "<div class=\"math-block\">\\[\(escapeHTML(content))\\]</div>"
-                    result += "\n\(token)\n"
-                    counter += 1
-                    index = endRange.upperBound
+            if source[index] == marker {
+                let next = source.index(after: index)
+                guard next < source.endIndex else {
+                    index = next
+                    continue
+                }
+
+                if source[next] == "{" {
+                    if let closing = source[next...].firstIndex(of: "}") {
+                        let content = source[source.index(after: next)..<closing]
+                        let rendered = content.compactMap { mapping[$0] ?? String($0) }.joined()
+                        result += rendered
+                        index = source.index(after: closing)
+                        continue
+                    }
+                } else {
+                    let rendered = mapping[source[next]] ?? String(source[next])
+                    result += rendered
+                    index = source.index(after: next)
                     continue
                 }
             }
@@ -617,103 +538,7 @@ enum MathMarkdownHTMLRenderer {
         return result
     }
 
-    private static func replaceInlineMath(in source: String, placeholders: inout [String: String]) -> String {
-        var result = ""
-        var index = source.startIndex
-        var counter = placeholders.count
-
-        while index < source.endIndex {
-            if source[index] == "$" {
-                let start = source.index(after: index)
-                if start < source.endIndex,
-                   source[start] != "$",
-                   let end = source[start...].firstIndex(of: "$") {
-                    let content = String(source[start..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !content.isEmpty && !content.contains("\n") {
-                        let token = "@@INLINE_\(counter)@@"
-                        placeholders[token] = "<span class=\"math-inline\">\\(\(escapeHTML(content))\\)</span>"
-                        result += token
-                        counter += 1
-                        index = source.index(after: end)
-                        continue
-                    }
-                }
-            }
-
-            result.append(source[index])
-            index = source.index(after: index)
-        }
-
-        return result
-    }
-
-    private static func renderTextHTML(from source: String) -> String {
-        let lines = source.components(separatedBy: .newlines)
-        var html = ""
-        var listItems: [String] = []
-
-        func flushList() {
-            guard !listItems.isEmpty else { return }
-            html += "<ul>" + listItems.map { "<li>\($0)</li>" }.joined() + "</ul>"
-            listItems.removeAll()
-        }
-
-        for rawLine in lines {
-            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
-
-            if trimmed.isEmpty {
-                flushList()
-                continue
-            }
-
-            if trimmed.hasPrefix("@@DISPLAY_") {
-                flushList()
-                html += trimmed
-                continue
-            }
-
-            if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
-                let content = String(trimmed.dropFirst(2))
-                listItems.append(applyInlineMarkup(to: escapeHTML(content)))
-            } else {
-                flushList()
-                html += "<p>\(applyInlineMarkup(to: escapeHTML(trimmed)))</p>"
-            }
-        }
-
-        flushList()
-        return html
-    }
-
-    private static func applyInlineMarkup(to escaped: String) -> String {
-        var html = escaped
-
-        html = html.replacingOccurrences(
-            of: "\\*\\*(.+?)\\*\\*",
-            with: "<strong>$1</strong>",
-            options: .regularExpression
-        )
-        html = html.replacingOccurrences(
-            of: "`([^`]+)`",
-            with: "<code>$1</code>",
-            options: .regularExpression
-        )
-
-        return html
-    }
-
-    private static func restorePlaceholders(in source: String, placeholders: [String: String]) -> String {
-        placeholders.reduce(source) { partial, entry in
-            partial.replacingOccurrences(of: entry.key, with: entry.value)
-        }
-    }
-
-    private static func escapeHTML(_ source: String) -> String {
-        source
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&#39;")
+    private static func nsRange(_ range: NSRange, in source: String) -> NSRange? {
+        range.location == NSNotFound ? nil : range
     }
 }
