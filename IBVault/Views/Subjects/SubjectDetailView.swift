@@ -219,22 +219,49 @@ struct SubjectDetailView: View {
                 }
             } else {
                 let topics = Dictionary(grouping: subject.cards, by: { $0.topicName })
-                    .sorted { $0.key < $1.key }
+                    .sorted { 
+                        let mastery1 = ProficiencyTracker.masteryPercentage(for: subject, topicName: $0.key)
+                        let mastery2 = ProficiencyTracker.masteryPercentage(for: subject, topicName: $1.key)
+                        return mastery1 < mastery2
+                    }
 
                 ForEach(topics, id: \.key) { topicName, topicCards in
                     DisclosureGroup {
                         let subtopics = Dictionary(grouping: topicCards, by: { $0.subtopic })
-                            .sorted { $0.key < $1.key }
+                            .sorted { 
+                                let mastery1 = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: $0.key)
+                                let mastery2 = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: $1.key)
+                                return mastery1 < mastery2
+                            }
 
                         VStack(spacing: 0) {
                             ForEach(subtopics, id: \.key) { subtopicName, subCards in
                                 let subName = subtopicName.isEmpty ? "General" : subtopicName
                                 let subMastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: subtopicName)
+                                let dueCount = subCards.filter { $0.isDue }.count
                                 
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(subName)
-                                            .font(.callout)
+                                        HStack(spacing: 6) {
+                                            Text(subName)
+                                                .font(.callout)
+                                            if dueCount > 0 {
+                                                Text("\(dueCount) due")
+                                                    .font(.caption2)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                                    .background(Capsule().fill(.orange.opacity(0.2)))
+                                                    .foregroundStyle(.orange)
+                                            }
+                                            if subMastery < 0.3 {
+                                                Text("Weak")
+                                                    .font(.caption2)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                                    .background(Capsule().fill(.red.opacity(0.15)))
+                                                    .foregroundStyle(.red)
+                                            }
+                                        }
                                         Text("\(subCards.count) cards")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
@@ -260,15 +287,29 @@ struct SubjectDetailView: View {
                         
                     } label: {
                         let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName)
+                        let dueCount = topicCards.filter { $0.isDue }.count
+                        
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(topicName)
-                                    .font(.callout.weight(.medium))
-                                    .foregroundStyle(.primary)
+                                HStack(spacing: 6) {
+                                    Text(topicName)
+                                        .font(.callout.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                    if mastery < 0.3 {
+                                        Circle()
+                                            .fill(.red)
+                                            .frame(width: 6, height: 6)
+                                    }
+                                }
                                 HStack(spacing: 8) {
                                     Text("\(topicCards.count) cards")
                                     Text("•")
                                     Text("\(Int(mastery * 100))% mastered")
+                                    if dueCount > 0 {
+                                        Text("•")
+                                        Text("\(dueCount) due")
+                                            .foregroundStyle(.orange)
+                                    }
                                 }
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

@@ -1,11 +1,15 @@
 import SwiftUI
+import SwiftData
 
 struct StudyCalendarView: View {
     let plans: [StudyPlan]
     let onTapPlan: (StudyPlan) -> Void
+    var onDeletePlan: ((StudyPlan) -> Void)?
 
     @State private var selectedWeekOffset = 0
     @State private var hoveredSlot: String?
+    @State private var showDeleteConfirmation = false
+    @State private var planToDelete: StudyPlan?
 
     private var currentWeekStart: Date {
         let cal = Calendar.current
@@ -280,6 +284,41 @@ struct StudyCalendarView: View {
                         .buttonStyle(.plain)
                         .onHover { hovering in
                             hoveredSlot = hovering ? slotId : nil
+                        }
+                        .contextMenu {
+                            if let onDeletePlan = onDeletePlan {
+                                Button(role: .destructive) {
+                                    planToDelete = plan
+                                    showDeleteConfirmation = true
+                                } label: {
+                                    Label("Delete Session", systemImage: "trash")
+                                }
+                                
+                                if !plan.isFollowUpReview {
+                                    Divider()
+                                    
+                                    Button {
+                                        planToDelete = plan
+                                        showDeleteConfirmation = true
+                                    } label: {
+                                        Label("Delete & Add Review", systemImage: "arrow.triangle.2.circlepath")
+                                    }
+                                }
+                            }
+                        }
+                        .alert("Delete Session?", isPresented: $showDeleteConfirmation) {
+                            Button("Delete", role: .destructive) {
+                                if let plan = planToDelete {
+                                    onDeletePlan?(plan)
+                                }
+                            }
+                            Button("Cancel", role: .cancel) {
+                                planToDelete = nil
+                            }
+                        } message: {
+                            if let plan = planToDelete, !plan.isFollowUpReview {
+                                Text("This will also schedule spaced repetition reviews for this session.")
+                            }
                         }
                     }
                 }

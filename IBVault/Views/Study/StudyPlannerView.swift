@@ -5,9 +5,9 @@ struct StudyPlannerView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \StudyPlan.scheduledDate, order: .forward) private var allPlans: [StudyPlan]
     @Query(sort: \StudySession.startDate, order: .reverse) private var recentSessions: [StudySession]
+    @Query private var subjects: [Subject]
     @State private var showNewSession = false
     @State private var selectedPlan: StudyPlan?
-    @State private var showActivePlan = false
 
     private var upcomingPlans: [StudyPlan] {
         allPlans.filter { $0.isUpcoming || $0.isActive }
@@ -40,8 +40,9 @@ struct StudyPlannerView: View {
 
                     // Calendar
                     StudyCalendarView(plans: allPlans) { plan in
-                        selectedPlan = plan
-                        showActivePlan = true
+                        openPlan(plan)
+                    } onDeletePlan: { plan in
+                        deletePlan(plan)
                     }
                     .padding(.horizontal, 28)
 
@@ -82,8 +83,10 @@ struct StudyPlannerView: View {
             .sheet(isPresented: $showNewSession) {
                 NewStudySessionView()
             }
-            .sheet(isPresented: $showActivePlan) {
-                if let plan = selectedPlan {
+            .sheet(item: $selectedPlan) { plan in
+                if plan.isFollowUpReview {
+                    ReviewSessionView(filterSubject: subject(for: plan))
+                } else {
                     ActiveStudySessionView(plan: plan)
                 }
             }
@@ -209,8 +212,7 @@ struct StudyPlannerView: View {
     // MARK: - Plan Row
     private func planRow(_ plan: StudyPlan) -> some View {
         Button {
-            selectedPlan = plan
-            showActivePlan = true
+            openPlan(plan)
         } label: {
             HStack(spacing: 14) {
                 RoundedRectangle(cornerRadius: 3)
@@ -221,10 +223,20 @@ struct StudyPlannerView: View {
                     Text(plan.subjectName)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
-                    Text(plan.topicName)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(plan.scheduleLabel)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        if plan.isFollowUpReview {
+                            Text("REVIEW")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(IBColors.electricBlue.opacity(0.1)))
+                                .foregroundStyle(IBColors.electricBlue)
+                        }
+                    }
                 }
 
                 Spacer()
@@ -372,5 +384,63 @@ struct StudyPlannerView: View {
         case "Business Management": return IBColors.businessColor
         default: return .gray
         }
+    }
+
+    private func openPlan(_ plan: StudyPlan) {
+        selectedPlan = plan
+        IBHaptics.light()
+    }
+
+    private func deletePlan(_ plan: StudyPlan) {
+        // Schedule spaced repetition reviews before deleting
+        if !plan.isFollowUpReview {
+            scheduleSpacedReviews(for: plan)
+        }
+        
+        context.delete(plan)
+        try? context.save()
+        IBHaptics.medium()
+    }
+
+    private func scheduleSpacedReviews(for plan: StudyPlan) {
+        let cal = Calendar.current
+        let endDate = plan.scheduledDate
+        
+        let reviewDays = [1, 3, 7]
+        
+        for days in reviewDays {
+            guard let date = cal.date(byAdding: .day, value: days, to: endDate),
+                  let scheduledAt = cal.date(bySettingHour: 16, minute: 0, second: 0, of: date) else { continue }
+            
+            let review = StudyPlan(
+                subjectName: plan.subjectName,
+                topicName: plan.topicName,
+                subtopicName: plan.subtopicName,
+                planMarkdown: """
+                📝 **Spaced Repetition Review**
+
+                Revisit \(plan.topicName) from your session on \(plan.scheduledDate.formatted(date: .abbreviated, time: .omitted)).
+
+                **Quick Recall** (10 min): Try to recall key concepts without notes
+
+                **Review Cards** (15 min): Work through flashcards
+
+                **Practice** (10 min): Attempt one exam-style question
+
+                **Self-Assessment**: Rate your confidence 1-5
+
+                Interval: Day \(days) review
+                """,
+                scheduledDate: scheduledAt,
+                durationMinutes: 30,
+                kind: .followUpReview,
+                reviewIntervalDays: days
+            )
+            context.insert(review)
+        }
+    }
+
+    private func subject(for plan: StudyPlan) -> Subject? {
+        subjects.first(where: { $0.name == plan.subjectName })
     }
 }
