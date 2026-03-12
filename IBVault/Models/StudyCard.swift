@@ -62,11 +62,28 @@ final class StudyCard {
 
     // Metadata
     var isCustom: Bool
+    var isAIGenerated: Bool?
     var createdDate: Date
     var lastReviewedDate: Date?
+    var generationSource: String?
+    var totalReviewCount: Int
+    var successfulReviewCount: Int
 
     // Relationship
     var subject: Subject?
+
+    var effectivenessRate: Double {
+        guard totalReviewCount > 0 else { return 0 }
+        return Double(successfulReviewCount) / Double(totalReviewCount)
+    }
+
+    var isEffective: Bool {
+        totalReviewCount >= 3 && effectivenessRate >= 0.6
+    }
+
+    var isStruggling: Bool {
+        totalReviewCount >= 3 && effectivenessRate < 0.4
+    }
 
     var proficiency: ProficiencyLevel {
         get { ProficiencyLevel(rawValue: proficiencyRaw) ?? .novice }
@@ -87,7 +104,9 @@ final class StudyCard {
         front: String,
         back: String,
         subject: Subject? = nil,
-        isCustom: Bool = false
+        isCustom: Bool = false,
+        isAIGenerated: Bool = true,
+        generationSource: String = "ARIA"
     ) {
         self.id = UUID()
         self.topicName = topicName
@@ -101,7 +120,11 @@ final class StudyCard {
         self.proficiencyRaw = ProficiencyLevel.novice.rawValue
         self.consecutiveCorrect = 0
         self.isCustom = isCustom
+        self.isAIGenerated = isAIGenerated
         self.createdDate = Date()
         self.subject = subject
+        self.generationSource = generationSource
+        self.totalReviewCount = 0
+        self.successfulReviewCount = 0
     }
 }
