@@ -15,6 +15,7 @@ struct IBVaultApp: App {
             UserProfile.self,
             Achievement.self,
             ARIAMemory.self,
+            ARIAChatSession.self,
             ChatMessage.self,
             StudyActivity.self,
             StudySession.self,

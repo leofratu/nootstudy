@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12T10:22:20+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering.",
+  "updated_at": "2026-03-12T10:33:17+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, and add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -114,6 +114,27 @@
         "IBVault/MathJax/tex-svg.js"
       ],
       "summary": "ARIA assistant messages use a bundled local MathJax SVG web renderer for complex TeX, multi-line derivations, flashcard layout, and richer paragraph formatting without CDN dependencies."
+    },
+    {
+      "id": "iface.aria.chat_sessions",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Models/ARIAMemory.swift",
+        "IBVault/Views/ARIA/ARIAChatView.swift",
+        "IBVault/Services/ARIAService.swift",
+        "IBVault/IBVaultApp.swift"
+      ],
+      "summary": "ARIA supports persistent chat sessions so users can create a new chat, reopen old chats, and keep per-session conversation history while long-term memory remains available."
+    },
+    {
+      "id": "iface.aria.chat_scroll_behavior",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/ARIA/ARIAChatView.swift"
+      ],
+      "summary": "ARIA chat remains scrollable even when assistant messages use embedded rich TeX rendering, by preventing nested web views from hijacking scroll gestures."
     }
   ],
   "edges": [
@@ -176,6 +197,16 @@
       "from": "iface.aria.full_tex_renderer",
       "to": "iface.aria.response_polish",
       "type": "dependency"
+    },
+    {
+      "from": "iface.aria.chat_sessions",
+      "to": "iface.aria.response_polish",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.chat_scroll_behavior",
+      "to": "iface.aria.full_tex_renderer",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -217,6 +248,14 @@
     },
     {
       "id": "iface.aria.full_tex_renderer",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.chat_sessions",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.chat_scroll_behavior",
       "status": "tested"
     }
   ]

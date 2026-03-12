@@ -51,11 +51,36 @@ final class ChatMessage {
     var role: String // "user" or "model"
     var content: String
     var timestamp: Date
+    var sessionID: UUID?
 
-    init(role: String, content: String) {
+    init(role: String, content: String, sessionID: UUID? = nil) {
         self.id = UUID()
         self.role = role
         self.content = content
         self.timestamp = Date()
+        self.sessionID = sessionID
+    }
+}
+
+@Model
+final class ARIAChatSession {
+    var id: UUID
+    var title: String
+    var createdAt: Date
+    var updatedAt: Date
+    var lastMessagePreview: String
+    var isArchived: Bool
+
+    init(
+        title: String = "New Chat",
+        lastMessagePreview: String = "",
+        isArchived: Bool = false
+    ) {
+        self.id = UUID()
+        self.title = title
+        self.createdAt = Date()
+        self.updatedAt = Date()
+        self.lastMessagePreview = lastMessagePreview
+        self.isArchived = isArchived
     }
 }

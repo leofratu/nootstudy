@@ -1,0 +1,37 @@
+{
+  "task_id": "20260312T103317_aria_chat_sessions_and_scroll",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.chat_sessions",
+      "iface.aria.chat_scroll_behavior"
+    ],
+    "files": [
+      "IBVault/Models/ARIAMemory.swift",
+      "IBVault/IBVaultApp.swift",
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Views/ARIA/ARIAChatView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-aria-sessions-build CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.chat_sessions",
+        "iface.aria.chat_scroll_behavior"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.aria.chat_sessions",
+    "iface.aria.chat_scroll_behavior"
+  ],
+  "tested_interfaces": [
+    "iface.aria.chat_sessions",
+    "iface.aria.chat_scroll_behavior"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}

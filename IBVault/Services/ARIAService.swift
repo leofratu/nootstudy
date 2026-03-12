@@ -89,6 +89,7 @@ class ARIAService {
     func sendMessage(
         _ userMessage: String,
         context: ModelContext,
+        session: ARIAChatSession,
         onToken: @escaping (String) -> Void,
         onComplete: @escaping (String) -> Void,
         onError: @escaping (Error) -> Void
@@ -102,7 +103,8 @@ class ARIAService {
         currentStreamText = ""
 
         // Save user message
-        let userChat = ChatMessage(role: "user", content: userMessage)
+        let userChat = ChatMessage(role: "user", content: userMessage, sessionID: session.id)
+        updateSession(session, withUserMessage: userMessage)
         context.insert(userChat)
         try? context.save()
 
@@ -112,7 +114,7 @@ class ARIAService {
 
                 // Build context
                 let systemPrompt = await buildSystemPrompt(context: context, queryProfile: queryProfile)
-                let messages = await buildConversationHistory(context: context, queryProfile: queryProfile)
+                let messages = await buildConversationHistory(context: context, queryProfile: queryProfile, sessionID: session.id)
 
                 var fullResponse = ""
 
@@ -132,8 +134,9 @@ class ARIAService {
 
                 // Save assistant response
                 await MainActor.run {
-                    let modelChat = ChatMessage(role: "model", content: fullResponse)
+                    let modelChat = ChatMessage(role: "model", content: fullResponse, sessionID: session.id)
                     context.insert(modelChat)
+                    self.updateSession(session, withAssistantReply: fullResponse)
 
                     // Auto-update rank from grades after ARIA response
                     self.autoUpdateRank(context: context)
@@ -153,7 +156,7 @@ class ARIAService {
                 )
 
                 // Check if compaction needed
-                await checkAndCompact(context: context, apiKey: apiKey)
+                await checkAndCompact(context: context, apiKey: apiKey, sessionID: session.id)
 
             } catch {
                 await MainActor.run {
@@ -187,6 +190,39 @@ class ARIAService {
         }
 
         return false
+    }
+
+    @MainActor
+    private func updateSession(_ session: ARIAChatSession, withUserMessage message: String) {
+        if session.title == "New Chat" || session.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            session.title = compactSessionTitle(from: message)
+        }
+        session.updatedAt = Date()
+        session.lastMessagePreview = compactSessionPreview(from: message)
+    }
+
+    @MainActor
+    private func updateSession(_ session: ARIAChatSession, withAssistantReply reply: String) {
+        session.updatedAt = Date()
+        session.lastMessagePreview = compactSessionPreview(from: reply)
+    }
+
+    private func compactSessionTitle(from source: String) -> String {
+        let trimmed = source
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+        guard !trimmed.isEmpty else { return "New Chat" }
+        if trimmed.count <= 44 { return trimmed }
+        return String(trimmed.prefix(44)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+
+    private func compactSessionPreview(from source: String) -> String {
+        let flattened = source
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+        guard !flattened.isEmpty else { return "No messages yet" }
+        if flattened.count <= 90 { return flattened }
+        return String(flattened.prefix(90)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
     }
 
     // MARK: - System Prompt Builder
@@ -476,9 +512,10 @@ class ARIAService {
 
     // MARK: - Conversation History
 
-    private func buildConversationHistory(context: ModelContext, queryProfile: QueryProfile) async -> [GeminiMessage] {
+    private func buildConversationHistory(context: ModelContext, queryProfile: QueryProfile, sessionID: UUID) async -> [GeminiMessage] {
         let windowSize = UserDefaults.standard.integer(forKey: "ariaContextWindow")
         var descriptor = FetchDescriptor<ChatMessage>(
+            predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
         descriptor.fetchLimit = max(windowSize, 30)
@@ -599,8 +636,9 @@ class ARIAService {
     // MARK: - Context Compaction
 
     @MainActor
-    private func checkAndCompact(context: ModelContext, apiKey: String) async {
+    private func checkAndCompact(context: ModelContext, apiKey: String, sessionID: UUID) async {
         let descriptor = FetchDescriptor<ChatMessage>(
+            predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID },
             sortBy: [SortDescriptor(\.timestamp, order: .forward)]
         )
 

@@ -5,67 +5,98 @@ import WebKit
 
 struct ARIAChatView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \ChatMessage.timestamp) private var messages: [ChatMessage]
+    @Query(sort: \ChatMessage.timestamp) private var allMessages: [ChatMessage]
+    @Query(sort: \ARIAChatSession.updatedAt, order: .reverse) private var sessions: [ARIAChatSession]
     @State private var ariaService = ARIAService()
     @State private var inputText = ""
     @State private var streamingText = ""
     @State private var showMemory = false
     @State private var errorMessage: String?
     @State private var pendingScrollTarget: AnyHashable?
+    @State private var selectedSessionID: UUID?
+
+    private var visibleSessions: [ARIAChatSession] {
+        sessions
+            .filter { !$0.isArchived }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private var selectedSession: ARIAChatSession? {
+        guard let selectedSessionID else { return visibleSessions.first }
+        return visibleSessions.first(where: { $0.id == selectedSessionID }) ?? visibleSessions.first
+    }
+
+    private var messages: [ChatMessage] {
+        guard let sessionID = selectedSession?.id else { return [] }
+        return allMessages.filter { $0.sessionID == sessionID }
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Chat content
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 2) {
-                            if messages.isEmpty && !ariaService.isLoading {
-                                emptyState
-                            }
-
-                            ForEach(messages, id: \.id) { message in
-                                MessageRow(message: message)
-                                    .id(message.id)
-                            }
-
-                            if ariaService.isLoading {
-                                if streamingText.isEmpty {
-                                    thinkingIndicator
-                                } else {
-                                    StreamingMessageRow(text: streamingText)
-                                        .id("streaming")
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                    }
-                    .onChange(of: messages.last?.id) { _, newValue in
-                        guard let newValue else { return }
-                        pendingScrollTarget = AnyHashable(newValue)
-                    }
-                    .onChange(of: streamingText.count) { _, newValue in
-                        guard ariaService.isLoading, newValue > 0 else { return }
-                        pendingScrollTarget = AnyHashable("streaming")
-                    }
-                    .task(id: pendingScrollTarget) {
-                        guard let pendingScrollTarget else { return }
-                        await Task.yield()
-                        withAnimation {
-                            proxy.scrollTo(pendingScrollTarget, anchor: .bottom)
-                        }
-                    }
-                }
+            HStack(spacing: 0) {
+                sessionSidebar
 
                 Divider()
 
-                // Input bar
-                inputBar
+                VStack(spacing: 0) {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 2) {
+                                if messages.isEmpty && !ariaService.isLoading {
+                                    emptyState
+                                }
+
+                                ForEach(messages, id: \.id) { message in
+                                    MessageRow(message: message)
+                                        .id(message.id)
+                                }
+
+                                if ariaService.isLoading, selectedSession != nil {
+                                    if streamingText.isEmpty {
+                                        thinkingIndicator
+                                    } else {
+                                        StreamingMessageRow(text: streamingText)
+                                            .id("streaming")
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                        }
+                        .onChange(of: messages.last?.id) { _, newValue in
+                            guard let newValue else { return }
+                            pendingScrollTarget = AnyHashable(newValue)
+                        }
+                        .onChange(of: streamingText.count) { _, newValue in
+                            guard ariaService.isLoading, newValue > 0 else { return }
+                            pendingScrollTarget = AnyHashable("streaming")
+                        }
+                        .task(id: pendingScrollTarget) {
+                            guard let pendingScrollTarget else { return }
+                            await Task.yield()
+                            withAnimation {
+                                proxy.scrollTo(pendingScrollTarget, anchor: .bottom)
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    inputBar
+                }
             }
             .background(.background)
-            .navigationTitle("ARIA")
+            .navigationTitle(selectedSession?.title ?? "ARIA")
             .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        createNewChat()
+                    } label: {
+                        Label("New Chat", systemImage: "square.and.pencil")
+                    }
+                    .disabled(ariaService.isLoading)
+                }
+
                 ToolbarItem(placement: .primaryAction) {
                     Button { showMemory = true } label: {
                         Label("Memory", systemImage: "brain")
@@ -73,7 +104,58 @@ struct ARIAChatView: View {
                 }
             }
             .sheet(isPresented: $showMemory) { ARIAMemoryView() }
+            .task {
+                await MainActor.run {
+                    bootstrapSessionsIfNeeded()
+                }
+            }
+            .onChange(of: sessions.count) { _, _ in
+                bootstrapSessionsIfNeeded()
+            }
         }
+    }
+
+    private var sessionSidebar: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Chats")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    createNewChat()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                .disabled(ariaService.isLoading)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(visibleSessions, id: \.id) { session in
+                        Button {
+                            selectedSessionID = session.id
+                            streamingText = ""
+                            errorMessage = nil
+                        } label: {
+                            ARIAChatSessionRow(
+                                session: session,
+                                isSelected: session.id == selectedSession?.id
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(12)
+            }
+        }
+        .frame(width: 280)
+        .background(Color.primary.opacity(0.02))
     }
 
     // MARK: - Empty State
@@ -179,11 +261,95 @@ struct ARIAChatView: View {
 
     private func sendMessage(_ text: String) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let selectedSession else {
+            bootstrapSessionsIfNeeded()
+            return
+        }
         let msg = text; inputText = ""; streamingText = ""; errorMessage = nil; IBHaptics.light()
-        ariaService.sendMessage(msg, context: context,
+        ariaService.sendMessage(msg, context: context, session: selectedSession,
             onToken: { partial in streamingText = partial },
             onComplete: { _ in streamingText = "" },
             onError: { error in errorMessage = error.localizedDescription; streamingText = "" }
+        )
+    }
+
+    @MainActor
+    private func bootstrapSessionsIfNeeded() {
+        var didMutate = false
+        var preferredSelection = selectedSessionID
+
+        let orphanMessages = allMessages.filter { $0.sessionID == nil }
+        if !orphanMessages.isEmpty {
+            let legacySession = ARIAChatSession(
+                title: "Previous Chat",
+                lastMessagePreview: orphanMessages.last?.content.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            )
+            legacySession.updatedAt = orphanMessages.last?.timestamp ?? legacySession.updatedAt
+            context.insert(legacySession)
+            for message in orphanMessages {
+                message.sessionID = legacySession.id
+            }
+            preferredSelection = preferredSelection ?? legacySession.id
+            didMutate = true
+        }
+
+        if visibleSessions.isEmpty && !didMutate {
+            let session = ARIAChatSession()
+            context.insert(session)
+            preferredSelection = session.id
+            didMutate = true
+        }
+
+        if didMutate {
+            try? context.save()
+        }
+
+        if selectedSessionID == nil {
+            selectedSessionID = preferredSelection ?? visibleSessions.first?.id
+        }
+    }
+
+    @MainActor
+    private func createNewChat() {
+        let session = ARIAChatSession()
+        context.insert(session)
+        try? context.save()
+        selectedSessionID = session.id
+        inputText = ""
+        streamingText = ""
+        errorMessage = nil
+    }
+}
+
+private struct ARIAChatSessionRow: View {
+    let session: ARIAChatSession
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(session.title)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(isSelected ? IBColors.electricBlue : .primary)
+                .lineLimit(1)
+
+            Text(session.lastMessagePreview.isEmpty ? "No messages yet" : session.lastMessagePreview)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Text(session.updatedAt, style: .relative)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isSelected ? IBColors.electricBlue.opacity(0.08) : Color.primary.opacity(0.035))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? IBColors.electricBlue.opacity(0.18) : Color.primary.opacity(0.06), lineWidth: 1)
         )
     }
 }
@@ -282,7 +448,9 @@ struct FormattedMessageContent: View {
     }
 
     private var canUseRichRenderer: Bool {
-        preferRichRendering && Bundle.main.url(forResource: "MathJax", withExtension: nil) != nil
+        preferRichRendering &&
+        FormattedMessageFormatter.shouldPreferRichRenderer(for: text) &&
+        Bundle.main.url(forResource: "MathJax", withExtension: nil) != nil
     }
 
     var body: some View {
@@ -378,14 +546,16 @@ private struct ARIALocalRichMessageWebView: NSViewRepresentable {
         configuration.userContentController = contentController
         configuration.websiteDataStore = .nonPersistent()
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = ARIAScrollPassthroughWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
         webView.allowsMagnification = false
         webView.isInspectable = false
+        webView.allowsBackForwardNavigationGestures = false
         webView.enclosingScrollView?.drawsBackground = false
         webView.enclosingScrollView?.hasVerticalScroller = false
         webView.enclosingScrollView?.hasHorizontalScroller = false
+        webView.enclosingScrollView?.autohidesScrollers = true
         webView.loadHTMLString(html, baseURL: baseURL)
         context.coordinator.lastHTML = html
         return webView
@@ -425,6 +595,16 @@ private struct ARIALocalRichMessageWebView: NSViewRepresentable {
                     self.height = max(CGFloat(value.doubleValue), 24)
                 }
             }
+        }
+    }
+}
+
+private final class ARIAScrollPassthroughWebView: WKWebView {
+    override func scrollWheel(with event: NSEvent) {
+        if abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) {
+            nextResponder?.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
         }
     }
 }
@@ -772,6 +952,16 @@ private struct FlashcardMessageView: View {
 }
 
 enum FormattedMessageFormatter {
+    static func shouldPreferRichRenderer(for source: String) -> Bool {
+        source.contains("$") ||
+        source.contains("FRONT:") ||
+        source.contains("BACK:") ||
+        source.contains("### ") ||
+        source.contains("\n- ") ||
+        source.contains("\n1. ") ||
+        source.contains("\n\n")
+    }
+
     static func sections(from source: String) -> [FormattedMessageSection] {
         let normalized = normalizeResponseText(source)
         var sections: [FormattedMessageSection] = []
