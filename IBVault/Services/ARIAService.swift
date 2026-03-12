@@ -977,7 +977,7 @@ class ARIAService {
         let aiEffectiveness = ProficiencyTracker.overallAIEffectiveness(for: subject)
         let effectiveCards = ProficiencyTracker.effectiveCards(for: subject).count
         let strugglingCards = ProficiencyTracker.strugglingCards(for: subject).count
-        let aiCards = subject.cards.filter { $0.isAIGenerated == true }.count
+        let aiCards = subject.cards.filter { $0.isAIGenerated ?? false }.count
 
         var headline = "  • \(subject.name) \(subject.level): mastery \(masteryPercent)%, due \(subject.dueCardsCount)/\(subject.cards.count)"
         if aiCards > 0 {

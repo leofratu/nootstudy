@@ -57,17 +57,17 @@ struct ProficiencyTracker {
 
     /// Get effective AI-generated cards (working well)
     static func effectiveCards(for subject: Subject) -> [StudyCard] {
-        subject.cards.filter { $0.isAIGenerated == true && $0.isEffective }
+        subject.cards.filter { ($0.isAIGenerated ?? false) && $0.isEffective }
     }
 
     /// Get struggling AI-generated cards (not working well)
     static func strugglingCards(for subject: Subject) -> [StudyCard] {
-        subject.cards.filter { $0.isAIGenerated == true && $0.isStruggling }
+        subject.cards.filter { ($0.isAIGenerated ?? false) && $0.isStruggling }
     }
 
     /// Get topic-level effectiveness
     static func topicEffectiveness(for subject: Subject, topicName: String) -> (effective: Int, struggling: Int, total: Int) {
-        let topicCards = subject.cards.filter { $0.topicName == topicName && $0.isAIGenerated == true }
+        let topicCards = subject.cards.filter { $0.topicName == topicName && ($0.isAIGenerated ?? false) }
         let effective = topicCards.filter { $0.isEffective }.count
         let struggling = topicCards.filter { $0.isStruggling }.count
         return (effective, struggling, topicCards.count)
@@ -75,7 +75,7 @@ struct ProficiencyTracker {
 
     /// Get subject-level AI card effectiveness
     static func overallAIEffectiveness(for subject: Subject) -> Double {
-        let aiCards = subject.cards.filter { $0.isAIGenerated == true && $0.totalReviewCount >= 3 }
+        let aiCards = subject.cards.filter { ($0.isAIGenerated ?? false) && $0.totalReviewCount >= 3 }
         guard !aiCards.isEmpty else { return 0 }
         let effectiveCount = aiCards.filter { $0.isEffective }.count
         return Double(effectiveCount) / Double(aiCards.count)
