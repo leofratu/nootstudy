@@ -1,0 +1,58 @@
+{
+  "task_id": "20260312T222040_review_cards_fix",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.review.plan_completion_sync",
+      "iface.flashcards.requested_count_fulfillment"
+    ],
+    "files": [
+      "IBVault/Views/Review/ReviewSessionView.swift",
+      "IBVault/Services/CardGeneratorService.swift",
+      "IBVault/Views/Study/ActiveStudySessionView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Views/Review/ReviewSessionView.swift IBVault/Services/CardGeneratorService.swift IBVault/Views/Study/ActiveStudySessionView.swift IBVault/Views/Study/StudyCalendarView.swift IBVault/Views/Study/StudyPlannerView.swift IBVault/Models/StudyPlan.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.review.plan_completion_sync",
+        "iface.flashcards.requested_count_fulfillment"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312l build",
+      "ok": true,
+      "interfaces": [
+        "iface.review.plan_completion_sync",
+        "iface.flashcards.requested_count_fulfillment",
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-release-build-20260312l/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.review.plan_completion_sync",
+    "iface.flashcards.requested_count_fulfillment"
+  ],
+  "tested_interfaces": [
+    "iface.review.plan_completion_sync",
+    "iface.flashcards.requested_count_fulfillment",
+    "iface.release.dmg_distribution"
+  ],
+  "files_changed": [
+    "IBVault/Views/Review/ReviewSessionView.swift",
+    "IBVault/Services/CardGeneratorService.swift",
+    "IBVault/Views/Study/ActiveStudySessionView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ]
+}

@@ -310,6 +310,7 @@ struct ReviewSessionView: View {
 
     private func completeSession() {
         if let p = profiles.first { p.addXP(sessionXP); p.checkAndUpdateStreak() }
+        filterPlan?.isCompleted = true
         let today = Calendar.current.startOfDay(for: Date())
         let pred = #Predicate<StudyActivity> { $0.date == today }
         if let a = try? context.fetch(FetchDescriptor(predicate: pred)).first {

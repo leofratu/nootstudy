@@ -935,10 +935,6 @@ struct ActiveStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-                    throw GeminiError.noAPIKey
-                }
-
                 await MainActor.run {
                     flashcardError = nil
                 }
@@ -946,73 +942,33 @@ struct ActiveStudySessionView: View {
                 let selectedTopics = plan.selectedTopicNames.isEmpty ? [plan.topicName] : plan.selectedTopicNames
                 let cardsPerTopic = max(6, Int(ceil(30.0 / Double(max(selectedTopics.count, 1)))))
                 var generatedBatch: [GeneratedFlashcard] = []
+                guard let subject = subjects.first(where: { $0.name == plan.subjectName }) else {
+                    throw NSError(
+                        domain: "IBVault.ActiveStudySessionView",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "Could not find the subject needed to save generated flashcards."]
+                    )
+                }
 
                 for topicName in selectedTopics {
-                    let unitName = SyllabusSeeder.unitName(for: plan.subjectName, topicName: topicName) ?? "Current Unit"
                     let validSubtopics = plan.selectedSubtopicNames.filter {
                         SyllabusSeeder.subtopics(for: plan.subjectName, topicName: topicName).contains($0)
                     }
-                    let subtopicPart = validSubtopics.isEmpty ? "" : "\nFocus subtopics: \(validSubtopics.joined(separator: ", "))"
-                    let prompt = """
-                    Generate \(cardsPerTopic) strictly IB Diploma-level rigorous flashcards for:
-                    Subject: \(plan.subjectName)
-                    Unit: \(unitName)
-                    Topic: \(topicName)\(subtopicPart)
-
-                    Study plan context:
-                    \(plan.planMarkdown.prefix(800))
-
-                    Output contract:
-                    - Return ONLY flashcards. No intro, no outro, no commentary.
-                    - Each card must be exactly this shape:
-                    FRONT: [question]
-                    BACK: [answer]
-                    - Leave one blank line between cards
-                    - Keep any formulas, mark-scheme notes, or bullet points inside the BACK block
-
-                    Rules:
-                    - These must stay tightly scoped to the named IB unit/topic.
-                    - These must be TRUE IB DIFFICULTY, not easy recall.
-                    - Use advanced IB command terms (evaluate, justify, compare and contrast, analyse).
-                    - Test deep understanding of mechanisms, complex multi-step reasoning, and evaluation points.
-                    - Include mark scheme hints (e.g. "[1 mark for definition, 2 for application]").
-                    - Answers must be extremely precise to the rigorous IB curriculum standard.
-                    """
-
-                    let response = try await GeminiService.generateContent(
-                        messages: [GeminiMessage(role: "user", text: prompt)],
-                        systemInstruction: "You are the ultimate IB examiner and flashcard generator. You create cards with extremely high difficulty suited for students aiming for a 7/7. Each card must have FRONT: and BACK: lines.",
-                        apiKey: apiKey,
-                        timeout: 120
+                    let generatedCardsForTopic = try await CardGeneratorService.generateCards(
+                        subject: subject,
+                        topicName: topicName,
+                        subtopic: validSubtopics.joined(separator: ", "),
+                        count: cardsPerTopic,
+                        context: context
                     )
-
-                    let parsed = sanitizeGeneratedCards(FormattedMessageFormatter.extractFlashcards(from: response))
-                    if parsed.isEmpty, let subject = subjects.first(where: { $0.name == plan.subjectName }) {
-                        let fallbackCards = try await CardGeneratorService.generateCards(
-                            subject: subject,
-                            topicName: topicName,
-                            subtopic: validSubtopics.joined(separator: ", "),
-                            count: cardsPerTopic,
-                            context: context
+                    generatedBatch.append(contentsOf: generatedCardsForTopic.map {
+                        GeneratedFlashcard(
+                            topicName: $0.topicName,
+                            subtopic: $0.subtopic,
+                            front: $0.front,
+                            back: $0.back
                         )
-                        generatedBatch.append(contentsOf: fallbackCards.map {
-                            GeneratedFlashcard(
-                                topicName: $0.topicName,
-                                subtopic: $0.subtopic,
-                                front: $0.front,
-                                back: $0.back
-                            )
-                        })
-                    } else {
-                        generatedBatch.append(contentsOf: parsed.map {
-                            GeneratedFlashcard(
-                                topicName: topicName,
-                                subtopic: validSubtopics.joined(separator: ", "),
-                                front: $0.front,
-                                back: $0.back
-                            )
-                        })
-                    }
+                    })
                 }
 
                 guard !generatedBatch.isEmpty else {
