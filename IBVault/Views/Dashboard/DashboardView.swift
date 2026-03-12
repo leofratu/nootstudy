@@ -8,7 +8,9 @@ struct DashboardView: View {
     @Query private var subjects: [Subject]
 
     @State private var ariaService = ARIAService()
+    @State private var reviewScheduler = ReviewScheduler()
     @State private var showReview = false
+    @State private var selectedSubjectForReview: Subject?
 
     private var profile: UserProfile? { profiles.first }
 
@@ -21,6 +23,8 @@ struct DashboardView: View {
     }
 
     var body: some View {
+        NavigationStack {
+            ScrollView {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
@@ -54,7 +58,10 @@ struct DashboardView: View {
             .background(.background)
             .navigationTitle("Dashboard")
             .sheet(isPresented: $showReview) {
-                ReviewSessionView()
+                ReviewSessionView(filterSubject: selectedSubjectForReview)
+            }
+            .task {
+                reviewScheduler.analyze(context: context)
             }
         }
     }
@@ -174,13 +181,42 @@ struct DashboardView: View {
                 }
                 .font(.callout)
             } else {
+                // Subject-specific review buttons
+                let subjectsWithDue = reviewScheduler.schedules.prefix(3)
+                if !subjectsWithDue.isEmpty {
+                    ForEach(subjectsWithDue) { schedule in
+                        Button {
+                            IBHaptics.medium()
+                            selectedSubjectForReview = schedule.subject
+                            showReview = true
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(Color(hex: schedule.subject.accentColorHex) ?? .blue)
+                                    .frame(width: 8, height: 8)
+                                Text(schedule.subject.name)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text("\(schedule.dueCards) due")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    Divider()
+                }
+                
                 Button {
                     IBHaptics.medium()
+                    selectedSubjectForReview = nil
                     showReview = true
                 } label: {
                     HStack {
                         Image(systemName: "play.fill")
-                        Text("Start Review")
+                        Text("Review All")
                     }
                     .frame(maxWidth: .infinity)
                 }
