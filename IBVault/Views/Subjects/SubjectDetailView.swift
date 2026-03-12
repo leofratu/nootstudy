@@ -200,26 +200,88 @@ struct SubjectDetailView: View {
             HStack {
                 Image(systemName: "list.bullet")
                     .foregroundStyle(.tint)
-                Text("Topics")
+                Text("Curriculum Mastery")
                     .font(.headline)
                 Spacer()
-                Text("\(sortedCards.count) total")
+                Text("\(subject.cards.count) cards")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if sortedCards.isEmpty {
+            if subject.cards.isEmpty {
                 HStack {
                     Spacer()
-                    Text("No topics available yet.")
+                    Text("No topics available yet. Browse curriculum to start.")
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 12)
                     Spacer()
                 }
             } else {
-                ForEach(sortedCards, id: \.id) { card in
-                    SubjectTopicRow(card: card, color: color)
-                    if card.id != sortedCards.last?.id {
+                let topics = Dictionary(grouping: subject.cards, by: { $0.topicName })
+                    .sorted { $0.key < $1.key }
+
+                ForEach(topics, id: \.key) { topicName, topicCards in
+                    DisclosureGroup {
+                        let subtopics = Dictionary(grouping: topicCards, by: { $0.subtopic })
+                            .sorted { $0.key < $1.key }
+
+                        VStack(spacing: 0) {
+                            ForEach(subtopics, id: \.key) { subtopicName, subCards in
+                                let subName = subtopicName.isEmpty ? "General" : subtopicName
+                                let subMastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: subtopicName)
+                                
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(subName)
+                                            .font(.callout)
+                                        Text("\(subCards.count) cards")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 4) {
+                                        Text("\(Int(subMastery * 100))%")
+                                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                                            .foregroundStyle(color)
+                                        MasteryBar(progress: subMastery, height: 4, color: color)
+                                            .frame(width: 60)
+                                    }
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.leading, 12)
+                                
+                                if subtopicName != subtopics.last?.key {
+                                    Divider().padding(.leading, 12)
+                                }
+                            }
+                        }
+                        .padding(.top, 4)
+                        
+                    } label: {
+                        let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName)
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(topicName)
+                                    .font(.callout.weight(.medium))
+                                    .foregroundStyle(.primary)
+                                HStack(spacing: 8) {
+                                    Text("\(topicCards.count) cards")
+                                    Text("•")
+                                    Text("\(Int(mastery * 100))% mastered")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            MasteryBar(progress: mastery, height: 5, color: color)
+                                .frame(width: 80)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .tint(color)
+
+                    if topicName != topics.last?.key {
                         Divider()
                     }
                 }

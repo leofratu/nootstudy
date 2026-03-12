@@ -19,18 +19,34 @@ struct ProficiencyTracker {
 
     /// Calculate overall mastery percentage for a subject
     static func masteryPercentage(for subject: Subject) -> Double {
-        guard !subject.cards.isEmpty else { return 0 }
-        let total = subject.cards.count
+        calculateMastery(for: subject.cards)
+    }
+
+    /// Calculate mastery percentage for a specific topic
+    static func masteryPercentage(for subject: Subject, topicName: String) -> Double {
+        let topicCards = subject.cards.filter { $0.topicName == topicName }
+        return calculateMastery(for: topicCards)
+    }
+
+    /// Calculate mastery percentage for a specific subtopic
+    static func masteryPercentage(for subject: Subject, topicName: String, subtopic: String) -> Double {
+        let subtopicCards = subject.cards.filter { $0.topicName == topicName && $0.subtopic == subtopic }
+        return calculateMastery(for: subtopicCards)
+    }
+
+    /// Internal helper to calculate mastery for any subset of cards
+    private static func calculateMastery(for cards: [StudyCard]) -> Double {
+        guard !cards.isEmpty else { return 0 }
         let weights: [ProficiencyLevel: Double] = [
             .novice: 0,
             .developing: 0.33,
             .proficient: 0.66,
             .mastered: 1.0
         ]
-        let score = subject.cards.reduce(0.0) { sum, card in
+        let score = cards.reduce(0.0) { sum, card in
             sum + (weights[card.proficiency] ?? 0)
         }
-        return score / Double(total)
+        return score / Double(cards.count)
     }
 
     /// Get weak topics for a subject (novice or developing)

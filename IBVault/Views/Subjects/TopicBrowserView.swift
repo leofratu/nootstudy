@@ -77,7 +77,7 @@ struct TopicBrowserView: View {
                 Section(unit.name) {
                     ForEach(unit.topics, id: \.name) { topic in
                         HStack {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text(topic.name)
                                     .font(.callout.weight(.medium))
                                 HStack(spacing: 8) {
@@ -87,6 +87,16 @@ struct TopicBrowserView: View {
                                 }
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+
+                                let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topic.name)
+                                if cardCount(for: topic.name) > 0 {
+                                    HStack(spacing: 6) {
+                                        MasteryBar(progress: mastery, height: 4, color: Color(hex: subject.accentColorHex))
+                                        Text("\(Int(mastery * 100))%")
+                                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                                            .foregroundStyle(Color(hex: subject.accentColorHex))
+                                    }
+                                }
                             }
                             Spacer()
                             if cardCount(for: topic.name) > 0 {
@@ -140,12 +150,27 @@ struct TopicBrowserView: View {
                                 Image(systemName: subtopicHasCards(topic: topic.name, subtopic: sub) ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(subtopicHasCards(topic: topic.name, subtopic: sub) ? .green : .secondary)
                                     .font(.system(size: 14))
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: 4) {
                                     Text(sub)
                                         .font(.callout)
-                                    Text("\(subtopicCardCount(topic: topic.name, subtopic: sub)) cards")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+
+                                    let count = subtopicCardCount(topic: topic.name, subtopic: sub)
+                                    HStack(spacing: 8) {
+                                        Text("\(count) cards")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+
+                                        if count > 0 {
+                                            let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topic.name, subtopic: sub)
+                                            HStack(spacing: 4) {
+                                                MasteryBar(progress: mastery, height: 4, color: Color(hex: subject.accentColorHex))
+                                                    .frame(width: 40)
+                                                Text("\(Int(mastery * 100))%")
+                                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                                                    .foregroundStyle(Color(hex: subject.accentColorHex))
+                                            }
+                                        }
+                                    }
                                 }
                                 Spacer()
                                 Button {
