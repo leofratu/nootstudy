@@ -61,7 +61,9 @@ struct DashboardView: View {
                 ReviewSessionView(filterSubject: selectedSubjectForReview)
             }
             .task {
-                reviewScheduler.analyze(context: context)
+                await MainActor.run {
+                    reviewScheduler.analyze(context: context)
+                }
             }
         }
     }
