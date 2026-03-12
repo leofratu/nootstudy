@@ -64,12 +64,13 @@ struct ADHDTrackerView: View {
     }
 
     private var highlightedPoint: (time: String, hour: Double, level: Double) {
+        guard !pkData.isEmpty else { return ("9 AM", 0, 0.0) }
         let targetHour = selectedHour ?? currentHourOffset ?? pkData.max(by: { $0.level < $1.level })?.hour ?? 0
         return pkData.min(by: { abs($0.hour - targetHour) < abs($1.hour - targetHour) }) ?? pkData[0]
     }
 
     private var focusWindows: [(label: String, start: Double, end: Double, peak: Double, color: Color)] {
-        doseSchedule.indices.map { index in
+        Array(doseSchedule.enumerated()).map { index, _ in
             let start = Double(index * doseIntervalMin) / 60.0 + 0.75
             let peak = Double(index * doseIntervalMin) / 60.0 + 2.0
             let end = Double(index * doseIntervalMin) / 60.0 + 4.5
@@ -101,6 +102,8 @@ struct ADHDTrackerView: View {
             return (0, "Not active", .gray)
         }
 
+        guard pkData.count >= 2 else { return (0, "Not active", .gray) }
+        
         var level = 0.0
         for i in 0..<pkData.count - 1 {
             if hoursSinceFirstDose >= pkData[i].hour && hoursSinceFirstDose <= pkData[i+1].hour {
@@ -245,8 +248,7 @@ struct ADHDTrackerView: View {
                     .font(.headline)
             }
 
-            ForEach(doseSchedule.indices, id: \.self) { index in
-                let item = doseSchedule[index]
+            ForEach(Array(doseSchedule.enumerated()), id: \.offset) { index, item in
                 HStack(spacing: 10) {
                     ZStack {
                         Circle()

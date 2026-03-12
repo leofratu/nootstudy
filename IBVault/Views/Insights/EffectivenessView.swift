@@ -59,6 +59,7 @@ struct EffectivenessView: View {
             })
         }
 
+        guard !momentumRows.isEmpty else { return nil }
         return momentumRows.last(where: { $0.minutes > 0 || $0.cards > 0 || $0.xp > 0 }) ?? momentumRows.last
     }
 
