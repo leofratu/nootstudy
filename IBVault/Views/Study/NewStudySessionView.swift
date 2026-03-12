@@ -9,7 +9,7 @@ struct NewStudySessionView: View {
     @State private var step = 0
     @State private var selectedSubject: Subject?
     @State private var selectedTopic = ""
-    @State private var selectedSubtopic = ""
+    @State private var selectedSubtopics: Set<String> = []
     @State private var scheduledDate = Date()
     @State private var durationMinutes = 60
     @State private var planMarkdown = ""
@@ -172,7 +172,7 @@ struct NewStudySessionView: View {
                     ForEach(unit.topics, id: \.name) { topic in
                         Button {
                             selectedTopic = topic.name
-                            selectedSubtopic = ""
+                            selectedSubtopics.removeAll()
                             IBHaptics.light()
                         } label: {
                             HStack {
@@ -197,27 +197,64 @@ struct NewStudySessionView: View {
                         // Show subtopics if selected
                         if selectedTopic == topic.name {
                             VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text("Select subtopics:")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    if !selectedSubtopics.isEmpty {
+                                        Text("\(selectedSubtopics.count) selected")
+                                            .font(.caption2)
+                                            .foregroundStyle(IBColors.electricBlue)
+                                    }
+                                }
+                                .padding(.bottom, 4)
+                                
                                 ForEach(topic.subtopics, id: \.self) { sub in
                                     Button {
-                                        selectedSubtopic = sub
+                                        if selectedSubtopics.contains(sub) {
+                                            selectedSubtopics.remove(sub)
+                                        } else {
+                                            selectedSubtopics.insert(sub)
+                                        }
                                         IBHaptics.light()
                                     } label: {
                                         HStack(spacing: 8) {
-                                            Image(systemName: selectedSubtopic == sub ? "smallcircle.filled.circle.fill" : "circle")
-                                                .font(.system(size: 10))
+                                            Image(systemName: selectedSubtopics.contains(sub) ? "checkmark.square.fill" : "square")
+                                                .font(.system(size: 12))
                                                 .foregroundStyle(
-                                                    selectedSubtopic == sub
+                                                    selectedSubtopics.contains(sub)
                                                         ? AnyShapeStyle(IBColors.electricBlue)
                                                         : AnyShapeStyle(.tertiary)
                                                 )
                                             Text(sub)
                                                 .font(.caption)
+                                                .foregroundStyle(selectedSubtopics.contains(sub) ? .primary : .secondary)
                                             Spacer()
                                         }
-                                        .padding(.vertical, 2)
+                                        .padding(.vertical, 3)
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
+                                }
+                                
+                                if !topic.subtopics.isEmpty {
+                                    HStack(spacing: 8) {
+                                        Button("Select All") {
+                                            selectedSubtopics = Set(topic.subtopics)
+                                            IBHaptics.light()
+                                        }
+                                        .font(.caption2)
+                                        .buttonStyle(.borderless)
+                                        
+                                        Button("Clear") {
+                                            selectedSubtopics.removeAll()
+                                            IBHaptics.light()
+                                        }
+                                        .font(.caption2)
+                                        .buttonStyle(.borderless)
+                                    }
+                                    .padding(.top, 4)
                                 }
                             }
                             .padding(.leading, 28)
@@ -340,8 +377,7 @@ struct NewStudySessionView: View {
                             .font(.headline)
                     }
 
-                    ForEach(chatMessages.indices, id: \.self) { i in
-                        let msg = chatMessages[i]
+                    ForEach(Array(chatMessages.enumerated()), id: \.offset) { _, msg in
                         HStack(alignment: .top) {
                             if msg.role == "user" { Spacer() }
                             FormattedMessageContent(text: msg.text)
@@ -434,7 +470,7 @@ struct NewStudySessionView: View {
                     throw GeminiError.noAPIKey
                 }
 
-                let subtopicPart = selectedSubtopic.isEmpty ? "" : ", focus on: \(selectedSubtopic)"
+                let subtopicPart = selectedSubtopics.isEmpty ? "" : ", focus on: \(selectedSubtopics.joined(separator: ", "))"
                 let prompt = """
                 Create a structured study plan for an IB \(subject.level) \(subject.name) student.
                 Topic: \(selectedTopic)\(subtopicPart)
@@ -465,7 +501,7 @@ struct NewStudySessionView: View {
                 ARIAService.recordStudyPlanDraft(
                     subjectName: subject.name,
                     topicName: selectedTopic,
-                    subtopicName: selectedSubtopic,
+                    subtopicName: selectedSubtopics.joined(separator: ", "),
                     scheduledDate: scheduledDate,
                     durationMinutes: durationMinutes,
                     planMarkdown: response
@@ -513,7 +549,7 @@ struct NewStudySessionView: View {
                 ARIAService.recordStudyPlanRevision(
                     subjectName: selectedSubject?.name ?? "Unknown Subject",
                     topicName: selectedTopic,
-                    subtopicName: selectedSubtopic,
+                    subtopicName: selectedSubtopics.joined(separator: ", "),
                     userRequest: userMsg,
                     updatedPlanMarkdown: response,
                     sourceReference: "NewStudySessionView.sendChatMessage"
@@ -539,7 +575,7 @@ struct NewStudySessionView: View {
         let plan = StudyPlan(
             subjectName: subject.name,
             topicName: selectedTopic,
-            subtopicName: selectedSubtopic,
+            subtopicName: selectedSubtopics.joined(separator: ", "),
             planMarkdown: planMarkdown,
             scheduledDate: scheduledDate,
             durationMinutes: durationMinutes
@@ -550,7 +586,7 @@ struct NewStudySessionView: View {
         ARIAService.recordStudyPlan(
             subjectName: subject.name,
             topicName: selectedTopic,
-            subtopicName: selectedSubtopic,
+            subtopicName: selectedSubtopics.joined(separator: ", "),
             scheduledDate: scheduledDate,
             durationMinutes: durationMinutes,
             planMarkdown: planMarkdown

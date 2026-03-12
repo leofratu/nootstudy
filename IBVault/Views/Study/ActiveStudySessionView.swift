@@ -19,11 +19,22 @@ struct ActiveStudySessionView: View {
     @State private var generatedCards: [(front: String, back: String)] = []
     @State private var isGeneratingCards = false
     @State private var showFlashcardPreview = false
+    @State private var revealedCards: Set<Int> = []
+    @State private var examMarkdown = ""
+    @State private var isGeneratingExam = false
+
+    private struct ScheduledReviewEntry: Identifiable {
+        let day: Int
+        let date: Date
+
+        var id: Int { day }
+    }
 
     enum SessionTab: String, CaseIterable {
         case plan = "Plan"
         case chat = "ARIA"
         case flashcards = "Flashcards"
+        case exam = "Practice Exam"
         case notes = "Notes"
 
         var icon: String {
@@ -31,6 +42,7 @@ struct ActiveStudySessionView: View {
             case .plan: return "doc.text.fill"
             case .chat: return "sparkles"
             case .flashcards: return "rectangle.on.rectangle.angled"
+            case .exam: return "pencil.and.list.clipboard"
             case .notes: return "note.text"
             }
         }
@@ -58,6 +70,7 @@ struct ActiveStudySessionView: View {
                         planPanel.tag(SessionTab.plan)
                         chatPanel.tag(SessionTab.chat)
                         flashcardsPanel.tag(SessionTab.flashcards)
+                        examPanel.tag(SessionTab.exam)
                         notesPanel.tag(SessionTab.notes)
                     }
                     .tabViewStyle(.automatic)
@@ -185,8 +198,15 @@ struct ActiveStudySessionView: View {
     private var planPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                FormattedMessageContent(text: plan.planMarkdown)
-                    .textSelection(.enabled)
+                if plan.planMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Session Ready")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                        Text("This session does not have a generated plan yet. You can still use ARIA, take notes, and generate flashcards for \(plan.topicName).")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(3)
+                    }
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
@@ -194,6 +214,17 @@ struct ActiveStudySessionView: View {
                             .fill(.ultraThinMaterial)
                             .shadow(color: .black.opacity(0.03), radius: 6, y: 2)
                     )
+                } else {
+                    FormattedMessageContent(text: plan.planMarkdown)
+                        .textSelection(.enabled)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.ultraThinMaterial)
+                                .shadow(color: .black.opacity(0.03), radius: 6, y: 2)
+                        )
+                }
             }
             .padding(20)
         }
@@ -210,8 +241,7 @@ struct ActiveStudySessionView: View {
                         emptyChat
                     }
 
-                    ForEach(chatMessages.indices, id: \.self) { i in
-                        let msg = chatMessages[i]
+                    ForEach(Array(chatMessages.enumerated()), id: \.offset) { index, msg in
                         HStack(alignment: .top, spacing: 8) {
                             if msg.role == "user" { Spacer(minLength: 60) }
 
@@ -378,11 +408,10 @@ struct ActiveStudySessionView: View {
                     .padding(.vertical, 40)
                 }
 
-                ForEach(generatedCards.indices, id: \.self) { i in
-                    let card = generatedCards[i]
+                ForEach(Array(generatedCards.enumerated()), id: \.offset) { index, card in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Card \(i + 1)")
+                            Text("Card \(index + 1)")
                                 .font(.system(size: 10, weight: .bold, design: .rounded))
                                 .foregroundStyle(.tertiary)
                                 .textCase(.uppercase)
@@ -410,14 +439,44 @@ struct ActiveStudySessionView: View {
                                     .fill(IBColors.electricBlue.opacity(0.04))
                             )
 
-                        FormattedMessageContent(text: card.back)
-                            .textSelection(.enabled)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.secondary.opacity(0.03))
-                            )
+                        if revealedCards.contains(index) {
+                            FormattedMessageContent(text: card.back)
+                                .textSelection(.enabled)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.secondary.opacity(0.03))
+                                )
+                                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+                        } else {
+                            Button {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    revealedCards.insert(index)
+                                }
+                                IBHaptics.light()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "eye.slash.fill")
+                                        .font(.system(size: 11))
+                                    Text("Tap to reveal answer")
+                                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                }
+                                .foregroundStyle(IBColors.electricBlue)
+                                .frame(maxWidth: .infinity)
+                                .padding(14)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.secondary.opacity(0.02))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .strokeBorder(Color.secondary.opacity(0.1), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                                        )
+                                )
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                     .padding(12)
                     .background(
@@ -440,6 +499,93 @@ struct ActiveStudySessionView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
                     .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 60)
+        }
+    }
+
+    // MARK: - Practice Exam Panel
+
+    private var examPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Practice Exam")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        Text("Generate a mock paper for this topic")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    if isGeneratingExam {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if examMarkdown.isEmpty {
+                        Button {
+                            generateExam()
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 11))
+                                Text("Generate Exam")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    } else {
+                         Button(role: .destructive) {
+                            withAnimation(.easeInOut) { examMarkdown = "" }
+                         } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "trash.fill")
+                                    .font(.system(size: 10))
+                                Text("Discard")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                         }
+                         .buttonStyle(.bordered)
+                         .controlSize(.small)
+                    }
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(.ultraThinMaterial)
+                        .shadow(color: .black.opacity(0.03), radius: 4, y: 1)
+                )
+
+                if examMarkdown.isEmpty && !isGeneratingExam {
+                    VStack(spacing: 12) {
+                        Image(systemName: "pencil.and.outline")
+                            .font(.system(size: 32, weight: .ultraLight))
+                            .foregroundStyle(.tertiary)
+                        Text("No active practice exam")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                        Text("ARIA will build a rigorous IB mock paper\nwith correct mark weighting [x marks].")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else if !examMarkdown.isEmpty {
+                    FormattedMessageContent(text: examMarkdown)
+                        .textSelection(.enabled)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.ultraThinMaterial)
+                                .shadow(color: .black.opacity(0.03), radius: 6, y: 2)
+                        )
                 }
             }
             .padding(.horizontal, 20)
@@ -580,7 +726,7 @@ struct ActiveStudySessionView: View {
             .frame(maxWidth: 550)
 
             // Spaced repetition notice
-            if !scheduledReviews.isEmpty {
+            if !scheduledReviewEntries.isEmpty {
                 VStack(spacing: 6) {
                     HStack(spacing: 5) {
                         Image(systemName: "arrow.triangle.2.circlepath")
@@ -589,8 +735,8 @@ struct ActiveStudySessionView: View {
                         Text("Spaced Repetition Reviews Scheduled")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
                     }
-                    ForEach(scheduledReviews, id: \.self) { date in
-                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                    ForEach(scheduledReviewEntries) { entry in
+                        Text("Day \(entry.day) • \(entry.date.formatted(date: .abbreviated, time: .shortened))")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
@@ -745,13 +891,14 @@ struct ActiveStudySessionView: View {
 
     private func generateFlashcards() {
         isGeneratingCards = true
+        revealedCards.removeAll()
 
         Task {
             do {
                 guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else { return }
 
                 let prompt = """
-                Generate 8 IB exam-focused flashcards for:
+                Generate 30 strictly IB Diploma-level rigorous flashcards for:
                 Subject: \(plan.subjectName)
                 Topic: \(plan.topicName)\(plan.subtopicName.isEmpty ? "" : " — \(plan.subtopicName)")
                 
@@ -763,15 +910,16 @@ struct ActiveStudySessionView: View {
                 BACK: [answer]
 
                 Rules:
-                - Mix definition, application, and exam-technique cards
-                - Use IB command terms (define, explain, evaluate, discuss, analyse)
-                - Include mark scheme hints where relevant
-                - Make answers concise but complete
+                - These must be TRUE IB DIFFICULTY, not easy recall.
+                - Use advanced IB command terms (evaluate, justify, compare and contrast, analyse).
+                - Test deep understanding of mechanisms, complex multi-step reasoning, and evaluation points.
+                - Include mark scheme hints (e.g. "[1 mark for definition, 2 for application]").
+                - Answers must be extremely precise to the rigorous IB curriculum standard.
                 """
 
                 let response = try await GeminiService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You are ARIA, an IB flashcard generator. Create high-quality flashcards suitable for IB exams. Each card must have FRONT: and BACK: lines.",
+                    systemInstruction: "You are the ultimate IB examiner and flashcard generator. You create cards with extremely high difficulty suited for students aiming for a 7/7. Each card must have FRONT: and BACK: lines.",
                     apiKey: apiKey
                 )
 
@@ -792,6 +940,50 @@ struct ActiveStudySessionView: View {
             } catch {
                 await MainActor.run {
                     isGeneratingCards = false
+                }
+            }
+        }
+    }
+
+    // MARK: - Exam Generation
+
+    private func generateExam() {
+        isGeneratingExam = true
+        examMarkdown = ""
+
+        Task {
+            do {
+                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else { return }
+
+                let prompt = """
+                Generate a rigorous Practice Exam paper for:
+                Subject: \(plan.subjectName)
+                Topic: \(plan.topicName)\(plan.subtopicName.isEmpty ? "" : " — \(plan.subtopicName)")
+                
+                Format rules:
+                - Output should mimic a true IB past paper format.
+                - Use clear sections (e.g., Section A: Short Answer, Section B: Extended Response / Essay).
+                - Use rigorous IB command terms (Evaluate, Discuss, To what extent, Compare and contrast).
+                - IMPORTANT: Include the exact marks available at the end of every question in brackets, e.g. [4 marks].
+                - Distribute marks realistically (total of ~20-30 marks).
+                - Do NOT include the answers in the main exam block, just the questions. Provide a small "Mark Scheme / Hints" section at the very end.
+                - Ensure layout uses Markdown effectively (Headers `###`, blockquotes for sources/figures).
+                """
+
+                let response = try await GeminiService.generateContent(
+                    messages: [GeminiMessage(role: "user", text: prompt)],
+                    systemInstruction: "You are the ultimate IB examiner. You generate mercilessly accurate, rigorous practice exams tailored to the exact level of an IB Diploma student aiming for a 7/7.",
+                    apiKey: apiKey
+                )
+
+                await MainActor.run {
+                    examMarkdown = response
+                    isGeneratingExam = false
+                }
+            } catch {
+                await MainActor.run {
+                    examMarkdown = "Failed to generate exam: \(error.localizedDescription)"
+                    isGeneratingExam = false
                 }
             }
         }
@@ -855,7 +1047,7 @@ struct ActiveStudySessionView: View {
 
     // MARK: - Spaced Repetition Scheduling
 
-    private var scheduledReviews: [Date] {
+    private var scheduledReviewEntries: [ScheduledReviewEntry] {
         // SM-2 inspired intervals: 1 day, 3 days, 7 days, 14 days
         let intervals = [1, 3, 7, 14]
         let cal = Calendar.current
@@ -864,26 +1056,36 @@ struct ActiveStudySessionView: View {
         return intervals.compactMap { days in
             guard let date = cal.date(byAdding: .day, value: days, to: endDate) else { return nil }
             // Schedule at 4pm (after school)
-            return cal.date(bySettingHour: 16, minute: 0, second: 0, of: date)
+            guard let scheduledAt = cal.date(bySettingHour: 16, minute: 0, second: 0, of: date) else { return nil }
+            return ScheduledReviewEntry(day: days, date: scheduledAt)
         }
     }
 
     private func scheduleSpacedReviews() {
-        let cal = Calendar.current
-        let intervals = [1, 3, 7, 14]
+        let existingPlans = (try? context.fetch(FetchDescriptor<StudyPlan>())) ?? []
 
-        for days in intervals {
-            guard let date = cal.date(byAdding: .day, value: days, to: Date()),
-                  let scheduledAt = cal.date(bySettingHour: 16, minute: 0, second: 0, of: date)
-            else { continue }
+        for entry in scheduledReviewEntries {
+            let duplicateExists = existingPlans.contains {
+                $0.isFollowUpReview &&
+                !$0.isCompleted &&
+                $0.subjectName == plan.subjectName &&
+                $0.topicName == plan.topicName &&
+                $0.subtopicName == plan.subtopicName &&
+                $0.reviewIntervalDays == entry.day &&
+                Calendar.current.isDate($0.scheduledDate, equalTo: entry.date, toGranularity: .minute)
+            }
+
+            guard !duplicateExists else { continue }
 
             let review = StudyPlan(
                 subjectName: plan.subjectName,
                 topicName: plan.topicName,
                 subtopicName: plan.subtopicName,
-                planMarkdown: "📝 **Spaced Repetition Review**\n\nRevisit \(plan.topicName) from your session on \(Date().formatted(date: .abbreviated, time: .omitted)).\n\n1. **Quick Recall** (10 min): Try to recall key concepts without notes\n2. **Review Cards** (15 min): Go through your flashcards\n3. **Practice** (10 min): Attempt one exam-style question\n4. **Self-Assessment**: Rate your confidence 1-5\n\nInterval: Day \(days) review • \(days <= 3 ? "Critical retention window" : "Long-term consolidation")",
-                scheduledDate: scheduledAt,
-                durationMinutes: 30
+                planMarkdown: "📝 **Spaced Repetition Review**\n\nRevisit \(plan.topicName) from your session on \(Date().formatted(date: .abbreviated, time: .omitted)).\n\n1. **Quick Recall** (10 min): Try to recall key concepts without notes\n2. **Review Cards** (15 min): Work through due flashcards\n3. **Practice** (10 min): Attempt one exam-style question\n4. **Self-Assessment**: Rate your confidence 1-5\n\nInterval: Day \(entry.day) review • \(entry.day <= 3 ? "Critical retention window" : "Long-term consolidation")",
+                scheduledDate: entry.date,
+                durationMinutes: 30,
+                kind: .followUpReview,
+                reviewIntervalDays: entry.day
             )
             context.insert(review)
         }
