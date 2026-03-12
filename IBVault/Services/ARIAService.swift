@@ -1287,6 +1287,9 @@ private struct ARIAActionSpec: Codable {
 
 private enum ARIAContextSpecStore {
     private static let folderName = "ARIAContextSpecs"
+    private static let cacheLock = NSLock()
+    private static var cachedRootPath: String?
+    private static var cachedSpecs: [ARIAActionSpec]?
 
     static func write(_ spec: ARIAActionSpec) {
         guard let rootURL = rootDirectoryURL() else { return }
@@ -1304,6 +1307,7 @@ private enum ARIAContextSpecStore {
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(spec)
             try data.write(to: fileURL, options: .atomic)
+            cache(spec: spec, forRootPath: rootURL.path)
         } catch {
             print("Failed to write ARIA spec: \(error)")
         }
@@ -1311,12 +1315,16 @@ private enum ARIAContextSpecStore {
 
     static func recentSpecs(limit: Int) -> [ARIAActionSpec] {
         guard let rootURL = rootDirectoryURL() else { return [] }
-        let manager = FileManager.default
+        let rootPath = rootURL.path
 
+        if let cached = cachedSpecs(forRootPath: rootPath) {
+            return Array(cached.prefix(limit))
+        }
+
+        let manager = FileManager.default
         guard let enumerator = manager.enumerator(at: rootURL, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) else {
             return []
         }
-
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
@@ -1328,10 +1336,9 @@ private enum ARIAContextSpecStore {
             specs.append(spec)
         }
 
-        return specs
-            .sorted { $0.createdAt > $1.createdAt }
-            .prefix(limit)
-            .map { $0 }
+        let sortedSpecs = specs.sorted { $0.createdAt > $1.createdAt }
+        storeCachedSpecs(sortedSpecs, forRootPath: rootPath)
+        return Array(sortedSpecs.prefix(limit))
     }
 
     private static func rootDirectoryURL() -> URL? {
@@ -1347,6 +1354,45 @@ private enum ARIAContextSpecStore {
         }
 
         return manager.temporaryDirectory.appendingPathComponent(folderName, isDirectory: true)
+    }
+
+    private static func cachedSpecs(forRootPath rootPath: String) -> [ARIAActionSpec]? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+
+        guard cachedRootPath == rootPath else {
+            cachedRootPath = rootPath
+            cachedSpecs = nil
+            return nil
+        }
+
+        return cachedSpecs
+    }
+
+    private static func storeCachedSpecs(_ specs: [ARIAActionSpec], forRootPath rootPath: String) {
+        cacheLock.lock()
+        cachedRootPath = rootPath
+        cachedSpecs = specs
+        cacheLock.unlock()
+    }
+
+    private static func cache(spec: ARIAActionSpec, forRootPath rootPath: String) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+
+        if cachedRootPath != rootPath {
+            cachedRootPath = rootPath
+            cachedSpecs = [spec]
+            return
+        }
+
+        if cachedSpecs == nil {
+            cachedSpecs = [spec]
+            return
+        }
+
+        cachedSpecs?.append(spec)
+        cachedSpecs?.sort { $0.createdAt > $1.createdAt }
     }
 }
 
@@ -1364,6 +1410,9 @@ private struct ARIAMaterialMatch {
 }
 
 private enum ARIAMaterialsCatalog {
+    private static let cacheLock = NSLock()
+    private static var cachedRootPath: String?
+    private static var cachedFilesByCollection: [String: [String]] = [:]
     private static let collections: [ARIAMaterialCollection] = [
         .init(name: "IB Documents", subject: "All Subjects", subfolder: "IB DOCUMENTS", description: "Official IB subject guides, mark schemes, examiner reports, and formula booklets."),
         .init(name: "revision-town", subject: "All Subjects", subfolder: "revision-town", description: "High-yield revision resources across multiple IB subjects."),
@@ -1378,8 +1427,11 @@ private enum ARIAMaterialsCatalog {
     ]
 
     static func relevantMatches(queryText: String, keywords: Set<String>, limit: Int) -> [ARIAMaterialMatch] {
-        let ranked = collections.map { collection in
+        let ranked: [ARIAMaterialMatch] = collections.compactMap { collection -> ARIAMaterialMatch? in
             let score = relevanceScore(for: collection, queryText: queryText, keywords: keywords)
+            let subjectMatch = queryText.contains(collection.subject.lowercased())
+            guard score > 0 || subjectMatch else { return nil }
+
             let files = materialFiles(for: collection)
             let rankedFiles = files
                 .sorted {
@@ -1393,7 +1445,6 @@ private enum ARIAMaterialsCatalog {
 
             return ARIAMaterialMatch(collection: collection, topFiles: Array(rankedFiles.prefix(6)), score: score)
         }
-        .filter { $0.score > 0 || queryText.contains($0.collection.subject.lowercased()) }
         .sorted {
             if $0.score == $1.score {
                 return $0.collection.name < $1.collection.name
@@ -1427,7 +1478,14 @@ private enum ARIAMaterialsCatalog {
     }
 
     private static func materialFiles(for collection: ARIAMaterialCollection) -> [String] {
-        guard let baseURL = materialsRootURL()?.appendingPathComponent(collection.subfolder, isDirectory: true) else { return [] }
+        guard let rootURL = materialsRootURL() else { return [] }
+        let rootPath = rootURL.path
+
+        if let cached = cachedFiles(for: collection, rootPath: rootPath) {
+            return cached
+        }
+
+        let baseURL = rootURL.appendingPathComponent(collection.subfolder, isDirectory: true)
 
         let manager = FileManager.default
         guard let enumerator = manager.enumerator(at: baseURL, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) else {
@@ -1441,6 +1499,7 @@ private enum ARIAMaterialsCatalog {
             if files.count >= 24 { break }
         }
 
+        storeCachedFiles(files, for: collection, rootPath: rootPath)
         return files
     }
 
@@ -1453,5 +1512,25 @@ private enum ARIAMaterialsCatalog {
         let projectRoot = fileURL.deletingLastPathComponent().deletingLastPathComponent()
         let localURL = projectRoot.appendingPathComponent("Materials", isDirectory: true)
         return FileManager.default.fileExists(atPath: localURL.path) ? localURL : nil
+    }
+
+    private static func cachedFiles(for collection: ARIAMaterialCollection, rootPath: String) -> [String]? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+
+        if cachedRootPath != rootPath {
+            cachedRootPath = rootPath
+            cachedFilesByCollection = [:]
+            return nil
+        }
+
+        return cachedFilesByCollection[collection.subfolder]
+    }
+
+    private static func storeCachedFiles(_ files: [String], for collection: ARIAMaterialCollection, rootPath: String) {
+        cacheLock.lock()
+        cachedRootPath = rootPath
+        cachedFilesByCollection[collection.subfolder] = files
+        cacheLock.unlock()
     }
 }

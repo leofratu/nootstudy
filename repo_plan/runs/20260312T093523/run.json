@@ -1,0 +1,50 @@
+{
+  "task_id": "improve-aria-and-materials-performance",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.context_caching",
+      "iface.materials.library_index_cache"
+    ],
+    "files": [
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Views/Materials/MaterialsLibraryView.swift",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ],
+    "evidence": [
+      "ARIA prompt building was re-reading every action-spec JSON file and materials filenames on repeated requests.",
+      "MaterialsLibraryView was recalculating collection counts and total size by recursively scanning the filesystem during rendering.",
+      "Both changes replace repeated synchronous disk work with in-memory caches while keeping the existing UI and prompt output shape."
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-codex-perf-build-3 CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.context_caching",
+        "iface.materials.library_index_cache"
+      ]
+    }
+  ],
+  "files_changed": [
+    "IBVault/Services/ARIAService.swift",
+    "IBVault/Views/Materials/MaterialsLibraryView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json",
+    "repo_plan/runs/20260312T093523/run.json"
+  ],
+  "implemented_interfaces": [
+    "iface.aria.context_caching",
+    "iface.materials.library_index_cache"
+  ],
+  "tested_interfaces": [
+    "iface.aria.context_caching",
+    "iface.materials.library_index_cache"
+  ],
+  "notes": [
+    "scripts/validate_rpg.py is referenced by AGENTS.md but is not present in this repository, so RPG validation could not be run."
+  ]
+}

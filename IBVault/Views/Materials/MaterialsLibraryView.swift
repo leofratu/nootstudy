@@ -1,23 +1,26 @@
-import SwiftUI
+import Foundation
 import QuickLook
+import SwiftUI
 
 // MARK: - Material Category
 struct MaterialCategory: Identifiable {
-    let id = UUID()
     let name: String
     let icon: String
     let color: Color
     let subject: String
     let subfolder: String
     let description: String
+
+    var id: String { subfolder }
 }
 
-struct MaterialFile: Identifiable, Hashable {
-    let id = UUID()
+struct MaterialFile: Identifiable, Hashable, Sendable {
     let name: String
     let url: URL
     let size: Int64
     let ext: String
+
+    var id: String { url.path }
 
     var sizeFormatted: String {
         if size > 1_000_000 { return "\(size / 1_000_000) MB" }
@@ -45,9 +48,32 @@ struct MaterialFile: Identifiable, Hashable {
     }
 }
 
+private struct MaterialFolderEntry: Identifiable, Hashable, Sendable {
+    let name: String
+    let url: URL
+
+    var id: String { url.path }
+}
+
+private struct MaterialDirectoryContents: Sendable {
+    let files: [MaterialFile]
+    let subfolders: [MaterialFolderEntry]
+}
+
+private struct MaterialLibraryStats: Sendable {
+    let totalFileCount: Int
+    let totalBytes: Int64
+    let fileCounts: [String: Int]
+
+    static let empty = MaterialLibraryStats(totalFileCount: 0, totalBytes: 0, fileCounts: [:])
+}
+
 struct MaterialsLibraryView: View {
     @State private var searchText = ""
     @State private var previewURL: URL?
+    @State private var libraryStats = MaterialLibraryStats.empty
+    @State private var isLoadingLibraryStats = false
+    @State private var hasLoadedLibraryStats = false
 
     private let categories: [MaterialCategory] = [
         MaterialCategory(name: "Bananaomics", icon: "chart.bar.fill", color: IBColors.economicsColor,
@@ -85,7 +111,6 @@ struct MaterialsLibraryView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Search + summary
                 HStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
@@ -95,18 +120,19 @@ struct MaterialsLibraryView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
 
-                // Library stats
                 librarySummary
                     .padding(.horizontal, 24)
 
-                // Collection grid
                 let columns = [GridItem(.adaptive(minimum: 280, maximum: 400), spacing: 16)]
                 LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(filteredCategories) { cat in
+                    ForEach(filteredCategories) { category in
                         NavigationLink {
-                            MaterialFolderView(category: cat, previewURL: $previewURL)
+                            MaterialFolderView(category: category, previewURL: $previewURL)
                         } label: {
-                            CollectionCard(category: cat, fileCount: getFileCount(for: cat))
+                            CollectionCard(
+                                category: category,
+                                fileCount: libraryStats.fileCounts[category.subfolder, default: 0]
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -118,17 +144,18 @@ struct MaterialsLibraryView: View {
         .background(.background)
         .navigationTitle("Materials Library")
         .quickLookPreview($previewURL)
+        .task {
+            await loadLibraryStatsIfNeeded()
+        }
     }
 
     private var librarySummary: some View {
         HStack(spacing: 0) {
-            let allFiles = getAllFiles()
-            let totalMB = allFiles.reduce(0) { $0 + $1.size } / 1_000_000
             StatCard(value: "\(categories.count)", label: "Collections", color: IBColors.electricBlue, icon: "folder.fill")
             Divider().frame(height: 40)
-            StatCard(value: "\(allFiles.count)", label: "Files", color: .orange, icon: "doc.fill")
+            StatCard(value: hasLoadedLibraryStats ? "\(libraryStats.totalFileCount)" : "…", label: "Files", color: .orange, icon: "doc.fill")
             Divider().frame(height: 40)
-            StatCard(value: "\(totalMB) MB", label: "Total Size", color: .green, icon: "externaldrive.fill")
+            StatCard(value: hasLoadedLibraryStats ? "\(libraryStats.totalBytes / 1_000_000) MB" : "…", label: "Total Size", color: .green, icon: "externaldrive.fill")
         }
         .padding(.vertical, 12)
         .glassCard()
@@ -143,23 +170,18 @@ struct MaterialsLibraryView: View {
         }
     }
 
-    private func getFileCount(for cat: MaterialCategory) -> Int {
-        return countFiles(in: getMaterialsURL(for: cat.subfolder))
-    }
+    private func loadLibraryStatsIfNeeded() async {
+        guard !hasLoadedLibraryStats, !isLoadingLibraryStats else { return }
+        isLoadingLibraryStats = true
 
-    private func getAllFiles() -> [MaterialFile] {
-        categories.flatMap { cat in
-            listFiles(in: getMaterialsURL(for: cat.subfolder))
-        }
-    }
+        let subfolders = categories.map(\.subfolder)
+        let stats = await Task.detached(priority: .utility) {
+            buildMaterialLibraryStats(for: subfolders)
+        }.value
 
-    private func countFiles(in url: URL) -> Int {
-        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey]) else { return 0 }
-        var count = 0
-        for case let fileURL as URL in enumerator {
-            if (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true { count += 1 }
-        }
-        return count
+        libraryStats = stats
+        hasLoadedLibraryStats = true
+        isLoadingLibraryStats = false
     }
 }
 
@@ -212,8 +234,7 @@ struct MaterialFolderView: View {
     let category: MaterialCategory
     @Binding var previewURL: URL?
     @State private var files: [MaterialFile] = []
-    @State private var subfolders: [(name: String, url: URL)] = []
-    @State private var currentPath: URL?
+    @State private var subfolders: [MaterialFolderEntry] = []
     @State private var searchText = ""
 
     var body: some View {
@@ -226,7 +247,7 @@ struct MaterialFolderView: View {
 
             if !filteredSubfolders.isEmpty {
                 Section("Folders") {
-                    ForEach(filteredSubfolders, id: \.name) { folder in
+                    ForEach(filteredSubfolders) { folder in
                         NavigationLink {
                             SubfolderView(name: folder.name, url: folder.url, color: category.color, previewURL: $previewURL)
                         } label: {
@@ -254,7 +275,7 @@ struct MaterialFolderView: View {
         return files.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
-    private var filteredSubfolders: [(name: String, url: URL)] {
+    private var filteredSubfolders: [MaterialFolderEntry] {
         if searchText.isEmpty { return subfolders }
         return subfolders.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
@@ -280,10 +301,9 @@ struct MaterialFolderView: View {
     }
 
     private func loadContents() {
-        let url = getMaterialsURL(for: category.subfolder)
-        currentPath = url
-        let (f, s) = loadDirectory(url)
-        files = f; subfolders = s
+        let contents = loadDirectory(getMaterialsURL(for: category.subfolder))
+        files = contents.files
+        subfolders = contents.subfolders
     }
 }
 
@@ -294,13 +314,13 @@ struct SubfolderView: View {
     let color: Color
     @Binding var previewURL: URL?
     @State private var files: [MaterialFile] = []
-    @State private var subfolders: [(name: String, url: URL)] = []
+    @State private var subfolders: [MaterialFolderEntry] = []
 
     var body: some View {
         List {
             if !subfolders.isEmpty {
                 Section("Folders") {
-                    ForEach(subfolders, id: \.name) { folder in
+                    ForEach(subfolders) { folder in
                         NavigationLink {
                             SubfolderView(name: folder.name, url: folder.url, color: color, previewURL: $previewURL)
                         } label: {
@@ -337,13 +357,108 @@ struct SubfolderView: View {
         }
         .navigationTitle(name)
         .onAppear {
-            let (f, s) = loadDirectory(url)
-            files = f; subfolders = s
+            let contents = loadDirectory(url)
+            files = contents.files
+            subfolders = contents.subfolders
         }
     }
 }
 
 // MARK: - Helpers
+
+private func buildMaterialLibraryStats(for subfolders: [String]) -> MaterialLibraryStats {
+    var totalFileCount = 0
+    var totalBytes: Int64 = 0
+    var fileCounts: [String: Int] = [:]
+
+    for subfolder in subfolders {
+        let files = listFiles(in: getMaterialsURL(for: subfolder))
+        fileCounts[subfolder] = files.count
+        totalFileCount += files.count
+        totalBytes += files.reduce(0) { $0 + $1.size }
+    }
+
+    return MaterialLibraryStats(totalFileCount: totalFileCount, totalBytes: totalBytes, fileCounts: fileCounts)
+}
+
+private enum MaterialsLibraryCache {
+    private static let cacheLock = NSLock()
+    private static var directoryCache: [String: MaterialDirectoryContents] = [:]
+    private static var recursiveFilesCache: [String: [MaterialFile]] = [:]
+
+    static func directoryContents(for url: URL) -> MaterialDirectoryContents {
+        let key = url.path
+        cacheLock.lock()
+        if let cached = directoryCache[key] {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+
+        let contents = buildDirectoryContents(for: url)
+        cacheLock.lock()
+        directoryCache[key] = contents
+        cacheLock.unlock()
+        return contents
+    }
+
+    static func recursiveFiles(in url: URL) -> [MaterialFile] {
+        let key = url.path
+        cacheLock.lock()
+        if let cached = recursiveFilesCache[key] {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+
+        let files = buildRecursiveFiles(in: url)
+        cacheLock.lock()
+        recursiveFilesCache[key] = files
+        cacheLock.unlock()
+        return files
+    }
+
+    private static func buildDirectoryContents(for url: URL) -> MaterialDirectoryContents {
+        guard let contents = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey]) else {
+            return MaterialDirectoryContents(files: [], subfolders: [])
+        }
+
+        var files: [MaterialFile] = []
+        var folders: [MaterialFolderEntry] = []
+        for item in contents.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            let name = item.lastPathComponent
+            guard !name.hasPrefix(".") else { continue }
+            if let values = try? item.resourceValues(forKeys: [.isDirectoryKey]),
+               values.isDirectory == true {
+                folders.append(MaterialFolderEntry(name: name, url: item))
+            } else {
+                files.append(MaterialFile(
+                    name: name,
+                    url: item,
+                    size: Int64((try? item.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0),
+                    ext: item.pathExtension
+                ))
+            }
+        }
+
+        return MaterialDirectoryContents(files: files, subfolders: folders)
+    }
+
+    private static func buildRecursiveFiles(in url: URL) -> [MaterialFile] {
+        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]) else { return [] }
+
+        var files: [MaterialFile] = []
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+                  values.isRegularFile == true else { continue }
+            let name = fileURL.lastPathComponent
+            guard !name.hasPrefix(".") else { continue }
+            files.append(MaterialFile(name: name, url: fileURL, size: Int64(values.fileSize ?? 0), ext: fileURL.pathExtension))
+        }
+
+        return files.sorted { $0.name < $1.name }
+    }
+}
 
 func getMaterialsURL(for subfolder: String) -> URL {
     if let url = Bundle.main.url(forResource: subfolder, withExtension: nil, subdirectory: "Materials") {
@@ -355,37 +470,9 @@ func getMaterialsURL(for subfolder: String) -> URL {
 }
 
 func listFiles(in url: URL) -> [MaterialFile] {
-    guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]) else { return [] }
-    var files: [MaterialFile] = []
-    for case let fileURL as URL in enumerator {
-        guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
-              values.isRegularFile == true else { continue }
-        let name = fileURL.lastPathComponent
-        guard !name.hasPrefix(".") else { continue }
-        files.append(MaterialFile(name: name, url: fileURL, size: Int64(values.fileSize ?? 0), ext: fileURL.pathExtension))
-    }
-    return files.sorted { $0.name < $1.name }
+    MaterialsLibraryCache.recursiveFiles(in: url)
 }
 
-func loadDirectory(_ url: URL) -> (files: [MaterialFile], subfolders: [(name: String, url: URL)]) {
-    guard let contents = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey]) else {
-        return ([], [])
-    }
-    var files: [MaterialFile] = []
-    var folders: [(name: String, url: URL)] = []
-    for item in contents.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-        let name = item.lastPathComponent
-        guard !name.hasPrefix(".") else { continue }
-        if let values = try? item.resourceValues(forKeys: [.isDirectoryKey]),
-           values.isDirectory == true {
-            folders.append((name: name, url: item))
-        } else {
-            files.append(MaterialFile(
-                name: name, url: item,
-                size: Int64((try? item.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0),
-                ext: item.pathExtension
-            ))
-        }
-    }
-    return (files, folders)
+private func loadDirectory(_ url: URL) -> MaterialDirectoryContents {
+    MaterialsLibraryCache.directoryContents(for: url)
 }

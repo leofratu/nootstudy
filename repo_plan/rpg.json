@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-11T23:29:44+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, and expand ARIA context specs so more study actions and development updates are persisted.",
+  "updated_at": "2026-03-12T09:35:23+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, and reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -46,6 +46,24 @@
         "IBVault/Views/Review/ReviewSessionView.swift"
       ],
       "summary": "ARIA records study-plan drafts, plan revisions, ARIA chat exchanges, flashcard generation, review completion, and development updates into persistent action specs."
+    },
+    {
+      "id": "iface.aria.context_caching",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Services/ARIAService.swift"
+      ],
+      "summary": "ARIA reuses in-memory indexes for recent action specs and materials filenames instead of rescanning the filesystem for every prompt build."
+    },
+    {
+      "id": "iface.materials.library_index_cache",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Materials/MaterialsLibraryView.swift"
+      ],
+      "summary": "Materials Library computes collection counts and aggregate size once per view lifecycle and reuses cached directory listings instead of recursively rescanning on every render."
     }
   ],
   "edges": [
@@ -73,6 +91,16 @@
       "from": "iface.aria.spec_logging",
       "to": "entry.ibvault_app",
       "type": "data_flow"
+    },
+    {
+      "from": "iface.aria.context_caching",
+      "to": "iface.aria.spec_logging",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.materials.library_index_cache",
+      "to": "iface.aria.context_caching",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -86,6 +114,14 @@
     },
     {
       "id": "iface.aria.spec_logging",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.context_caching",
+      "status": "tested"
+    },
+    {
+      "id": "iface.materials.library_index_cache",
       "status": "tested"
     }
   ]
