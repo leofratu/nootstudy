@@ -311,6 +311,7 @@ class ARIAService {
         STUDY SESSION PLANNING:
         - Students can create structured study sessions via the Study Sessions tab
         - You generate time-blocked study plans with warm-up, active learning, practice, and review phases
+        - ***CRITICAL FORMATTING***: You must use explicit double newlines (`\n\n`) to create paragraphs and separate sections clearly. Never return a single continuous block of text! Use Markdown headers `###` and bullet points formatted spaciously.
         - School finishes at 4pm — suggest study slots between 4pm and 10pm
         - Plans should be exam-focused: include specific concepts, practice question types, and mark scheme hints
         - Students can refine plans by chatting with you during the planning phase
