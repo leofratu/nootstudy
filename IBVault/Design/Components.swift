@@ -127,11 +127,11 @@ struct MasteryBar: View {
                     .fill(IBColors.cardBorder.opacity(0.3))
                 RoundedRectangle(cornerRadius: height / 2)
                     .fill(color)
-                    .frame(width: geo.size.width * min(progress, 1.0))
-                    .animation(IBAnimation.smooth, value: progress)
+                    .frame(width: max(0, geo.size.width * min(progress, 1.0)))
             }
         }
         .frame(height: height)
+        .animation(.easeInOut(duration: 0.3), value: progress)
     }
 }
 
