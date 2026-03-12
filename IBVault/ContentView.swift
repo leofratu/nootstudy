@@ -35,9 +35,17 @@ enum NavigationTab: String, CaseIterable, Hashable {
 struct ContentView: View {
     @State private var selectedTab: NavigationTab? = .dashboard
     @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
+    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
+
+    private var studiedScopes: [StudyScope] {
+        StudySession.uniqueStudyScopes(from: studySessions)
+    }
 
     private var dueCount: Int {
-        allCards.filter { $0.isDue }.count
+        guard !studiedScopes.isEmpty else { return 0 }
+        return allCards.filter { card in
+            card.isDue && studiedScopes.contains { $0.matches(card) }
+        }.count
     }
 
     var body: some View {
@@ -125,8 +133,20 @@ struct ReviewLaunchView: View {
     @State private var showReview = false
     @State private var showGuide = false
     @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
+    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
 
-    private var dueCards: [StudyCard] { allCards.filter { $0.isDue } }
+    private var studiedScopes: [StudyScope] {
+        StudySession.uniqueStudyScopes(from: studySessions)
+    }
+
+    private var eligibleCards: [StudyCard] {
+        guard !studiedScopes.isEmpty else { return [] }
+        return allCards.filter { card in
+            studiedScopes.contains { $0.matches(card) }
+        }
+    }
+
+    private var dueCards: [StudyCard] { eligibleCards.filter { $0.isDue } }
 
     var body: some View {
         NavigationStack {
@@ -147,7 +167,7 @@ struct ReviewLaunchView: View {
                     VStack(spacing: 6) {
                         Text("Spaced Repetition")
                             .font(.title2.bold())
-                        Text("Review due cards using science-backed intervals, or open an ARIA study guide to prepare.")
+                        Text(reviewSubtitle)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -158,7 +178,7 @@ struct ReviewLaunchView: View {
                     HStack(spacing: 0) {
                         StatCard(value: "\(dueCards.count)", label: "Cards Due", color: dueCards.isEmpty ? .green : .orange, icon: "clock.badge.exclamationmark")
                         Divider().frame(height: 50)
-                        StatCard(value: "\(allCards.count)", label: "Total Cards", color: IBColors.electricBlue, icon: "square.stack.fill")
+                        StatCard(value: "\(eligibleCards.count)", label: "Review Pool", color: IBColors.electricBlue, icon: "square.stack.fill")
                     }
                     .padding(.vertical, 12)
                     .glassCard()
@@ -178,7 +198,7 @@ struct ReviewLaunchView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        .disabled(dueCards.isEmpty)
+                        .disabled(studySessions.isEmpty || dueCards.isEmpty)
 
                         Button {
                             IBHaptics.soft()
@@ -203,5 +223,12 @@ struct ReviewLaunchView: View {
             .sheet(isPresented: $showReview) { ReviewSessionView() }
             .sheet(isPresented: $showGuide) { StudyGuideView(subject: nil, mode: .preSession) }
         }
+    }
+
+    private var reviewSubtitle: String {
+        if studySessions.isEmpty {
+            return "Finish a study session first. Revision should only come from material you actually studied."
+        }
+        return "Review due cards from your completed study sessions, or open an ARIA study guide to prepare."
     }
 }

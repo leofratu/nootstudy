@@ -38,9 +38,17 @@ struct RootView: View {
     @Query private var profiles: [UserProfile]
     @State private var hasAttemptedAutomaticBackup = false
 
+    private var orderedProfiles: [UserProfile] {
+        profiles.sorted { $0.id.uuidString < $1.id.uuidString }
+    }
+
+    private var primaryProfile: UserProfile? {
+        orderedProfiles.first(where: { $0.onboardingCompleted }) ?? orderedProfiles.first
+    }
+
     var body: some View {
         Group {
-            if let profile = profiles.first {
+            if let profile = primaryProfile {
                 if profile.onboardingCompleted {
                     ContentView()
                         .onAppear {
@@ -77,6 +85,7 @@ struct RootView: View {
             let achievement = Achievement(id: def.id, title: def.title, desc: def.desc, icon: def.icon, category: def.category)
             context.insert(achievement)
         }
+
         try? context.save()
     }
 }

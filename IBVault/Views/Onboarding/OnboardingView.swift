@@ -5,6 +5,11 @@ struct OnboardingView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @State private var currentPage = 0
+    @State private var isCompleting = false
+
+    private var orderedProfiles: [UserProfile] {
+        profiles.sorted { $0.id.uuidString < $1.id.uuidString }
+    }
 
     private let pages = [
         (icon: "books.vertical.fill", title: "Your IB Study Hub", subtitle: "Everything you need in one place"),
@@ -93,6 +98,7 @@ struct OnboardingView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .disabled(isCompleting)
                 }
             }
             .padding(.bottom, 40)
@@ -184,16 +190,30 @@ struct OnboardingView: View {
     }
 
     private func completeOnboarding() {
+        guard !isCompleting else { return }
+        isCompleting = true
         IBHaptics.success()
         SyllabusSeeder.seedIfNeeded(context: context)
         NotificationService.requestPermission()
-        if let profile = profiles.first {
-            profile.onboardingCompleted = true
-        } else {
+
+        if orderedProfiles.isEmpty {
             let profile = UserProfile()
             profile.onboardingCompleted = true
             context.insert(profile)
+        } else {
+            for profile in orderedProfiles {
+                profile.onboardingCompleted = true
+            }
         }
-        try? context.save()
+
+        do {
+            try context.save()
+        } catch {
+            assertionFailure("Failed to complete onboarding: \(error.localizedDescription)")
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            isCompleting = false
+        }
     }
 }

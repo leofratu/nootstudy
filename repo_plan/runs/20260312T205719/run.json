@@ -1,0 +1,63 @@
+{
+  "task_id": "20260312-review-session-gating",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.review.session_scoped_queue",
+      "iface.study.scope_selection",
+      "iface.persistence.update_safe_backups"
+    ],
+    "files": [
+      "IBVault/ContentView.swift",
+      "IBVault/Engine/ReviewQueueManager.swift",
+      "IBVault/Engine/ReviewScheduler.swift",
+      "IBVault/Models/StudySession.swift",
+      "IBVault/IBVaultApp.swift",
+      "IBVault/Views/Onboarding/OnboardingView.swift",
+      "IBVault/Views/Review/ReviewSessionView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Models/StudySession.swift IBVault/ContentView.swift IBVault/Views/Review/ReviewSessionView.swift IBVault/Engine/ReviewQueueManager.swift IBVault/Engine/ReviewScheduler.swift IBVault/IBVaultApp.swift IBVault/Views/Onboarding/OnboardingView.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.review.session_scoped_queue",
+        "iface.study.scope_selection",
+        "iface.persistence.update_safe_backups"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312f build",
+      "ok": true,
+      "interfaces": [
+        "iface.review.session_scoped_queue",
+        "iface.study.scope_selection",
+        "iface.persistence.update_safe_backups"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.review.session_scoped_queue",
+    "iface.study.scope_selection",
+    "iface.persistence.update_safe_backups"
+  ],
+  "tested_interfaces": [
+    "iface.review.session_scoped_queue",
+    "iface.study.scope_selection",
+    "iface.persistence.update_safe_backups"
+  ],
+  "files_changed": [
+    "IBVault/ContentView.swift",
+    "IBVault/Engine/ReviewQueueManager.swift",
+    "IBVault/Engine/ReviewScheduler.swift",
+    "IBVault/IBVaultApp.swift",
+    "IBVault/Models/StudySession.swift",
+    "IBVault/Views/Onboarding/OnboardingView.swift",
+    "IBVault/Views/Review/ReviewSessionView.swift",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "repo_plan/runs/20260312T205719/run.json"
+  ]
+}

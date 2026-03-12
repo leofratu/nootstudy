@@ -5,6 +5,7 @@ struct ReviewSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var profiles: [UserProfile]
+    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     var filterSubject: Subject? = nil
     var filterPlan: StudyPlan? = nil
     var reviewScopeSession: StudySession? = nil
@@ -23,6 +24,9 @@ struct ReviewSessionView: View {
     }
     private var activeScope: StudyScope? {
         reviewScopeSession?.studyScope ?? filterPlan?.studyScope
+    }
+    private var studiedScopes: [StudyScope] {
+        StudySession.uniqueStudyScopes(from: studySessions)
     }
     private var scopeSummary: String? {
         let summary = activeScope?.summary.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -227,6 +231,12 @@ struct ReviewSessionView: View {
     // MARK: - Logic
     private func loadCards() {
         let now = Date()
+        guard activeScope != nil || !studiedScopes.isEmpty else {
+            cards = []
+            sessionStartTime = Date()
+            return
+        }
+
         let allCandidates: [StudyCard]
         if let subject = filterSubject {
             allCandidates = subject.cards
@@ -234,13 +244,22 @@ struct ReviewSessionView: View {
             allCandidates = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
         }
 
-        let dueCards = allCandidates.filter { $0.nextReviewDate <= now }
+        let eligibleCandidates: [StudyCard]
+        if let activeScope {
+            eligibleCandidates = allCandidates.filter { activeScope.matches($0) }
+        } else {
+            eligibleCandidates = allCandidates.filter { card in
+                studiedScopes.contains { $0.matches(card) }
+            }
+        }
+
+        let dueCards = eligibleCandidates.filter { $0.nextReviewDate <= now }
         let scopedDueCards = filteredCards(from: dueCards)
 
         if !scopedDueCards.isEmpty {
             cards = scopedDueCards
         } else if activeScope?.hasFilters == true {
-            cards = fallbackScopedCards(from: allCandidates, now: now)
+            cards = fallbackScopedCards(from: eligibleCandidates, now: now)
         } else {
             cards = []
         }
@@ -421,9 +440,12 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateMessage: String {
+        if studySessions.isEmpty {
+            return "No revision yet. Complete a study session first, then spaced repetition will use that material."
+        }
         if let scopeSummary {
             return "No flashcards match \(scopeSummary) yet. Generate cards for this scope first or try another recent study session."
         }
-        return "No cards are due for review right now. Come back later!"
+        return "No studied flashcards are due for review right now. Come back after your next study session or when those cards become due."
     }
 }

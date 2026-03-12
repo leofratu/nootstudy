@@ -6,6 +6,18 @@ class ReviewQueueManager {
     var dueCards: [StudyCard] = []
     var totalDueCount: Int = 0
 
+    private func studiedScopes(in context: ModelContext) -> [StudyScope] {
+        let sessions = (try? context.fetch(FetchDescriptor<StudySession>())) ?? []
+        return StudySession.uniqueStudyScopes(from: sessions)
+    }
+
+    private func cards(_ cards: [StudyCard], matching scopes: [StudyScope]) -> [StudyCard] {
+        guard !scopes.isEmpty else { return [] }
+        return cards.filter { card in
+            scopes.contains { $0.matches(card) }
+        }
+    }
+
     func loadDueCards(context: ModelContext) {
         let now = Date()
         let predicate = #Predicate<StudyCard> { card in
@@ -15,7 +27,14 @@ class ReviewQueueManager {
         descriptor.sortBy = [SortDescriptor(\.nextReviewDate, order: .forward)]
 
         do {
-            dueCards = try context.fetch(descriptor)
+            let studiedScopes = studiedScopes(in: context)
+            guard !studiedScopes.isEmpty else {
+                dueCards = []
+                totalDueCount = 0
+                return
+            }
+
+            dueCards = cards(try context.fetch(descriptor), matching: studiedScopes)
             totalDueCount = dueCards.count
         } catch {
             print("Failed to fetch due cards: \(error)")
@@ -24,9 +43,11 @@ class ReviewQueueManager {
         }
     }
 
-    func dueCardsForSubject(_ subject: Subject) -> [StudyCard] {
+    func dueCardsForSubject(_ subject: Subject, context: ModelContext) -> [StudyCard] {
         let now = Date()
-        return subject.cards.filter { $0.nextReviewDate <= now }
+        let studiedScopes = studiedScopes(in: context).filter { $0.subjectName == subject.name }
+        return cards(subject.cards, matching: studiedScopes)
+            .filter { $0.nextReviewDate <= now }
             .sorted { $0.nextReviewDate < $1.nextReviewDate }
     }
 
@@ -54,7 +75,7 @@ class ReviewQueueManager {
         descriptor.sortBy = [SortDescriptor(\.nextReviewDate)]
 
         do {
-            return try context.fetch(descriptor)
+            return cards(try context.fetch(descriptor), matching: studiedScopes(in: context))
         } catch {
             return []
         }
