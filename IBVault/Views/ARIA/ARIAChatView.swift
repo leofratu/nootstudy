@@ -264,7 +264,7 @@ struct StreamingMessageRow: View {
     }
 }
 
-private struct FormattedMessageContent: View {
+struct FormattedMessageContent: View {
     let text: String
 
     private var sections: [FormattedMessageSection] {
@@ -322,7 +322,7 @@ private struct FormattedMessageContent: View {
     }
 }
 
-private struct MathMarkdownContainer: View {
+struct MathMarkdownContainer: View {
     let markdown: String
     @State private var contentHeight: CGFloat = 28
 
@@ -333,7 +333,7 @@ private struct MathMarkdownContainer: View {
 }
 
 #if os(macOS)
-private struct MathMarkdownWebView: NSViewRepresentable {
+struct MathMarkdownWebView: NSViewRepresentable {
     let markdown: String
     @Binding var contentHeight: CGFloat
 
@@ -406,12 +406,12 @@ private struct MathMarkdownWebView: NSViewRepresentable {
 }
 #endif
 
-private enum FormattedMessageSection {
+enum FormattedMessageSection {
     case markdown(String)
     case mathBlock(String)
 }
 
-private enum FormattedMessageFormatter {
+enum FormattedMessageFormatter {
     static func sections(from source: String) -> [FormattedMessageSection] {
         let normalized = normalizeMathDelimiters(in: source)
         var sections: [FormattedMessageSection] = []
@@ -496,7 +496,7 @@ private enum FormattedMessageFormatter {
     }
 }
 
-private enum MathMarkdownHTMLRenderer {
+enum MathMarkdownHTMLRenderer {
     static func containsMath(in source: String) -> Bool {
         let normalized = source
             .replacingOccurrences(of: "\\[", with: "$$")

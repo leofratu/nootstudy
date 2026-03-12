@@ -324,8 +324,7 @@ struct NewStudySessionView: View {
                             .font(.headline)
                     }
 
-                    Text(planMarkdown)
-                        .font(.callout)
+                    FormattedMessageContent(text: planMarkdown)
                         .textSelection(.enabled)
                         .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -345,8 +344,8 @@ struct NewStudySessionView: View {
                         let msg = chatMessages[i]
                         HStack(alignment: .top) {
                             if msg.role == "user" { Spacer() }
-                            Text(msg.text)
-                                .font(.callout)
+                            FormattedMessageContent(text: msg.text)
+                                .textSelection(.enabled)
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10)

@@ -185,10 +185,8 @@ struct ActiveStudySessionView: View {
     private var planPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(plan.planMarkdown)
-                    .font(.system(size: 13, weight: .regular))
+                FormattedMessageContent(text: plan.planMarkdown)
                     .textSelection(.enabled)
-                    .lineSpacing(3)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
@@ -229,9 +227,8 @@ struct ActiveStudySessionView: View {
                                 .padding(.top, 2)
                             }
 
-                            Text(msg.text)
-                                .font(.system(size: 13))
-                                .lineSpacing(2)
+                            FormattedMessageContent(text: msg.text)
+                                .textSelection(.enabled)
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
@@ -239,7 +236,6 @@ struct ActiveStudySessionView: View {
                                               ? IBColors.electricBlue.opacity(0.08)
                                               : Color.secondary.opacity(0.04))
                                 )
-                                .textSelection(.enabled)
 
                             if msg.role == "model" { Spacer(minLength: 60) }
                         }
@@ -405,8 +401,8 @@ struct ActiveStudySessionView: View {
                             .controlSize(.mini)
                         }
 
-                        Text(card.front)
-                            .font(.system(size: 13, weight: .medium))
+                        FormattedMessageContent(text: card.front)
+                            .textSelection(.enabled)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
@@ -414,9 +410,8 @@ struct ActiveStudySessionView: View {
                                     .fill(IBColors.electricBlue.opacity(0.04))
                             )
 
-                        Text(card.back)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                        FormattedMessageContent(text: card.back)
+                            .textSelection(.enabled)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
