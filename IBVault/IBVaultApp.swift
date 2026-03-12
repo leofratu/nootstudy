@@ -74,14 +74,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         
-        // Force evaluation of authorization on startup
-        center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            if let error = error {
-                print("AppDelegate Notification error: \(error.localizedDescription)")
-            } else {
-                print("AppDelegate Notification granted: \(granted)")
-            }
-        }
+        center.requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
     }
     
     // Allow notifications to show even when the app is focused

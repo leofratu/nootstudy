@@ -11,6 +11,8 @@ enum NavigationTab: String, CaseIterable, Hashable {
     case review = "Review"
     case aria = "ARIA"
     case analytics = "Analytics"
+    case recommendations = "Recommendations"
+    case predictions = "Predictions"
     case profile = "Profile"
     case settings = "Settings"
 
@@ -22,6 +24,8 @@ enum NavigationTab: String, CaseIterable, Hashable {
         case .review: return "brain.head.profile"
         case .aria: return "sparkles"
         case .analytics: return "chart.bar.fill"
+        case .recommendations: return "lightbulb.fill"
+        case .predictions: return "chart.line.uptrend.xyaxis"
         case .profile: return "person.fill"
         case .settings: return "gearshape"
         }
@@ -55,6 +59,10 @@ struct ContentView: View {
                 Section("Insights") {
                     Label(NavigationTab.analytics.rawValue, systemImage: NavigationTab.analytics.icon)
                         .tag(NavigationTab.analytics)
+                    Label(NavigationTab.recommendations.rawValue, systemImage: NavigationTab.recommendations.icon)
+                        .tag(NavigationTab.recommendations)
+                    Label(NavigationTab.predictions.rawValue, systemImage: NavigationTab.predictions.icon)
+                        .tag(NavigationTab.predictions)
                 }
 
                 Section("Account") {
@@ -87,6 +95,8 @@ struct ContentView: View {
                 case .review: ReviewLaunchView()
                 case .aria: ARIAChatView()
                 case .analytics: AnalyticsView()
+                case .recommendations: SmartRecommendationsView()
+                case .predictions: PredictiveGradeView()
                 case .profile: ProfileView()
                 case .settings:
                     NavigationStack {
