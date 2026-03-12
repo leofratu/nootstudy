@@ -59,7 +59,7 @@ IBVault/
 - Daily review queue sorted with overdue cards first
 
 ### ARIA AI Companion
-- Powered by **Gemini 2.0 Flash** via native URLSession
+- Powered by **Gemini Models** via native URLSession
 - Streaming responses with typewriter effect via SSE
 - Context-aware: reads all app data (grades, due cards, streak, weak topics)
 - Memory system with semantic categories and automatic compaction
