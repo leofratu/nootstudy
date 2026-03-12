@@ -18,6 +18,8 @@ struct ReviewSessionView: View {
     @State private var sessionCorrect = 0
     @State private var sessionStartTime = Date()
     @State private var showStudyGuide = false
+    @State private var isGeneratingMoreCards = false
+    @State private var generationError: String?
 
     private var currentCard: StudyCard? {
         currentIndex < cards.count ? cards[currentIndex] : nil
@@ -37,6 +39,19 @@ struct ReviewSessionView: View {
     }
     private var dedicatedMinutesDouble: Double {
         Double(ARIAService.normalizedDurationMinutes(Date().timeIntervalSince(sessionStartTime) / 60))
+    }
+    private var generationSubject: Subject? {
+        if let filterSubject {
+            return filterSubject
+        }
+        return cards.first?.subject ?? studySessionsSubject()
+    }
+    private var generationTopics: [String] {
+        if let activeScope, !activeScope.topicNames.isEmpty {
+            return activeScope.topicNames
+        }
+        let cardTopics = Array(Set(cards.map(\.topicName))).sorted()
+        return cardTopics
     }
 
     var body: some View {
@@ -61,6 +76,19 @@ struct ReviewSessionView: View {
                     Button { showStudyGuide = true } label: {
                         Label("Guide", systemImage: "book")
                     }
+                }
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        generateMoreFlashcards()
+                    } label: {
+                        if isGeneratingMoreCards {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label("Generate Cards", systemImage: "sparkles.rectangle.stack")
+                        }
+                    }
+                    .disabled(isGeneratingMoreCards || generationSubject == nil || generationTopics.isEmpty)
                 }
             }
         }
@@ -356,9 +384,12 @@ struct ReviewSessionView: View {
 
     // MARK: - Empty State
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            ZStack {
+            VStack(spacing: 20) {
+                if let generationError, !generationError.isEmpty {
+                    errorBanner(generationError)
+                }
+                Spacer()
+                ZStack {
                 Circle()
                     .fill(Color.green.opacity(0.08))
                     .frame(width: 100, height: 100)
@@ -383,6 +414,11 @@ struct ReviewSessionView: View {
     private var completionView: some View {
         VStack(spacing: 24) {
             Spacer()
+
+            if let generationError, !generationError.isEmpty {
+                errorBanner(generationError)
+                    .frame(maxWidth: 500)
+            }
 
             ZStack {
                 Circle()
@@ -410,6 +446,24 @@ struct ReviewSessionView: View {
             .frame(maxWidth: 500)
 
             HStack(spacing: 12) {
+                Button {
+                    generateMoreFlashcards()
+                } label: {
+                    HStack {
+                        if isGeneratingMoreCards {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "sparkles.rectangle.stack")
+                        }
+                        Text(isGeneratingMoreCards ? "Generating…" : "Generate More Cards")
+                    }
+                    .frame(minWidth: 160)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(isGeneratingMoreCards || generationSubject == nil || generationTopics.isEmpty)
+
                 Button {
                     showStudyGuide = true
                 } label: {
@@ -448,5 +502,88 @@ struct ReviewSessionView: View {
             return "No flashcards match \(scopeSummary) yet. Generate cards for this scope first or try another recent study session."
         }
         return "No studied flashcards are due for review right now. Come back after your next study session or when those cards become due."
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.red)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.red.opacity(0.06))
+        )
+        .padding(.horizontal, 24)
+    }
+
+    private func studySessionsSubject() -> Subject? {
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        let subjectName = filterSubject?.name ?? activeScope?.subjectName ?? cards.first?.subject?.name
+        return subjects.first(where: { $0.name == subjectName })
+    }
+
+    private func generateMoreFlashcards() {
+        guard !isGeneratingMoreCards else { return }
+        guard let subject = generationSubject else {
+            generationError = "Could not find the subject for generating more flashcards."
+            return
+        }
+        let topics = generationTopics
+        guard !topics.isEmpty else {
+            generationError = "Could not determine which topics to generate more flashcards for."
+            return
+        }
+
+        isGeneratingMoreCards = true
+        generationError = nil
+
+        Task {
+            do {
+                let subtopics = activeScope?.subtopicNames ?? []
+                let cardsPerTopic = max(6, Int(ceil(18.0 / Double(max(topics.count, 1)))))
+                var insertedAny = false
+
+                for topic in topics {
+                    let validSubtopics = subtopics.filter {
+                        SyllabusSeeder.subtopics(for: subject.name, topicName: topic).contains($0)
+                    }
+                    let generated = try await CardGeneratorService.generateCards(
+                        subject: subject,
+                        topicName: topic,
+                        subtopic: validSubtopics.joined(separator: ", "),
+                        count: cardsPerTopic,
+                        context: context
+                    )
+
+                    for card in generated {
+                        context.insert(card)
+                        subject.cards.append(card)
+                    }
+                    insertedAny = insertedAny || !generated.isEmpty
+                }
+
+                try context.save()
+
+                await MainActor.run {
+                    isGeneratingMoreCards = false
+                    if insertedAny {
+                        loadCards()
+                        IBHaptics.success()
+                    } else {
+                        generationError = "ARIA did not return any new flashcards for this revision scope."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isGeneratingMoreCards = false
+                    generationError = error.localizedDescription
+                }
+            }
+        }
     }
 }

@@ -1,0 +1,50 @@
+{
+  "task_id": "20260312T222930_review_generate_more",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.review.in_place_flashcard_generation"
+    ],
+    "files": [
+      "IBVault/Views/Review/ReviewSessionView.swift",
+      "IBVault/Services/CardGeneratorService.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Views/Review/ReviewSessionView.swift IBVault/Services/CardGeneratorService.swift IBVault/Views/Study/ActiveStudySessionView.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.review.in_place_flashcard_generation"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312m build",
+      "ok": true,
+      "interfaces": [
+        "iface.review.in_place_flashcard_generation",
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-release-build-20260312m/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.review.in_place_flashcard_generation"
+  ],
+  "tested_interfaces": [
+    "iface.review.in_place_flashcard_generation",
+    "iface.release.dmg_distribution"
+  ],
+  "files_changed": [
+    "IBVault/Views/Review/ReviewSessionView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ]
+}
