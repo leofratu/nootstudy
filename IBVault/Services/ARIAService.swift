@@ -123,10 +123,10 @@ class ARIAService {
                 )
 
                 for try await token in stream {
-                    fullResponse += token
+                    fullResponse = Self.appendStreamChunk(token, to: fullResponse)
                     await MainActor.run {
                         self.currentStreamText = fullResponse
-                        onToken(token)
+                        onToken(fullResponse)
                     }
                 }
 
@@ -162,6 +162,31 @@ class ARIAService {
                 }
             }
         }
+    }
+
+    private static func appendStreamChunk(_ chunk: String, to current: String) -> String {
+        guard !chunk.isEmpty else { return current }
+        guard !current.isEmpty else { return chunk }
+
+        var combined = current
+        if shouldInsertSpace(between: current.last, and: chunk.first) {
+            combined.append(" ")
+        }
+        combined.append(chunk)
+        return combined
+    }
+
+    private static func shouldInsertSpace(between lhs: Character?, and rhs: Character?) -> Bool {
+        guard let lhs, let rhs else { return false }
+        guard !lhs.isWhitespace, !rhs.isWhitespace else { return false }
+        guard !"\n\r\t".contains(lhs), !"\n\r\t".contains(rhs) else { return false }
+
+        let sentenceTerminators = ".!?:"
+        if sentenceTerminators.contains(lhs) {
+            return rhs.isLetter || rhs.isNumber || rhs == "*" || rhs == "#" || rhs == "("
+        }
+
+        return false
     }
 
     // MARK: - System Prompt Builder

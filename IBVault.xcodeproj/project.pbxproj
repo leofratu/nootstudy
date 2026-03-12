@@ -14,6 +14,7 @@
 		040A0B0C0D0E0F1011121314 /* StudyPlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140A0B0C0D0E0F1011121314 /* StudyPlannerView.swift */; };
 		050A0B0C0D0E0F1011121314 /* StudyPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150A0B0C0D0E0F1011121314 /* StudyPlan.swift */; };
 		06C90D075EF16F41D104F04B /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 097E508F5709148582415B7B /* README.md */; };
+		06D90E085FF26F52E205A15C /* MathJax in Resources */ = {isa = PBXBuildFile; fileRef = 06D90E085FF26F52E205A15B /* MathJax */; };
 		06E28858193E70D583BC5CBD /* ADHDTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0CBD332FD598F687CAE0EEE /* ADHDTrackerView.swift */; };
 		10CC766826E31BEB74A6A705 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED97CD9D635EAE250C259E5F /* KeychainService.swift */; };
 		14FC8AF088F886C4AFDAA596 /* BackupListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349F1CBB7C178EC42E6B64F7 /* BackupListView.swift */; };
@@ -60,6 +61,7 @@
 /* Begin PBXFileReference section */
 		02C83017CAF22B22F672B78C /* Grade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Grade.swift; sourceTree = "<group>"; };
 		097E508F5709148582415B7B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		06D90E085FF26F52E205A15B /* MathJax */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MathJax; path = IBVault/MathJax; sourceTree = SOURCE_ROOT; };
 		0E125707A54C6B4B05D3DA55 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		110A0B0C0D0E0F1011121314 /* ActiveStudySessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveStudySessionView.swift; sourceTree = "<group>"; };
 		120A0B0C0D0E0F1011121314 /* NewStudySessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewStudySessionView.swift; sourceTree = "<group>"; };
@@ -242,6 +244,7 @@
 			isa = PBXGroup;
 			children = (
 				BB9713AFE0115FF39ABB53ED /* Materials */,
+				06D90E085FF26F52E205A15B /* MathJax */,
 				B3FA2135BB201DAECA8EB957 /* IBVault */,
 				5379DB9129801993AA64E0B9 /* Products */,
 			);
@@ -369,6 +372,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FCBB7707F18F8EFEF39782CD /* Materials in Resources */,
+				06D90E085FF26F52E205A15C /* MathJax in Resources */,
 				06C90D075EF16F41D104F04B /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

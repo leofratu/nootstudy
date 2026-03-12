@@ -1,0 +1,42 @@
+{
+  "task_id": "20260312T101256_aria_response_polish",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.response_polish"
+    ],
+    "files": [
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Views/ARIA/ARIAChatView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-aria-formatting-build CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.response_polish"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.aria.response_polish"
+  ],
+  "tested_interfaces": [
+    "iface.aria.response_polish"
+  ],
+  "files_changed": [
+    "IBVault/Services/ARIAService.swift",
+    "IBVault/Views/ARIA/ARIAChatView.swift",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "repo_plan/runs/20260312T101256/run.json"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null,
+  "notes": [
+    "Improved stream chunk joining to reduce missing spaces during live token display.",
+    "Added flashcard-aware ARIA rendering and stronger response normalization for headings and paragraph breaks."
+  ]
+}

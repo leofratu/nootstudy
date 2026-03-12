@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-12T09:56:24+01:00",
+  "generated_at": "2026-03-12T10:22:20+01:00",
   "files": [
     ".gitignore",
     "IBVault.xcodeproj/project.pbxproj",
@@ -11,6 +11,7 @@
     "IBVault/Engine/ReviewQueueManager.swift",
     "IBVault/Engine/SM2Engine.swift",
     "IBVault/IBVaultApp.swift",
+    "IBVault/MathJax/tex-svg.js",
     "IBVault/Models/ARIAMemory.swift",
     "IBVault/Models/Achievement.swift",
     "IBVault/Models/Grade.swift",

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12T09:56:24+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs.",
+  "updated_at": "2026-03-12T10:22:20+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -93,6 +93,27 @@
         "IBVault/Views/Insights/ADHDTrackerView.swift"
       ],
       "summary": "Study effectiveness and focus screens expose interactive Charts-based graphs so users can inspect study momentum, method impact, and focus windows directly in the UI."
+    },
+    {
+      "id": "iface.aria.response_polish",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Services/ARIAService.swift",
+        "IBVault/Views/ARIA/ARIAChatView.swift"
+      ],
+      "summary": "ARIA chat normalizes streamed assistant text, restores missing sentence spacing, and renders flashcard-style replies with clearer FRONT/BACK structure and richer typography."
+    },
+    {
+      "id": "iface.aria.full_tex_renderer",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/ARIA/ARIAChatView.swift",
+        "IBVault.xcodeproj/project.pbxproj",
+        "IBVault/MathJax/tex-svg.js"
+      ],
+      "summary": "ARIA assistant messages use a bundled local MathJax SVG web renderer for complex TeX, multi-line derivations, flashcard layout, and richer paragraph formatting without CDN dependencies."
     }
   ],
   "edges": [
@@ -145,6 +166,16 @@
       "from": "iface.study.focus_interactive_graphs",
       "to": "dep.design_system",
       "type": "dependency"
+    },
+    {
+      "from": "iface.aria.response_polish",
+      "to": "iface.aria.math_rendering",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.full_tex_renderer",
+      "to": "iface.aria.response_polish",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -178,6 +209,14 @@
     },
     {
       "id": "iface.study.focus_interactive_graphs",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.response_polish",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.full_tex_renderer",
       "status": "tested"
     }
   ]

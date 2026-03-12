@@ -1,0 +1,46 @@
+{
+  "task_id": "20260312T102220_full_tex_renderer",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.full_tex_renderer"
+    ],
+    "files": [
+      "IBVault/Views/ARIA/ARIAChatView.swift",
+      "IBVault/Services/ARIAService.swift",
+      "IBVault.xcodeproj/project.pbxproj",
+      "IBVault/MathJax/tex-svg.js"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-full-tex-build CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.full_tex_renderer"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.aria.full_tex_renderer"
+  ],
+  "tested_interfaces": [
+    "iface.aria.full_tex_renderer"
+  ],
+  "files_changed": [
+    "IBVault/Views/ARIA/ARIAChatView.swift",
+    "IBVault/Services/ARIAService.swift",
+    "IBVault.xcodeproj/project.pbxproj",
+    "IBVault/MathJax/tex-svg.js",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "repo_plan/runs/20260312T102220/run.json"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null,
+  "notes": [
+    "Bundled MathJax SVG locally and switched assistant messages to a rich HTML renderer.",
+    "Improved paragraph, heading, list, flashcard, and complex TeX rendering without CDN dependencies."
+  ]
+}
