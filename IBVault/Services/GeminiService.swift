@@ -79,7 +79,7 @@ struct GeminiService {
 
         if httpResponse.statusCode != 200 {
             let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw GeminiError.apiError(statusCode: httpResponse.statusCode, message: errorBody)
+            throw parseAPIError(statusCode: httpResponse.statusCode, body: errorBody)
         }
 
         return try parseResponse(data: data)
@@ -99,31 +99,51 @@ struct GeminiService {
                     var request = URLRequest(url: url)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.timeoutInterval = 60
 
                     let body = buildRequestBody(messages: messages, systemInstruction: systemInstruction)
                     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
-                    guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                    guard let httpResponse = response as? HTTPURLResponse else {
                         throw GeminiError.invalidResponse
                     }
 
-                    var buffer = ""
+                    if httpResponse.statusCode != 200 {
+                        var errorBody = ""
+                        for try await line in bytes.lines {
+                            errorBody += line
+                        }
+                        throw parseAPIError(statusCode: httpResponse.statusCode, body: errorBody)
+                    }
+
                     for try await line in bytes.lines {
                         if line.hasPrefix("data: ") {
                             let jsonStr = String(line.dropFirst(6))
+                            if jsonStr == "[DONE]" {
+                                continuation.finish()
+                                return
+                            }
                             if let jsonData = jsonStr.data(using: .utf8),
-                               let text = try? parseStreamChunk(data: jsonData) {
+                               let text = try? parseStreamChunk(data: jsonData),
+                               !text.isEmpty {
                                 continuation.yield(text)
                             }
                         }
                     }
 
-                    _ = buffer // suppress unused warning
                     continuation.finish()
-                } catch {
+                } catch let error as GeminiError {
                     continuation.finish(throwing: error)
+                } catch {
+                    if (error as NSError).code == NSURLErrorTimedOut {
+                        continuation.finish(throwing: GeminiError.maxRetriesExceeded)
+                    } else if (error as NSError).code == NSURLErrorNotConnectedToInternet {
+                        continuation.finish(throwing: GeminiError.offline)
+                    } else {
+                        continuation.finish(throwing: error)
+                    }
                 }
             }
         }
@@ -188,6 +208,43 @@ struct GeminiService {
         return text
     }
 
+    // MARK: - Error Parsing
+
+    private static func parseAPIError(statusCode: Int, body: String) -> GeminiError {
+        // Try to parse JSON error response
+        if let data = body.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let error = json["error"] as? [String: Any] {
+                let message = error["message"] as? String ?? body
+                let status = error["status"] as? String ?? ""
+
+                if status == "RESOURCE_EXHAUSTED" || statusCode == 429 {
+                    return .quotaExceeded
+                }
+                if status == "INVALID_ARGUMENT" {
+                    return .apiError(statusCode: statusCode, message: message)
+                }
+                if status == "MODEL_NOT_FOUND" {
+                    return .invalidModel
+                }
+                if status == "SAFETY" || message.lowercased().contains("blocked") {
+                    return .contentFiltered
+                }
+                return .apiError(statusCode: statusCode, message: message)
+            }
+        }
+
+        // Fallback to status code based error
+        switch statusCode {
+        case 429:
+            return .rateLimited(retryAfter: nil)
+        case 400...499:
+            return .apiError(statusCode: statusCode, message: body)
+        default:
+            return .apiError(statusCode: statusCode, message: body)
+        }
+    }
+
     // MARK: - Retry Logic
 
     private static func retryRequest(request: URLRequest, maxRetries: Int = 3) async throws -> (Data, URLResponse) {
@@ -222,15 +279,43 @@ enum GeminiError: Error, LocalizedError {
     case noAPIKey
     case maxRetriesExceeded
     case offline
+    case rateLimited(retryAfter: Int?)
+    case quotaExceeded
+    case invalidModel
+    case contentFiltered
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse: return "Invalid response from Gemini API"
-        case .apiError(let code, let msg): return "API Error (\(code)): \(msg)"
+        case .apiError(let code, _): return apiErrorMessage(for: code)
         case .parseError: return "Failed to parse Gemini response"
-        case .noAPIKey: return "No Gemini API key configured"
-        case .maxRetriesExceeded: return "Max retries exceeded"
-        case .offline: return "No network connection"
+        case .noAPIKey: return "No Gemini API key configured. Go to Settings → ARIA Configuration to add your key."
+        case .maxRetriesExceeded: return "Request timed out. Please try again."
+        case .offline: return "No internet connection. Please check your network."
+        case .rateLimited: return "Too many requests. Please wait a moment and try again."
+        case .quotaExceeded: return "API quota exceeded. Please check your Gemini API usage."
+        case .invalidModel: return "Selected model is not available. Try a different model in Settings."
+        case .contentFiltered: return "Request was blocked due to content policy. Try rephrasing your question."
+        }
+    }
+
+    private func apiErrorMessage(for statusCode: Int) -> String {
+        switch statusCode {
+        case 400: return "Invalid request. Try rephrasing your question."
+        case 403: return "API key doesn't have permission. Check your key in Settings."
+        case 404: return "Model not found. Select a different model in Settings."
+        case 429: return "Rate limit exceeded. Wait a moment before trying again."
+        case 500: return "Gemini server error. Try again in a few seconds."
+        case 503: return "Service temporarily unavailable. Please try again."
+        default: return "API error (\(statusCode))"
+        }
+    }
+
+    var isRetryable: Bool {
+        switch self {
+        case .rateLimited, .maxRetriesExceeded, .offline: return true
+        case .apiError(let code, _): return code == 429 || code == 503
+        default: return false
         }
     }
 }
