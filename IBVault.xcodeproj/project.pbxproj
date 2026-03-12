@@ -57,6 +57,9 @@
 		FB2B6F45BCD2D53911D81EB8 /* ARIAMemoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BBBB8B078687079BC5D9480 /* ARIAMemoryView.swift */; };
 		FCBB7707F18F8EFEF39782CD /* Materials in Resources */ = {isa = PBXBuildFile; fileRef = BB9713AFE0115FF39ABB53ED /* Materials */; };
 		FDEC1D8CE0720ECB213E467F /* TopicBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88FC6557D278D7C5D2150576 /* TopicBrowserView.swift */; };
+		NEWSMART001INSRVCS /* SmartRecommendationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWSMART001FILEREF /* SmartRecommendationsView.swift */; };
+		NEWPREDICT001INSRVCS /* PredictiveGradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWPREDICT001FILEREF /* PredictiveGradeView.swift */; };
+		NEWLEARN001INSRVCS /* LearningAnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NEWLEARN001FILEREF /* LearningAnalyticsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -92,6 +95,9 @@
 		84CBE422BE3736077D85F83C /* HeatmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapView.swift; sourceTree = "<group>"; };
 		88FC6557D278D7C5D2150576 /* TopicBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicBrowserView.swift; sourceTree = "<group>"; };
 		8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewQueueManager.swift; sourceTree = "<group>"; };
+		NEWSMART001FILEREF /* SmartRecommendationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartRecommendationsView.swift; sourceTree = "<group>"; };
+		NEWPREDICT001FILEREF /* PredictiveGradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictiveGradeView.swift; sourceTree = "<group>"; };
+		NEWLEARN001FILEREF /* LearningAnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningAnalyticsView.swift; sourceTree = "<group>"; };
 		908ECDE117349ED5E8B3004B /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		998605218B33DF3291D5649D /* ReviewSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSession.swift; sourceTree = "<group>"; };
 		9A6EF035A1AF10213DA1FA65 /* Achievement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Achievement.swift; sourceTree = "<group>"; };
@@ -155,6 +161,9 @@
 			children = (
 				A0CBD332FD598F687CAE0EEE /* ADHDTrackerView.swift */,
 				6068C07FEC68B8172047E23A /* EffectivenessView.swift */,
+				NEWSMART001FILEREF /* SmartRecommendationsView.swift */,
+				NEWPREDICT001FILEREF /* PredictiveGradeView.swift */,
+				NEWLEARN001FILEREF /* LearningAnalyticsView.swift */,
 			);
 			path = Insights;
 			sourceTree = "<group>";
@@ -414,6 +423,9 @@
 				F103A1E5F76E417E026DA182 /* DashboardView.swift in Sources */,
 				9D1F50FAE95AFD66C6E15506 /* DesignSystem.swift in Sources */,
 				2E6108F8EA41CFBF27907F37 /* EffectivenessView.swift in Sources */,
+				NEWSMART001INSRVCS /* SmartRecommendationsView.swift in Sources */,
+				NEWPREDICT001INSRVCS /* PredictiveGradeView.swift in Sources */,
+				NEWLEARN001INSRVCS /* LearningAnalyticsView.swift in Sources */,
 				EB08D3857E24FAAA8B7B7A08 /* GeminiService.swift in Sources */,
 				16D34B93155925547CF27576 /* Grade.swift in Sources */,
 				45434FB663C699EED77D88D0 /* HeatmapView.swift in Sources */,
