@@ -442,7 +442,9 @@ struct ActiveStudySessionView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 60)
         }
     }
 
