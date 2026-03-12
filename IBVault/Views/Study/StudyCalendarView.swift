@@ -294,31 +294,31 @@ struct StudyCalendarView: View {
         let isReview = plan.planMarkdown.contains("Spaced Repetition Review")
 
         return VStack(spacing: 1) {
-            RoundedRectangle(cornerRadius: 5)
-                .fill(
-                    LinearGradient(
-                        colors: [color.opacity(0.2), color.opacity(0.12)],
-                        startPoint: .top,
-                        endPoint: .bottom
+            ZStack {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(
+                        LinearGradient(
+                            colors: [color.opacity(0.2), color.opacity(0.12)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(color.opacity(0.25), lineWidth: 0.5)
-                )
-                .overlay(
-                    VStack(spacing: 1) {
-                        if isReview {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 7, weight: .bold))
-                                .foregroundStyle(color)
-                        }
-                        Text(subjectAbbrev(plan.subjectName))
-                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                    .shadow(color: color.opacity(0.15), radius: 3, y: 1)
+
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(color.opacity(0.25), lineWidth: 0.5)
+
+                VStack(spacing: 1) {
+                    if isReview {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 7, weight: .bold))
                             .foregroundStyle(color)
                     }
-                )
-                .shadow(color: color.opacity(0.15), radius: 3, y: 1)
+                    Text(subjectAbbrev(plan.subjectName))
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
+                        .foregroundStyle(color)
+                }
+            }
         }
         .padding(2)
     }
