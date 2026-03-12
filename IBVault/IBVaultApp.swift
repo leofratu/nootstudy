@@ -3,6 +3,10 @@ import SwiftData
 
 @main
 struct IBVaultApp: App {
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #endif
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -62,3 +66,26 @@ struct RootView: View {
         try? context.save()
     }
 }
+
+#if os(macOS)
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        
+        // Force evaluation of authorization on startup
+        center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            if let error = error {
+                print("AppDelegate Notification error: \(error.localizedDescription)")
+            } else {
+                print("AppDelegate Notification granted: \(granted)")
+            }
+        }
+    }
+    
+    // Allow notifications to show even when the app is focused
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .badge, .sound])
+    }
+}
+#endif
