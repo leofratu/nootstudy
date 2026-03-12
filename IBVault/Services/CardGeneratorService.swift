@@ -86,7 +86,9 @@ struct CardGeneratorService {
                 front: front,
                 back: back,
                 subject: subject,
-                isCustom: false
+                isCustom: false,
+                isAIGenerated: true,
+                generationSource: "ARIA"
             )
             cards.append(card)
         }
