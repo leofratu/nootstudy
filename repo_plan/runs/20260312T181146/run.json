@@ -1,0 +1,54 @@
+{
+  "task_id": "20260312T181146_github_push_and_dmg_release",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.release.dmg_distribution",
+      "iface.release.github_publication"
+    ],
+    "files": [
+      "IBVault.xcodeproj/project.pbxproj",
+      "IBVault/IBVault.entitlements",
+      "Info.plist",
+      "repo_plan/file_index.json",
+      "repo_plan/rpg.json"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build build",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-release-build/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.release.dmg_distribution",
+    "iface.release.github_publication"
+  ],
+  "tested_interfaces": [
+    "iface.release.dmg_distribution",
+    "iface.release.github_publication"
+  ],
+  "files_changed": [
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "repo_plan/runs/20260312T181146/run.json"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null,
+  "notes": [
+    "Built a Release configuration app bundle and packaged /tmp/IBVault-1.0.0.dmg from the resulting IBVault.app.",
+    "The app bundle is ad hoc signed as Sign to Run Locally; no Apple Developer notarization credentials are configured in this repository.",
+    "DMG SHA-256: 28e18845d81d955df5e61e519746447944fa7eaed73f119b0440022d44594bf6"
+  ]
+}

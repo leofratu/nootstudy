@@ -530,10 +530,12 @@ struct FormattedMessageContent: View {
             if let attributed = FormattedMessageFormatter.attributedMarkdown(from: markdown) {
                 Text(attributed)
                     .lineSpacing(5)
+                    .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text(markdown)
                     .lineSpacing(5)
+                    .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
@@ -849,11 +851,9 @@ enum FormattedMessageFormatter {
         }
 
         func appendFlashcardBuffer() {
-            let front = frontLines.joined(separator: " ")
-                .replacingOccurrences(of: "  ", with: " ")
+            let front = frontLines.joined(separator: "\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let back = backLines.joined(separator: " ")
-                .replacingOccurrences(of: "  ", with: " ")
+            let back = backLines.joined(separator: "\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
             if !front.isEmpty && !back.isEmpty {
@@ -907,23 +907,23 @@ enum FormattedMessageFormatter {
                 codeBlockLines.append(line)
 
             case .markdown:
-                if trimmed.hasPrefix("FRONT:") {
+                if let frontPayload = flashcardPayload(in: trimmed, marker: "FRONT") {
                     appendMarkdownBuffer()
-                    frontLines = [String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)]
+                    frontLines = [frontPayload]
                     mode = .flashcardFront
                 } else {
                     markdownLines.append(line)
                 }
 
             case .flashcardFront:
-                if trimmed.hasPrefix("BACK:") {
-                    backLines = [String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)]
+                if let backPayload = flashcardPayload(in: trimmed, marker: "BACK") {
+                    backLines = [backPayload]
                     mode = .flashcardBack
-                } else if trimmed.hasPrefix("FRONT:") {
+                } else if let frontPayload = flashcardPayload(in: trimmed, marker: "FRONT") {
                     appendFlashcardBuffer()
-                    frontLines = [String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)]
+                    frontLines = [frontPayload]
                     mode = .flashcardFront
-                } else if trimmed.hasPrefix("### ") {
+                } else if isMarkdownHeader(trimmed) {
                     appendFlashcardBuffer()
                     markdownLines.append(line)
                     mode = .markdown
@@ -932,11 +932,11 @@ enum FormattedMessageFormatter {
                 }
 
             case .flashcardBack:
-                if trimmed.hasPrefix("FRONT:") {
+                if let frontPayload = flashcardPayload(in: trimmed, marker: "FRONT") {
                     appendFlashcardBuffer()
-                    frontLines = [String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)]
+                    frontLines = [frontPayload]
                     mode = .flashcardFront
-                } else if trimmed.hasPrefix("### ") {
+                } else if isMarkdownHeader(trimmed) {
                     appendFlashcardBuffer()
                     markdownLines.append(line)
                     mode = .markdown
@@ -960,6 +960,72 @@ enum FormattedMessageFormatter {
         return sections.isEmpty ? [.markdown(normalized)] : sections
     }
 
+    static func extractFlashcards(from source: String) -> [(front: String, back: String)] {
+        let normalized = normalizeResponseText(source)
+        let lines = normalized.components(separatedBy: .newlines)
+        var cards: [(front: String, back: String)] = []
+        var frontLines: [String] = []
+        var backLines: [String] = []
+        var mode: FlashcardParseMode = .idle
+
+        func flush() {
+            let front = frontLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            let back = backLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !front.isEmpty && !back.isEmpty {
+                cards.append((front: front, back: back))
+            }
+            frontLines.removeAll()
+            backLines.removeAll()
+            mode = .idle
+        }
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let frontPayload = flashcardPayload(in: trimmed, marker: "FRONT") {
+                flush()
+                frontLines = [frontPayload]
+                mode = .front
+                continue
+            }
+
+            if let backPayload = flashcardPayload(in: trimmed, marker: "BACK") {
+                if mode == .idle {
+                    continue
+                }
+                backLines = [backPayload]
+                mode = .back
+                continue
+            }
+
+            switch mode {
+            case .front:
+                if trimmed.isEmpty {
+                    continue
+                }
+                if isMarkdownHeader(trimmed) {
+                    flush()
+                } else {
+                    frontLines.append(trimmed)
+                }
+            case .back:
+                if trimmed.isEmpty {
+                    continue
+                }
+                if isMarkdownHeader(trimmed) {
+                    flush()
+                } else {
+                    backLines.append(trimmed)
+                }
+            case .idle:
+                continue
+            }
+        }
+
+        flush()
+        return cards
+    }
+
     static func attributedMarkdown(from source: String) -> AttributedString? {
         let processed = convertInlineMathToReadableText(in: source)
         var options = AttributedString.MarkdownParsingOptions()
@@ -972,6 +1038,9 @@ enum FormattedMessageFormatter {
         result = normalizeMathDelimiters(in: result)
         result = replaceRegex(pattern: #"[-—]{3,}\s*(FRONT:|BACK:)"#, template: "\n\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[.!?])(?=[A-Z])"#, template: " ", in: result)
+        result = replaceRegex(pattern: #"(?m)^(#{1,6})([^ #\n])"#, template: "$1 $2", in: result)
+        result = replaceRegex(pattern: #"(?m)(?<!\n)(#{1,6}\s)"#, template: "\n\n$1", in: result)
+        result = replaceRegex(pattern: #"(?<=[^\n])\s+((?:[-*•]|\d+[.)])\s)"#, template: "\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s*(FRONT:)"#, template: "\n\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s*(BACK:)"#, template: "\n$1", in: result)
         result = replaceRegex(
@@ -1149,6 +1218,40 @@ enum FormattedMessageFormatter {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return source }
         let range = NSRange(source.startIndex..., in: source)
         return regex.stringByReplacingMatches(in: source, range: range, withTemplate: template)
+    }
+
+    private enum FlashcardParseMode {
+        case idle
+        case front
+        case back
+    }
+
+    private static func flashcardPayload(in line: String, marker: String) -> String? {
+        let stripped = stripFlashcardLinePrefix(from: line)
+        let uppercased = stripped.uppercased()
+        let markerPrefix = "\(marker.uppercased()):"
+        guard uppercased.hasPrefix(markerPrefix) else { return nil }
+        return String(stripped.dropFirst(markerPrefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func stripFlashcardLinePrefix(from line: String) -> String {
+        var stripped = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let patterns = [
+            #"^[\-\*\•]\s*"#,
+            #"^\d+[\.\)]\s*"#,
+            #"(?i)^card\s*\d+\s*[:\-\.\)]\s*"#
+        ]
+
+        for pattern in patterns {
+            stripped = replaceRegex(pattern: pattern, template: "", in: stripped)
+        }
+
+        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isMarkdownHeader(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("#") || (trimmed.hasPrefix("**") && trimmed.hasSuffix("**"))
     }
 }
 

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12T10:41:30+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, and add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity.",
+  "updated_at": "2026-03-12T18:11:46+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity, replace the last ARIA WebKit math path with native SwiftUI math block layout, fix broken study-session opening/dismiss behavior, make follow-up review sessions explicit and visible on the study schedule, track pending ARIA spec-logging wiring gaps found during review, implement a focused ARIA quality pass for richer context, cleaner rendering, sturdier flashcard generation, and more accurate time logging while restoring a passing Xcode build, then package and publish the first macOS DMG release to GitHub.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -153,6 +153,121 @@
         "IBVault/Views/ARIA/ARIAChatView.swift"
       ],
       "summary": "ARIA only uses the WebKit/MathJax renderer for genuinely TeX-heavy assistant replies, leaving normal paragraphs and flashcard prose on native SwiftUI text rendering to cut unnecessary WebContent churn."
+    },
+    {
+      "id": "iface.aria.native_math_layout",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/ARIA/ARIAChatView.swift"
+      ],
+      "summary": "ARIA renders display-math blocks, aligned derivations, matrices, and cases natively in SwiftUI so chat no longer depends on WKWebView for TeX-heavy responses."
+    },
+    {
+      "id": "iface.study.plan_opening",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Study/StudyPlannerView.swift",
+        "IBVault/Views/Study/ActiveStudySessionView.swift"
+      ],
+      "summary": "Selecting a study plan reliably opens an actionable active-session view and the user can dismiss/close it without getting stuck in an empty presentation shell."
+    },
+    {
+      "id": "iface.study.follow_up_reviews",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Study/ActiveStudySessionView.swift",
+        "IBVault/Views/Study/StudyPlannerView.swift",
+        "IBVault/Models/StudyPlan.swift"
+      ],
+      "summary": "Completing a study session creates visible follow-up review plans on the schedule so the IB Vault method's spaced-repetition review cadence is explicit and reusable."
+    },
+    {
+      "id": "iface.aria.study_guide_spec_logging",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Services/ARIAService.swift",
+        "IBVault/Views/Review/StudyGuideView.swift"
+      ],
+      "summary": "Successful study-guide generation writes a reusable ARIA action spec so later prompts can ground on the generated guide."
+    },
+    {
+      "id": "iface.aria.development_update_logging",
+      "kind": "interface",
+      "status": "planned",
+      "paths": [
+        "IBVault/Services/ARIAService.swift"
+      ],
+      "summary": "Development-update events have at least one concrete producer that records them into ARIA context specs."
+    },
+    {
+      "id": "iface.aria.context_enrichment",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Services/ARIAService.swift",
+        "IBVault/Models/Subject.swift",
+        "IBVault/Models/StudyCard.swift",
+        "IBVault/Models/Grade.swift"
+      ],
+      "summary": "ARIA chat and guide generation infer stronger subject/topic context from the user query and current study data so stored specs and prompts carry useful grounding instead of empty metadata."
+    },
+    {
+      "id": "iface.aria.rendering_consistency",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/ARIA/ARIAChatView.swift",
+        "IBVault/Views/Review/StudyGuideView.swift"
+      ],
+      "summary": "ARIA-generated prose and guides render with stable paragraph spacing, markdown sections, and flashcard blocks across chat and study-guide surfaces."
+    },
+    {
+      "id": "iface.study.flashcard_generation_robustness",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Study/ActiveStudySessionView.swift",
+        "IBVault/Views/ARIA/ARIAChatView.swift",
+        "IBVault/Services/ARIAService.swift"
+      ],
+      "summary": "AI-generated flashcards use stricter output instructions and more fault-tolerant parsing so valid cards are recovered reliably and stored with reusable ARIA context."
+    },
+    {
+      "id": "iface.study.session_time_accuracy",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Study/ActiveStudySessionView.swift",
+        "IBVault/Views/Review/ReviewSessionView.swift",
+        "IBVault/Services/ARIAService.swift",
+        "IBVault/Models/StudyActivity.swift"
+      ],
+      "summary": "Study and review flows clamp, round, and log dedicated minutes consistently so activity analytics and ARIA summaries reflect realistic time spent."
+    },
+    {
+      "id": "iface.release.dmg_distribution",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault.xcodeproj/project.pbxproj",
+        "Info.plist",
+        "IBVault/IBVault.entitlements"
+      ],
+      "summary": "A Release build of the macOS app is packaged into a signed-to-run-locally DMG artifact that users can download and mount directly."
+    },
+    {
+      "id": "iface.release.github_publication",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "repo_plan/rpg.json",
+        "repo_plan/file_index.json"
+      ],
+      "summary": "The current main branch changes are committed, pushed to GitHub, and published as a tagged release with the DMG asset attached."
     }
   ],
   "edges": [
@@ -235,6 +350,66 @@
       "from": "iface.aria.rich_renderer_gating",
       "to": "iface.aria.full_tex_renderer",
       "type": "dependency"
+    },
+    {
+      "from": "iface.aria.native_math_layout",
+      "to": "iface.aria.rich_renderer_gating",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study.plan_opening",
+      "to": "iface.study_views.shape_style_compat",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study.follow_up_reviews",
+      "to": "iface.study.plan_opening",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.study_guide_spec_logging",
+      "to": "iface.aria.spec_logging",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.development_update_logging",
+      "to": "iface.aria.spec_logging",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.context_enrichment",
+      "to": "iface.aria.spec_logging",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.aria.rendering_consistency",
+      "to": "iface.aria.response_polish",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study.flashcard_generation_robustness",
+      "to": "iface.aria.rendering_consistency",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study.flashcard_generation_robustness",
+      "to": "iface.aria.context_enrichment",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study.session_time_accuracy",
+      "to": "iface.study.follow_up_reviews",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.xcode.target_study_sources",
+      "to": "iface.release.dmg_distribution",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.release.dmg_distribution",
+      "to": "iface.release.github_publication",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -292,6 +467,50 @@
     },
     {
       "id": "iface.aria.rich_renderer_gating",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.native_math_layout",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.plan_opening",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.follow_up_reviews",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.study_guide_spec_logging",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.development_update_logging",
+      "status": "planned"
+    },
+    {
+      "id": "iface.aria.context_enrichment",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria.rendering_consistency",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.flashcard_generation_robustness",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.session_time_accuracy",
+      "status": "tested"
+    },
+    {
+      "id": "iface.release.dmg_distribution",
+      "status": "tested"
+    },
+    {
+      "id": "iface.release.github_publication",
       "status": "tested"
     }
   ]

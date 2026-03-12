@@ -529,7 +529,9 @@ struct NewStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else { return }
+                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
+                    throw GeminiError.noAPIKey
+                }
 
                 let prompt = """
                 The current study plan is:

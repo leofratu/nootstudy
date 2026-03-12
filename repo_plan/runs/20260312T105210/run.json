@@ -1,0 +1,30 @@
+{
+  "task_id": "20260312T105210_aria_native_math_layout",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.native_math_layout"
+    ],
+    "files": [
+      "IBVault/Views/ARIA/ARIAChatView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-native-math-build CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.native_math_layout"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.aria.native_math_layout"
+  ],
+  "tested_interfaces": [
+    "iface.aria.native_math_layout"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}

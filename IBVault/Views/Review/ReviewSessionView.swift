@@ -22,6 +22,9 @@ struct ReviewSessionView: View {
     private var progress: Double {
         cards.isEmpty ? 0 : Double(currentIndex) / Double(cards.count)
     }
+    private var dedicatedMinutesDouble: Double {
+        Double(ARIAService.normalizedDurationMinutes(Date().timeIntervalSince(sessionStartTime) / 60))
+    }
 
     var body: some View {
         NavigationStack {
@@ -230,9 +233,9 @@ struct ReviewSessionView: View {
         let today = Calendar.current.startOfDay(for: Date())
         let pred = #Predicate<StudyActivity> { $0.date == today }
         if let a = try? context.fetch(FetchDescriptor(predicate: pred)).first {
-            a.cardsReviewed += cards.count; a.xpEarned += sessionXP; a.minutesStudied += Date().timeIntervalSince(sessionStartTime) / 60
+            a.cardsReviewed += cards.count; a.xpEarned += sessionXP; a.minutesStudied += dedicatedMinutesDouble
         } else {
-            context.insert(StudyActivity(date: today, cardsReviewed: cards.count, minutesStudied: Date().timeIntervalSince(sessionStartTime) / 60, xpEarned: sessionXP))
+            context.insert(StudyActivity(date: today, cardsReviewed: cards.count, minutesStudied: dedicatedMinutesDouble, xpEarned: sessionXP))
         }
 
         // Log StudySession
@@ -255,7 +258,7 @@ struct ReviewSessionView: View {
             cardsReviewed: cards.count,
             correctCount: sessionCorrect,
             xpEarned: sessionXP,
-            durationMinutes: Date().timeIntervalSince(sessionStartTime) / 60
+            durationMinutes: dedicatedMinutesDouble
         )
 
         try? context.save()

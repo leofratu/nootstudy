@@ -22,9 +22,10 @@
 		3B446844F68A315BC9A4D7D3 /* StudySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43594ABE6B0E41B86138E5D8 /* StudySession.swift */; };
 		45434FB663C699EED77D88D0 /* HeatmapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CBE422BE3736077D85F83C /* HeatmapView.swift */; };
 		4EE359B5212AAD28F1FEE995 /* NewStudySessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 409B8A12578D6E3872B9C1FA /* NewStudySessionView.swift */; };
-		5578BA0C7ABFA2BB8BFA742C /* StudySessionLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064639B44D2E11A0F608D188 /* StudySessionLogView.swift */; };
-		5839DFD9945FDFFFD3420911 /* ReviewQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */; };
-		5B101A4BDFFA73E0ECEEF03C /* IBVaultApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748EFDA3DB3CD359B6901879 /* IBVaultApp.swift */; };
+			5578BA0C7ABFA2BB8BFA742C /* StudySessionLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064639B44D2E11A0F608D188 /* StudySessionLogView.swift */; };
+			5839DFD9945FDFFFD3420911 /* ReviewQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */; };
+			5A92EE191C0D4A6EBB24A501 /* ReviewScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A92EE191C0D4A6EBB24A502 /* ReviewScheduler.swift */; };
+			5B101A4BDFFA73E0ECEEF03C /* IBVaultApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748EFDA3DB3CD359B6901879 /* IBVaultApp.swift */; };
 		61A24BEE0A32B0B5D5453734 /* ActiveStudySessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69F1ABD16621DF2227D783B7 /* ActiveStudySessionView.swift */; };
 		6555BFE175B3CC2D25339C2A /* StudyCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1009A5CD3691D26599C4DEF /* StudyCalendarView.swift */; };
 		6761823EB779DFBBA717C544 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C181DD379612F56FEB4EB918 /* Assets.xcassets */; };
@@ -92,10 +93,11 @@
 		748EFDA3DB3CD359B6901879 /* IBVaultApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IBVaultApp.swift; sourceTree = "<group>"; };
 		7D1BCB038B1F092030FA92E8 /* StudyCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyCard.swift; sourceTree = "<group>"; };
 		82D5C3D493F8E74D1A33CA70 /* AnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsView.swift; sourceTree = "<group>"; };
-		84CBE422BE3736077D85F83C /* HeatmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapView.swift; sourceTree = "<group>"; };
-		88FC6557D278D7C5D2150576 /* TopicBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicBrowserView.swift; sourceTree = "<group>"; };
-		8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewQueueManager.swift; sourceTree = "<group>"; };
-		NEWSMART001FILEREF /* SmartRecommendationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartRecommendationsView.swift; sourceTree = "<group>"; };
+			84CBE422BE3736077D85F83C /* HeatmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapView.swift; sourceTree = "<group>"; };
+			88FC6557D278D7C5D2150576 /* TopicBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicBrowserView.swift; sourceTree = "<group>"; };
+			8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewQueueManager.swift; sourceTree = "<group>"; };
+			5A92EE191C0D4A6EBB24A502 /* ReviewScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScheduler.swift; sourceTree = "<group>"; };
+			NEWSMART001FILEREF /* SmartRecommendationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartRecommendationsView.swift; sourceTree = "<group>"; };
 		NEWPREDICT001FILEREF /* PredictiveGradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictiveGradeView.swift; sourceTree = "<group>"; };
 		NEWLEARN001FILEREF /* LearningAnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningAnalyticsView.swift; sourceTree = "<group>"; };
 		908ECDE117349ED5E8B3004B /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
@@ -170,11 +172,12 @@
 		};
 		77F4190FCADFC7849C97EF7C /* Engine */ = {
 			isa = PBXGroup;
-			children = (
-				B8F717785BEE4366BA0A9CE7 /* ProficiencyTracker.swift */,
-				8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */,
-				E463EB81821428C62738F69C /* SM2Engine.swift */,
-			);
+				children = (
+					B8F717785BEE4366BA0A9CE7 /* ProficiencyTracker.swift */,
+					8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */,
+					5A92EE191C0D4A6EBB24A502 /* ReviewScheduler.swift */,
+					E463EB81821428C62738F69C /* SM2Engine.swift */,
+				);
 			path = Engine;
 			sourceTree = "<group>";
 		};
@@ -434,11 +437,12 @@
 				8C8382F7DB40BC3842F42288 /* MaterialsLibraryView.swift in Sources */,
 				4EE359B5212AAD28F1FEE995 /* NewStudySessionView.swift in Sources */,
 				03D03E613D9E1169F9371209 /* NotificationService.swift in Sources */,
-				CE96FB3C86DF1E355C6233BF /* OnboardingView.swift in Sources */,
-				E264EF0CA59F55FD71234BFD /* ProficiencyTracker.swift in Sources */,
-				F2715EEDDE42039EBD21DC06 /* ProfileView.swift in Sources */,
-				5839DFD9945FDFFFD3420911 /* ReviewQueueManager.swift in Sources */,
-				81E2B41579F98E5CB885B048 /* ReviewSession.swift in Sources */,
+					CE96FB3C86DF1E355C6233BF /* OnboardingView.swift in Sources */,
+					E264EF0CA59F55FD71234BFD /* ProficiencyTracker.swift in Sources */,
+					F2715EEDDE42039EBD21DC06 /* ProfileView.swift in Sources */,
+					5839DFD9945FDFFFD3420911 /* ReviewQueueManager.swift in Sources */,
+					5A92EE191C0D4A6EBB24A501 /* ReviewScheduler.swift in Sources */,
+					81E2B41579F98E5CB885B048 /* ReviewSession.swift in Sources */,
 				6BD4E18E615166A8145BF3A6 /* ReviewSessionView.swift in Sources */,
 				76B93476413B446A4D4B8361 /* SM2Engine.swift in Sources */,
 				33F81B4B1E53FB64783BBD2A /* SettingsView.swift in Sources */,

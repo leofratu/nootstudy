@@ -25,8 +25,6 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-        NavigationStack {
-            ScrollView {
                 VStack(spacing: 0) {
                     // Hero stats bar
                     statsHeader
@@ -194,7 +192,7 @@ struct DashboardView: View {
                         } label: {
                             HStack {
                                 Circle()
-                                    .fill(Color(hex: schedule.subject.accentColorHex) ?? .blue)
+                                    .fill(Color(hex: schedule.subject.accentColorHex))
                                     .frame(width: 8, height: 8)
                                 Text(schedule.subject.name)
                                     .lineLimit(1)

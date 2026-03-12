@@ -1,0 +1,36 @@
+{
+  "task_id": "20260312T112450_study_session_opening_and_follow_up_reviews",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.study.plan_opening",
+      "iface.study.follow_up_reviews"
+    ],
+    "files": [
+      "IBVault/Models/StudyPlan.swift",
+      "IBVault/Views/Study/StudyPlannerView.swift",
+      "IBVault/Views/Study/ActiveStudySessionView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "'/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild' -project IBVault.xcodeproj -scheme IBVault -configuration Debug -sdk macosx -derivedDataPath /tmp/IBVault-study-flow-build CODE_SIGNING_ALLOWED=NO build",
+      "ok": true,
+      "interfaces": [
+        "iface.study.plan_opening",
+        "iface.study.follow_up_reviews"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.study.plan_opening",
+    "iface.study.follow_up_reviews"
+  ],
+  "tested_interfaces": [
+    "iface.study.plan_opening",
+    "iface.study.follow_up_reviews"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}

@@ -140,23 +140,20 @@ struct StudyGuideView: View {
     // MARK: - Guide Content
     private var guideContent: some View {
         VStack(spacing: 12) {
-            ForEach(parseGuideBlocks(guideText), id: \.id) { block in
-                VStack(alignment: .leading, spacing: 10) {
-                    if let title = block.title {
-                        HStack(spacing: 8) {
-                            Image(systemName: block.icon)
-                                .foregroundStyle(block.iconColor)
-                            Text(title)
-                                .font(.headline)
-                        }
-                    }
-                    Text(block.content)
-                        .textSelection(.enabled)
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "book.closed.fill")
+                        .foregroundStyle(subject.map { Color(hex: $0.accentColorHex) } ?? IBColors.electricBlue)
+                    Text(mode.rawValue)
+                        .font(.headline)
                 }
-                .padding(16)
-                .glassCard()
+
+                FormattedMessageContent(text: guideText)
+                    .textSelection(.enabled)
+                    .foregroundStyle(.secondary)
             }
+            .padding(16)
+            .glassCard()
 
             Button {
                 guideText = ""; error = nil
@@ -224,19 +221,41 @@ struct StudyGuideView: View {
         Task {
             do {
                 let prompt = buildGuidePrompt(mode: mode)
-                let systemPrompt = await ariaService.buildSystemPrompt(context: context)
+                let systemPrompt = await ariaService.buildSystemPrompt(context: context, seedQuery: guideSeedQuery(for: mode))
                 let stream = GeminiService.streamContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
                     systemInstruction: systemPrompt, apiKey: apiKey
                 )
+                var fullGuide = ""
                 for try await token in stream {
-                    await MainActor.run { guideText += token }
+                    fullGuide += token
+                    await MainActor.run { guideText = fullGuide }
                 }
-                await MainActor.run { isGenerating = false }
+
+                let normalizedGuide = fullGuide.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !normalizedGuide.isEmpty {
+                    ARIAService.recordStudyGuide(
+                        subjectName: subject?.name ?? "All Subjects",
+                        mode: mode.rawValue,
+                        guideText: normalizedGuide
+                    )
+                }
+
+                await MainActor.run {
+                    guideText = normalizedGuide
+                    isGenerating = false
+                }
             } catch {
                 await MainActor.run { self.error = error.localizedDescription; isGenerating = false }
             }
         }
+    }
+
+    private func guideSeedQuery(for mode: GuideMode) -> String {
+        if let subject {
+            return "\(mode.rawValue) for \(subject.name) \(subject.level)"
+        }
+        return "\(mode.rawValue) across all enrolled IB subjects"
     }
 
     private func buildGuidePrompt(mode: GuideMode) -> String {
@@ -262,6 +281,10 @@ struct StudyGuideView: View {
             return """
             Generate a PRE-SESSION BRIEF for my upcoming review.
             \(subjectContext)
+            Format requirements:
+            - Use `###` headers with blank lines between sections
+            - Keep each bullet to one actionable idea
+            - Include an explicit time estimate in minutes
             Tell me:
             1. Top 3 topics to focus on (ranked by weakness × IB weighting)
             2. Key concepts to refresh before starting
@@ -273,6 +296,10 @@ struct StudyGuideView: View {
             return """
             Generate a FULL STUDY GUIDE.
             \(subjectContext)
+            Format requirements:
+            - Use `###` headers with blank lines between sections
+            - Use short paragraphs and bullet lists, not one giant block
+            - Include realistic time estimates in minutes or hours
             For each topic, include:
             1. Topic name and IB difficulty rating (1-5 stars)
             2. Current mastery status
@@ -286,6 +313,10 @@ struct StudyGuideView: View {
             return """
             Generate a WEAK TOPICS ANALYSIS.
             \(subjectContext)
+            Format requirements:
+            - Use `###` headers with blank lines between sections
+            - Use bullets for interventions and practice ideas
+            - Include expected time-to-improve estimates
             For my weakest topics:
             1. Why this topic is hard (common misconceptions)
             2. The fastest way to improve (specific strategies)
@@ -298,6 +329,10 @@ struct StudyGuideView: View {
             return """
             Generate an EXAM PREP SPRINT plan.
             \(subjectContext)
+            Format requirements:
+            - Use `###` headers with blank lines between sections
+            - Use a clear schedule with dedicated time per block
+            - Keep the plan terse, specific, and exam-focused
             I need maximum score improvement in minimum time:
             1. Triage: which topics to master vs. skip vs. just-know-basics
             2. Hour-by-hour or day-by-day schedule
@@ -308,50 +343,4 @@ struct StudyGuideView: View {
             """
         }
     }
-}
-
-// MARK: - Guide Block Parser
-struct GuideBlock: Identifiable {
-    let id = UUID()
-    let title: String?
-    let content: String
-    let icon: String
-    let iconColor: Color
-}
-
-func parseGuideBlocks(_ text: String) -> [GuideBlock] {
-    let lines = text.components(separatedBy: "\n")
-    var blocks: [GuideBlock] = []
-    var currentTitle: String?
-    var currentContent: [String] = []
-
-    let icons = ["bolt.fill", "book.fill", "target", "flame.fill", "lightbulb.fill", "chart.bar.fill", "star.fill", "brain.head.profile"]
-    let colors: [Color] = [.orange, IBColors.electricBlue, .red, IBColors.streakOrange, .green, .cyan, .yellow, .purple]
-    var blockIndex = 0
-
-    for line in lines {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        if trimmed.hasPrefix("##") || trimmed.hasPrefix("**") && trimmed.hasSuffix("**") {
-            if !currentContent.isEmpty || currentTitle != nil {
-                let idx = blockIndex % icons.count
-                blocks.append(GuideBlock(title: currentTitle, content: currentContent.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines), icon: icons[idx], iconColor: colors[idx]))
-                blockIndex += 1
-            }
-            currentTitle = trimmed.replacingOccurrences(of: "#", with: "").replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespaces)
-            currentContent = []
-        } else if !trimmed.isEmpty {
-            currentContent.append(trimmed)
-        }
-    }
-
-    if !currentContent.isEmpty {
-        let idx = blockIndex % icons.count
-        blocks.append(GuideBlock(title: currentTitle, content: currentContent.joined(separator: "\n"), icon: icons[idx], iconColor: colors[idx]))
-    }
-
-    if blocks.isEmpty && !text.isEmpty {
-        blocks.append(GuideBlock(title: nil, content: text, icon: "book.fill", iconColor: IBColors.electricBlue))
-    }
-
-    return blocks
 }

@@ -18,6 +18,7 @@ struct ActiveStudySessionView: View {
     @State private var selectedTab: SessionTab = .plan
     @State private var generatedCards: [(front: String, back: String)] = []
     @State private var isGeneratingCards = false
+    @State private var flashcardError: String?
     @State private var showFlashcardPreview = false
     @State private var revealedCards: Set<Int> = []
     @State private var examMarkdown = ""
@@ -28,6 +29,14 @@ struct ActiveStudySessionView: View {
         let date: Date
 
         var id: Int { day }
+    }
+
+    private var dedicatedMinutes: Int {
+        ARIAService.normalizedDurationMinutes(elapsed / 60)
+    }
+
+    private var dedicatedMinutesDouble: Double {
+        Double(dedicatedMinutes)
     }
 
     enum SessionTab: String, CaseIterable {
@@ -408,6 +417,22 @@ struct ActiveStudySessionView: View {
                     .padding(.vertical, 40)
                 }
 
+                if let flashcardError, !flashcardError.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(flashcardError)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.red)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.red.opacity(0.06))
+                    )
+                }
+
                 ForEach(Array(generatedCards.enumerated()), id: \.offset) { index, card in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -709,7 +734,7 @@ struct ActiveStudySessionView: View {
 
             // Stats
             HStack(spacing: 0) {
-                StatCard(value: "\(Int(elapsed / 60))m", label: "Studied", color: .orange, icon: "clock.fill")
+                StatCard(value: "\(dedicatedMinutes)m", label: "Dedicated", color: .orange, icon: "clock.fill")
                 Divider().frame(height: 44)
                 StatCard(value: plan.subjectName, label: "Subject", color: subjectColor(plan.subjectName), icon: "book.fill")
                 Divider().frame(height: 44)
@@ -835,7 +860,9 @@ struct ActiveStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else { return }
+                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
+                    throw GeminiError.noAPIKey
+                }
 
                 // Build full ARIA system prompt with context
                 let aria = ARIAService()
@@ -895,7 +922,13 @@ struct ActiveStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else { return }
+                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
+                    throw GeminiError.noAPIKey
+                }
+
+                await MainActor.run {
+                    flashcardError = nil
+                }
 
                 let prompt = """
                 Generate 30 strictly IB Diploma-level rigorous flashcards for:
@@ -905,9 +938,13 @@ struct ActiveStudySessionView: View {
                 Study plan context:
                 \(plan.planMarkdown.prefix(800))
 
-                Format each card EXACTLY as:
+                Output contract:
+                - Return ONLY flashcards. No intro, no outro, no commentary.
+                - Each card must be exactly this shape:
                 FRONT: [question]
                 BACK: [answer]
+                - Leave one blank line between cards
+                - Keep any formulas, mark-scheme notes, or bullet points inside the BACK block
 
                 Rules:
                 - These must be TRUE IB DIFFICULTY, not easy recall.
@@ -923,7 +960,15 @@ struct ActiveStudySessionView: View {
                     apiKey: apiKey
                 )
 
-                let parsed = parseFlashcards(response)
+                let parsed = sanitizeGeneratedCards(FormattedMessageFormatter.extractFlashcards(from: response))
+
+                guard !parsed.isEmpty else {
+                    throw NSError(
+                        domain: "IBVault.ActiveStudySessionView",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "ARIA returned text, but no valid FRONT/BACK flashcards could be parsed. Try again."]
+                    )
+                }
 
                 ARIAService.recordFlashcardGeneration(
                     subjectName: plan.subjectName,
@@ -939,6 +984,7 @@ struct ActiveStudySessionView: View {
                 }
             } catch {
                 await MainActor.run {
+                    flashcardError = error.localizedDescription
                     isGeneratingCards = false
                 }
             }
@@ -953,7 +999,9 @@ struct ActiveStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else { return }
+                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
+                    throw GeminiError.noAPIKey
+                }
 
                 let prompt = """
                 Generate a rigorous Practice Exam paper for:
@@ -989,30 +1037,17 @@ struct ActiveStudySessionView: View {
         }
     }
 
-    private func parseFlashcards(_ text: String) -> [(front: String, back: String)] {
-        var cards: [(front: String, back: String)] = []
-        let lines = text.components(separatedBy: .newlines)
-        var currentFront = ""
-        var currentBack = ""
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("FRONT:") {
-                if !currentFront.isEmpty && !currentBack.isEmpty {
-                    cards.append((front: currentFront, back: currentBack))
-                }
-                currentFront = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
-                currentBack = ""
-            } else if trimmed.hasPrefix("BACK:") {
-                currentBack = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
-            } else if !trimmed.isEmpty && !currentBack.isEmpty {
-                currentBack += " " + trimmed
-            }
+    private func sanitizeGeneratedCards(_ cards: [(front: String, back: String)]) -> [(front: String, back: String)] {
+        var seen = Set<String>()
+        return cards.compactMap { card in
+            let front = card.front.trimmingCharacters(in: .whitespacesAndNewlines)
+            let back = card.back.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !front.isEmpty, !back.isEmpty else { return nil }
+            let key = "\(front.lowercased())::\(back.lowercased())"
+            guard !seen.contains(key) else { return nil }
+            seen.insert(key)
+            return (front: front, back: back)
         }
-        if !currentFront.isEmpty && !currentBack.isEmpty {
-            cards.append((front: currentFront, back: currentBack))
-        }
-        return cards
     }
 
     private func saveCardToSubject(front: String, back: String) {
@@ -1094,7 +1129,7 @@ struct ActiveStudySessionView: View {
     // MARK: - Complete
 
     private var xpAwarded: Int {
-        let baseXP = max(10, Int(elapsed / 60) * 2)
+        let baseXP = max(10, dedicatedMinutes * 2)
         let cardBonus = generatedCards.count * 3
         let noteBonus = sessionNotes.count > 50 ? 10 : 0
         return baseXP + cardBonus + noteBonus
@@ -1123,6 +1158,15 @@ struct ActiveStudySessionView: View {
             profile.checkAndUpdateStreak()
         }
 
+        let today = Calendar.current.startOfDay(for: Date())
+        let predicate = #Predicate<StudyActivity> { $0.date == today }
+        if let activity = try? context.fetch(FetchDescriptor(predicate: predicate)).first {
+            activity.minutesStudied += dedicatedMinutesDouble
+            activity.xpEarned += xpAwarded
+        } else {
+            context.insert(StudyActivity(date: today, cardsReviewed: 0, minutesStudied: dedicatedMinutesDouble, xpEarned: xpAwarded))
+        }
+
         // Schedule spaced repetition reviews on calendar
         scheduleSpacedReviews()
 
@@ -1133,7 +1177,7 @@ struct ActiveStudySessionView: View {
             planMarkdown: plan.planMarkdown,
             notes: sessionNotes,
             xpEarned: xpAwarded,
-            durationMinutes: elapsed / 60
+            durationMinutes: dedicatedMinutesDouble
         )
 
         try? context.save()

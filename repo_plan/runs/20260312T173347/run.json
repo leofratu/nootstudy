@@ -1,0 +1,45 @@
+{
+  "task_id": "20260312T173347_wiring_review",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.spec_logging",
+      "iface.aria.study_guide_spec_logging",
+      "iface.aria.development_update_logging"
+    ],
+    "files": [
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Views/Review/StudyGuideView.swift",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [],
+  "implemented_interfaces": [],
+  "tested_interfaces": [],
+  "elapsed_s": null,
+  "tool_calls_count": null,
+  "notes": [
+    "Review-only run.",
+    "Local xcodebuild could not be executed in this session because the active developer directory points to CommandLineTools instead of a full Xcode install.",
+    "Used existing build evidence from build_output.log and source inspection to identify wiring gaps."
+  ],
+  "findings": [
+    {
+      "id": "missing_study_guide_spec_logging",
+      "severity": "medium",
+      "files": [
+        "IBVault/Views/Review/StudyGuideView.swift",
+        "IBVault/Services/ARIAService.swift"
+      ]
+    },
+    {
+      "id": "unwired_development_update_logger",
+      "severity": "low",
+      "files": [
+        "IBVault/Services/ARIAService.swift"
+      ]
+    }
+  ]
+}

@@ -144,6 +144,11 @@ class ARIAService {
         }
     }
 
+    private struct LoggingContext {
+        let subjectName: String
+        let topicNames: [String]
+    }
+
     // MARK: - Chat
 
     @MainActor
@@ -172,6 +177,7 @@ class ARIAService {
         Task {
             do {
                 let queryProfile = analyzeQuery(userMessage)
+                let loggingContext = inferredLoggingContext(context: context, queryProfile: queryProfile)
 
                 // Build context
                 let systemPrompt = await buildSystemPrompt(context: context, queryProfile: queryProfile)
@@ -193,11 +199,13 @@ class ARIAService {
                     }
                 }
 
+                let finalizedResponse = Self.finalizeAssistantResponse(fullResponse)
+
                 // Save assistant response
                 await MainActor.run {
-                    let modelChat = ChatMessage(role: "model", content: fullResponse, sessionID: session.id)
+                    let modelChat = ChatMessage(role: "model", content: finalizedResponse, sessionID: session.id)
                     context.insert(modelChat)
-                    self.updateSession(session, withAssistantReply: fullResponse)
+                    self.updateSession(session, withAssistantReply: finalizedResponse)
 
                     // Auto-update rank from grades after ARIA response
                     self.autoUpdateRank(context: context)
@@ -205,14 +213,14 @@ class ARIAService {
                     try? context.save()
 
                     self.isLoading = false
-                    onComplete(fullResponse)
+                    onComplete(finalizedResponse)
                 }
 
                 Self.recordARIAChatExchange(
-                    subjectName: "",
-                    topicNames: [],
+                    subjectName: loggingContext.subjectName,
+                    topicNames: loggingContext.topicNames,
                     userMessage: userMessage,
-                    assistantReply: fullResponse,
+                    assistantReply: finalizedResponse,
                     sourceReference: "ARIAService.sendMessage"
                 )
 
@@ -251,6 +259,25 @@ class ARIAService {
         }
 
         return false
+    }
+
+    private static func finalizeAssistantResponse(_ text: String) -> String {
+        var result = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        result = replaceRegex(pattern: #"(?m)^(#{1,6})([^ #\n])"#, template: "$1 $2", in: result)
+        result = replaceRegex(pattern: #"(?m)(?<!\n)(#{1,6}\s)"#, template: "\n\n$1", in: result)
+        result = replaceRegex(pattern: #"(?<=[^\n])\s+(?=((?:[-*•]|\d+[.)])\s))"#, template: "\n", in: result)
+        result = replaceRegex(pattern: #"\n{3,}"#, template: "\n\n", in: result)
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func replaceRegex(pattern: String, template: String, in source: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return source }
+        let range = NSRange(source.startIndex..., in: source)
+        return regex.stringByReplacingMatches(in: source, range: range, withTemplate: template)
     }
 
     @MainActor
@@ -369,7 +396,7 @@ class ARIAService {
         CAPABILITIES:
         - Analyse grades, predict IB outcomes, identify weak spots
         - Create study plans and sprint plans calibrated to real IB difficulty
-        - Generate flashcards (format: "FRONT: [question] | BACK: [answer]")
+        - Generate flashcards using dedicated FRONT/BACK blocks with a blank line between cards
         - Quiz using Socratic questioning for active recall
         - Explain concepts, structure essays, clarify mark schemes at IB level
         - Track session-by-session and subject-by-subject progress
@@ -383,6 +410,7 @@ class ARIAService {
         - Start each card with "FRONT:" followed by the question
         - Follow with "BACK:" followed by the answer
         - Separate cards with a blank line
+        - Never put FRONT and BACK on the same line with pipes or extra labels
         - Generate IB-exam-level questions that test understanding, not just recall
         - Include a mix of definitions, applications, analysis, and evaluation questions
         - For science/math: include formulas and worked examples where relevant
@@ -963,6 +991,67 @@ class ARIAService {
             }
     }
 
+    @MainActor
+    private func inferredLoggingContext(context: ModelContext, queryProfile: QueryProfile) -> LoggingContext {
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        guard !subjects.isEmpty else {
+            return LoggingContext(subjectName: "", topicNames: [])
+        }
+
+        let now = Date()
+        let rankedSubjects = subjects
+            .map { subject in
+                (
+                    subject: subject,
+                    score: subjectRelevanceScore(for: subject, queryProfile: queryProfile, now: now),
+                    matchedTopics: matchedTopics(for: subject, keywords: queryProfile.keywords)
+                )
+            }
+            .sorted {
+                if $0.score == $1.score {
+                    return $0.subject.name < $1.subject.name
+                }
+                return $0.score > $1.score
+            }
+
+        guard let primary = rankedSubjects.first else {
+            return LoggingContext(subjectName: "", topicNames: [])
+        }
+
+        let nextScore = rankedSubjects.dropFirst().first?.score ?? Int.min
+        let hasExplicitSubjectMatch = queryProfile.normalizedQuery.contains(primary.subject.name.lowercased())
+        let hasMatchedTopics = !primary.matchedTopics.isEmpty
+        let isOnlySubject = subjects.count == 1
+        let isStrongIntentMatch = queryProfile.intent != .general && (primary.score >= 40 || primary.score - nextScore >= 20)
+
+        guard hasExplicitSubjectMatch || hasMatchedTopics || isOnlySubject || isStrongIntentMatch else {
+            return LoggingContext(subjectName: "", topicNames: [])
+        }
+
+        var topicNames = Array(primary.matchedTopics.prefix(4))
+        if topicNames.isEmpty && queryProfile.intent != .general {
+            topicNames = Array(uniqueWeakTopicNames(for: primary.subject).prefix(3))
+        }
+        if topicNames.isEmpty {
+            let recentTopics = primary.subject.cards
+                .sorted { ($0.lastReviewedDate ?? $0.createdDate) > ($1.lastReviewedDate ?? $1.createdDate) }
+                .flatMap { [$0.topicName, $0.subtopic] }
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            var seen = Set<String>()
+            topicNames = recentTopics.filter { topic in
+                let key = topic.lowercased()
+                guard !seen.contains(key) else { return false }
+                seen.insert(key)
+                return true
+            }
+            .prefix(3)
+            .map { $0 }
+        }
+
+        return LoggingContext(subjectName: primary.subject.name, topicNames: topicNames)
+    }
+
     private func subjectSummaryLines(subject: Subject, sessions: [ReviewSession], queryProfile: QueryProfile, now: Date) -> [String] {
         let masteryPercent = Int(ProficiencyTracker.masteryPercentage(for: subject) * 100)
         let weakTopics = uniqueWeakTopicNames(for: subject).prefix(4)
@@ -1312,7 +1401,7 @@ class ARIAService {
 
     static func recordReviewSession(subjectName: String, topics: [String], cardsReviewed: Int, correctCount: Int, xpEarned: Int, durationMinutes: Double) {
         let accuracy = cardsReviewed == 0 ? 0 : Int((Double(correctCount) / Double(cardsReviewed)) * 100)
-        let roundedMinutes = max(1, Int(durationMinutes.rounded()))
+        let roundedMinutes = normalizedDurationMinutes(durationMinutes)
         let detailLines = [
             "Topics: \(topics.prefix(6).joined(separator: ", "))",
             "Cards reviewed: \(cardsReviewed)",
@@ -1335,7 +1424,7 @@ class ARIAService {
     }
 
     static func recordPlannedStudySession(subjectName: String, topics: [String], planMarkdown: String, notes: String, xpEarned: Int, durationMinutes: Double) {
-        let roundedMinutes = max(1, Int(durationMinutes.rounded()))
+        let roundedMinutes = normalizedDurationMinutes(durationMinutes)
         var detailLines = [
             "Topics: \(topics.prefix(6).joined(separator: ", "))",
             "Duration: \(roundedMinutes) minutes",
@@ -1527,6 +1616,10 @@ class ARIAService {
 
         guard singleLine.count > limit else { return singleLine }
         return String(singleLine.prefix(limit - 1)) + "…"
+    }
+
+    static func normalizedDurationMinutes(_ durationMinutes: Double) -> Int {
+        max(1, Int(durationMinutes.rounded()))
     }
 
     // MARK: - Auto-Update Rank
