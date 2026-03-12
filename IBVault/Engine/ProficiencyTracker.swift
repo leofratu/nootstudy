@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 struct ProficiencyTracker {
     /// Update proficiency level based on consecutive correct recalls

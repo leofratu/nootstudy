@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 struct SM2Result {
     let interval: Int
