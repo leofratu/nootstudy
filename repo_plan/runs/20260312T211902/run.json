@@ -1,0 +1,58 @@
+{
+  "task_id": "20260312-dp1-grade-import",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.grades.assessment_import",
+      "iface.aria.grade_import_actions"
+    ],
+    "files": [
+      "IBVault/Models/Grade.swift",
+      "IBVault/Models/Subject.swift",
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Services/BackupService.swift",
+      "IBVault/Views/Insights/PredictiveGradeView.swift",
+      "IBVault/Views/Settings/SettingsView.swift",
+      "IBVault/Views/Subjects/SubjectDetailView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Models/Grade.swift IBVault/Models/Subject.swift IBVault/Services/BackupService.swift IBVault/Services/ARIAService.swift IBVault/Views/Insights/PredictiveGradeView.swift IBVault/Views/Subjects/SubjectDetailView.swift IBVault/Views/Settings/SettingsView.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.grades.assessment_import",
+        "iface.aria.grade_import_actions"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312g build",
+      "ok": true,
+      "interfaces": [
+        "iface.grades.assessment_import",
+        "iface.aria.grade_import_actions"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.grades.assessment_import",
+    "iface.aria.grade_import_actions"
+  ],
+  "tested_interfaces": [
+    "iface.grades.assessment_import",
+    "iface.aria.grade_import_actions"
+  ],
+  "files_changed": [
+    "IBVault/Models/Grade.swift",
+    "IBVault/Models/Subject.swift",
+    "IBVault/Services/ARIAService.swift",
+    "IBVault/Services/BackupService.swift",
+    "IBVault/Views/Insights/PredictiveGradeView.swift",
+    "IBVault/Views/Settings/SettingsView.swift",
+    "IBVault/Views/Subjects/SubjectDetailView.swift",
+    "repo_plan/file_index.json",
+    "repo_plan/rpg.json",
+    "repo_plan/runs/20260312T211902/run.json"
+  ]
+}

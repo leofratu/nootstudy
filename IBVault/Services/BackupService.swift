@@ -354,10 +354,24 @@ struct CardBackup: Codable {
 struct GradeBackup: Codable {
     let id: UUID; let component: String; let score: Int; let predictedGrade: Int?
     let date: Date; let teacherFeedback: String; let subjectName: String
+    let assessmentTitle: String
+    let assessmentCategory: String?
+    let achievedPoints: Double?
+    let maxPoints: Double?
+    let weightPercent: Double?
+    let sourceName: String?
+    let termName: String?
 
     init(from g: Grade) {
         id = g.id; component = g.component; score = g.score; predictedGrade = g.predictedGrade
         date = g.date; teacherFeedback = g.teacherFeedback; subjectName = g.subject?.name ?? ""
+        assessmentTitle = g.assessmentTitle
+        assessmentCategory = g.assessmentCategory
+        achievedPoints = g.achievedPoints
+        maxPoints = g.maxPoints
+        weightPercent = g.weightPercent
+        sourceName = g.sourceName
+        termName = g.termName
     }
 
     func toModel(subjectsByName: [String: Subject]) -> Grade {
@@ -366,6 +380,13 @@ struct GradeBackup: Codable {
             score: score,
             predictedGrade: predictedGrade,
             teacherFeedback: teacherFeedback,
+            assessmentTitle: assessmentTitle,
+            assessmentCategory: assessmentCategory,
+            achievedPoints: achievedPoints,
+            maxPoints: maxPoints,
+            weightPercent: weightPercent,
+            sourceName: sourceName,
+            termName: termName,
             subject: subjectsByName[subjectName]
         )
         grade.id = id

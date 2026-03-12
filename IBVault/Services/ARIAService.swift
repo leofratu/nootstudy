@@ -35,6 +35,15 @@ class ARIAService {
         let searchText: String?
         let frontText: String?
         let backText: String?
+        let assessmentTitle: String?
+        let component: String?
+        let score: Int?
+        let predictedGrade: Int?
+        let achievedPoints: Double?
+        let maxPoints: Double?
+        let weightPercent: Double?
+        let sourceName: String?
+        let termName: String?
     }
 
     private struct ActionExecutionSummary {
@@ -68,7 +77,8 @@ class ARIAService {
             "How can I improve my grades?",
             "Create a study session for Biology tomorrow at 6",
             "Generate flashcards for my weakest Economics topic",
-            "Clean up weak flashcards and assign me a session from my weakest topic"
+            "Clean up weak flashcards and assign me a session from my weakest topic",
+            "Import my ManageBac grades and estimate my DP1 average"
         ]
     }
 
@@ -319,6 +329,7 @@ class ARIAService {
             - complete_study_session
             - cancel_study_session
             - generate_flashcards
+            - import_grades
             - edit_flashcard
             - delete_flashcards
             - update_progress
@@ -326,11 +337,13 @@ class ARIAService {
             - save_memory
             Rules:
             - Only create actions for explicit edit/create/assign/generate/set/update requests.
+            - Use import_grades when the user pastes or uploads report-card, ManageBac, assessment, marks, or grade-export data.
             - Prefer concrete subject names that exist in the provided app state.
             - Use ISO-8601 timestamps for scheduledAt.
             - Keep topics/subtopics arrays empty rather than inventing values.
             - Use frontText/backText when editing flashcards.
             - Use searchText only when the user gives identifying wording for a card or asks to clean up/delete cards.
+            - For grade imports, copy the raw grade text into notes and include sourceName if it is obvious from the request.
             """,
             apiKey: apiKey
         )
@@ -364,7 +377,8 @@ class ARIAService {
         let normalized = userMessage.lowercased()
         if containsAny(normalized, phrases: [
             "create", "schedule", "assign", "set up", "set", "update", "edit",
-            "change", "move", "reschedule", "generate", "make", "mark", "log"
+            "change", "move", "reschedule", "generate", "make", "mark", "log",
+            "import", "upload", "sync", "paste"
         ]) {
             return true
         }
@@ -413,7 +427,7 @@ class ARIAService {
         }
 
         lines.append("")
-        lines.append("Return JSON array with fields: type, subjectName, topics, subtopics, scheduledAt, durationMinutes, cardCount, masteryLevel, dailyGoal, targetIBScore, minutesStudied, xpEarned, notes, memoryCategory, searchText, frontText, backText.")
+        lines.append("Return JSON array with fields: type, subjectName, topics, subtopics, scheduledAt, durationMinutes, cardCount, masteryLevel, dailyGoal, targetIBScore, minutesStudied, xpEarned, notes, memoryCategory, searchText, frontText, backText, assessmentTitle, component, score, predictedGrade, achievedPoints, maxPoints, weightPercent, sourceName, termName.")
         return lines.joined(separator: "\n")
     }
 
@@ -450,6 +464,8 @@ class ARIAService {
             return try executeCancelStudySession(action: action, context: context)
         case "generate_flashcards":
             return try await executeGenerateFlashcards(action: action, context: context)
+        case "import_grades":
+            return try executeImportGrades(action: action, context: context)
         case "edit_flashcard":
             return try executeEditFlashcard(action: action, context: context)
         case "delete_flashcards":
@@ -670,6 +686,252 @@ class ARIAService {
         }
 
         return "Generated \(generatedTotal) flashcards for \(subject.name) across \(topics.joined(separator: ", "))."
+    }
+
+    private struct ParsedGradeImport {
+        let subject: Subject
+        let component: String
+        let assessmentTitle: String
+        let score: Int
+        let predictedGrade: Int?
+        let achievedPoints: Double?
+        let maxPoints: Double?
+        let weightPercent: Double?
+        let sourceName: String?
+        let termName: String?
+        let teacherFeedback: String
+    }
+
+    @MainActor
+    private func executeImportGrades(action: PlannedAppAction, context: ModelContext) throws -> String {
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        let preferredSubject = resolveSubject(named: action.subjectName, context: context)
+        let inlineGrade = buildInlineGradeImport(from: action, preferredSubject: preferredSubject)
+        let parsedGrades = inlineGrade.map { [$0] } ?? parseGradeImports(
+            from: action.notes ?? "",
+            subjects: subjects,
+            preferredSubject: preferredSubject,
+            defaultSource: action.sourceName
+        )
+
+        guard !parsedGrades.isEmpty else {
+            throw NSError(domain: "ARIAService", code: 24, userInfo: [NSLocalizedDescriptionKey: "ARIA could not parse any grades from that report. Paste the assessment lines or ManageBac export text and include the subject names if possible."])
+        }
+
+        var importedCount = 0
+        var touchedSubjects = Set<String>()
+
+        for entry in parsedGrades {
+            let titleKey = normalizedGradeTitle(entry.assessmentTitle)
+            let sourceKey = (entry.sourceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if let existing = entry.subject.grades.first(where: { grade in
+                grade.component.caseInsensitiveCompare(entry.component) == .orderedSame &&
+                normalizedGradeTitle(grade.displayTitle) == titleKey &&
+                ((grade.sourceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == sourceKey || sourceKey.isEmpty)
+            }) {
+                existing.score = entry.score
+                existing.predictedGrade = entry.predictedGrade
+                existing.assessmentTitle = entry.assessmentTitle
+                existing.achievedPoints = entry.achievedPoints
+                existing.maxPoints = entry.maxPoints
+                existing.weightPercent = entry.weightPercent
+                existing.sourceName = entry.sourceName
+                existing.termName = entry.termName
+                existing.teacherFeedback = entry.teacherFeedback
+                existing.date = Date()
+            } else {
+                context.insert(Grade(
+                    component: entry.component,
+                    score: entry.score,
+                    predictedGrade: entry.predictedGrade,
+                    teacherFeedback: entry.teacherFeedback,
+                    assessmentTitle: entry.assessmentTitle,
+                    achievedPoints: entry.achievedPoints,
+                    maxPoints: entry.maxPoints,
+                    weightPercent: entry.weightPercent,
+                    sourceName: entry.sourceName,
+                    termName: entry.termName,
+                    subject: entry.subject
+                ))
+            }
+            importedCount += 1
+            touchedSubjects.insert(entry.subject.name)
+        }
+
+        if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first,
+           let averageGrade = Subject.overallGradeAverage(for: subjects) {
+            let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
+            profile.reportLastUploaded = Date()
+            profile.autoUpdateFromGrades(averageGrade: averageGrade, totalReviews: totalReviews)
+        }
+
+        let subjectSummary = touchedSubjects.sorted().joined(separator: ", ")
+        return "Imported \(importedCount) assessment grade\(importedCount == 1 ? "" : "s") for \(subjectSummary). ARIA updated your course averages using the imported assessment weights and marks."
+    }
+
+    private func buildInlineGradeImport(from action: PlannedAppAction, preferredSubject: Subject?) -> ParsedGradeImport? {
+        guard let subject = preferredSubject,
+              action.score != nil || (action.achievedPoints != nil && action.maxPoints != nil) else {
+            return nil
+        }
+
+        let assessmentTitle = action.assessmentTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let component = normalizedGradeComponent(from: action.component ?? assessmentTitle)
+        let resolvedScore: Int
+        if let score = action.score {
+            resolvedScore = min(max(score, 1), 7)
+        } else {
+            resolvedScore = Grade.ibScore(fromNormalized: (action.achievedPoints ?? 0) / max(action.maxPoints ?? 1, 1))
+        }
+
+        return ParsedGradeImport(
+            subject: subject,
+            component: component,
+            assessmentTitle: assessmentTitle.isEmpty ? component : assessmentTitle,
+            score: resolvedScore,
+            predictedGrade: action.predictedGrade,
+            achievedPoints: action.achievedPoints,
+            maxPoints: action.maxPoints,
+            weightPercent: action.weightPercent,
+            sourceName: action.sourceName,
+            termName: action.termName,
+            teacherFeedback: ""
+        )
+    }
+
+    private func parseGradeImports(from rawText: String, subjects: [Subject], preferredSubject: Subject?, defaultSource: String?) -> [ParsedGradeImport] {
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        let subjectPairs = subjects.map { ($0, $0.name.lowercased()) }
+        let lines = trimmed
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var results: [ParsedGradeImport] = []
+        var currentSubject = preferredSubject
+
+        for line in lines {
+            let lowercased = line.lowercased()
+            if let explicitSubject = subjectPairs.first(where: { lowercased.contains($0.1) })?.0 {
+                currentSubject = explicitSubject
+            }
+            guard let subject = currentSubject else { continue }
+
+            let points = firstMatch(in: line, pattern: "(\\d+(?:\\.\\d+)?)\\s*/\\s*(\\d+(?:\\.\\d+)?)")
+            let predictedGrade = firstIntMatch(in: line, pattern: "(?:predicted|forecast|target)\\s*(?:grade)?\\s*[:=-]?\\s*([1-7])")
+            let explicitGrade = firstIntMatch(in: line, pattern: "(?:ib\\s*grade|grade|level|band)\\s*[:=-]?\\s*([1-7])")
+            let weightPercent = firstDoubleMatch(in: line, pattern: "(?:weight|weighted|worth|contributes?)\\s*[:=-]?\\s*(\\d+(?:\\.\\d+)?)\\s*%")
+            let sourceName = defaultSource ?? (lowercased.contains("managebac") ? "ManageBac" : nil)
+
+            let resolvedScore: Int?
+            let achievedPoints: Double?
+            let maxPoints: Double?
+            if points.count == 2, let achieved = Double(points[0]), let maximum = Double(points[1]), maximum > 0 {
+                achievedPoints = achieved
+                maxPoints = maximum
+                resolvedScore = explicitGrade ?? Grade.ibScore(fromNormalized: achieved / maximum)
+            } else {
+                achievedPoints = nil
+                maxPoints = nil
+                if let explicitGrade {
+                    resolvedScore = explicitGrade
+                } else if let percentValue = firstStandalonePercent(in: line) {
+                    resolvedScore = Grade.ibScore(fromNormalized: percentValue / 100.0)
+                } else {
+                    resolvedScore = nil
+                }
+            }
+
+            guard let score = resolvedScore else { continue }
+
+            let title = cleanedAssessmentTitle(from: line, subjectName: subject.name)
+            let component = normalizedGradeComponent(from: title)
+            results.append(ParsedGradeImport(
+                subject: subject,
+                component: component,
+                assessmentTitle: title.isEmpty ? component : title,
+                score: score,
+                predictedGrade: predictedGrade,
+                achievedPoints: achievedPoints,
+                maxPoints: maxPoints,
+                weightPercent: weightPercent,
+                sourceName: sourceName,
+                termName: nil,
+                teacherFeedback: ""
+            ))
+        }
+
+        return results
+    }
+
+    private func cleanedAssessmentTitle(from line: String, subjectName: String) -> String {
+        var title = line.replacingOccurrences(of: subjectName, with: "", options: [.caseInsensitive])
+        let patterns = [
+            "(\\d+(?:\\.\\d+)?)\\s*/\\s*(\\d+(?:\\.\\d+)?)",
+            "(?:predicted|forecast|target)\\s*(?:grade)?\\s*[:=-]?\\s*[1-7]",
+            "(?:ib\\s*grade|grade|level|band)\\s*[:=-]?\\s*[1-7]",
+            "(?:weight|weighted|worth|contributes?)\\s*[:=-]?\\s*\\d+(?:\\.\\d+)?\\s*%",
+            "\\d+(?:\\.\\d+)?\\s*%"
+        ]
+        for pattern in patterns {
+            title = title.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        }
+        title = title.replacingOccurrences(of: "|", with: " ")
+        title = title.replacingOccurrences(of: "—", with: " ")
+        title = title.replacingOccurrences(of: "-", with: " ")
+        title = title.replacingOccurrences(of: "  ", with: " ")
+        title = title.trimmingCharacters(in: CharacterSet(charactersIn: " -|\t"))
+        return title.isEmpty ? "Assessment" : title
+    }
+
+    private func normalizedGradeComponent(from text: String) -> String {
+        let normalized = text.lowercased()
+        if normalized.contains("paper 1") { return "Paper 1" }
+        if normalized.contains("paper 2") { return "Paper 2" }
+        if normalized.contains("paper 3") { return "Paper 3" }
+        if normalized.contains("ia") || normalized.contains("internal assessment") { return "IA" }
+        if normalized.contains("mock") { return "Mock Exam" }
+        if normalized.contains("quiz") { return "Quiz" }
+        if normalized.contains("test") { return "Test" }
+        if normalized.contains("essay") { return "Essay" }
+        if normalized.contains("overall") { return "Overall" }
+        return "Assessment"
+    }
+
+    private func normalizedGradeTitle(_ text: String) -> String {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    private func firstMatch(in text: String, pattern: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: nsRange) else { return [] }
+        return (1..<match.numberOfRanges).compactMap { index in
+            guard let range = Range(match.range(at: index), in: text) else { return nil }
+            return String(text[range])
+        }
+    }
+
+    private func firstIntMatch(in text: String, pattern: String) -> Int? {
+        firstMatch(in: text, pattern: pattern).first.flatMap(Int.init)
+    }
+
+    private func firstDoubleMatch(in text: String, pattern: String) -> Double? {
+        firstMatch(in: text, pattern: pattern).first.flatMap(Double.init)
+    }
+
+    private func firstStandalonePercent(in text: String) -> Double? {
+        let matches = firstMatch(in: text, pattern: "(\\d+(?:\\.\\d+)?)\\s*%")
+        for match in matches {
+            if let value = Double(match), value <= 100 {
+                return value
+            }
+        }
+        return nil
     }
 
     @MainActor
@@ -1130,7 +1392,7 @@ class ARIAService {
         - Quiz using Socratic questioning for active recall
         - Explain concepts, structure essays, clarify mark schemes at IB level
         - Track session-by-session and subject-by-subject progress
-        - When the user explicitly asks, you can execute app actions: create, assign, reschedule, complete, or cancel study sessions; generate, edit, or delete flashcards in the library; and update progress/profile settings
+        - When the user explicitly asks, you can execute app actions: create, assign, reschedule, complete, or cancel study sessions; generate, edit, or delete flashcards in the library; import assessment/report grades; and update progress/profile settings
         - Produce study guides with difficulty ratings and time allocations
         - TRACK FLASHCARD EFFECTIVENESS: You know which AI-generated flashcards are working (high review success) vs struggling (low review success). Use this to recommend regeneration of weak cards.
         - XP & MASTERY TRACKING: You have full access to student's XP, rank progression, and subject mastery percentages. Reference this to motivate students ("You're 200XP away from leveling up to Atom!").
@@ -1397,7 +1659,7 @@ class ARIAService {
         if queryProfile.intent == .performanceReview, !allGrades.isEmpty {
             let recentGrades = allGrades.prefix(4).map { grade in
                 let subjectName = grade.subject?.name ?? "Unknown Subject"
-                return "\(subjectName) \(grade.component): \(grade.score)"
+                return "\(subjectName) \(grade.displayTitle): \(grade.scoreSummary)"
             }
             lines.append("- Latest grades: \(recentGrades.joined(separator: "; "))")
         }
@@ -1801,7 +2063,7 @@ class ARIAService {
             lines.append("    query-matched topics: \(mentionedTopics.joined(separator: ", "))")
         }
         if !recentGrades.isEmpty {
-            let gradeSummary = recentGrades.map { "\($0.component) \($0.score)" }.joined(separator: ", ")
+            let gradeSummary = recentGrades.map { "\($0.displayTitle) \($0.scoreSummary)" }.joined(separator: ", ")
             lines.append("    recent grades: \(gradeSummary)")
         }
         if !recentSessions.isEmpty {
@@ -2342,7 +2604,7 @@ class ARIAService {
         let allGrades = subjects.flatMap { $0.grades }
         guard !allGrades.isEmpty else { return }
 
-        let avg = Double(allGrades.map(\.score).reduce(0, +)) / Double(allGrades.count)
+        guard let avg = Subject.overallGradeAverage(for: subjects) else { return }
         let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
 
         profile.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)

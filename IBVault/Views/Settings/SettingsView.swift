@@ -589,7 +589,7 @@ struct SettingsView: View {
         guard let p = profile else { return }
         let allGrades = subjects.flatMap { $0.grades }
         guard !allGrades.isEmpty else { IBHaptics.warning(); return }
-        let avg = Double(allGrades.map(\.score).reduce(0, +)) / Double(allGrades.count)
+        guard let avg = Subject.overallGradeAverage(for: subjects) else { return }
         let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
         p.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)
         try? context.save(); IBHaptics.success()
@@ -836,9 +836,10 @@ struct ReportUploadView: View {
             p.reportLastUploaded = Date()
             let allGrades = subjects.flatMap { $0.grades }
             if !allGrades.isEmpty {
-                let avg = Double(allGrades.map(\.score).reduce(0, +)) / Double(allGrades.count)
-                let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
-                p.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)
+                if let avg = Subject.overallGradeAverage(for: subjects) {
+                    let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
+                    p.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)
+                }
             }
         }
         try? context.save(); IBHaptics.success(); dismiss()

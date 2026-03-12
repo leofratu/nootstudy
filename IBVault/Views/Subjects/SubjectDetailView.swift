@@ -360,7 +360,7 @@ struct SubjectDetailView: View {
                 }
             } else {
                 ForEach(sortedGrades, id: \.id) { grade in
-                    GradeSummaryRow(grade: grade, color: gradeColor(grade.score))
+                    GradeSummaryRow(grade: grade, color: gradeColor(grade.resolvedIBScore))
                     if grade.id != sortedGrades.last?.id {
                         Divider()
                     }
@@ -387,8 +387,13 @@ struct AddGradeView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var component = "Paper 1"
+    @State private var assessmentTitle = ""
     @State private var score = 4
     @State private var predictedGrade = 5
+    @State private var achievedPoints = ""
+    @State private var maxPoints = ""
+    @State private var weightPercent = ""
+    @State private var sourceName = "Manual"
     @State private var feedback = ""
 
     let components = ["Paper 1", "Paper 2", "IA", "EE", "TOK", "Overall"]
@@ -403,6 +408,8 @@ struct AddGradeView: View {
                         }
                     }
                     .pickerStyle(.menu)
+
+                    TextField("Assessment title", text: $assessmentTitle)
                 }
 
                 Section("Score (1-7)") {
@@ -410,6 +417,13 @@ struct AddGradeView: View {
                         Text("\(score)")
                             .font(.title)
                     }
+                }
+
+                Section("Assessment Breakdown") {
+                    TextField("Achieved points", text: $achievedPoints)
+                    TextField("Max points", text: $maxPoints)
+                    TextField("Weight %", text: $weightPercent)
+                    TextField("Source", text: $sourceName)
                 }
 
                 Section("Predicted Grade (1-7)") {
@@ -437,6 +451,11 @@ struct AddGradeView: View {
                             score: score,
                             predictedGrade: predictedGrade,
                             teacherFeedback: feedback,
+                            assessmentTitle: assessmentTitle,
+                            achievedPoints: Double(achievedPoints),
+                            maxPoints: Double(maxPoints),
+                            weightPercent: Double(weightPercent),
+                            sourceName: sourceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : sourceName,
                             subject: subject
                         )
                         context.insert(grade)
@@ -491,11 +510,20 @@ private struct GradeSummaryRow: View {
     var body: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(grade.component)
+                Text(grade.displayTitle)
                     .font(.callout.weight(.medium))
-                Text(grade.date, style: .date)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(grade.component)
+                    Text(grade.date, style: .date)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if let sourceName = grade.sourceName, !sourceName.isEmpty {
+                    Text(sourceName)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
 
                 if !grade.teacherFeedback.isEmpty {
                     Text(grade.teacherFeedback)
@@ -505,9 +533,15 @@ private struct GradeSummaryRow: View {
                 }
             }
             Spacer()
-            Text("\(grade.score)")
-                .font(.title2.bold())
-                .foregroundColor(color)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(grade.resolvedIBScore)")
+                    .font(.title2.bold())
+                    .foregroundColor(color)
+                Text(grade.scoreSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
         }
         .padding(.vertical, 2)
     }

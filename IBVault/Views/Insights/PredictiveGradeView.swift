@@ -46,7 +46,7 @@ struct PredictiveGradeView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Predictive Grade Calculator")
                         .font(.headline)
-                    Text("Based on your mastery trends and historical grades")
+                    Text("Based on your weighted assessments, mastery trends, and historical grades")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -163,6 +163,7 @@ struct PredictiveGradeView: View {
     private func subjectPredictionRow(_ subject: Subject) -> some View {
         let prediction = predictSubjectGrade(subject)
         let color = Color(hex: subject.accentColorHex)
+        let weightedAverage = subject.weightedGradeAverage
         
         return VStack(spacing: 8) {
             HStack(spacing: 10) {
@@ -180,7 +181,11 @@ struct PredictiveGradeView: View {
                         .font(.caption.bold())
                         .foregroundStyle(color)
                     
-                    if let latest = prediction.latest {
+                    if let weightedAverage {
+                        Text("Course avg: \(weightedAverage, specifier: "%.1f")")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if let latest = prediction.latest {
                         Text("Latest: \(latest)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -295,20 +300,22 @@ struct PredictiveGradeView: View {
     private func predictSubjectGrade(_ subject: Subject) -> SubjectPrediction {
         let mastery = subject.masteryProgress
         let grades = subject.grades.sorted { $0.date > $1.date }
+        let weightedAverage = subject.weightedGradeAverage
         
         var predicted: Int
         var latest: Int?
         var trend: GradeTrend = .stable
         
         if let latestGrade = grades.first {
-            latest = latestGrade.score
+            latest = latestGrade.resolvedIBScore
             
             if grades.count >= 2, let second = grades.dropFirst().first {
-                trend = latestGrade.score > second.score ? .improving : (latestGrade.score < second.score ? .declining : .stable)
+                trend = latestGrade.resolvedIBScore > second.resolvedIBScore ? .improving : (latestGrade.resolvedIBScore < second.resolvedIBScore ? .declining : .stable)
             }
-            
-            let masteryBoost = Int(mastery * 2)
-            predicted = min(7, max(1, latestGrade.score + masteryBoost))
+
+            let baseGrade = weightedAverage ?? Double(latestGrade.resolvedIBScore)
+            let masteryBoost = mastery * 1.4
+            predicted = min(7, max(1, Int((baseGrade + masteryBoost).rounded())))
         } else {
             predicted = max(1, Int(mastery * 7))
         }
