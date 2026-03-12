@@ -227,14 +227,24 @@ struct ReviewSessionView: View {
     // MARK: - Logic
     private func loadCards() {
         let now = Date()
+        let allCandidates: [StudyCard]
         if let subject = filterSubject {
-            let dueCards = subject.cards.filter { $0.nextReviewDate <= now }
-            cards = filteredCards(from: dueCards)
+            allCandidates = subject.cards
         } else {
-            let pred = #Predicate<StudyCard> { $0.nextReviewDate <= now }
-            var desc = FetchDescriptor(predicate: pred); desc.sortBy = [SortDescriptor(\.nextReviewDate)]
-            cards = filteredCards(from: (try? context.fetch(desc)) ?? [])
+            allCandidates = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
         }
+
+        let dueCards = allCandidates.filter { $0.nextReviewDate <= now }
+        let scopedDueCards = filteredCards(from: dueCards)
+
+        if !scopedDueCards.isEmpty {
+            cards = scopedDueCards
+        } else if activeScope?.hasFilters == true {
+            cards = fallbackScopedCards(from: allCandidates, now: now)
+        } else {
+            cards = []
+        }
+
         sessionStartTime = Date()
     }
 
@@ -247,6 +257,24 @@ struct ReviewSessionView: View {
         }
 
         return scopedCards.sorted { $0.nextReviewDate < $1.nextReviewDate }
+    }
+
+    private func fallbackScopedCards(from candidates: [StudyCard], now: Date) -> [StudyCard] {
+        let scopedCards = filteredCards(from: candidates)
+        return scopedCards.sorted { lhs, rhs in
+            let lhsIsDue = lhs.nextReviewDate <= now
+            let rhsIsDue = rhs.nextReviewDate <= now
+            if lhsIsDue != rhsIsDue {
+                return lhsIsDue && !rhsIsDue
+            }
+            if lhs.proficiency != rhs.proficiency {
+                return lhs.proficiency.sortOrder < rhs.proficiency.sortOrder
+            }
+            if lhs.nextReviewDate != rhs.nextReviewDate {
+                return lhs.nextReviewDate < rhs.nextReviewDate
+            }
+            return lhs.createdDate > rhs.createdDate
+        }
     }
 
     private func rateCard(_ quality: RecallQuality) {
@@ -281,6 +309,7 @@ struct ReviewSessionView: View {
         let session = StudySession(
             subjectName: subjectName,
             topicsCovered: topics,
+            subtopicsCovered: activeScope?.subtopicNames.joined(separator: ", ") ?? "",
             startDate: sessionStartTime,
             endDate: Date(),
             cardsReviewed: cards.count,
@@ -393,7 +422,7 @@ struct ReviewSessionView: View {
 
     private var emptyStateMessage: String {
         if let scopeSummary {
-            return "No cards are due for \(scopeSummary) right now. Try another recent study session or come back later."
+            return "No flashcards match \(scopeSummary) yet. Generate cards for this scope first or try another recent study session."
         }
         return "No cards are due for review right now. Come back later!"
     }

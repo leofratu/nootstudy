@@ -990,6 +990,8 @@ class ARIAService {
         var result = text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "—", with: " - ")
+            .replacingOccurrences(of: "–", with: " - ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         result = replaceRegex(pattern: #"(?m)^(#{1,6})([^ #\n])"#, template: "$1 $2", in: result)
@@ -1089,6 +1091,7 @@ class ARIAService {
 
         RESPONSE FORMATTING:
         - Use clean Markdown for structure: short paragraphs, bullet lists, and **bold** for key takeaways
+        - Use plain hyphen bullets and avoid em dashes in prose
         - When writing maths or science equations, use LaTeX: inline as $...$ and display equations as $$...$$
         - Use code blocks with ```language for any code examples
         - Keep emoji use light and helpful, not excessive

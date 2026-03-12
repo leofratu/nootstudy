@@ -47,7 +47,7 @@ struct StudyScope: Equatable {
         guard !subtopicNames.isEmpty else { return true }
         let normalizedCardSubtopic = card.subtopic.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedCardSubtopic.isEmpty, normalizedCardSubtopic != card.topicName else {
-            return true
+            return false
         }
 
         return subtopicNames.contains(normalizedCardSubtopic)

@@ -6,6 +6,7 @@ final class StudySession {
     var id: UUID
     var subjectName: String
     var topicsCovered: String  // comma-separated
+    var subtopicsCovered: String  // comma-separated
     var startDate: Date
     var endDate: Date
     var cardsReviewed: Int
@@ -36,7 +37,7 @@ final class StudySession {
             subjectName: subjectName,
             unitNames: SyllabusSeeder.unitNames(for: subjectName, topicNames: selectedTopicNames),
             topicNames: selectedTopicNames,
-            subtopicNames: []
+            subtopicNames: StudyScope.parseList(subtopicsCovered)
         )
     }
 
@@ -45,10 +46,11 @@ final class StudySession {
         return summary.isEmpty ? subjectName : summary
     }
 
-    init(subjectName: String, topicsCovered: String, startDate: Date, endDate: Date = Date(), cardsReviewed: Int, correctCount: Int, xpEarned: Int) {
+    init(subjectName: String, topicsCovered: String, subtopicsCovered: String = "", startDate: Date, endDate: Date = Date(), cardsReviewed: Int, correctCount: Int, xpEarned: Int) {
         self.id = UUID()
         self.subjectName = subjectName
         self.topicsCovered = topicsCovered
+        self.subtopicsCovered = subtopicsCovered
         self.startDate = startDate
         self.endDate = endDate
         self.cardsReviewed = cardsReviewed

@@ -487,7 +487,7 @@ struct ActiveStudySessionView: View {
                                 .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
                         } else {
                             Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                _ = withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                     revealedCards.insert(index)
                                 }
                                 IBHaptics.light()
@@ -1178,6 +1178,7 @@ struct ActiveStudySessionView: View {
         let session = StudySession(
             subjectName: plan.subjectName,
             topicsCovered: topics.joined(separator: ", "),
+            subtopicsCovered: plan.selectedSubtopicNames.joined(separator: ", "),
             startDate: Date().addingTimeInterval(-elapsed),
             endDate: Date(),
             cardsReviewed: generatedCards.count,

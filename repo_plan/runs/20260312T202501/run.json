@@ -1,0 +1,92 @@
+{
+  "task_id": "20260312T202501-format-review-fix",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.aria.shared_formatting",
+      "iface.review.session_scoped_queue",
+      "iface.study.scope_selection",
+      "iface.release.dmg_distribution"
+    ],
+    "files": [
+      "IBVault/Models/StudyPlan.swift",
+      "IBVault/Models/StudySession.swift",
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Views/ARIA/ARIAChatView.swift",
+      "IBVault/Views/Review/ReviewSessionView.swift",
+      "IBVault/Views/Study/ActiveStudySessionView.swift",
+      "IBVault/Views/Insights/SmartRecommendationsView.swift",
+      "IBVault/Views/Study/StudyCalendarView.swift",
+      "Info.plist"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Models/StudyPlan.swift IBVault/Models/StudySession.swift IBVault/Models/StudyCard.swift IBVault/Models/Subject.swift IBVault/Models/ReviewSession.swift IBVault/Services/ARIAService.swift IBVault/Views/ARIA/ARIAChatView.swift IBVault/Views/Study/ActiveStudySessionView.swift IBVault/Views/Review/ReviewSessionView.swift IBVault/Views/Study/StudyPlannerView.swift IBVault/Views/Study/NewStudySessionView.swift IBVault/Views/Insights/SmartRecommendationsView.swift IBVault/Views/Study/StudyCalendarView.swift IBVault/Engine/ProficiencyTracker.swift IBVault/Services/SyllabusSeeder.swift IBVault/Services/CardGeneratorService.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.shared_formatting",
+        "iface.review.session_scoped_queue",
+        "iface.study.scope_selection"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312c build",
+      "ok": true,
+      "interfaces": [
+        "iface.aria.shared_formatting",
+        "iface.review.session_scoped_queue",
+        "iface.study.scope_selection",
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-release-build-20260312c/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "hdiutil create -volname IBVault -srcfolder /tmp/IBVault-dmg-staging-20260312d -ov -format UDZO /Users/main/Documents/nootstudy/releases/IBVault-1.0-20260312-fixed.dmg",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.aria.shared_formatting",
+    "iface.review.session_scoped_queue",
+    "iface.study.scope_selection",
+    "iface.release.dmg_distribution"
+  ],
+  "tested_interfaces": [
+    "iface.aria.shared_formatting",
+    "iface.review.session_scoped_queue",
+    "iface.study.scope_selection",
+    "iface.release.dmg_distribution"
+  ],
+  "files_changed": [
+    "IBVault/Models/StudyPlan.swift",
+    "IBVault/Models/StudySession.swift",
+    "IBVault/Services/ARIAService.swift",
+    "IBVault/Views/ARIA/ARIAChatView.swift",
+    "IBVault/Views/Review/ReviewSessionView.swift",
+    "IBVault/Views/Study/ActiveStudySessionView.swift",
+    "IBVault/Views/Insights/SmartRecommendationsView.swift",
+    "IBVault/Views/Study/StudyCalendarView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ],
+  "artifacts": {
+    "dmg_path": "/Users/main/Documents/nootstudy/releases/IBVault-1.0-20260312-fixed.dmg",
+    "dmg_sha256": "b4021ea6d44e06ba8a0847cc8f8a5dfc6b90ce4eb497a8344549c5677c90912f",
+    "app_path": "/tmp/IBVault-release-build-20260312c/Build/Products/Release/IBVault.app"
+  },
+  "notes": [
+    "Scoped review now falls back to matching cards even when none are due, instead of opening an empty revision session.",
+    "Compiler warnings in ActiveStudySessionView, SmartRecommendationsView, and StudyCalendarView were removed from this release build."
+  ]
+}

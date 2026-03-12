@@ -1027,7 +1027,9 @@ enum FormattedMessageFormatter {
     }
 
     static func attributedMarkdown(from source: String) -> AttributedString? {
-        let processed = normalizeResponseText(convertInlineMathToReadableText(in: source))
+        let processed = displayFriendlyMarkdown(
+            normalizeResponseText(convertInlineMathToReadableText(in: source))
+        )
         let options = AttributedString.MarkdownParsingOptions()
         return try? AttributedString(markdown: processed, options: options)
     }
@@ -1060,6 +1062,14 @@ enum FormattedMessageFormatter {
         result = collapseNewlinesPreservingCodeBlocks(in: result)
         result = replaceRegex(pattern: #"\n{3,}"#, template: "\n\n", in: result)
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func displayFriendlyMarkdown(_ source: String) -> String {
+        var result = source
+            .replacingOccurrences(of: "—", with: " - ")
+            .replacingOccurrences(of: "–", with: " - ")
+        result = replaceRegex(pattern: #"(?m)^(\s*)[-*]\s+"#, template: "$1• ", in: result)
+        return result
     }
 
     private static func collapseNewlinesPreservingCodeBlocks(in source: String) -> String {

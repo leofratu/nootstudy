@@ -379,7 +379,7 @@ struct SmartRecommendationsView: View {
         
         var weakest: (name: String, mastery: Double)?
         
-        for (topicName, cards) in byTopic {
+        for (topicName, _) in byTopic {
             let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName)
             if weakest == nil || mastery < weakest!.mastery {
                 weakest = (topicName, mastery)

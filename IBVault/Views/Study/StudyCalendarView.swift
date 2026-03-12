@@ -286,7 +286,7 @@ struct StudyCalendarView: View {
                             hoveredSlot = hovering ? slotId : nil
                         }
                         .contextMenu {
-                            if let onDeletePlan = onDeletePlan {
+                            if onDeletePlan != nil {
                                 Button(role: .destructive) {
                                     planToDelete = plan
                                     showDeleteConfirmation = true
