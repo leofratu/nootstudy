@@ -27,8 +27,12 @@ struct StudyCalendarView: View {
     // After-school study slots: 4pm to 10pm
     private let timeSlots = Array(16...21)
 
+    private var visiblePlans: [StudyPlan] {
+        plans.filter { !$0.isCompleted }
+    }
+
     private var weekPlansCount: Int {
-        plans.filter { plan in
+        visiblePlans.filter { plan in
             let start = Calendar.current.startOfDay(for: currentWeekStart)
             let end = Calendar.current.date(byAdding: .day, value: 7, to: start)!
             return plan.scheduledDate >= start && plan.scheduledDate < end
@@ -394,7 +398,7 @@ struct StudyCalendarView: View {
 
     private func plansForSlot(day: Date, hour: Int) -> [StudyPlan] {
         let cal = Calendar.current
-        return plans.filter { plan in
+        return visiblePlans.filter { plan in
             let planDay = cal.startOfDay(for: plan.scheduledDate)
             let slotDay = cal.startOfDay(for: day)
             guard planDay == slotDay else { return false }

@@ -14,7 +14,6 @@ struct ActiveStudySessionView: View {
     @State private var chatMessages: [(role: String, text: String)] = []
     @State private var chatInput = ""
     @State private var isChatting = false
-    @State private var showCompletion = false
     @State private var sessionNotes = ""
     @State private var selectedTab: SessionTab = .plan
     @State private var generatedCards: [GeneratedFlashcard] = []
@@ -73,38 +72,34 @@ struct ActiveStudySessionView: View {
 
     var body: some View {
         NavigationStack {
-            if showCompletion {
-                completionView
-            } else {
-                VStack(spacing: 0) {
-                    // Top bar
-                    sessionHeader
-                        .padding(16)
+            VStack(spacing: 0) {
+                // Top bar
+                sessionHeader
+                    .padding(16)
 
-                    Divider()
+                Divider()
 
-                    // Tab bar
-                    sessionTabBar
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
+                // Tab bar
+                sessionTabBar
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
 
-                    // Content
-                    TabView(selection: $selectedTab) {
-                        planPanel.tag(SessionTab.plan)
-                        chatPanel.tag(SessionTab.chat)
-                        flashcardsPanel.tag(SessionTab.flashcards)
-                        examPanel.tag(SessionTab.exam)
-                        notesPanel.tag(SessionTab.notes)
-                    }
-                    .tabViewStyle(.automatic)
-
-                    Divider()
-
-                    // Bottom bar
-                    bottomBar
-                        .padding(14)
-                        .background(.ultraThinMaterial)
+                // Content
+                TabView(selection: $selectedTab) {
+                    planPanel.tag(SessionTab.plan)
+                    chatPanel.tag(SessionTab.chat)
+                    flashcardsPanel.tag(SessionTab.flashcards)
+                    examPanel.tag(SessionTab.exam)
+                    notesPanel.tag(SessionTab.notes)
                 }
+                .tabViewStyle(.automatic)
+
+                Divider()
+
+                // Bottom bar
+                bottomBar
+                    .padding(14)
+                    .background(.ultraThinMaterial)
             }
         }
         .frame(minWidth: 780, minHeight: 580)
@@ -1196,6 +1191,10 @@ struct ActiveStudySessionView: View {
 
     private func completeSession() {
         guard !isCompletingSession else { return }
+        guard !plan.isCompleted else {
+            dismiss()
+            return
+        }
         isCompletingSession = true
         plan.isCompleted = true
         plan.notes = sessionNotes
@@ -1242,10 +1241,14 @@ struct ActiveStudySessionView: View {
             durationMinutes: dedicatedMinutesDouble
         )
 
-        try? context.save()
-        onComplete?()
-        withAnimation(IBAnimation.smooth) { showCompletion = true }
-        IBHaptics.success()
+        do {
+            try context.save()
+            IBHaptics.success()
+            onComplete?()
+            dismiss()
+        } catch {
+            isCompletingSession = false
+        }
     }
 
     // MARK: - Helpers

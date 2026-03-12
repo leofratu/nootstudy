@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12T21:41:45+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity, replace the last ARIA WebKit math path with native SwiftUI math block layout, fix broken study-session opening/dismiss behavior, make follow-up review sessions explicit and visible on the study schedule, track pending ARIA spec-logging wiring gaps found during review, implement a focused ARIA quality pass for richer context, cleaner rendering, sturdier flashcard generation, and more accurate time logging while restoring a passing Xcode build, package and publish the first macOS DMG release to GitHub, and harden update safety by expanding backup coverage and triggering automatic safety backups after onboarding., repair study-scope selection so sessions can span multiple topics within chosen units, align mastery calculations with proficiency tracking, and make review/flashcard generation honor the originating study-session scope., extend ARIA with safe app-action execution so chat can create or reschedule study sessions, generate flashcards into the library, and update progress/profile settings when the user explicitly asks., harden shared rich-text formatting so ARIA chat and all reused formatted content stop rendering orphan markdown markers and render headings/lists with full markdown parsing., expand ARIA app actions further so chat can assign weakest-topic sessions, complete or cancel sessions, and edit or delete flashcards safely before shipping an updated local DMG release., tighten scoped review/session behavior so study-session revisions fall back to matching cards even when none are due, persist subtopic scope on StudySession logs, and normalize ARIA display dashes into cleaner rendered bullets before shipping a corrected DMG., make spaced repetition globally honor completed study-session scope, gate review until real study sessions exist, and harden migration/onboarding compatibility so existing stores and the Start Studying flow keep working., add assessment-level grade tracking with points, weights, and source metadata; let ARIA import ManageBac-style grade exports into real grade records; and switch rank/prediction math to weighted course averages instead of naive one-score grade entries., harden Gemini-backed flashcard generation with longer request timeouts, fallback models, and FRONT/BACK salvage parsing; let users choose how many automatic revisit sessions to schedule and keep completed study sheets dismissing cleanly; and add an explicit chart bar height so focus-window charts stop logging fixed-dimension warnings., make Grade assessment metadata migration-safe by treating assessment titles as optional stored data so older stores upgrade cleanly instead of crashing on launch.",
+  "updated_at": "2026-03-12T21:57:30+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity, replace the last ARIA WebKit math path with native SwiftUI math block layout, fix broken study-session opening/dismiss behavior, make follow-up review sessions explicit and visible on the study schedule, track pending ARIA spec-logging wiring gaps found during review, implement a focused ARIA quality pass for richer context, cleaner rendering, sturdier flashcard generation, and more accurate time logging while restoring a passing Xcode build, package and publish the first macOS DMG release to GitHub, and harden update safety by expanding backup coverage and triggering automatic safety backups after onboarding., repair study-scope selection so sessions can span multiple topics within chosen units, align mastery calculations with proficiency tracking, and make review/flashcard generation honor the originating study-session scope., extend ARIA with safe app-action execution so chat can create or reschedule study sessions, generate flashcards into the library, and update progress/profile settings when the user explicitly asks., harden shared rich-text formatting so ARIA chat and all reused formatted content stop rendering orphan markdown markers and render headings/lists with full markdown parsing., expand ARIA app actions further so chat can assign weakest-topic sessions, complete or cancel sessions, and edit or delete flashcards safely before shipping an updated local DMG release., tighten scoped review/session behavior so study-session revisions fall back to matching cards even when none are due, persist subtopic scope on StudySession logs, and normalize ARIA display dashes into cleaner rendered bullets before shipping a corrected DMG., make spaced repetition globally honor completed study-session scope, gate review until real study sessions exist, and harden migration/onboarding compatibility so existing stores and the Start Studying flow keep working., add assessment-level grade tracking with points, weights, and source metadata; let ARIA import ManageBac-style grade exports into real grade records; and switch rank/prediction math to weighted course averages instead of naive one-score grade entries., harden Gemini-backed flashcard generation with longer request timeouts, fallback models, and FRONT/BACK salvage parsing; let users choose how many automatic revisit sessions to schedule and keep completed study sheets dismissing cleanly; and add an explicit chart bar height so focus-window charts stop logging fixed-dimension warnings., make Grade assessment metadata migration-safe by treating assessment titles as optional stored data so older stores upgrade cleanly instead of crashing on launch., make study-session completion dismiss immediately, guard against re-completing finished plans, and hide completed plans from the calendar so finished sessions stop lingering in-place and looking duplicated.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -423,6 +423,25 @@
         "IBVault/Services/BackupService.swift"
       ],
       "summary": "Grade assessment metadata is backward-compatible with older SwiftData stores by making stored assessment titles optional and normalizing missing values at display and backup-restore boundaries."
+    },
+    {
+      "id": "iface.study.completion_dismissal",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Study/ActiveStudySessionView.swift",
+        "IBVault/Views/Study/StudyPlannerView.swift"
+      ],
+      "summary": "Completing a study session is single-shot, saves once, then dismisses the active sheet immediately instead of lingering on a stale completion screen."
+    },
+    {
+      "id": "iface.study.calendar_completed_filter",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Study/StudyCalendarView.swift"
+      ],
+      "summary": "The study calendar only renders active and upcoming plans, so completed sessions disappear from their slots instead of looking duplicated after completion."
     }
   ],
   "edges": [
@@ -595,6 +614,16 @@
       "from": "iface.grades.assessment_import",
       "to": "iface.persistence.grade_migration_compatibility",
       "type": "dependency"
+    },
+    {
+      "from": "iface.study.plan_opening",
+      "to": "iface.study.completion_dismissal",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.study.follow_up_reviews",
+      "to": "iface.study.calendar_completed_filter",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -748,6 +777,14 @@
     },
     {
       "id": "iface.persistence.grade_migration_compatibility",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.completion_dismissal",
+      "status": "tested"
+    },
+    {
+      "id": "iface.study.calendar_completed_filter",
       "status": "tested"
     }
   ]

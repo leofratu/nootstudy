@@ -1,0 +1,58 @@
+{
+  "task_id": "20260312T215730_study_completion_fix",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.study.plan_opening",
+      "iface.study.completion_dismissal",
+      "iface.study.calendar_completed_filter"
+    ],
+    "files": [
+      "IBVault/Views/Study/ActiveStudySessionView.swift",
+      "IBVault/Views/Study/StudyCalendarView.swift",
+      "IBVault/Views/Study/StudyPlannerView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Views/Study/ActiveStudySessionView.swift IBVault/Views/Study/StudyCalendarView.swift IBVault/Views/Study/StudyPlannerView.swift IBVault/Models/StudyPlan.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.study.completion_dismissal",
+        "iface.study.calendar_completed_filter"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312k build",
+      "ok": true,
+      "interfaces": [
+        "iface.study.completion_dismissal",
+        "iface.study.calendar_completed_filter",
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-release-build-20260312k/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.study.completion_dismissal",
+    "iface.study.calendar_completed_filter"
+  ],
+  "tested_interfaces": [
+    "iface.study.completion_dismissal",
+    "iface.study.calendar_completed_filter",
+    "iface.release.dmg_distribution"
+  ],
+  "files_changed": [
+    "IBVault/Views/Study/ActiveStudySessionView.swift",
+    "IBVault/Views/Study/StudyCalendarView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ]
+}
