@@ -1,0 +1,76 @@
+{
+  "task_id": "20260312T212911_stability_fixes",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.study.flashcard_generation_robustness",
+      "iface.flashcards.generation_resilience",
+      "iface.study.follow_up_reviews",
+      "iface.study.revisit_schedule_configuration",
+      "iface.study.focus_interactive_graphs",
+      "iface.analytics.chart_mark_dimensions"
+    ],
+    "files": [
+      "IBVault/Services/GeminiService.swift",
+      "IBVault/Services/CardGeneratorService.swift",
+      "IBVault/Models/StudyPlan.swift",
+      "IBVault/Services/BackupService.swift",
+      "IBVault/Views/Study/NewStudySessionView.swift",
+      "IBVault/Views/Study/ActiveStudySessionView.swift",
+      "IBVault/Views/Study/StudyPlannerView.swift",
+      "IBVault/Views/Insights/ADHDTrackerView.swift"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "swiftc -frontend -parse IBVault/Services/GeminiService.swift IBVault/Services/CardGeneratorService.swift IBVault/Models/StudyPlan.swift IBVault/Services/BackupService.swift IBVault/Views/Study/NewStudySessionView.swift IBVault/Views/Study/ActiveStudySessionView.swift IBVault/Views/Study/StudyPlannerView.swift IBVault/Views/Insights/ADHDTrackerView.swift",
+      "ok": true,
+      "interfaces": [
+        "iface.flashcards.generation_resilience",
+        "iface.study.revisit_schedule_configuration",
+        "iface.analytics.chart_mark_dimensions"
+      ]
+    },
+    {
+      "cmd": "/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -sdk macosx -derivedDataPath /tmp/IBVault-release-build-20260312h build",
+      "ok": true,
+      "interfaces": [
+        "iface.flashcards.generation_resilience",
+        "iface.study.revisit_schedule_configuration",
+        "iface.analytics.chart_mark_dimensions",
+        "iface.release.dmg_distribution"
+      ]
+    },
+    {
+      "cmd": "spctl -a -t exec -vv /tmp/IBVault-release-build-20260312h/Build/Products/Release/IBVault.app",
+      "ok": true,
+      "interfaces": [
+        "iface.release.dmg_distribution"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.flashcards.generation_resilience",
+    "iface.study.revisit_schedule_configuration",
+    "iface.analytics.chart_mark_dimensions"
+  ],
+  "tested_interfaces": [
+    "iface.flashcards.generation_resilience",
+    "iface.study.revisit_schedule_configuration",
+    "iface.analytics.chart_mark_dimensions",
+    "iface.release.dmg_distribution"
+  ],
+  "files_changed": [
+    "IBVault/Services/GeminiService.swift",
+    "IBVault/Services/CardGeneratorService.swift",
+    "IBVault/Models/StudyPlan.swift",
+    "IBVault/Services/BackupService.swift",
+    "IBVault/Views/Study/NewStudySessionView.swift",
+    "IBVault/Views/Study/ActiveStudySessionView.swift",
+    "IBVault/Views/Study/StudyPlannerView.swift",
+    "IBVault/Views/Insights/ADHDTrackerView.swift",
+    "repo_plan/rpg.json",
+    "repo_plan/file_index.json"
+  ]
+}

@@ -530,12 +530,14 @@ struct StudyPlanBackup: Codable {
     let id: UUID; let subjectName: String; let topicName: String; let subtopicName: String
     let planMarkdown: String; let createdDate: Date; let scheduledDate: Date; let scheduledEndDate: Date
     let isCompleted: Bool; let notes: String; let durationMinutes: Int; let kindRaw: String; let reviewIntervalDays: Int?
+    let reviewScheduleOffsetsRaw: String?
 
     init(from plan: StudyPlan) {
         id = plan.id; subjectName = plan.subjectName; topicName = plan.topicName; subtopicName = plan.subtopicName
         planMarkdown = plan.planMarkdown; createdDate = plan.createdDate; scheduledDate = plan.scheduledDate
         scheduledEndDate = plan.scheduledEndDate; isCompleted = plan.isCompleted; notes = plan.notes
         durationMinutes = plan.durationMinutes; kindRaw = plan.kindRaw; reviewIntervalDays = plan.reviewIntervalDays
+        reviewScheduleOffsetsRaw = plan.reviewScheduleOffsetsRaw
     }
 
     func toModel() -> StudyPlan {
@@ -548,7 +550,10 @@ struct StudyPlanBackup: Codable {
             durationMinutes: durationMinutes,
             notes: notes,
             kind: StudyPlanKind(rawValue: kindRaw) ?? .studySession,
-            reviewIntervalDays: reviewIntervalDays
+            reviewIntervalDays: reviewIntervalDays,
+            reviewScheduleOffsets: reviewScheduleOffsetsRaw?
+                .components(separatedBy: ",")
+                .compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? [1, 3, 7]
         )
         plan.id = id
         plan.createdDate = createdDate

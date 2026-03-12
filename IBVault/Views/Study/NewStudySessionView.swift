@@ -12,6 +12,7 @@ struct NewStudySessionView: View {
     @State private var selectedSubtopicsByTopic: [String: Set<String>] = [:]
     @State private var scheduledDate = Date()
     @State private var durationMinutes = 60
+    @State private var revisitCount = 3
     @State private var planMarkdown = ""
     @State private var isGeneratingPlan = false
     @State private var chatMessages: [(role: String, text: String)] = []
@@ -19,6 +20,8 @@ struct NewStudySessionView: View {
     @State private var isChatting = false
 
     private let durations = [30, 45, 60, 90, 120]
+    private let revisitOptions = [0, 1, 2, 3, 4, 5]
+    private let defaultReviewOffsets = [1, 3, 7, 14, 21]
 
     private var curriculum: [CurriculumUnit] {
         guard let subject = selectedSubject else { return [] }
@@ -331,6 +334,27 @@ struct NewStudySessionView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("Auto revisit count", selection: $revisitCount) {
+                        ForEach(revisitOptions, id: \.self) { count in
+                            Text(count == 0 ? "No auto reviews" : "\(count) review\(count == 1 ? "" : "s")")
+                                .tag(count)
+                        }
+                    }
+
+                    if selectedReviewOffsets.isEmpty {
+                        Text("No follow-up review sessions will be created automatically.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Auto reviews: " + selectedReviewOffsets.map { "Day \($0)" }.joined(separator: ", "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .padding(16)
             .glassCard()
@@ -342,6 +366,10 @@ struct NewStudySessionView: View {
         let fmt = DateFormatter()
         fmt.dateFormat = "HH:mm"
         return fmt.string(from: end)
+    }
+
+    private var selectedReviewOffsets: [Int] {
+        Array(defaultReviewOffsets.prefix(revisitCount))
     }
 
     // MARK: - Step 3: Plan
@@ -613,7 +641,8 @@ struct NewStudySessionView: View {
             subtopicName: selectedSubtopicList.joined(separator: ", "),
             planMarkdown: planMarkdown,
             scheduledDate: scheduledDate,
-            durationMinutes: durationMinutes
+            durationMinutes: durationMinutes,
+            reviewScheduleOffsets: selectedReviewOffsets
         )
         context.insert(plan)
 

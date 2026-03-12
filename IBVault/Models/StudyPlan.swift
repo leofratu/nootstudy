@@ -81,6 +81,7 @@ final class StudyPlan {
     var durationMinutes: Int
     var kindRaw: String
     var reviewIntervalDays: Int?
+    var reviewScheduleOffsetsRaw: String?
 
     var kind: StudyPlanKind {
         get { StudyPlanKind(rawValue: kindRaw) ?? .studySession }
@@ -137,6 +138,21 @@ final class StudyPlan {
         SyllabusSeeder.unitNames(for: subjectName, topicNames: selectedTopicNames)
     }
 
+    var reviewScheduleOffsets: [Int] {
+        let raw = reviewScheduleOffsetsRaw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let parsed = raw
+            .components(separatedBy: ",")
+            .compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            .filter { $0 > 0 }
+        guard !parsed.isEmpty else { return [1, 3, 7] }
+        var seen = Set<Int>()
+        return parsed.filter { seen.insert($0).inserted }
+    }
+
+    var revisitCount: Int {
+        reviewScheduleOffsets.count
+    }
+
     var studyScope: StudyScope {
         StudyScope(
             subjectName: subjectName,
@@ -160,7 +176,8 @@ final class StudyPlan {
         durationMinutes: Int = 60,
         notes: String = "",
         kind: StudyPlanKind = .studySession,
-        reviewIntervalDays: Int? = nil
+        reviewIntervalDays: Int? = nil,
+        reviewScheduleOffsets: [Int] = [1, 3, 7]
     ) {
         self.id = UUID()
         self.subjectName = subjectName
@@ -175,6 +192,7 @@ final class StudyPlan {
         self.durationMinutes = durationMinutes
         self.kindRaw = kind.rawValue
         self.reviewIntervalDays = reviewIntervalDays
+        self.reviewScheduleOffsetsRaw = reviewScheduleOffsets.map(String.init).joined(separator: ",")
     }
 }
 

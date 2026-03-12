@@ -404,7 +404,8 @@ struct ADHDTrackerView: View {
                     BarMark(
                         xStart: .value("Start", window.start),
                         xEnd: .value("End", window.end),
-                        y: .value("Dose", window.label)
+                        y: .value("Dose", window.label),
+                        height: .fixed(18)
                     )
                     .clipShape(Capsule())
                     .foregroundStyle(window.color.opacity(0.75))

@@ -84,14 +84,20 @@ struct StudyPlannerView: View {
             .sheet(isPresented: $showNewSession) {
                 NewStudySessionView()
             }
-            .sheet(item: $selectedPlan) { plan in
+            .sheet(item: $selectedPlan, onDismiss: {
+                selectedPlan = nil
+            }) { plan in
                 if plan.isFollowUpReview {
                     ReviewSessionView(filterSubject: subject(for: plan), filterPlan: plan)
                 } else {
-                    ActiveStudySessionView(plan: plan)
+                    ActiveStudySessionView(plan: plan) {
+                        selectedPlan = nil
+                    }
                 }
             }
-            .sheet(item: $selectedReviewSession) { session in
+            .sheet(item: $selectedReviewSession, onDismiss: {
+                selectedReviewSession = nil
+            }) { session in
                 ReviewSessionView(
                     filterSubject: subject(named: session.subjectName),
                     reviewScopeSession: session
@@ -432,7 +438,7 @@ struct StudyPlannerView: View {
         let endDate = plan.scheduledDate
         let existingPlans = (try? context.fetch(FetchDescriptor<StudyPlan>())) ?? []
         
-        let reviewDays = [1, 3, 7]
+        let reviewDays = plan.reviewScheduleOffsets
         
         for days in reviewDays {
             guard let date = cal.date(byAdding: .day, value: days, to: endDate),
@@ -472,7 +478,8 @@ struct StudyPlannerView: View {
                 scheduledDate: scheduledAt,
                 durationMinutes: 30,
                 kind: .followUpReview,
-                reviewIntervalDays: days
+                reviewIntervalDays: days,
+                reviewScheduleOffsets: []
             )
             context.insert(review)
         }

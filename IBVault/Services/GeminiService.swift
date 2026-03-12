@@ -7,6 +7,8 @@ struct GeminiMessage {
 
 struct GeminiService {
     private static let apiBase = "https://generativelanguage.googleapis.com/v1beta"
+    private static let defaultRequestTimeout: TimeInterval = 90
+    private static let defaultResourceTimeout: TimeInterval = 180
 
     static var selectedModel: String {
         UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-2.0-flash"
@@ -14,6 +16,17 @@ struct GeminiService {
 
     private static var modelURL: String {
         "\(apiBase)/models/\(selectedModel)"
+    }
+
+    private static func configuredSession(
+        timeout: TimeInterval = defaultRequestTimeout,
+        resourceTimeout: TimeInterval = defaultResourceTimeout
+    ) -> URLSession {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = timeout
+        config.timeoutIntervalForResource = resourceTimeout
+        config.waitsForConnectivity = true
+        return URLSession(configuration: config)
     }
 
     // MARK: - List Available Models
@@ -61,17 +74,21 @@ struct GeminiService {
     static func generateContent(
         messages: [GeminiMessage],
         systemInstruction: String,
-        apiKey: String
+        apiKey: String,
+        modelOverride: String? = nil,
+        timeout: TimeInterval = defaultRequestTimeout
     ) async throws -> String {
-        let url = URL(string: "\(modelURL):generateContent?key=\(apiKey)")!
+        let model = modelOverride ?? selectedModel
+        let url = URL(string: "\(apiBase)/models/\(model):generateContent?key=\(apiKey)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = timeout
 
         let body = buildRequestBody(messages: messages, systemInstruction: systemInstruction)
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await retryRequest(request: request)
+        let (data, response) = try await retryRequest(request: request, timeout: timeout)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GeminiError.invalidResponse
@@ -247,11 +264,16 @@ struct GeminiService {
 
     // MARK: - Retry Logic
 
-    private static func retryRequest(request: URLRequest, maxRetries: Int = 3) async throws -> (Data, URLResponse) {
+    private static func retryRequest(
+        request: URLRequest,
+        maxRetries: Int = 3,
+        timeout: TimeInterval = defaultRequestTimeout
+    ) async throws -> (Data, URLResponse) {
         var lastError: Error?
+        let session = configuredSession(timeout: timeout)
         for attempt in 0..<maxRetries {
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await session.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse {
                     if httpResponse.statusCode == 429 || httpResponse.statusCode == 503 {
                         let delay = pow(2.0, Double(attempt)) + Double.random(in: 0...1)
@@ -262,6 +284,13 @@ struct GeminiService {
                 return (data, response)
             } catch {
                 lastError = error
+                let nsError = error as NSError
+                if nsError.code == NSURLErrorNotConnectedToInternet {
+                    throw GeminiError.offline
+                }
+                if nsError.code == NSURLErrorTimedOut && attempt == maxRetries - 1 {
+                    throw GeminiError.maxRetriesExceeded
+                }
                 let delay = pow(2.0, Double(attempt))
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }

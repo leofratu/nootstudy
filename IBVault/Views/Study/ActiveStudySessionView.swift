@@ -3,6 +3,7 @@ import SwiftData
 
 struct ActiveStudySessionView: View {
     let plan: StudyPlan
+    var onComplete: (() -> Void)? = nil
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var profiles: [UserProfile]
@@ -23,6 +24,7 @@ struct ActiveStudySessionView: View {
     @State private var revealedCards: Set<Int> = []
     @State private var examMarkdown = ""
     @State private var isGeneratingExam = false
+    @State private var isCompletingSession = false
 
     private struct ScheduledReviewEntry: Identifiable {
         let day: Int
@@ -45,6 +47,10 @@ struct ActiveStudySessionView: View {
 
     private var dedicatedMinutesDouble: Double {
         Double(dedicatedMinutes)
+    }
+
+    private var activeReviewOffsets: [Int] {
+        plan.reviewScheduleOffsets
     }
 
     enum SessionTab: String, CaseIterable {
@@ -699,6 +705,7 @@ struct ActiveStudySessionView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.green)
+            .disabled(isCompletingSession)
         }
     }
 
@@ -980,18 +987,37 @@ struct ActiveStudySessionView: View {
                     let response = try await GeminiService.generateContent(
                         messages: [GeminiMessage(role: "user", text: prompt)],
                         systemInstruction: "You are the ultimate IB examiner and flashcard generator. You create cards with extremely high difficulty suited for students aiming for a 7/7. Each card must have FRONT: and BACK: lines.",
-                        apiKey: apiKey
+                        apiKey: apiKey,
+                        timeout: 120
                     )
 
                     let parsed = sanitizeGeneratedCards(FormattedMessageFormatter.extractFlashcards(from: response))
-                    generatedBatch.append(contentsOf: parsed.map {
-                        GeneratedFlashcard(
+                    if parsed.isEmpty, let subject = subjects.first(where: { $0.name == plan.subjectName }) {
+                        let fallbackCards = try await CardGeneratorService.generateCards(
+                            subject: subject,
                             topicName: topicName,
                             subtopic: validSubtopics.joined(separator: ", "),
-                            front: $0.front,
-                            back: $0.back
+                            count: cardsPerTopic,
+                            context: context
                         )
-                    })
+                        generatedBatch.append(contentsOf: fallbackCards.map {
+                            GeneratedFlashcard(
+                                topicName: $0.topicName,
+                                subtopic: $0.subtopic,
+                                front: $0.front,
+                                back: $0.back
+                            )
+                        })
+                    } else {
+                        generatedBatch.append(contentsOf: parsed.map {
+                            GeneratedFlashcard(
+                                topicName: topicName,
+                                subtopic: validSubtopics.joined(separator: ", "),
+                                front: $0.front,
+                                back: $0.back
+                            )
+                        })
+                    }
                 }
 
                 guard !generatedBatch.isEmpty else {
@@ -1117,12 +1143,10 @@ struct ActiveStudySessionView: View {
     // MARK: - Spaced Repetition Scheduling
 
     private var scheduledReviewEntries: [ScheduledReviewEntry] {
-        // SM-2 inspired intervals: 1 day, 3 days, 7 days, 14 days
-        let intervals = [1, 3, 7, 14]
         let cal = Calendar.current
         let endDate = Date()
 
-        return intervals.compactMap { days in
+        return activeReviewOffsets.compactMap { days in
             guard let date = cal.date(byAdding: .day, value: days, to: endDate) else { return nil }
             // Schedule at 4pm (after school)
             guard let scheduledAt = cal.date(bySettingHour: 16, minute: 0, second: 0, of: date) else { return nil }
@@ -1154,7 +1178,8 @@ struct ActiveStudySessionView: View {
                 scheduledDate: entry.date,
                 durationMinutes: 30,
                 kind: .followUpReview,
-                reviewIntervalDays: entry.day
+                reviewIntervalDays: entry.day,
+                reviewScheduleOffsets: []
             )
             context.insert(review)
         }
@@ -1170,6 +1195,8 @@ struct ActiveStudySessionView: View {
     }
 
     private func completeSession() {
+        guard !isCompletingSession else { return }
+        isCompletingSession = true
         plan.isCompleted = true
         plan.notes = sessionNotes
 
@@ -1216,6 +1243,7 @@ struct ActiveStudySessionView: View {
         )
 
         try? context.save()
+        onComplete?()
         withAnimation(IBAnimation.smooth) { showCompletion = true }
         IBHaptics.success()
     }
