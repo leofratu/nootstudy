@@ -88,7 +88,7 @@ struct CardGeneratorService {
                 subject: subject,
                 isCustom: false,
                 isAIGenerated: true,
-                generationSource: "ARIA"
+                generationSource: "ARIA" as String?
             )
             cards.append(card)
         }

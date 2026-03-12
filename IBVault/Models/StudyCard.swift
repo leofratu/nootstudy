@@ -105,8 +105,8 @@ final class StudyCard {
         back: String,
         subject: Subject? = nil,
         isCustom: Bool = false,
-        isAIGenerated: Bool = true,
-        generationSource: String = "ARIA"
+        isAIGenerated: Bool? = true,
+        generationSource: String? = "ARIA"
     ) {
         self.id = UUID()
         self.topicName = topicName
