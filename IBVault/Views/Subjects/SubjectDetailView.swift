@@ -3,6 +3,7 @@ import SwiftData
 
 struct SubjectDetailView: View {
     let subject: Subject
+    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     @State private var showAddGrade = false
     @State private var showReview = false
     @State private var showStudyGuide = false
@@ -11,6 +12,14 @@ struct SubjectDetailView: View {
     private var color: Color { Color(hex: subject.accentColorHex) }
     private var sortedCards: [StudyCard] { subject.cards.sorted { $0.topicName < $1.topicName } }
     private var sortedGrades: [Grade] { subject.grades.sorted { $0.date > $1.date } }
+    private var reviewableDueCount: Int {
+        let studiedScopes = StudySession.uniqueStudyScopes(from: studySessions)
+            .filter { $0.subjectName == subject.name }
+        guard !studiedScopes.isEmpty else { return 0 }
+        return subject.cards.filter { card in
+            card.isDue && studiedScopes.contains { $0.matches(card) }
+        }.count
+    }
 
     var body: some View {
         ScrollView {
@@ -84,8 +93,8 @@ struct SubjectDetailView: View {
 
                 HStack(spacing: 16) {
                     Label("\(subject.cards.count) topics", systemImage: "square.stack")
-                    if subject.dueCardsCount > 0 {
-                        Label("\(subject.dueCardsCount) due now", systemImage: "clock.badge.exclamationmark")
+                    if reviewableDueCount > 0 {
+                        Label("\(reviewableDueCount) due now", systemImage: "clock.badge.exclamationmark")
                             .foregroundStyle(.orange)
                     } else {
                         Label("All caught up", systemImage: "checkmark.circle")
@@ -108,7 +117,7 @@ struct SubjectDetailView: View {
     // MARK: - Actions
     private var actionsBar: some View {
         HStack(spacing: 12) {
-            if subject.dueCardsCount > 0 {
+            if reviewableDueCount > 0 {
                 Button {
                     showReview = true
                     IBHaptics.medium()

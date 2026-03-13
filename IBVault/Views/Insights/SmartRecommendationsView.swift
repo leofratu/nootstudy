@@ -13,6 +13,17 @@ struct SmartRecommendationsView: View {
     private var recommendations: [StudyRecommendation] {
         generateRecommendations()
     }
+
+    private var studiedScopes: [StudyScope] {
+        StudySession.uniqueStudyScopes(from: sessions)
+    }
+
+    private var reviewableDueCards: [StudyCard] {
+        guard !studiedScopes.isEmpty else { return [] }
+        return allCards.filter { card in
+            card.isDue && studiedScopes.contains { $0.matches(card) }
+        }
+    }
     
     var body: some View {
         ScrollView {
@@ -177,7 +188,7 @@ struct SmartRecommendationsView: View {
             }
             
             if dueCardsCount > 0 {
-                let bySubject = Dictionary(grouping: allCards.filter { $0.isDue }, by: { $0.subject?.name ?? "Unknown" })
+                let bySubject = Dictionary(grouping: reviewableDueCards, by: { $0.subject?.name ?? "Unknown" })
                 
                 ForEach(bySubject.keys.sorted(), id: \.self) { subjectName in
                     let cards = bySubject[subjectName] ?? []
@@ -292,13 +303,13 @@ struct SmartRecommendationsView: View {
     
     // MARK: - Helpers
     private var dueCardsCount: Int {
-        allCards.filter { $0.isDue }.count
+        reviewableDueCards.count
     }
     
     private func generateRecommendations() -> [StudyRecommendation] {
         var recs: [StudyRecommendation] = []
         
-        let dueCards = allCards.filter { $0.isDue }
+        let dueCards = reviewableDueCards
         if dueCards.count > 20 {
             recs.append(StudyRecommendation(
                 id: UUID(),

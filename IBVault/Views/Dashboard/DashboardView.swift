@@ -6,6 +6,7 @@ struct DashboardView: View {
     @Query private var profiles: [UserProfile]
     @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
     @Query private var subjects: [Subject]
+    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
 
     @State private var ariaService = ARIAService()
     @State private var reviewScheduler = ReviewScheduler()
@@ -14,8 +15,15 @@ struct DashboardView: View {
 
     private var profile: UserProfile? { profiles.first }
 
+    private var studiedScopes: [StudyScope] {
+        StudySession.uniqueStudyScopes(from: studySessions)
+    }
+
     private var dueCards: [StudyCard] {
-        allCards.filter { $0.isDue }
+        guard !studiedScopes.isEmpty else { return [] }
+        return allCards.filter { card in
+            card.isDue && studiedScopes.contains { $0.matches(card) }
+        }
     }
 
     private var sortedSubjects: [Subject] {

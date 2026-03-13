@@ -5,6 +5,7 @@ struct ReviewSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var profiles: [UserProfile]
+    @Query(sort: \StudyCard.nextReviewDate) private var allReviewCards: [StudyCard]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     var filterSubject: Subject? = nil
     var filterPlan: StudyPlan? = nil
@@ -39,6 +40,14 @@ struct ReviewSessionView: View {
     }
     private var dedicatedMinutesDouble: Double {
         Double(ARIAService.normalizedDurationMinutes(Date().timeIntervalSince(sessionStartTime) / 60))
+    }
+    private var reloadSignature: String {
+        let sessionIDs = studySessions.map { $0.id.uuidString }.joined(separator: "|")
+        let cardIDs = allReviewCards.map { $0.id.uuidString }.joined(separator: "|")
+        let planID = filterPlan?.id.uuidString ?? ""
+        let scopeSessionID = reviewScopeSession?.id.uuidString ?? ""
+        let subjectName = filterSubject?.name ?? ""
+        return [sessionIDs, cardIDs, planID, scopeSessionID, subjectName].joined(separator: "::")
     }
     private var generationSubject: Subject? {
         if let filterSubject {
@@ -93,6 +102,9 @@ struct ReviewSessionView: View {
             }
         }
         .onAppear { loadCards() }
+        .onChange(of: reloadSignature) { _, _ in
+            loadCards()
+        }
         .sheet(isPresented: $showStudyGuide) {
             StudyGuideView(subject: filterSubject, mode: sessionComplete ? .weakTopics : .preSession)
         }
@@ -269,7 +281,7 @@ struct ReviewSessionView: View {
         if let subject = filterSubject {
             allCandidates = subject.cards
         } else {
-            allCandidates = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
+            allCandidates = allReviewCards
         }
 
         let eligibleCandidates: [StudyCard]

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12T22:29:30+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity, replace the last ARIA WebKit math path with native SwiftUI math block layout, fix broken study-session opening/dismiss behavior, make follow-up review sessions explicit and visible on the study schedule, track pending ARIA spec-logging wiring gaps found during review, implement a focused ARIA quality pass for richer context, cleaner rendering, sturdier flashcard generation, and more accurate time logging while restoring a passing Xcode build, package and publish the first macOS DMG release to GitHub, and harden update safety by expanding backup coverage and triggering automatic safety backups after onboarding., repair study-scope selection so sessions can span multiple topics within chosen units, align mastery calculations with proficiency tracking, and make review/flashcard generation honor the originating study-session scope., extend ARIA with safe app-action execution so chat can create or reschedule study sessions, generate flashcards into the library, and update progress/profile settings when the user explicitly asks., harden shared rich-text formatting so ARIA chat and all reused formatted content stop rendering orphan markdown markers and render headings/lists with full markdown parsing., expand ARIA app actions further so chat can assign weakest-topic sessions, complete or cancel sessions, and edit or delete flashcards safely before shipping an updated local DMG release., tighten scoped review/session behavior so study-session revisions fall back to matching cards even when none are due, persist subtopic scope on StudySession logs, and normalize ARIA display dashes into cleaner rendered bullets before shipping a corrected DMG., make spaced repetition globally honor completed study-session scope, gate review until real study sessions exist, and harden migration/onboarding compatibility so existing stores and the Start Studying flow keep working., add assessment-level grade tracking with points, weights, and source metadata; let ARIA import ManageBac-style grade exports into real grade records; and switch rank/prediction math to weighted course averages instead of naive one-score grade entries., harden Gemini-backed flashcard generation with longer request timeouts, fallback models, and FRONT/BACK salvage parsing; let users choose how many automatic revisit sessions to schedule and keep completed study sheets dismissing cleanly; and add an explicit chart bar height so focus-window charts stop logging fixed-dimension warnings., make Grade assessment metadata migration-safe by treating assessment titles as optional stored data so older stores upgrade cleanly instead of crashing on launch., make study-session completion dismiss immediately, guard against re-completing finished plans, and hide completed plans from the calendar so finished sessions stop lingering in-place and looking duplicated., mark completed review plans off the schedule when a scoped review session finishes and make flashcard generation auto-top-up underfilled batches until the requested count is reached or retries are exhausted., add a review-stage Generate More Cards action so users can expand the current revision scope in-place without leaving the review flow.",
+  "updated_at": "2026-03-13T12:59:30+01:00",
+  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity, replace the last ARIA WebKit math path with native SwiftUI math block layout, fix broken study-session opening/dismiss behavior, make follow-up review sessions explicit and visible on the study schedule, track pending ARIA spec-logging wiring gaps found during review, implement a focused ARIA quality pass for richer context, cleaner rendering, sturdier flashcard generation, and more accurate time logging while restoring a passing Xcode build, package and publish the first macOS DMG release to GitHub, and harden update safety by expanding backup coverage and triggering automatic safety backups after onboarding., repair study-scope selection so sessions can span multiple topics within chosen units, align mastery calculations with proficiency tracking, and make review/flashcard generation honor the originating study-session scope., extend ARIA with safe app-action execution so chat can create or reschedule study sessions, generate flashcards into the library, and update progress/profile settings when the user explicitly asks., harden shared rich-text formatting so ARIA chat and all reused formatted content stop rendering orphan markdown markers and render headings/lists with full markdown parsing., expand ARIA app actions further so chat can assign weakest-topic sessions, complete or cancel sessions, and edit or delete flashcards safely before shipping an updated local DMG release., tighten scoped review/session behavior so study-session revisions fall back to matching cards even when none are due, persist subtopic scope on StudySession logs, and normalize ARIA display dashes into cleaner rendered bullets before shipping a corrected DMG., make spaced repetition globally honor completed study-session scope, gate review until real study sessions exist, and harden migration/onboarding compatibility so existing stores and the Start Studying flow keep working., add assessment-level grade tracking with points, weights, and source metadata; let ARIA import ManageBac-style grade exports into real grade records; and switch rank/prediction math to weighted course averages instead of naive one-score grade entries., harden Gemini-backed flashcard generation with longer request timeouts, fallback models, and FRONT/BACK salvage parsing; let users choose how many automatic revisit sessions to schedule and keep completed study sheets dismissing cleanly; and add an explicit chart bar height so focus-window charts stop logging fixed-dimension warnings., make Grade assessment metadata migration-safe by treating assessment titles as optional stored data so older stores upgrade cleanly instead of crashing on launch., make study-session completion dismiss immediately, guard against re-completing finished plans, and hide completed plans from the calendar so finished sessions stop lingering in-place and looking duplicated., mark completed review plans off the schedule when a scoped review session finishes and make flashcard generation auto-top-up underfilled batches until the requested count is reached or retries are exhausted., add a review-stage Generate More Cards action so users can expand the current revision scope in-place without leaving the review flow., make review due counts refresh from the same studied-scope queue as the review screen and reload the review session whenever scoped study-session/card data changes, so the badge and launch stats only reflect cards that can actually be reviewed.",
   "nodes": [
     {
       "id": "entry.ibvault_app",
@@ -474,6 +474,28 @@
         "IBVault/Services/CardGeneratorService.swift"
       ],
       "summary": "Review sessions can generate additional flashcards for the currently scoped subject/topic directly from the review UI, then reload the review queue with those new cards."
+    },
+    {
+      "id": "iface.review.due_count_consistency",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/ContentView.swift",
+        "IBVault/Views/Dashboard/DashboardView.swift",
+        "IBVault/Views/Insights/SmartRecommendationsView.swift",
+        "IBVault/Views/Subjects/SubjectDetailView.swift",
+        "IBVault/Views/Subjects/SubjectsGridView.swift"
+      ],
+      "summary": "Review-related due counts now use the same completed-study-session scope filter as the review queue so the app only reports cards that are actually reviewable."
+    },
+    {
+      "id": "iface.review.queue_reload_on_data_change",
+      "kind": "interface",
+      "status": "tested",
+      "paths": [
+        "IBVault/Views/Review/ReviewSessionView.swift"
+      ],
+      "summary": "The review session reloads its card queue whenever the underlying study-session scope or available review cards change, preventing empty sessions caused by stale first-pass query state."
     }
   ],
   "edges": [
@@ -671,6 +693,16 @@
       "from": "iface.flashcards.requested_count_fulfillment",
       "to": "iface.review.in_place_flashcard_generation",
       "type": "dependency"
+    },
+    {
+      "from": "iface.review.session_scoped_queue",
+      "to": "iface.review.due_count_consistency",
+      "type": "dependency"
+    },
+    {
+      "from": "iface.review.session_scoped_queue",
+      "to": "iface.review.queue_reload_on_data_change",
+      "type": "dependency"
     }
   ],
   "work_plan": [
@@ -844,6 +876,14 @@
     },
     {
       "id": "iface.review.in_place_flashcard_generation",
+      "status": "tested"
+    },
+    {
+      "id": "iface.review.due_count_consistency",
+      "status": "tested"
+    },
+    {
+      "id": "iface.review.queue_reload_on_data_change",
       "status": "tested"
     }
   ]

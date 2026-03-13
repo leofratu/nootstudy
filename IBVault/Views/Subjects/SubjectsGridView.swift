@@ -3,6 +3,7 @@ import SwiftData
 
 struct SubjectsGridView: View {
     @Query private var subjects: [Subject]
+    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
 
     private var sortedSubjects: [Subject] {
         subjects.sorted { $0.name < $1.name }
@@ -33,7 +34,10 @@ struct SubjectsGridView: View {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(sortedSubjects, id: \.id) { subject in
                             NavigationLink(destination: SubjectDetailView(subject: subject)) {
-                                SubjectGridCard(subject: subject)
+                                SubjectGridCard(
+                                    subject: subject,
+                                    dueCount: scopedDueCount(for: subject)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
@@ -45,14 +49,23 @@ struct SubjectsGridView: View {
             .navigationTitle("Subjects")
         }
     }
+
+    private func scopedDueCount(for subject: Subject) -> Int {
+        let studiedScopes = StudySession.uniqueStudyScopes(from: studySessions)
+            .filter { $0.subjectName == subject.name }
+        guard !studiedScopes.isEmpty else { return 0 }
+        return subject.cards.filter { card in
+            card.isDue && studiedScopes.contains { $0.matches(card) }
+        }.count
+    }
 }
 
 // MARK: - Subject Card
 struct SubjectGridCard: View {
     let subject: Subject
+    let dueCount: Int
 
     private var color: Color { Color(hex: subject.accentColorHex) }
-    private var dueCount: Int { subject.dueCardsCount }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
