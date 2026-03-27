@@ -42,8 +42,8 @@ struct SettingsView: View {
     @AppStorage("showDueCountBadge") private var showDueCountBadge = true
     @AppStorage("reviewOrder") private var reviewOrder = "spaced"
 
-    // ADHD Settings
-    @AppStorage("adhdDoseMg") private var adhdDoseMg = 10
+    @State private var adhdMedSettings: ADHDMedicationSettings = .default
+    @State private var showMedicationPicker = false
 
     private var profile: UserProfile? { profiles.first }
 
@@ -65,7 +65,10 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .sheet(isPresented: $showReportUpload) { ReportUploadView() }
         .sheet(isPresented: $showModelPicker) { GeminiModelPickerView(selectedModel: $selectedModel) }
-        .onAppear { refreshViewState() }
+        .onAppear { refreshViewState(); adhdMedSettings = ADHDMedicationSettings.loadFromDefaults() }
+        .sheet(isPresented: $showMedicationPicker) {
+            MedicationPickerView(settings: $adhdMedSettings)
+        }
     }
 
     // MARK: - Student Preset
@@ -359,27 +362,48 @@ struct SettingsView: View {
     // MARK: - ADHD Section
     private var adhdSection: some View {
         Section {
-            NavigationLink {
-                ADHDTrackerView()
+            Button {
+                showMedicationPicker = true
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "pills.fill")
                         .foregroundStyle(.purple)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("ADHD Med Tracker")
-                        Text("Ritalin IR \(adhdDoseMg)mg • 3× daily")
+                        Text("ADHD Medication Tracker")
+                        if adhdMedSettings.isEnabled && adhdMedSettings.medicationType != .none {
+                            Text("\(adhdMedSettings.medicationType.displayName) \(adhdMedSettings.doseMg)mg • \(adhdMedSettings.dailyDoses)× daily")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Configure medication for focus window predictions")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            
+            NavigationLink {
+                ADHDTrackerView()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "chart.xyaxis.line")
+                        .foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Focus Window Timeline")
+                        Text("Interactive plasma level visualization")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-
-            Picker("Default Dose", selection: $adhdDoseMg) {
-                Text("10 mg").tag(10)
-                Text("20 mg").tag(20)
-            }.pickerStyle(.segmented)
         } header: {
             Label("ADHD Medication", systemImage: "heart.text.clipboard")
+        } footer: {
+            Text("All medication data is stored locally and never sent to external servers. This information is completely private.")
         }
     }
 
