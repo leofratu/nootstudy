@@ -100,6 +100,10 @@ struct BackupService {
             try write(achievements.map(AchievementBackup.init), named: "achievements.json", into: backupDir, encoder: encoder)
             writtenFiles.append("achievements.json")
         }
+        
+        let adhdSettings = ADHDMedicationSettings.loadFromDefaults()
+        try write(ADHDMedicationBackup(from: adhdSettings), named: "adhd_medication.json", into: backupDir, encoder: encoder)
+        writtenFiles.append("adhd_medication.json")
 
         let meta = BackupMeta(date: Date(), fileCount: writtenFiles.count, version: appVersion())
         let metaData = try encoder.encode(meta)
@@ -202,6 +206,11 @@ struct BackupService {
             for backup in backups {
                 context.insert(backup.toModel())
             }
+        }
+        
+        if let adhdBackup = decode(ADHDMedicationBackup.self, from: directory.appendingPathComponent("adhd_medication.json"), decoder: decoder) {
+            let adhdSettings = adhdBackup.toSettings()
+            adhdSettings.saveToDefaults()
         }
 
         try context.save()
@@ -570,5 +579,37 @@ struct AchievementBackup: Codable {
     func toModel() -> Achievement {
         let a = Achievement(id: id, title: title, desc: desc, icon: icon, category: category)
         a.unlocked = unlocked; a.unlockDate = unlockDate; return a
+    }
+}
+
+struct ADHDMedicationBackup: Codable {
+    let medicationTypeRaw: String
+    let doseMg: Int
+    let dailyDoses: Int
+    let firstDoseHour: Int
+    let firstDoseMinute: Int
+    let doseIntervalMinutes: Int
+    let isEnabled: Bool
+    
+    init(from settings: ADHDMedicationSettings) {
+        self.medicationTypeRaw = settings.medicationType.rawValue
+        self.doseMg = settings.doseMg
+        self.dailyDoses = settings.dailyDoses
+        self.firstDoseHour = settings.firstDoseHour
+        self.firstDoseMinute = settings.firstDoseMinute
+        self.doseIntervalMinutes = settings.doseIntervalMinutes
+        self.isEnabled = settings.isEnabled
+    }
+    
+    func toSettings() -> ADHDMedicationSettings {
+        ADHDMedicationSettings(
+            medicationType: ADHDMedicationType(rawValue: medicationTypeRaw) ?? .none,
+            doseMg: doseMg,
+            dailyDoses: dailyDoses,
+            firstDoseHour: firstDoseHour,
+            firstDoseMinute: firstDoseMinute,
+            doseIntervalMinutes: doseIntervalMinutes,
+            isEnabled: isEnabled
+        )
     }
 }
