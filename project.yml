@@ -35,3 +35,17 @@ targets:
       INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 NootStudy. All rights reserved."
       INFOPLIST_KEY_NSPrincipalClass: NSApplication
       INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
+  IBVaultTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: IBVaultTests
+    dependencies:
+      - target: IBVault
+    settings:
+      CODE_SIGN_IDENTITY: "-"
+      DEVELOPMENT_TEAM: ""
+      SWIFT_VERSION: 5.0
+      PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.tests
+      ENABLE_TESTING_SEARCH_PATHS: YES
