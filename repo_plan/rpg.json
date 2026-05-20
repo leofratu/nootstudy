@@ -1,889 +1,158 @@
 {
-  "version": 1,
-  "updated_at": "2026-03-13T12:59:30+01:00",
-  "summary": "Repair the macOS Xcode build, sync the IBVault target with the on-disk study sources, normalize mixed ShapeStyle foregroundStyle expressions, expand ARIA context specs, reduce runtime stalls caused by repeated ARIA filesystem scans and materials-library reindexing, stabilize ARIA chat runtime behavior on macOS, improve ARIA math formatting, and add interactive focus/study graphs, and polish ARIA response spacing and flashcard formatting, bundle a local MathJax SVG renderer for full TeX support, and strengthen ARIA paragraph/layout rendering, fix ARIA chat scrolling, add persistent ARIA chat sessions with reopen/new-chat flows while preserving memory behavior, add an ARIA sidebar toggle plus more selective rich-renderer usage to reduce unnecessary WebKit activity, replace the last ARIA WebKit math path with native SwiftUI math block layout, fix broken study-session opening/dismiss behavior, make follow-up review sessions explicit and visible on the study schedule, track pending ARIA spec-logging wiring gaps found during review, implement a focused ARIA quality pass for richer context, cleaner rendering, sturdier flashcard generation, and more accurate time logging while restoring a passing Xcode build, package and publish the first macOS DMG release to GitHub, and harden update safety by expanding backup coverage and triggering automatic safety backups after onboarding., repair study-scope selection so sessions can span multiple topics within chosen units, align mastery calculations with proficiency tracking, and make review/flashcard generation honor the originating study-session scope., extend ARIA with safe app-action execution so chat can create or reschedule study sessions, generate flashcards into the library, and update progress/profile settings when the user explicitly asks., harden shared rich-text formatting so ARIA chat and all reused formatted content stop rendering orphan markdown markers and render headings/lists with full markdown parsing., expand ARIA app actions further so chat can assign weakest-topic sessions, complete or cancel sessions, and edit or delete flashcards safely before shipping an updated local DMG release., tighten scoped review/session behavior so study-session revisions fall back to matching cards even when none are due, persist subtopic scope on StudySession logs, and normalize ARIA display dashes into cleaner rendered bullets before shipping a corrected DMG., make spaced repetition globally honor completed study-session scope, gate review until real study sessions exist, and harden migration/onboarding compatibility so existing stores and the Start Studying flow keep working., add assessment-level grade tracking with points, weights, and source metadata; let ARIA import ManageBac-style grade exports into real grade records; and switch rank/prediction math to weighted course averages instead of naive one-score grade entries., harden Gemini-backed flashcard generation with longer request timeouts, fallback models, and FRONT/BACK salvage parsing; let users choose how many automatic revisit sessions to schedule and keep completed study sheets dismissing cleanly; and add an explicit chart bar height so focus-window charts stop logging fixed-dimension warnings., make Grade assessment metadata migration-safe by treating assessment titles as optional stored data so older stores upgrade cleanly instead of crashing on launch., make study-session completion dismiss immediately, guard against re-completing finished plans, and hide completed plans from the calendar so finished sessions stop lingering in-place and looking duplicated., mark completed review plans off the schedule when a scoped review session finishes and make flashcard generation auto-top-up underfilled batches until the requested count is reached or retries are exhausted., add a review-stage Generate More Cards action so users can expand the current revision scope in-place without leaving the review flow., make review due counts refresh from the same studied-scope queue as the review screen and reload the review session whenever scoped study-session/card data changes, so the badge and launch stats only reflect cards that can actually be reviewed.",
+  "schema_version": "1.0",
+  "generated_at": "2026-05-20T18:08:53Z",
+  "task": "Improve native macOS menu commands, review ranking/performance, rank logic, and tests without visible in-app UI redesign.",
   "nodes": [
     {
-      "id": "entry.ibvault_app",
-      "kind": "entrypoint",
+      "id": "entry.ibvault_app.commands",
+      "type": "entrypoint",
       "path": "IBVault/IBVaultApp.swift",
-      "summary": "SwiftUI app entrypoint that registers SwiftData models, including StudyPlan."
-    },
-    {
-      "id": "iface.xcode.target_study_sources",
-      "kind": "interface",
       "status": "tested",
-      "paths": [
-        "IBVault.xcodeproj/project.pbxproj"
-      ],
-      "summary": "IBVault target includes StudyPlan.swift and the Study views in the project graph and Sources build phase."
+      "summary": "Native macOS Study menu and command payloads."
     },
     {
-      "id": "iface.study_views.shape_style_compat",
-      "kind": "interface",
+      "id": "iface.app_command_router",
+      "type": "interface",
+      "path": "IBVault/ContentView.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Views/Study/StudyCalendarView.swift",
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Views/Study/NewStudySessionView.swift"
-      ],
-      "summary": "Study views use ShapeStyle-erased foregroundStyle branches so the macOS SwiftUI compiler accepts mixed accent colors and hierarchical styles."
+      "summary": "Receives app command notifications and routes navigation/refresh actions."
     },
     {
-      "id": "dep.design_system",
-      "kind": "dependency_root",
-      "path": "IBVault/Design/DesignSystem.swift",
-      "summary": "Defines IBColors, which are used by the repaired foregroundStyle expressions."
-    },
-    {
-      "id": "iface.aria.spec_logging",
-      "kind": "interface",
+      "id": "iface.user_rank_policy",
+      "type": "interface",
+      "path": "IBVault/Models/UserProfile.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/Views/Study/NewStudySessionView.swift",
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Views/Review/ReviewSessionView.swift"
-      ],
-      "summary": "ARIA records study-plan drafts, plan revisions, ARIA chat exchanges, flashcard generation, review completion, and development updates into persistent action specs."
+      "summary": "Deterministic XP threshold lookup, clamped progress, guarded XP mutation."
     },
     {
-      "id": "iface.aria.context_caching",
-      "kind": "interface",
+      "id": "iface.review_queue_snapshot",
+      "type": "interface",
+      "path": "IBVault/Engine/ReviewQueueManager.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Services/ARIAService.swift"
-      ],
-      "summary": "ARIA reuses in-memory indexes for recent action specs and materials filenames instead of rescanning the filesystem for every prompt build."
+      "summary": "Due-card snapshot refresh and subject-indexed scope filtering."
     },
     {
-      "id": "iface.materials.library_index_cache",
-      "kind": "interface",
+      "id": "iface.review_ranking_policy",
+      "type": "interface",
+      "path": "IBVault/Engine/ReviewScheduler.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Views/Materials/MaterialsLibraryView.swift"
-      ],
-      "summary": "Materials Library computes collection counts and aggregate size once per view lifecycle and reuses cached directory listings instead of recursively rescanning on every render."
+      "summary": "Pure priority scoring for due/overdue/mastery/exam urgency."
     },
     {
-      "id": "iface.aria.chat_runtime_stability",
-      "kind": "interface",
+      "id": "iface.review_scheduler_analysis",
+      "type": "interface",
+      "path": "IBVault/Engine/ReviewScheduler.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/Views/ARIA/ARIAChatView.swift"
-      ],
-      "summary": "ARIA chat keeps SwiftData ModelContext work on the main actor and defers streaming auto-scroll updates so macOS runtime warnings do not cascade during token streaming."
+      "summary": "Scheduler consumes grouped scopes and cached per-subject card lists."
     },
     {
-      "id": "iface.aria.math_rendering",
-      "kind": "interface",
+      "id": "test.app_commands",
+      "type": "test",
+      "path": "IBVaultTests/IBVaultAppCommandTests.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Views/ARIA/ARIAChatView.swift"
-      ],
-      "summary": "ARIA chat renders mixed markdown and LaTeX-style equations locally with readable inline and block formatting instead of depending on a remote web view renderer."
+      "summary": "Menu command routing payload regression tests."
     },
     {
-      "id": "iface.study.focus_interactive_graphs",
-      "kind": "interface",
+      "id": "test.user_rank_policy",
+      "type": "test",
+      "path": "IBVaultTests/UserRankTests.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Views/Insights/EffectivenessView.swift",
-        "IBVault/Views/Insights/ADHDTrackerView.swift"
-      ],
-      "summary": "Study effectiveness and focus screens expose interactive Charts-based graphs so users can inspect study momentum, method impact, and focus windows directly in the UI."
+      "summary": "Rank threshold/progress/mutation regression tests."
     },
     {
-      "id": "iface.aria.response_polish",
-      "kind": "interface",
+      "id": "test.review_ranking_policy",
+      "type": "test",
+      "path": "IBVaultTests/ReviewRankingPolicyTests.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/Views/ARIA/ARIAChatView.swift"
-      ],
-      "summary": "ARIA chat normalizes streamed assistant text, restores missing sentence spacing, and renders flashcard-style replies with clearer FRONT/BACK structure and richer typography."
+      "summary": "Review priority policy regression tests."
     },
     {
-      "id": "iface.aria.full_tex_renderer",
-      "kind": "interface",
+      "id": "test.review_queue_manager",
+      "type": "test",
+      "path": "IBVaultTests/ReviewQueueManagerTests.swift",
       "status": "tested",
-      "paths": [
-        "IBVault/Views/ARIA/ARIAChatView.swift",
-        "IBVault.xcodeproj/project.pbxproj",
-        "IBVault/MathJax/tex-svg.js"
-      ],
-      "summary": "ARIA assistant messages use a bundled local MathJax SVG web renderer for complex TeX, multi-line derivations, flashcard layout, and richer paragraph formatting without CDN dependencies."
-    },
-    {
-      "id": "iface.aria.chat_sessions",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Models/ARIAMemory.swift",
-        "IBVault/Views/ARIA/ARIAChatView.swift",
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/IBVaultApp.swift"
-      ],
-      "summary": "ARIA supports persistent chat sessions so users can create a new chat, reopen old chats, and keep per-session conversation history while long-term memory remains available."
-    },
-    {
-      "id": "iface.aria.chat_scroll_behavior",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/ARIA/ARIAChatView.swift"
-      ],
-      "summary": "ARIA chat remains scrollable even when assistant messages use embedded rich TeX rendering, by preventing nested web views from hijacking scroll gestures."
-    },
-    {
-      "id": "iface.aria.sidebar_toggle",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/ARIA/ARIAChatView.swift"
-      ],
-      "summary": "ARIA chat exposes a collapsible chats sidebar so users can minimize and restore the session list without leaving the chat view."
-    },
-    {
-      "id": "iface.aria.rich_renderer_gating",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/ARIA/ARIAChatView.swift"
-      ],
-      "summary": "ARIA only uses the WebKit/MathJax renderer for genuinely TeX-heavy assistant replies, leaving normal paragraphs and flashcard prose on native SwiftUI text rendering to cut unnecessary WebContent churn."
-    },
-    {
-      "id": "iface.aria.native_math_layout",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/ARIA/ARIAChatView.swift"
-      ],
-      "summary": "ARIA renders display-math blocks, aligned derivations, matrices, and cases natively in SwiftUI so chat no longer depends on WKWebView for TeX-heavy responses."
-    },
-    {
-      "id": "iface.study.plan_opening",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Study/StudyPlannerView.swift",
-        "IBVault/Views/Study/ActiveStudySessionView.swift"
-      ],
-      "summary": "Selecting a study plan reliably opens an actionable active-session view and the user can dismiss/close it without getting stuck in an empty presentation shell."
-    },
-    {
-      "id": "iface.study.follow_up_reviews",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Views/Study/StudyPlannerView.swift",
-        "IBVault/Models/StudyPlan.swift"
-      ],
-      "summary": "Completing a study session creates visible follow-up review plans on the schedule so the IB Vault method's spaced-repetition review cadence is explicit and reusable."
-    },
-    {
-      "id": "iface.aria.study_guide_spec_logging",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/Views/Review/StudyGuideView.swift"
-      ],
-      "summary": "Successful study-guide generation writes a reusable ARIA action spec so later prompts can ground on the generated guide."
-    },
-    {
-      "id": "iface.aria.development_update_logging",
-      "kind": "interface",
-      "status": "planned",
-      "paths": [
-        "IBVault/Services/ARIAService.swift"
-      ],
-      "summary": "Development-update events have at least one concrete producer that records them into ARIA context specs."
-    },
-    {
-      "id": "iface.aria.context_enrichment",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/Models/Subject.swift",
-        "IBVault/Models/StudyCard.swift",
-        "IBVault/Models/Grade.swift"
-      ],
-      "summary": "ARIA chat and guide generation infer stronger subject/topic context from the user query and current study data so stored specs and prompts carry useful grounding instead of empty metadata."
-    },
-    {
-      "id": "iface.aria.rendering_consistency",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/ARIA/ARIAChatView.swift",
-        "IBVault/Views/Review/StudyGuideView.swift"
-      ],
-      "summary": "ARIA-generated prose and guides render with stable paragraph spacing, markdown sections, and flashcard blocks across chat and study-guide surfaces."
-    },
-    {
-      "id": "iface.study.flashcard_generation_robustness",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Views/ARIA/ARIAChatView.swift",
-        "IBVault/Services/ARIAService.swift"
-      ],
-      "summary": "AI-generated flashcards use stricter output instructions and more fault-tolerant parsing so valid cards are recovered reliably and stored with reusable ARIA context."
-    },
-    {
-      "id": "iface.study.session_time_accuracy",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Views/Review/ReviewSessionView.swift",
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/Models/StudyActivity.swift"
-      ],
-      "summary": "Study and review flows clamp, round, and log dedicated minutes consistently so activity analytics and ARIA summaries reflect realistic time spent."
-    },
-    {
-      "id": "iface.release.dmg_distribution",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault.xcodeproj/project.pbxproj",
-        "Info.plist",
-        "IBVault/IBVault.entitlements"
-      ],
-      "summary": "A Release build of the macOS app is packaged into a signed-to-run-locally DMG artifact that users can download and mount directly."
-    },
-    {
-      "id": "iface.release.github_publication",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "repo_plan/rpg.json",
-        "repo_plan/file_index.json"
-      ],
-      "summary": "The current main branch changes are committed, pushed to GitHub, and published as a tagged release with the DMG asset attached."
-    },
-    {
-      "id": "iface.persistence.update_safe_backups",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/IBVaultApp.swift",
-        "IBVault/Services/BackupService.swift",
-        "IBVault/Models/ARIAMemory.swift",
-        "IBVault/Models/StudyPlan.swift",
-        "IBVault/Models/StudySession.swift",
-        "IBVault/Views/Onboarding/OnboardingView.swift"
-      ],
-      "summary": "Update safety is improved by backing up chat sessions, study plans, study sessions, richer ARIA memory metadata, and triggering automatic backup snapshots after onboarding so replacing the app is less likely to cost user data."
-    },
-    {
-      "id": "iface.study.scope_selection",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Models/StudyPlan.swift",
-        "IBVault/Models/StudySession.swift",
-        "IBVault/Views/Study/NewStudySessionView.swift",
-        "IBVault/Views/Study/StudyPlannerView.swift",
-        "IBVault/Views/Study/ActiveStudySessionView.swift"
-      ],
-      "summary": "Study sessions now preserve a reusable scope across units, multiple topics, and optional subtopics so planning and later review can target the same curriculum slice."
-    },
-    {
-      "id": "iface.review.session_scoped_queue",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/ContentView.swift",
-        "IBVault/Views/Review/ReviewSessionView.swift",
-        "IBVault/Engine/ReviewQueueManager.swift",
-        "IBVault/Engine/ReviewScheduler.swift",
-        "IBVault/Views/Study/StudyPlannerView.swift",
-        "IBVault/Models/StudyPlan.swift",
-        "IBVault/Models/StudySession.swift"
-      ],
-      "summary": "Review launch, queueing, scheduling, and recent-session revision now only surface cards that match completed study-session scopes, and revision stays unavailable until the user has actually completed a study session."
-    },
-    {
-      "id": "iface.flashcards.unit_scoped_generation",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Services/CardGeneratorService.swift",
-        "IBVault/Services/SyllabusSeeder.swift"
-      ],
-      "summary": "Generated flashcards include unit/topic context and are saved with per-topic metadata so later spaced repetition stays relevant to the original study scope."
-    },
-    {
-      "id": "iface.study.mastery_alignment",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Models/Subject.swift",
-        "IBVault/Engine/ProficiencyTracker.swift"
-      ],
-      "summary": "Subject mastery now uses the same weighted proficiency model surfaced elsewhere, and card proficiency advancement reflects review stability instead of raw streaks alone."
-    },
-    {
-      "id": "iface.aria.app_actions",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/Views/ARIA/ARIAChatView.swift",
-        "IBVault/Services/CardGeneratorService.swift",
-        "IBVault/Models/StudyPlan.swift",
-        "IBVault/Models/UserProfile.swift",
-        "IBVault/Models/StudyActivity.swift"
-      ],
-      "summary": "ARIA can interpret explicit user requests into validated app actions, then create, assign, reschedule, complete, or cancel study sessions; generate, edit, or delete flashcards; save memory notes; and update progress/profile settings before replying with the outcome."
-    },
-    {
-      "id": "iface.aria.shared_formatting",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/ARIA/ARIAChatView.swift",
-        "IBVault/Services/ARIAService.swift"
-      ],
-      "summary": "Shared formatted message rendering now strips orphan markdown markers, preserves cleaner section spacing, and parses full markdown so ARIA chat, study guides, plans, and exam views render consistently."
-    },
-    {
-      "id": "iface.grades.assessment_import",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Models/Grade.swift",
-        "IBVault/Models/Subject.swift",
-        "IBVault/Views/Subjects/SubjectDetailView.swift",
-        "IBVault/Views/Settings/SettingsView.swift",
-        "IBVault/Services/BackupService.swift"
-      ],
-      "summary": "Grade records now support assessment titles, point totals, weights, and source metadata so DP1 coursework can be stored as multiple real assessment results instead of a single flat grade value."
-    },
-    {
-      "id": "iface.aria.grade_import_actions",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Services/ARIAService.swift",
-        "IBVault/Models/Grade.swift",
-        "IBVault/Models/Subject.swift",
-        "IBVault/Views/Insights/PredictiveGradeView.swift"
-      ],
-      "summary": "ARIA can import pasted ManageBac/report assessment data into structured grade entries and then update weighted course averages, predictions, and rank context from those imported assessments."
-    },
-    {
-      "id": "iface.flashcards.generation_resilience",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Services/GeminiService.swift",
-        "IBVault/Services/CardGeneratorService.swift",
-        "IBVault/Views/Study/ActiveStudySessionView.swift"
-      ],
-      "summary": "Flashcard generation now uses longer AI request timeouts, retries through cheaper fallback Gemini models, and salvages FRONT/BACK pairs from non-JSON replies so study and ARIA card generation stay usable when the primary model stalls or formats output loosely."
-    },
-    {
-      "id": "iface.study.revisit_schedule_configuration",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Models/StudyPlan.swift",
-        "IBVault/Views/Study/NewStudySessionView.swift",
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Views/Study/StudyPlannerView.swift",
-        "IBVault/Services/BackupService.swift"
-      ],
-      "summary": "Users can choose how many automatic revisit sessions a study plan should create, that cadence is persisted through backups, and completed study sheets close cleanly while follow-up reviews mirror the chosen revisit schedule instead of a hardcoded one."
-    },
-    {
-      "id": "iface.analytics.chart_mark_dimensions",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Insights/ADHDTrackerView.swift"
-      ],
-      "summary": "Focus-window Charts marks now use an explicit bar height so macOS Charts stops falling back to a fixed dimension and logging warnings during analytics rendering."
-    },
-    {
-      "id": "iface.persistence.grade_migration_compatibility",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Models/Grade.swift",
-        "IBVault/Services/BackupService.swift"
-      ],
-      "summary": "Grade assessment metadata is backward-compatible with older SwiftData stores by making stored assessment titles optional and normalizing missing values at display and backup-restore boundaries."
-    },
-    {
-      "id": "iface.study.completion_dismissal",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Views/Study/StudyPlannerView.swift"
-      ],
-      "summary": "Completing a study session is single-shot, saves once, then dismisses the active sheet immediately instead of lingering on a stale completion screen."
-    },
-    {
-      "id": "iface.study.calendar_completed_filter",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Study/StudyCalendarView.swift"
-      ],
-      "summary": "The study calendar only renders active and upcoming plans, so completed sessions disappear from their slots instead of looking duplicated after completion."
-    },
-    {
-      "id": "iface.review.plan_completion_sync",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Review/ReviewSessionView.swift",
-        "IBVault/Views/Study/StudyPlannerView.swift",
-        "IBVault/Views/Study/StudyCalendarView.swift"
-      ],
-      "summary": "Completing a follow-up review session marks its backing review plan completed before save so the review block disappears from the planner and calendar immediately."
-    },
-    {
-      "id": "iface.flashcards.requested_count_fulfillment",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Services/CardGeneratorService.swift",
-        "IBVault/Views/Study/ActiveStudySessionView.swift",
-        "IBVault/Services/ARIAService.swift"
-      ],
-      "summary": "Flashcard generation keeps requesting additional distinct cards when a model underfills the requested batch, and the study-session UI uses the shared generator so card counts match the requested volume more reliably."
-    },
-    {
-      "id": "iface.review.in_place_flashcard_generation",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Review/ReviewSessionView.swift",
-        "IBVault/Services/CardGeneratorService.swift"
-      ],
-      "summary": "Review sessions can generate additional flashcards for the currently scoped subject/topic directly from the review UI, then reload the review queue with those new cards."
-    },
-    {
-      "id": "iface.review.due_count_consistency",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/ContentView.swift",
-        "IBVault/Views/Dashboard/DashboardView.swift",
-        "IBVault/Views/Insights/SmartRecommendationsView.swift",
-        "IBVault/Views/Subjects/SubjectDetailView.swift",
-        "IBVault/Views/Subjects/SubjectsGridView.swift"
-      ],
-      "summary": "Review-related due counts now use the same completed-study-session scope filter as the review queue so the app only reports cards that are actually reviewable."
-    },
-    {
-      "id": "iface.review.queue_reload_on_data_change",
-      "kind": "interface",
-      "status": "tested",
-      "paths": [
-        "IBVault/Views/Review/ReviewSessionView.swift"
-      ],
-      "summary": "The review session reloads its card queue whenever the underlying study-session scope or available review cards change, preventing empty sessions caused by stale first-pass query state."
+      "summary": "Queue snapshot and fallback regression tests."
     }
   ],
   "edges": [
     {
-      "from": "entry.ibvault_app",
-      "to": "iface.xcode.target_study_sources",
-      "type": "dependency"
+      "from": "entry.ibvault_app.commands",
+      "to": "iface.app_command_router",
+      "type": "data_flow",
+      "summary": "Commands post typed notification payloads consumed by ContentView."
     },
     {
-      "from": "iface.study_views.shape_style_compat",
-      "to": "dep.design_system",
-      "type": "dependency"
+      "from": "iface.review_queue_snapshot",
+      "to": "iface.app_command_router",
+      "type": "dependency",
+      "summary": "Refresh command invokes queue refresh."
     },
     {
-      "from": "iface.xcode.target_study_sources",
-      "to": "iface.study_views.shape_style_compat",
-      "type": "dependency"
+      "from": "iface.review_ranking_policy",
+      "to": "iface.review_scheduler_analysis",
+      "type": "dependency",
+      "summary": "Scheduler analysis uses pure ranking policy."
     },
     {
-      "from": "iface.study_views.shape_style_compat",
-      "to": "iface.aria.spec_logging",
-      "type": "dependency"
+      "from": "iface.user_rank_policy",
+      "to": "test.user_rank_policy",
+      "type": "verification"
     },
     {
-      "from": "iface.aria.spec_logging",
-      "to": "entry.ibvault_app",
-      "type": "data_flow"
+      "from": "entry.ibvault_app.commands",
+      "to": "test.app_commands",
+      "type": "verification"
     },
     {
-      "from": "iface.aria.context_caching",
-      "to": "iface.aria.spec_logging",
-      "type": "dependency"
+      "from": "iface.review_ranking_policy",
+      "to": "test.review_ranking_policy",
+      "type": "verification"
     },
     {
-      "from": "iface.materials.library_index_cache",
-      "to": "iface.aria.context_caching",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.chat_runtime_stability",
-      "to": "iface.aria.context_caching",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.math_rendering",
-      "to": "iface.aria.chat_runtime_stability",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.focus_interactive_graphs",
-      "to": "dep.design_system",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.response_polish",
-      "to": "iface.aria.math_rendering",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.full_tex_renderer",
-      "to": "iface.aria.response_polish",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.chat_sessions",
-      "to": "iface.aria.response_polish",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.chat_scroll_behavior",
-      "to": "iface.aria.full_tex_renderer",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.sidebar_toggle",
-      "to": "iface.aria.chat_sessions",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.rich_renderer_gating",
-      "to": "iface.aria.full_tex_renderer",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.native_math_layout",
-      "to": "iface.aria.rich_renderer_gating",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.plan_opening",
-      "to": "iface.study_views.shape_style_compat",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.follow_up_reviews",
-      "to": "iface.study.plan_opening",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.study_guide_spec_logging",
-      "to": "iface.aria.spec_logging",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.development_update_logging",
-      "to": "iface.aria.spec_logging",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.context_enrichment",
-      "to": "iface.aria.spec_logging",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.aria.rendering_consistency",
-      "to": "iface.aria.response_polish",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.flashcard_generation_robustness",
-      "to": "iface.aria.rendering_consistency",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.flashcard_generation_robustness",
-      "to": "iface.aria.context_enrichment",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.session_time_accuracy",
-      "to": "iface.study.follow_up_reviews",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.xcode.target_study_sources",
-      "to": "iface.release.dmg_distribution",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.release.dmg_distribution",
-      "to": "iface.release.github_publication",
-      "type": "dependency"
-    },
-    {
-      "from": "entry.ibvault_app",
-      "to": "iface.persistence.update_safe_backups",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.persistence.update_safe_backups",
-      "to": "iface.release.dmg_distribution",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.flashcard_generation_robustness",
-      "to": "iface.flashcards.generation_resilience",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.revisit_schedule_configuration",
-      "to": "iface.study.follow_up_reviews",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.focus_interactive_graphs",
-      "to": "iface.analytics.chart_mark_dimensions",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.grades.assessment_import",
-      "to": "iface.persistence.grade_migration_compatibility",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.plan_opening",
-      "to": "iface.study.completion_dismissal",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.study.follow_up_reviews",
-      "to": "iface.study.calendar_completed_filter",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.review.session_scoped_queue",
-      "to": "iface.review.plan_completion_sync",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.flashcards.generation_resilience",
-      "to": "iface.flashcards.requested_count_fulfillment",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.flashcards.requested_count_fulfillment",
-      "to": "iface.review.in_place_flashcard_generation",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.review.session_scoped_queue",
-      "to": "iface.review.due_count_consistency",
-      "type": "dependency"
-    },
-    {
-      "from": "iface.review.session_scoped_queue",
-      "to": "iface.review.queue_reload_on_data_change",
-      "type": "dependency"
+      "from": "iface.review_queue_snapshot",
+      "to": "test.review_queue_manager",
+      "type": "verification"
     }
   ],
   "work_plan": [
     {
-      "id": "iface.xcode.target_study_sources",
+      "id": "entry.ibvault_app.commands",
       "status": "tested"
     },
     {
-      "id": "iface.study_views.shape_style_compat",
+      "id": "iface.app_command_router",
       "status": "tested"
     },
     {
-      "id": "iface.aria.spec_logging",
+      "id": "iface.user_rank_policy",
       "status": "tested"
     },
     {
-      "id": "iface.aria.context_caching",
+      "id": "iface.review_queue_snapshot",
       "status": "tested"
     },
     {
-      "id": "iface.materials.library_index_cache",
+      "id": "iface.review_ranking_policy",
       "status": "tested"
     },
     {
-      "id": "iface.aria.chat_runtime_stability",
+      "id": "iface.review_scheduler_analysis",
       "status": "tested"
     },
     {
-      "id": "iface.aria.math_rendering",
+      "id": "test.app_commands",
       "status": "tested"
     },
     {
-      "id": "iface.study.focus_interactive_graphs",
+      "id": "test.user_rank_policy",
       "status": "tested"
     },
     {
-      "id": "iface.aria.response_polish",
+      "id": "test.review_ranking_policy",
       "status": "tested"
     },
     {
-      "id": "iface.aria.full_tex_renderer",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.chat_sessions",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.chat_scroll_behavior",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.sidebar_toggle",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.rich_renderer_gating",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.native_math_layout",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.plan_opening",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.follow_up_reviews",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.study_guide_spec_logging",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.development_update_logging",
-      "status": "planned"
-    },
-    {
-      "id": "iface.aria.context_enrichment",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.rendering_consistency",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.flashcard_generation_robustness",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.session_time_accuracy",
-      "status": "tested"
-    },
-    {
-      "id": "iface.release.dmg_distribution",
-      "status": "tested"
-    },
-    {
-      "id": "iface.release.github_publication",
-      "status": "tested"
-    },
-    {
-      "id": "iface.persistence.update_safe_backups",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.scope_selection",
-      "status": "tested"
-    },
-    {
-      "id": "iface.review.session_scoped_queue",
-      "status": "tested"
-    },
-    {
-      "id": "iface.flashcards.unit_scoped_generation",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.mastery_alignment",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.app_actions",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.shared_formatting",
-      "status": "tested"
-    },
-    {
-      "id": "iface.grades.assessment_import",
-      "status": "tested"
-    },
-    {
-      "id": "iface.aria.grade_import_actions",
-      "status": "tested"
-    },
-    {
-      "id": "iface.flashcards.generation_resilience",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.revisit_schedule_configuration",
-      "status": "tested"
-    },
-    {
-      "id": "iface.analytics.chart_mark_dimensions",
-      "status": "tested"
-    },
-    {
-      "id": "iface.persistence.grade_migration_compatibility",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.completion_dismissal",
-      "status": "tested"
-    },
-    {
-      "id": "iface.study.calendar_completed_filter",
-      "status": "tested"
-    },
-    {
-      "id": "iface.review.plan_completion_sync",
-      "status": "tested"
-    },
-    {
-      "id": "iface.flashcards.requested_count_fulfillment",
-      "status": "tested"
-    },
-    {
-      "id": "iface.review.in_place_flashcard_generation",
-      "status": "tested"
-    },
-    {
-      "id": "iface.review.due_count_consistency",
-      "status": "tested"
-    },
-    {
-      "id": "iface.review.queue_reload_on_data_change",
+      "id": "test.review_queue_manager",
       "status": "tested"
     }
   ]

@@ -1,0 +1,66 @@
+{
+  "task_id": "20260520-native-menu-ranking-performance",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "entry.ibvault_app.commands",
+      "iface.app_command_router",
+      "iface.user_rank_policy",
+      "iface.review_queue_snapshot",
+      "iface.review_ranking_policy",
+      "iface.review_scheduler_analysis",
+      "test.app_commands",
+      "test.user_rank_policy",
+      "test.review_ranking_policy",
+      "test.review_queue_manager"
+    ],
+    "files": [
+      "IBVault/IBVaultApp.swift",
+      "IBVault/ContentView.swift",
+      "IBVault/Models/UserProfile.swift",
+      "IBVault/Engine/ReviewQueueManager.swift",
+      "IBVault/Engine/ReviewScheduler.swift",
+      "IBVaultTests/IBVaultAppCommandTests.swift",
+      "IBVaultTests/UserRankTests.swift",
+      "IBVaultTests/ReviewRankingPolicyTests.swift",
+      "IBVaultTests/ReviewQueueManagerTests.swift",
+      "IBVault.xcodeproj/project.pbxproj",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS'",
+      "ok": true,
+      "interfaces": [
+        "entry.ibvault_app.commands",
+        "iface.app_command_router",
+        "iface.user_rank_policy",
+        "iface.review_queue_snapshot",
+        "iface.review_ranking_policy",
+        "iface.review_scheduler_analysis"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "entry.ibvault_app.commands",
+    "iface.app_command_router",
+    "iface.user_rank_policy",
+    "iface.review_queue_snapshot",
+    "iface.review_ranking_policy",
+    "iface.review_scheduler_analysis"
+  ],
+  "tested_interfaces": [
+    "entry.ibvault_app.commands",
+    "iface.app_command_router",
+    "iface.user_rank_policy",
+    "iface.review_queue_snapshot",
+    "iface.review_ranking_policy",
+    "iface.review_scheduler_analysis"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null,
+  "notes": "RPG builder/validator/bench scripts were absent from this repository, so artifacts were updated manually. No uplift claimed."
+}
