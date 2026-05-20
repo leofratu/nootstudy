@@ -1,12 +1,32 @@
 # OS
 .DS_Store
+._*
 *.swp
+*.tmp
+*.log
 
 # Materials (too large for GitHub - stored locally)
-IBVault/Materials/
+IBVault/Materials/**
+!IBVault/Materials/
+!IBVault/Materials/README.md
 
 # Xcode
 build/
 DerivedData/
+*.xcresult
 *.xcuserstate
 *.xcworkspacedata
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager / tooling
+.build/
+.swiftpm/
+
+# Local env files
+.env
+.env.*
+!.env.example
