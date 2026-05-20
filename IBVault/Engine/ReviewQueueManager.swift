@@ -3,62 +3,127 @@ import SwiftData
 
 @Observable
 final class ReviewQueueManager: @unchecked Sendable {
+    // MARK: - Published State
     private(set) var dueCards: [StudyCard] = []
     private(set) var totalDueCount: Int = 0
-    
+
+    // O(1) per-subject due count cache: keyed by subject UUID string
+    private(set) var dueCountCache: [String: Int] = [:]
+
     private let lock = NSLock()
-    
-    func loadDueCards(context: ModelContext) {
+    private var isRefreshing = false
+
+    // MARK: - Refresh (off-main-thread fetch)
+    func refreshDueCards(context: ModelContext) {
+        // Prevent concurrent redundant refreshes
         lock.lock()
-        defer { lock.unlock() }
-        
+        guard !isRefreshing else { lock.unlock(); return }
+        isRefreshing = true
+        lock.unlock()
+
+        // Capture the persistent container so we can create a background context
+        let container = context.container
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+
+            let backgroundContext = ModelContext(container)
+            let now = Date()
+            let predicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
+            var descriptor = FetchDescriptor<StudyCard>(predicate: predicate)
+            descriptor.sortBy = [SortDescriptor(\.nextReviewDate, order: .forward)]
+
+            do {
+                let studiedScopes = self.fetchStudiedScopes(in: backgroundContext)
+                let fetched = try backgroundContext.fetch(descriptor)
+                let filtered: [StudyCard]
+                if studiedScopes.isEmpty {
+                    filtered = fetched
+                } else {
+                    filtered = self.filterCardsToScopes(fetched, matching: studiedScopes)
+                }
+
+                // Build O(1) per-subject count cache
+                var cache: [String: Int] = [:]
+                for card in filtered {
+                    if let subjectID = card.subject?.id.uuidString {
+                        cache[subjectID, default: 0] += 1
+                    }
+                }
+
+                await MainActor.run {
+                    self.dueCards = filtered
+                    self.totalDueCount = filtered.count
+                    self.dueCountCache = cache
+                    self.lock.lock()
+                    self.isRefreshing = false
+                    self.lock.unlock()
+                }
+            } catch {
+                await MainActor.run {
+                    self.dueCards = []
+                    self.totalDueCount = 0
+                    self.dueCountCache = [:]
+                    self.lock.lock()
+                    self.isRefreshing = false
+                    self.lock.unlock()
+                }
+            }
+        }
+    }
+
+    // Convenience alias
+    func loadDueCards(context: ModelContext) {
+        refreshDueCards(context: context)
+    }
+
+    @MainActor
+    func refreshDueCardsSynchronously(context: ModelContext) {
         let now = Date()
         let predicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
         var descriptor = FetchDescriptor<StudyCard>(predicate: predicate)
         descriptor.sortBy = [SortDescriptor(\.nextReviewDate, order: .forward)]
-        
+
         do {
-            let studiedScopes = self.studiedScopes(in: context)
-            guard !studiedScopes.isEmpty else {
-                dueCards = []
-                totalDueCount = 0
-                return
-            }
-            
-            dueCards = filterCardsToScopes(
-                try context.fetch(descriptor),
-                matching: studiedScopes
-            )
-            totalDueCount = dueCards.count
+            let studiedScopes = fetchStudiedScopes(in: context)
+            let fetched = try context.fetch(descriptor)
+            let filtered = studiedScopes.isEmpty ? fetched : filterCardsToScopes(fetched, matching: studiedScopes)
+            applyDueCardsSnapshot(filtered)
         } catch {
-            dueCards = []
-            totalDueCount = 0
+            applyDueCardsSnapshot([])
         }
     }
-    
+
+    // MARK: - O(1) Due Count Lookup
+    func dueCount(for subject: Subject) -> Int {
+        dueCountCache[subject.id.uuidString] ?? 0
+    }
+
+    // MARK: - Subject-scoped due cards (for ReviewSession)
     func dueCardsForSubject(_ subject: Subject, context: ModelContext) -> [StudyCard] {
         let now = Date()
-        let studiedScopes = self.studiedScopes(in: context).filter { $0.subjectName == subject.name }
-        
+        let studiedScopes = fetchStudiedScopes(in: context).filter { $0.subjectName == subject.name }
+
+        if studiedScopes.isEmpty {
+            return subject.cards
+                .filter { $0.nextReviewDate <= now }
+                .sorted { $0.nextReviewDate < $1.nextReviewDate }
+        }
+
         return filterCardsToScopes(subject.cards, matching: studiedScopes)
             .filter { $0.nextReviewDate <= now }
             .sorted { $0.nextReviewDate < $1.nextReviewDate }
     }
-    
+
     func overdueCards(context: ModelContext) -> [StudyCard] {
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
         return dueCards.filter { $0.nextReviewDate < yesterday }
     }
-    
+
     func dueCountPerSubject() -> [String: Int] {
-        var counts: [String: Int] = [:]
-        for card in dueCards {
-            let name = card.subject?.name ?? "Unknown"
-            counts[name, default: 0] += 1
-        }
-        return counts
+        dueCountCache
     }
-    
+
     func upcomingCards(context: ModelContext, days: Int = 7) -> [StudyCard] {
         let now = Date()
         let future = Calendar.current.date(byAdding: .day, value: days, to: now) ?? now
@@ -67,30 +132,63 @@ final class ReviewQueueManager: @unchecked Sendable {
         }
         var descriptor = FetchDescriptor<StudyCard>(predicate: predicate)
         descriptor.sortBy = [SortDescriptor(\.nextReviewDate)]
-        
+
         do {
-            return filterCardsToScopes(
-                try context.fetch(descriptor),
-                matching: studiedScopes(in: context)
-            )
+            let studied = fetchStudiedScopes(in: context)
+            let fetched = try context.fetch(descriptor)
+            if studied.isEmpty { return fetched }
+            return filterCardsToScopes(fetched, matching: studied)
         } catch {
             return []
         }
     }
-    
-    func refreshDueCards(context: ModelContext) {
-        loadDueCards(context: context)
+
+    func eligibleCardsCount(context: ModelContext) -> Int {
+        let studied = fetchStudiedScopes(in: context)
+        if studied.isEmpty {
+            return (try? context.fetchCount(FetchDescriptor<StudyCard>())) ?? 0
+        }
+        return eligibleCards(context: context).count
     }
-    
-    private func studiedScopes(in context: ModelContext) -> [StudyScope] {
+
+    func eligibleCards(context: ModelContext) -> [StudyCard] {
+        let studied = fetchStudiedScopes(in: context)
+        let all = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
+        if studied.isEmpty { return all }
+        return filterCardsToScopes(all, matching: studied)
+    }
+
+    // MARK: - Private helpers
+    private func fetchStudiedScopes(in context: ModelContext) -> [StudyScope] {
         let sessions = (try? context.fetch(FetchDescriptor<StudySession>())) ?? []
         return StudySession.uniqueStudyScopes(from: sessions)
     }
-    
+
+    @MainActor
+    private func applyDueCardsSnapshot(_ cards: [StudyCard]) {
+        var cache: [String: Int] = [:]
+        for card in cards {
+            if let subjectID = card.subject?.id.uuidString {
+                cache[subjectID, default: 0] += 1
+            }
+        }
+
+        dueCards = cards
+        totalDueCount = cards.count
+        dueCountCache = cache
+    }
+
     private func filterCardsToScopes(_ cards: [StudyCard], matching scopes: [StudyScope]) -> [StudyCard] {
         guard !scopes.isEmpty else { return [] }
+        let scopesBySubject = Dictionary(grouping: scopes, by: \.subjectName)
         return cards.filter { card in
-            scopes.contains { $0.matches(card) }
+            guard let subjectName = card.subject?.name else { return false }
+            return scopesBySubject[subjectName]?.contains { $0.matches(card) } ?? false
         }
+    }
+
+    // Keep old name so callers continue to compile
+    private func studiedScopes(in context: ModelContext) -> [StudyScope] {
+        fetchStudiedScopes(in: context)
     }
 }

@@ -1,0 +1,89 @@
+import Testing
+import Foundation
+import SwiftData
+@testable import IBVault
+
+@Suite("ReviewQueueManager Tests")
+struct ReviewQueueManagerTests {
+    
+    @MainActor
+    @Test("dueCount should return correct count of due cards for a given subject")
+    func testDueCountForSubject() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let context = container.mainContext
+        
+        let subject1 = Subject(name: "Mathematics", level: "HL", accentColorHex: "#FF0000")
+        let subject2 = Subject(name: "Physics", level: "HL", accentColorHex: "#0000FF")
+        context.insert(subject1)
+        context.insert(subject2)
+        
+        let now = Date()
+        let past = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+        let future = Calendar.current.date(byAdding: .day, value: 1, to: now)!
+        
+        let card1 = StudyCard(topicName: "Calculus", front: "Front 1", back: "Back 1", subject: subject1)
+        card1.nextReviewDate = past
+        
+        let card2 = StudyCard(topicName: "Algebra", front: "Front 2", back: "Back 2", subject: subject1)
+        card2.nextReviewDate = future
+        
+        let card3 = StudyCard(topicName: "Mechanics", front: "Front 3", back: "Back 3", subject: subject2)
+        card3.nextReviewDate = past
+        
+        context.insert(card1)
+        context.insert(card2)
+        context.insert(card3)
+        
+        let manager = ReviewQueueManager()
+        manager.refreshDueCardsSynchronously(context: context)
+        
+        #expect(manager.dueCount(for: subject1) == 1)
+        #expect(manager.dueCount(for: subject2) == 1)
+        #expect(manager.dueCards.count == 2)
+    }
+
+    @MainActor
+    @Test("dueCardsForSubject falls back to all subject cards when no study scope exists")
+    func testDueCardsForSubjectWithoutStudyScopes() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let context = container.mainContext
+
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "#10B981")
+        context.insert(subject)
+
+        let past = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        let future = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
+        let dueCard = StudyCard(topicName: "Cells", front: "Front", back: "Back", subject: subject)
+        dueCard.nextReviewDate = past
+        let futureCard = StudyCard(topicName: "Genetics", front: "Front", back: "Back", subject: subject)
+        futureCard.nextReviewDate = future
+
+        context.insert(dueCard)
+        context.insert(futureCard)
+
+        let manager = ReviewQueueManager()
+        let dueCards = manager.dueCardsForSubject(subject, context: context)
+
+        #expect(dueCards.map(\.id) == [dueCard.id])
+    }
+
+    @MainActor
+    @Test("eligibleCardsCount should return exact count of study cards when studied scopes are empty")
+    func testEligibleCardsCountWithoutStudySessions() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let context = container.mainContext
+        
+        let card1 = StudyCard(topicName: "Calculus", front: "Front 1", back: "Back 1")
+        let card2 = StudyCard(topicName: "Algebra", front: "Front 2", back: "Back 2")
+        context.insert(card1)
+        context.insert(card2)
+        
+        let manager = ReviewQueueManager()
+        let eligibleCount = manager.eligibleCardsCount(context: context)
+        
+        #expect(eligibleCount == 2)
+    }
+}
