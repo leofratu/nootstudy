@@ -100,7 +100,7 @@ enum GeminiError: Error, LocalizedError, Sendable {
 }
 
 enum GeminiService {
-    private static var selectedModel: String {
+    static var selectedModel: String {
         UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-2.0-flash"
     }
     
