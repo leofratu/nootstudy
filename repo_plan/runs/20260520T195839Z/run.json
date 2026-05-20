@@ -1,0 +1,35 @@
+{
+  "task_id": "20260520-publish-1-1",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.macos_target_configuration"
+    ],
+    "files": [
+      "Info.plist",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json"
+    ],
+    "evidence": [
+      "Bundle short version bumped from 1.0 to 1.1 and build version from 1 to 2."
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "python3 -m json.tool repo_plan/rpg.json >/dev/null && python3 -m json.tool repo_plan/file_index.json >/dev/null",
+      "ok": true,
+      "interfaces": [
+        "iface.macos_target_configuration"
+      ]
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.macos_target_configuration"
+  ],
+  "tested_interfaces": [
+    "iface.macos_target_configuration"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null
+}

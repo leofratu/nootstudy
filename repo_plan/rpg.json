@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-05-20T18:54:59Z",
+  "generated_at": "2026-05-20T19:58:39Z",
   "task": "Final repository wrap-up: improved README documentation, cleaned repository metadata, restored clean-clone build resources, fixed committed review build drift, and verified macOS tests.",
   "nodes": [
     {
@@ -78,7 +78,7 @@
       "type": "interface",
       "path": "project.yml",
       "status": "tested",
-      "summary": "Mac-only SDK, supported platforms, shared scheme, deployment target, AppKit app metadata, and no stale iOS launch setting."
+      "summary": "Mac-only SDK, supported platforms, shared scheme, deployment target, app metadata, and release versioning."
     },
     {
       "id": "iface.macos_design_system",
