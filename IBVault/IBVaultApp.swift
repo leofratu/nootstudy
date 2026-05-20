@@ -25,13 +25,88 @@ struct IBVaultApp: App {
             StudyActivity.self,
             StudySession.self,
             StudyPlan.self
-        ])
+        ], isAutosaveEnabled: true, isUndoEnabled: false)
         #if os(macOS)
         .defaultSize(width: 1100, height: 750)
         .windowToolbarStyle(.unified)
+        .commands {
+            IBVaultCommands()
+        }
         #endif
     }
 }
+
+#if os(macOS)
+enum IBVaultAppCommand: String, CaseIterable, Sendable {
+    case showDashboard
+    case showSubjects
+    case showReview
+    case showARIA
+    case showAnalytics
+    case showProfile
+    case showSettings
+    case refreshReviewQueue
+
+    var targetTab: NavigationTab? {
+        switch self {
+        case .showDashboard: return .dashboard
+        case .showSubjects: return .subjects
+        case .showReview: return .review
+        case .showARIA: return .aria
+        case .showAnalytics: return .analytics
+        case .showProfile: return .profile
+        case .showSettings: return .settings
+        case .refreshReviewQueue: return nil
+        }
+    }
+
+    var notificationPayload: String { rawValue }
+
+    static func fromNotificationPayload(_ payload: Any?) -> IBVaultAppCommand? {
+        guard let rawValue = payload as? String else { return nil }
+        return IBVaultAppCommand(rawValue: rawValue)
+    }
+}
+
+extension Notification.Name {
+    static let ibVaultAppCommand = Notification.Name("IBVaultAppCommand")
+}
+
+struct IBVaultCommands: Commands {
+    var body: some Commands {
+        CommandMenu("Study") {
+            Button("Dashboard") { post(.showDashboard) }
+                .keyboardShortcut("1", modifiers: [.command])
+            Button("Subjects") { post(.showSubjects) }
+                .keyboardShortcut("2", modifiers: [.command])
+            Button("Review Queue") { post(.showReview) }
+                .keyboardShortcut("3", modifiers: [.command])
+            Button("ARIA") { post(.showARIA) }
+                .keyboardShortcut("4", modifiers: [.command])
+            Button("Analytics") { post(.showAnalytics) }
+                .keyboardShortcut("5", modifiers: [.command])
+
+            Divider()
+
+            Button("Refresh Review Queue") { post(.refreshReviewQueue) }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+        }
+
+        CommandGroup(after: .appSettings) {
+            Button("Profile") { post(.showProfile) }
+                .keyboardShortcut(",", modifiers: [.command, .shift])
+        }
+    }
+
+    private func post(_ command: IBVaultAppCommand) {
+        NotificationCenter.default.post(
+            name: .ibVaultAppCommand,
+            object: command.notificationPayload
+        )
+    }
+}
+#endif
+
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
