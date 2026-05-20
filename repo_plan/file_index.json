@@ -1,11 +1,12 @@
 {
-  "generated_at": "2026-05-20T18:15:00Z",
+  "generated_at": "2026-05-20T18:31:54Z",
   "root": "/Users/main/Desktop/nootstudy",
-  "source": "git ls-tree -r --name-only HEAD",
+  "source": "git ls-tree -r --name-only HEAD plus current macOS-native follow-up files",
   "files": [
     ".github/workflows/mac-release.yml",
     ".gitignore",
     "IBVault.xcodeproj/project.pbxproj",
+    "IBVault.xcodeproj/xcshareddata/xcschemes/IBVault.xcscheme",
     "IBVault.xcodeproj/xcuserdata/main.xcuserdatad/xcschemes/xcschememanagement.plist",
     "IBVault/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
     "IBVault/Assets.xcassets/AppIcon.appiconset/Contents.json",

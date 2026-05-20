@@ -28,6 +28,7 @@ struct IBVaultApp: App {
         ], isAutosaveEnabled: true, isUndoEnabled: false)
         #if os(macOS)
         .defaultSize(width: 1100, height: 750)
+        .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
         .commands {
             IBVaultCommands()
@@ -40,9 +41,12 @@ struct IBVaultApp: App {
 enum IBVaultAppCommand: String, CaseIterable, Sendable {
     case showDashboard
     case showSubjects
+    case showStudySessions
     case showReview
     case showARIA
     case showAnalytics
+    case showRecommendations
+    case showPredictions
     case showProfile
     case showSettings
     case refreshReviewQueue
@@ -51,9 +55,12 @@ enum IBVaultAppCommand: String, CaseIterable, Sendable {
         switch self {
         case .showDashboard: return .dashboard
         case .showSubjects: return .subjects
+        case .showStudySessions: return .studySessions
         case .showReview: return .review
         case .showARIA: return .aria
         case .showAnalytics: return .analytics
+        case .showRecommendations: return .recommendations
+        case .showPredictions: return .predictions
         case .showProfile: return .profile
         case .showSettings: return .settings
         case .refreshReviewQueue: return nil
@@ -79,12 +86,10 @@ struct IBVaultCommands: Commands {
                 .keyboardShortcut("1", modifiers: [.command])
             Button("Subjects") { post(.showSubjects) }
                 .keyboardShortcut("2", modifiers: [.command])
-            Button("Review Queue") { post(.showReview) }
+            Button("Study Sessions") { post(.showStudySessions) }
                 .keyboardShortcut("3", modifiers: [.command])
-            Button("ARIA") { post(.showARIA) }
+            Button("Review Queue") { post(.showReview) }
                 .keyboardShortcut("4", modifiers: [.command])
-            Button("Analytics") { post(.showAnalytics) }
-                .keyboardShortcut("5", modifiers: [.command])
 
             Divider()
 
@@ -92,9 +97,28 @@ struct IBVaultCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .shift])
         }
 
-        CommandGroup(after: .appSettings) {
+        CommandMenu("Assistant") {
+            Button("ARIA") { post(.showARIA) }
+                .keyboardShortcut("5", modifiers: [.command])
+        }
+
+        CommandMenu("Insights") {
+            Button("Analytics") { post(.showAnalytics) }
+                .keyboardShortcut("6", modifiers: [.command])
+            Button("Recommendations") { post(.showRecommendations) }
+                .keyboardShortcut("7", modifiers: [.command])
+            Button("Predictions") { post(.showPredictions) }
+                .keyboardShortcut("8", modifiers: [.command])
+        }
+
+        CommandMenu("Account") {
             Button("Profile") { post(.showProfile) }
-                .keyboardShortcut(",", modifiers: [.command, .shift])
+                .keyboardShortcut("9", modifiers: [.command])
+        }
+
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings...") { post(.showSettings) }
+                .keyboardShortcut(",", modifiers: [.command])
         }
     }
 

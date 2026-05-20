@@ -3,6 +3,18 @@ options:
   bundleIdPrefix: com.nootstudy
   deploymentTarget:
     macOS: "14.0"
+schemes:
+  IBVault:
+    shared: true
+    build:
+      targets:
+        IBVault: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - IBVaultTests
 targets:
   IBVault:
     type: application
@@ -28,10 +40,11 @@ targets:
       CODE_SIGN_IDENTITY: "-"
       DEVELOPMENT_TEAM: "" # Allows local build
       ENABLE_PREVIEWS: YES
+      SDKROOT: macosx
+      SUPPORTED_PLATFORMS: macosx
       SWIFT_VERSION: 5.0
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.app
-      INFOPLIST_KEY_UILaunchScreen_Generation: YES
       INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 NootStudy. All rights reserved."
       INFOPLIST_KEY_NSPrincipalClass: NSApplication
       INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
@@ -46,6 +59,8 @@ targets:
     settings:
       CODE_SIGN_IDENTITY: "-"
       DEVELOPMENT_TEAM: ""
+      SDKROOT: macosx
+      SUPPORTED_PLATFORMS: macosx
       SWIFT_VERSION: 5.0
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.tests
       ENABLE_TESTING_SEARCH_PATHS: YES

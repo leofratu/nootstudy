@@ -1,15 +1,15 @@
 # IB Vault — Science-Backed IB Study Companion
 
-A production-quality iOS app built with **Swift 5.9+** and **SwiftUI**, implementing spaced repetition, an AI study companion (ARIA), gamification, and IB syllabus management.
+A production-quality native macOS app built with **Swift 5.9+** and **SwiftUI**, implementing spaced repetition, an AI study companion (ARIA), gamification, and IB syllabus management.
 
 ## 🏗️ Architecture
 
-**MVVM** with a service layer. All data persisted via **SwiftData** (iOS 17+).
+**MVVM** with a service layer. All data persisted via **SwiftData** on macOS 14+.
 
 ```
 IBVault/
 ├── IBVaultApp.swift              # @main entry, SwiftData ModelContainer
-├── ContentView.swift             # Custom tab bar navigation
+├── ContentView.swift             # Native macOS sidebar navigation
 ├── Design/
 │   ├── DesignSystem.swift        # Colors, typography, spacing, haptics
 │   └── Components.swift          # Reusable UI: GlassCard, PulseOrb, etc.
@@ -47,8 +47,8 @@ IBVault/
 
 1. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
 2. Open the app → **Profile** → **Settings** (gear icon)
-3. Under **ARIA Configuration**, paste your key and tap **Save to Keychain**
-4. The key is stored securely via iOS Keychain — never leaves the device except in API calls
+3. Under **ARIA Configuration**, paste your key and click **Save to Keychain**
+4. The key is stored securely via macOS Keychain — never leaves the device except in API calls
 
 ## 🧠 Core Features
 
@@ -82,15 +82,15 @@ IBVault/
 - Each subject has a unique accent color
 
 ## 📋 Technical Requirements
-- **iOS 17+** (SwiftData requirement)
-- **iPhone-first** (iPad adaptive)
+- **macOS 14+** (SwiftData requirement)
+- **Native Mac app** with AppKit-backed menu commands, sandboxing, and sidebar navigation
 - **No third-party dependencies** — Gemini via native URLSession
 - Swift 5.9+, Xcode 15+
 
 ## 🚀 Getting Started
 
-1. Open the `IBVault` folder contents in Xcode (create a new iOS App project and add all files)
-2. Set deployment target to **iOS 17.0**
-3. Build and run on simulator or device
+1. Generate/open the checked-in `IBVault.xcodeproj` in Xcode
+2. Confirm the app target platform is **macOS 14.0+**
+3. Build and run on **My Mac**
 4. Complete onboarding → 6 subjects auto-populated
 5. Enter Gemini API key in Settings for ARIA functionality

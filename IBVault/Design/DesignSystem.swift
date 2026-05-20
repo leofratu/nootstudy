@@ -1,26 +1,14 @@
 import SwiftUI
-#if os(macOS)
 import AppKit
-#else
-import UIKit
-#endif
 
 // MARK: - Color Palette — macOS native with subtle accents
 struct IBColors {
     // Backgrounds
-#if os(macOS)
     static let navy = Color(nsColor: .windowBackgroundColor)
     static let deepNavy = Color(nsColor: .underPageBackgroundColor)
     static let surface = Color(nsColor: .controlBackgroundColor)
     static let surfaceHover = Color(nsColor: .controlBackgroundColor)
     static let overlay = Color(nsColor: .textBackgroundColor)
-#else
-    static let navy = Color(hex: "F6F7FB")
-    static let deepNavy = Color(hex: "EFF2F7")
-    static let surface = Color.white
-    static let surfaceHover = Color(hex: "F2F4F8")
-    static let overlay = Color(hex: "FBFCFE")
-#endif
 
     // Accents
     static let electricBlue = Color(hex: "5BA4FF")
@@ -28,17 +16,10 @@ struct IBColors {
     static let electricBlueMuted = Color(hex: "3A6CA8")
 
     // Text
-#if os(macOS)
     static let softWhite = Color(nsColor: .labelColor)
     static let secondaryText = Color(nsColor: .secondaryLabelColor)
     static let mutedGray = Color(nsColor: .secondaryLabelColor)
     static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
-#else
-    static let softWhite = Color(hex: "1C2434")
-    static let secondaryText = Color(hex: "556070")
-    static let mutedGray = Color(hex: "6E7785")
-    static let tertiaryText = Color(hex: "8A93A3")
-#endif
 
     // Cards
     static let cardBackground = Color.white.opacity(0.96)
@@ -209,7 +190,6 @@ extension View {
 
 // MARK: - Haptics
 struct IBHaptics {
-#if os(macOS)
     static func light() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default) }
     static func medium() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .default) }
     static func soft() { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .default) }
@@ -217,15 +197,6 @@ struct IBHaptics {
     static func success() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
     static func warning() { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now) }
     static func error() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
-#else
-    static func light() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-    static func medium() { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
-    static func soft() { UIImpactFeedbackGenerator(style: .soft).impactOccurred() }
-    static func rigid() { UIImpactFeedbackGenerator(style: .rigid).impactOccurred() }
-    static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
-    static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
-    static func error() { UINotificationFeedbackGenerator().notificationOccurred(.error) }
-#endif
 }
 
 // MARK: - Animations

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -778,12 +779,8 @@ private struct CodeBlockView: View {
                 }
                 Spacer()
                 Button {
-                    #if canImport(UIKit)
-                    UIPasteboard.general.string = code
-                    #elseif canImport(AppKit)
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(code, forType: .string)
-                    #endif
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 } label: {

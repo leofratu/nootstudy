@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-05-20T18:08:53Z",
-  "task": "Improve native macOS menu commands, review ranking/performance, rank logic, and tests without visible in-app UI redesign.",
+  "generated_at": "2026-05-20T18:31:54Z",
+  "task": "Enforce native macOS target/settings and Mac-optimized app menus/usability without unrelated UI redesign.",
   "nodes": [
     {
       "id": "entry.ibvault_app.commands",
@@ -72,6 +72,41 @@
       "path": "IBVaultTests/ReviewQueueManagerTests.swift",
       "status": "tested",
       "summary": "Queue snapshot and fallback regression tests."
+    },
+    {
+      "id": "iface.macos_target_configuration",
+      "type": "interface",
+      "path": "project.yml",
+      "status": "tested",
+      "summary": "Mac-only SDK, supported platforms, shared scheme, deployment target, AppKit app metadata, and no stale iOS launch setting."
+    },
+    {
+      "id": "iface.macos_design_system",
+      "type": "interface",
+      "path": "IBVault/Design/DesignSystem.swift",
+      "status": "tested",
+      "summary": "AppKit-only colors and NSHapticFeedbackManager feedback for native macOS behavior."
+    },
+    {
+      "id": "iface.macos_clipboard",
+      "type": "interface",
+      "path": "IBVault/Views/ARIA/ARIAChatView.swift",
+      "status": "tested",
+      "summary": "Code block copy action uses NSPasteboard directly."
+    },
+    {
+      "id": "iface.macos_menu_coverage",
+      "type": "interface",
+      "path": "IBVault/IBVaultApp.swift",
+      "status": "tested",
+      "summary": "Top menu exposes Study, Assistant, Insights, Account, and standard Settings commands with Mac keyboard shortcuts."
+    },
+    {
+      "id": "test.macos_menu_coverage",
+      "type": "test",
+      "path": "IBVaultTests/IBVaultAppCommandTests.swift",
+      "status": "tested",
+      "summary": "Regression coverage that every menu navigation command maps to its sidebar destination."
     }
   ],
   "edges": [
@@ -112,6 +147,35 @@
       "from": "iface.review_queue_snapshot",
       "to": "test.review_queue_manager",
       "type": "verification"
+    },
+    {
+      "from": "iface.macos_target_configuration",
+      "to": "entry.ibvault_app.commands",
+      "type": "dependency",
+      "summary": "Mac target settings build the AppKit-backed application entrypoint."
+    },
+    {
+      "from": "iface.macos_menu_coverage",
+      "to": "iface.app_command_router",
+      "type": "data_flow",
+      "summary": "Top menu command payloads are consumed by ContentView routing."
+    },
+    {
+      "from": "iface.macos_menu_coverage",
+      "to": "test.macos_menu_coverage",
+      "type": "verification"
+    },
+    {
+      "from": "iface.macos_clipboard",
+      "to": "iface.macos_target_configuration",
+      "type": "dependency",
+      "summary": "Clipboard implementation assumes AppKit/macOS target."
+    },
+    {
+      "from": "iface.macos_design_system",
+      "to": "iface.macos_target_configuration",
+      "type": "dependency",
+      "summary": "Design feedback and system colors assume AppKit/macOS target."
     }
   ],
   "work_plan": [
@@ -153,6 +217,26 @@
     },
     {
       "id": "test.review_queue_manager",
+      "status": "tested"
+    },
+    {
+      "id": "iface.macos_target_configuration",
+      "status": "tested"
+    },
+    {
+      "id": "iface.macos_design_system",
+      "status": "tested"
+    },
+    {
+      "id": "iface.macos_clipboard",
+      "status": "tested"
+    },
+    {
+      "id": "iface.macos_menu_coverage",
+      "status": "tested"
+    },
+    {
+      "id": "test.macos_menu_coverage",
       "status": "tested"
     }
   ]

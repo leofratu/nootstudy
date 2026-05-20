@@ -5,9 +5,23 @@ import Testing
 struct IBVaultAppCommandTests {
     @Test("Navigation commands map to expected tabs")
     func navigationCommandsMapToTabs() {
-        #expect(IBVaultAppCommand.showDashboard.targetTab == .dashboard)
-        #expect(IBVaultAppCommand.showReview.targetTab == .review)
-        #expect(IBVaultAppCommand.showSettings.targetTab == .settings)
+        let expectedTabs: [IBVaultAppCommand: NavigationTab] = [
+            .showDashboard: .dashboard,
+            .showSubjects: .subjects,
+            .showStudySessions: .studySessions,
+            .showReview: .review,
+            .showARIA: .aria,
+            .showAnalytics: .analytics,
+            .showRecommendations: .recommendations,
+            .showPredictions: .predictions,
+            .showProfile: .profile,
+            .showSettings: .settings
+        ]
+
+        for (command, tab) in expectedTabs {
+            #expect(command.targetTab == tab)
+        }
+
         #expect(IBVaultAppCommand.refreshReviewQueue.targetTab == nil)
     }
 
