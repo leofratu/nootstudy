@@ -1,96 +1,98 @@
-# IB Vault — Science-Backed IB Study Companion
+# IB Vault
 
-A production-quality native macOS app built with **Swift 5.9+** and **SwiftUI**, implementing spaced repetition, an AI study companion (ARIA), gamification, and IB syllabus management.
+IB Vault is a native macOS study app for IB students. It combines SwiftData persistence, SM-2 spaced retrieval, grade and mastery analytics, and ARIA, a Gemini-backed study assistant that can reason over the student's local study context.
 
-## 🏗️ Architecture
+The app is intentionally Mac-first: it builds as a sandboxed AppKit-backed SwiftUI application, uses the macOS Keychain for the Gemini API key, exposes native menu commands, and targets macOS 14 or later.
 
-**MVVM** with a service layer. All data persisted via **SwiftData** on macOS 14+.
+## Current Capabilities
 
-```
+- Spaced retrieval queue using SM-2 scheduling, overdue prioritization, per-subject filtering, and proficiency tracking.
+- Native macOS navigation with sidebar tabs, top-menu commands, keyboard shortcuts, unified toolbar styling, and local notification support.
+- ARIA assistant with streaming Gemini responses, bounded context construction, persistent memory, conversation compaction, and app-action planning for study sessions, grades, flashcards, and progress updates.
+- IB study data for subjects, topics, cards, review sessions, grades, study sessions, study plans, achievements, activity history, and user profile/rank state.
+- Local-first security posture: app data stays in SwiftData, API keys are stored in Keychain, and Gemini requests are made with `URLSession`.
+
+## Repository Layout
+
+```text
 IBVault/
-├── IBVaultApp.swift              # @main entry, SwiftData ModelContainer
-├── ContentView.swift             # Native macOS sidebar navigation
-├── Design/
-│   ├── DesignSystem.swift        # Colors, typography, spacing, haptics
-│   └── Components.swift          # Reusable UI: GlassCard, PulseOrb, etc.
-├── Models/                       # 8 SwiftData @Model classes
-│   ├── Subject.swift             # IB subject with card relationships
-│   ├── StudyCard.swift           # SM-2 fields, proficiency tracking
-│   ├── ReviewSession.swift       # Individual review outcomes
-│   ├── Grade.swift               # IB 1-7 grades per component
-│   ├── UserProfile.swift         # XP, streak, rank, settings
-│   ├── Achievement.swift         # 14 achievement definitions
-│   ├── ARIAMemory.swift          # ARIA memory + ChatMessage
-│   └── StudyActivity.swift       # Daily activity for heatmap
-├── Engine/
-│   ├── SM2Engine.swift           # SM-2 spaced repetition algorithm
-│   ├── ReviewQueueManager.swift  # Due card queue management
-│   └── ProficiencyTracker.swift  # Novice → Mastered tracking
-├── Services/
-│   ├── GeminiService.swift       # Gemini 2.0 Flash API (streaming)
-│   ├── ARIAService.swift         # Context builder, memory compaction
-│   ├── KeychainService.swift     # Secure API key storage
-│   ├── NotificationService.swift # Local notifications
-│   └── SyllabusSeeder.swift      # Pre-seeded IB syllabus data
-└── Views/                        # 10 SwiftUI view files
-    ├── Onboarding/               # 3-screen onboarding flow
-    ├── Dashboard/                # Home with streak, XP, queue
-    ├── Subjects/                 # Grid + detail views
-    ├── Review/                   # Card flip review session
-    ├── Analytics/                # Heatmap, retention curves
-    ├── ARIA/                     # Chat + memory manager
-    ├── Profile/                  # Rank, XP, achievements
-    └── Settings/                 # API key, notifications, goals
+  IBVaultApp.swift              macOS app entrypoint, model container, menu commands
+  ContentView.swift             root navigation and command routing
+  Design/                       reusable styling and shared components
+  Engine/                       SM-2, review ranking, queue management, proficiency logic
+  Models/                       SwiftData models for study, profile, ARIA, and analytics data
+  Services/                     Gemini, ARIA, Keychain, backup, cards, notifications, seeding
+  Views/                        SwiftUI app surfaces
+IBVaultTests/                   Swift Testing unit and regression tests
+repo_plan/                      RPG planning graph, file index, run artifacts
+project.yml                     XcodeGen source of truth for the project
+IBVault.xcodeproj/              checked-in generated Xcode project
 ```
 
-## 🔑 Setting Up the Gemini API Key
+## Requirements
 
-1. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
-2. Open the app → **Profile** → **Settings** (gear icon)
-3. Under **ARIA Configuration**, paste your key and click **Save to Keychain**
-4. The key is stored securely via macOS Keychain — never leaves the device except in API calls
+- macOS 14 or later
+- Xcode 15 or later
+- XcodeGen installed for project regeneration
+- Gemini API key from Google AI Studio for ARIA
 
-## 🧠 Core Features
+## Setup
 
-### Spaced Retrieval Engine (SM-2)
-- Cards scheduled using the SM-2 algorithm with ease factor adaptation
-- Quality ratings: Again (0) / Hard (2) / Good (3) / Easy (5)
-- Proficiency levels: Novice → Developing → Proficient → Mastered
-- Daily review queue sorted with overdue cards first
+1. Generate the Xcode project after changing `project.yml` or test/source membership:
 
-### ARIA AI Companion
-- Powered by **Gemini Models** via native URLSession
-- Streaming responses with typewriter effect via SSE
-- Context-aware: reads all app data (grades, due cards, streak, weak topics)
-- Memory system with semantic categories and automatic compaction
-- Generates study plans, quizzes, gap analyses, and custom flashcards
+   ```bash
+   xcodegen generate
+   ```
 
-### Gamification
-- XP system with rank progression: Electron → Atom → Molecule → Cell → Organism → Ecosystem → Universe
-- Daily study streak with freeze mechanic (earn 1 freeze per 7-day streak)
-- 14 achievements across categories (streak, recall, mastery, milestones, special)
+2. Open `IBVault.xcodeproj` in Xcode.
 
-### Pre-loaded IB Subjects
-- English B HL, Russian A Literature SL, Biology SL
-- Mathematics AA SL, Economics HL, Business Management HL
-- Each with official syllabus topics as study cards
+3. Select the `IBVault` scheme and run on `My Mac`.
 
-## 🎨 Design System
-- **Dark mode first** with deep navy (#0A0F1E) background
-- Electric blue (#4A9EFF) accent with glassmorphism cards
-- Physics-based SwiftUI animations and haptic feedback
-- Each subject has a unique accent color
+4. Add the Gemini API key in the app settings. The key is saved to the macOS Keychain.
 
-## 📋 Technical Requirements
-- **macOS 14+** (SwiftData requirement)
-- **Native Mac app** with AppKit-backed menu commands, sandboxing, and sidebar navigation
-- **No third-party dependencies** — Gemini via native URLSession
-- Swift 5.9+, Xcode 15+
+## Test And Verification
 
-## 🚀 Getting Started
+Run the macOS test suite from the repository root:
 
-1. Generate/open the checked-in `IBVault.xcodeproj` in Xcode
-2. Confirm the app target platform is **macOS 14.0+**
-3. Build and run on **My Mac**
-4. Complete onboarding → 6 subjects auto-populated
-5. Enter Gemini API key in Settings for ARIA functionality
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+xcodebuild test \
+  -project IBVault.xcodeproj \
+  -scheme IBVault \
+  -destination 'platform=macOS'
+```
+
+Validate RPG JSON artifacts when changing `repo_plan/`:
+
+```bash
+python3 -m json.tool repo_plan/rpg.json >/dev/null
+python3 -m json.tool repo_plan/file_index.json >/dev/null
+python3 -m json.tool repo_plan/runs/<run-id>/run.json >/dev/null
+```
+
+The canonical RPG helper scripts named in the agent instructions are not currently present in this checkout, so JSON validation is the available local RPG check.
+
+## Gemini And ARIA Notes
+
+- `GeminiService` owns the Gemini transport, typed request/response encoding, model listing, non-streaming generation, streaming generation, retry handling, and API error mapping.
+- `ARIAService` owns prompt/context construction, memory retrieval, app-action execution, streaming response handling, conversation history, and compaction.
+- Keep request bodies bounded. Prefer adding focused context selectors over loading entire datasets into prompts.
+- Do not log API keys, generated secrets, or raw private user study data.
+
+## Development Rules
+
+- Preserve native macOS behavior. Do not introduce iOS-only assumptions or web-only interaction patterns.
+- Keep generated Xcode project changes consistent with `project.yml`; run `xcodegen generate` after adding source or test files.
+- Prefer small, behavior-preserving service and engine changes with regression tests.
+- Update `repo_plan/rpg.json`, `repo_plan/file_index.json`, and a new `repo_plan/runs/<timestamp>/run.json` for non-trivial work.
+- Do not commit local materials, DerivedData, user schemes, or temporary profiling outputs.
+
+## Release Shape
+
+The app is a local-first macOS education tool. A production release should verify:
+
+- Clean `xcodebuild test` on macOS.
+- App sandbox entitlement and network-client entitlement remain present.
+- Gemini key storage succeeds in Keychain, with the documented local fallback behavior tested when Keychain is unavailable.
+- ARIA works with a real Gemini key and degrades clearly when the key is missing or invalid.
+- Review queue, rank progression, and menu command routing remain covered by tests.
