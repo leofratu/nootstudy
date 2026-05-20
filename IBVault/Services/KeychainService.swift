@@ -50,7 +50,8 @@ enum KeychainService {
             return true
         }
         
-        return UserDefaults.standard.set(trimmed, forKey: userDefaultsFallbackKey)
+        UserDefaults.standard.set(trimmed, forKey: userDefaultsFallbackKey)
+        return true
     }
     
     static func loadAPIKey() -> String? {
