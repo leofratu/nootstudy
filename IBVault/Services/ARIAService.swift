@@ -14,8 +14,12 @@ class ARIAService {
     private let maxMemoryItems = 8
     private let maxContextSubjects = 4
     private let maxHistoryMessages = 24
+    private let maxSnapshotReviewSessions = 160
+    private let maxCompactionMessages = 120
     private let minMessagesBeforeCompaction = 16
     private let minMessagesToKeepAfterCompaction = 8
+    private let streamUpdateCharacterStride = 96
+    private let streamUpdateInterval: TimeInterval = 0.08
 
     private struct PlannedAppAction: Codable {
         let type: String
@@ -255,12 +259,30 @@ class ARIAService {
                     apiKey: apiKey
                 )
 
+                var lastStreamUpdate = Date.distantPast
+                var pendingStreamCharacters = 0
+
                 for try await token in stream {
-                    fullResponse = Self.appendStreamChunk(token, to: fullResponse)
+                    Self.appendStreamChunk(token, to: &fullResponse)
+                    pendingStreamCharacters += token.count
+
+                    let now = Date()
+                    guard pendingStreamCharacters >= self.streamUpdateCharacterStride ||
+                            now.timeIntervalSince(lastStreamUpdate) >= self.streamUpdateInterval else {
+                        continue
+                    }
+
+                    pendingStreamCharacters = 0
+                    lastStreamUpdate = now
                     await MainActor.run {
                         self.currentStreamText = fullResponse
                         onToken(fullResponse)
                     }
+                }
+
+                await MainActor.run {
+                    self.currentStreamText = fullResponse
+                    onToken(fullResponse)
                 }
 
                 let finalizedResponse = Self.finalizeAssistantResponse(fullResponse)
@@ -1223,16 +1245,17 @@ class ARIAService {
         }
     }
 
-    private static func appendStreamChunk(_ chunk: String, to current: String) -> String {
-        guard !chunk.isEmpty else { return current }
-        guard !current.isEmpty else { return chunk }
-
-        var combined = current
-        if shouldInsertSpace(between: current.last, and: chunk.first) {
-            combined.append(" ")
+    private static func appendStreamChunk(_ chunk: String, to current: inout String) {
+        guard !chunk.isEmpty else { return }
+        guard !current.isEmpty else {
+            current = chunk
+            return
         }
-        combined.append(chunk)
-        return combined
+
+        if shouldInsertSpace(between: current.last, and: chunk.first) {
+            current.append(" ")
+        }
+        current.append(chunk)
     }
 
     private static func shouldInsertSpace(between lhs: Character?, and rhs: Character?) -> Bool {
@@ -1630,7 +1653,8 @@ class ARIAService {
         let overdueCount = (try? context.fetchCount(FetchDescriptor(predicate: overduePredicate))) ?? 0
         lines.append("- Review load: \(dueCount) due cards, \(overdueCount) overdue")
 
-        let sessionDescriptor = FetchDescriptor<ReviewSession>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
+        var sessionDescriptor = FetchDescriptor<ReviewSession>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
+        sessionDescriptor.fetchLimit = maxSnapshotReviewSessions
         let sessions = (try? context.fetch(sessionDescriptor)) ?? []
         let recentSessions = Array(sessions.prefix(40))
         if !recentSessions.isEmpty {
@@ -1843,10 +1867,11 @@ class ARIAService {
 
     @MainActor
     private func checkAndCompact(context: ModelContext, apiKey: String, sessionID: UUID) async {
-        let descriptor = FetchDescriptor<ChatMessage>(
+        var descriptor = FetchDescriptor<ChatMessage>(
             predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID },
             sortBy: [SortDescriptor(\.timestamp, order: .forward)]
         )
+        descriptor.fetchLimit = maxCompactionMessages
 
         guard let allMessages = try? context.fetch(descriptor) else { return }
         guard allMessages.count >= minMessagesBeforeCompaction else { return }

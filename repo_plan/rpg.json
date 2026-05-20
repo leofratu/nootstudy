@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-05-20T18:31:54Z",
-  "task": "Enforce native macOS target/settings and Mac-optimized app menus/usability without unrelated UI redesign.",
+  "generated_at": "2026-05-20T18:45:09Z",
+  "task": "Optimize service-layer CPU/RAM usage and Gemini call efficiency without changing app behavior.",
   "nodes": [
     {
       "id": "entry.ibvault_app.commands",
@@ -107,6 +107,41 @@
       "path": "IBVaultTests/IBVaultAppCommandTests.swift",
       "status": "tested",
       "summary": "Regression coverage that every menu navigation command maps to its sidebar destination."
+    },
+    {
+      "id": "iface.gemini_transport",
+      "type": "interface",
+      "path": "IBVault/Services/GeminiService.swift",
+      "status": "tested",
+      "summary": "Reusable configured URLSession, request body encoding, retries, streaming error handling, and response parsing."
+    },
+    {
+      "id": "iface.aria_stream_backpressure",
+      "type": "interface",
+      "path": "IBVault/Services/ARIAService.swift",
+      "status": "tested",
+      "summary": "Batched streamed-token UI updates to reduce main-actor churn while preserving final streamed text."
+    },
+    {
+      "id": "iface.aria_context_fetch_budget",
+      "type": "interface",
+      "path": "IBVault/Services/ARIAService.swift",
+      "status": "tested",
+      "summary": "Fetch limits and bounded context construction for chat history and app state snapshots."
+    },
+    {
+      "id": "iface.review_queue_scope_cache",
+      "type": "interface",
+      "path": "IBVault/Engine/ReviewQueueManager.swift",
+      "status": "tested",
+      "summary": "Avoid redundant studied-scope grouping work during due-card filtering and counts."
+    },
+    {
+      "id": "test.service_performance_regression",
+      "type": "test",
+      "path": "IBVaultTests",
+      "status": "tested",
+      "summary": "Existing macOS test suite plus targeted service tests for transport/body/history behavior."
     }
   ],
   "edges": [
@@ -176,6 +211,33 @@
       "to": "iface.macos_target_configuration",
       "type": "dependency",
       "summary": "Design feedback and system colors assume AppKit/macOS target."
+    },
+    {
+      "from": "iface.gemini_transport",
+      "to": "iface.aria_stream_backpressure",
+      "type": "data_flow",
+      "summary": "ARIA chat consumes Gemini stream chunks from transport."
+    },
+    {
+      "from": "iface.gemini_transport",
+      "to": "test.service_performance_regression",
+      "type": "verification"
+    },
+    {
+      "from": "iface.aria_stream_backpressure",
+      "to": "test.service_performance_regression",
+      "type": "verification"
+    },
+    {
+      "from": "iface.aria_context_fetch_budget",
+      "to": "iface.gemini_transport",
+      "type": "dependency",
+      "summary": "Bounded prompt/history context reduces request body size sent to Gemini."
+    },
+    {
+      "from": "iface.review_queue_scope_cache",
+      "to": "test.review_queue_manager",
+      "type": "verification"
     }
   ],
   "work_plan": [
@@ -237,6 +299,26 @@
     },
     {
       "id": "test.macos_menu_coverage",
+      "status": "tested"
+    },
+    {
+      "id": "iface.gemini_transport",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria_stream_backpressure",
+      "status": "tested"
+    },
+    {
+      "id": "iface.aria_context_fetch_budget",
+      "status": "tested"
+    },
+    {
+      "id": "iface.review_queue_scope_cache",
+      "status": "tested"
+    },
+    {
+      "id": "test.service_performance_regression",
       "status": "tested"
     }
   ]

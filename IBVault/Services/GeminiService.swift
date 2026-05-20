@@ -38,6 +38,71 @@ struct GeminiModel: Identifiable, Hashable, Sendable {
     }
 }
 
+struct GeminiRequestBody: Encodable {
+    let systemInstruction: GeminiSystemInstruction?
+    let contents: [GeminiContent]
+    let generationConfig: GeminiGenerationConfig
+
+    enum CodingKeys: String, CodingKey {
+        case systemInstruction = "system_instruction"
+        case contents
+        case generationConfig
+    }
+}
+
+struct GeminiSystemInstruction: Encodable {
+    let parts: [GeminiPart]
+}
+
+struct GeminiContent: Encodable {
+    let role: String
+    let parts: [GeminiPart]
+}
+
+struct GeminiPart: Codable {
+    let text: String
+}
+
+struct GeminiGenerationConfig: Encodable {
+    let temperature: Double
+    let topP: Double
+    let maxOutputTokens: Int
+}
+
+private struct GeminiListModelsResponse: Decodable {
+    let models: [GeminiModelResponse]
+}
+
+private struct GeminiModelResponse: Decodable {
+    let name: String
+    let displayName: String
+    let description: String?
+    let inputTokenLimit: Int?
+    let outputTokenLimit: Int?
+    let supportedGenerationMethods: [String]?
+}
+
+private struct GeminiGenerateResponse: Decodable {
+    let candidates: [GeminiCandidate]?
+}
+
+private struct GeminiCandidate: Decodable {
+    let content: GeminiResponseContent?
+}
+
+private struct GeminiResponseContent: Decodable {
+    let parts: [GeminiPart]?
+}
+
+private struct GeminiAPIErrorResponse: Decodable {
+    let error: GeminiAPIErrorPayload?
+}
+
+private struct GeminiAPIErrorPayload: Decodable {
+    let message: String?
+    let status: String?
+}
+
 enum GeminiError: Error, LocalizedError, Sendable {
     case invalidResponse
     case apiError(statusCode: Int, message: String)
@@ -100,6 +165,27 @@ enum GeminiError: Error, LocalizedError, Sendable {
 }
 
 enum GeminiService {
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
+    private static let defaultSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = GeminiConfig.default.defaultRequestTimeout
+        config.timeoutIntervalForResource = GeminiConfig.default.defaultResourceTimeout
+        config.waitsForConnectivity = true
+        config.httpMaximumConnectionsPerHost = 6
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: config)
+    }()
+    private static let shortSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForResource = 30
+        config.waitsForConnectivity = true
+        config.httpMaximumConnectionsPerHost = 4
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: config)
+    }()
+
     static var selectedModel: String {
         UserDefaults.standard.string(forKey: "geminiModel") ?? "gemini-2.0-flash"
     }
@@ -120,36 +206,28 @@ enum GeminiService {
         request.httpMethod = "GET"
         request.timeoutInterval = 15
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await shortSession.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw GeminiError.invalidResponse
         }
         
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = json["models"] as? [[String: Any]] else {
+        guard let list = try? decoder.decode(GeminiListModelsResponse.self, from: data) else {
             throw GeminiError.parseError
         }
         
-        return models.compactMap { dict -> GeminiModel? in
-            guard let name = dict["name"] as? String,
-                  let displayName = dict["displayName"] as? String else { return nil }
-            
-            let desc = dict["description"] as? String ?? ""
-            let inputLimit = dict["inputTokenLimit"] as? Int ?? 0
-            let outputLimit = dict["outputTokenLimit"] as? Int ?? 0
-            let methods = dict["supportedGenerationMethods"] as? [String] ?? []
-            
+        return list.models.compactMap { model -> GeminiModel? in
+            let methods = model.supportedGenerationMethods ?? []
             guard methods.contains("generateContent") else { return nil }
             
-            let modelId = name.hasPrefix("models/") ? String(name.dropFirst(7)) : name
+            let modelId = model.name.hasPrefix("models/") ? String(model.name.dropFirst(7)) : model.name
             
             return GeminiModel(
                 id: modelId,
-                displayName: displayName,
-                description: desc,
-                inputTokenLimit: inputLimit,
-                outputTokenLimit: outputLimit,
+                displayName: model.displayName,
+                description: model.description ?? "",
+                inputTokenLimit: model.inputTokenLimit ?? 0,
+                outputTokenLimit: model.outputTokenLimit ?? 0,
                 supportsStreaming: methods.contains("streamGenerateContent")
             )
         }
@@ -179,7 +257,7 @@ enum GeminiService {
             maxTokens: maxTokens,
             topP: config.defaultTopP
         )
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try encoder.encode(body)
         
         let (data, response) = try await retryRequest(
             request: request,
@@ -222,9 +300,9 @@ enum GeminiService {
                         maxTokens: maxTokens,
                         topP: config.defaultTopP
                     )
-                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+                    request.httpBody = try encoder.encode(body)
                     
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, response) = try await defaultSession.bytes(for: request)
                     
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw GeminiError.invalidResponse
@@ -233,7 +311,10 @@ enum GeminiService {
                     if httpResponse.statusCode != 200 {
                         var errorBody = ""
                         for try await line in bytes.lines {
-                            errorBody += line
+                            if errorBody.count < 4096 {
+                                errorBody.append(contentsOf: line.prefix(4096 - errorBody.count))
+                            }
+                            if errorBody.count >= 4096 { break }
                         }
                         throw parseAPIError(statusCode: httpResponse.statusCode, body: errorBody)
                     }
@@ -275,62 +356,64 @@ enum GeminiService {
         temperature: Double,
         maxTokens: Int,
         topP: Double
-    ) -> [String: Any] {
-        var body: [String: Any] = [:]
-        
-        if !systemInstruction.isEmpty {
-            body["system_instruction"] = [
-                "parts": [["text": systemInstruction]]
-            ]
+    ) -> GeminiRequestBody {
+        let systemInstruction = systemInstruction.isEmpty
+            ? nil
+            : GeminiSystemInstruction(parts: [GeminiPart(text: systemInstruction)])
+        let contents = messages.map { message in
+            GeminiContent(role: message.role, parts: [GeminiPart(text: message.text)])
         }
-        
-        let contents = messages.map { msg in
-            [
-                "role": msg.role,
-                "parts": [["text": msg.text]]
-            ]
-        }
-        body["contents"] = contents
-        
-        body["generationConfig"] = [
-            "temperature": temperature,
-            "topP": topP,
-            "maxOutputTokens": maxTokens
-        ]
-        
-        return body
+        return GeminiRequestBody(
+            systemInstruction: systemInstruction,
+            contents: contents,
+            generationConfig: GeminiGenerationConfig(
+                temperature: temperature,
+                topP: topP,
+                maxOutputTokens: maxTokens
+            )
+        )
+    }
+
+    static func encodedRequestBodyForTesting(
+        messages: [GeminiMessage],
+        systemInstruction: String,
+        temperature: Double,
+        maxTokens: Int,
+        topP: Double
+    ) throws -> Data {
+        try encoder.encode(buildRequestBody(
+            messages: messages,
+            systemInstruction: systemInstruction,
+            temperature: temperature,
+            maxTokens: maxTokens,
+            topP: topP
+        ))
     }
     
     private static func parseResponse(data: Data) throws -> String {
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let first = candidates.first,
-              let content = first["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]],
-              let text = parts.first?["text"] as? String else {
+        guard let response = try? decoder.decode(GeminiGenerateResponse.self, from: data),
+              let text = response.candidates?.first?.content?.parts?.first?.text else {
             throw GeminiError.parseError
         }
         return text
     }
     
     private static func parseStreamChunk(data: Data) throws -> String? {
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let first = candidates.first,
-              let content = first["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]],
-              let text = parts.first?["text"] as? String else {
-            return nil
-        }
-        return text
+        try decoder.decode(GeminiGenerateResponse.self, from: data)
+            .candidates?
+            .first?
+            .content?
+            .parts?
+            .first?
+            .text
     }
     
     private static func parseAPIError(statusCode: Int, body: String) -> GeminiError {
         if let data = body.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let error = json["error"] as? [String: Any] {
-            let message = error["message"] as? String ?? body
-            let status = error["status"] as? String ?? ""
+           let payload = try? decoder.decode(GeminiAPIErrorResponse.self, from: data),
+           let error = payload.error {
+            let message = error.message ?? body
+            let status = error.status ?? ""
             
             if status == "RESOURCE_EXHAUSTED" || statusCode == 429 {
                 return .quotaExceeded
@@ -358,15 +441,15 @@ enum GeminiService {
         timeout: TimeInterval
     ) async throws -> (Data, URLResponse) {
         var lastError: Error?
-        let session = configuredSession(timeout: timeout)
+        let session = timeout <= GeminiConfig.default.defaultRequestTimeout ? defaultSession : configuredSession(timeout: timeout)
         
-        for attempt in 0..<maxRetries {
+        for attempt in 0...maxRetries {
             do {
                 let (data, response) = try await session.data(for: request)
                 
                 if let httpResponse = response as? HTTPURLResponse {
-                    if httpResponse.statusCode == 429 || httpResponse.statusCode == 503 {
-                        let delay = pow(2.0, Double(attempt)) + Double.random(in: 0...1)
+                    if (httpResponse.statusCode == 429 || httpResponse.statusCode == 503), attempt < maxRetries {
+                        let delay = retryDelay(for: attempt, response: httpResponse)
                         try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                         continue
                     }
@@ -381,11 +464,12 @@ enum GeminiService {
                     throw GeminiError.offline
                 }
                 
-                if nsError.code == NSURLErrorTimedOut && attempt == maxRetries - 1 {
+                if nsError.code == NSURLErrorTimedOut && attempt == maxRetries {
                     throw GeminiError.maxRetriesExceeded
                 }
                 
-                let delay = pow(2.0, Double(attempt))
+                guard attempt < maxRetries else { break }
+                let delay = retryDelay(for: attempt, response: nil)
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
         }
@@ -398,6 +482,17 @@ enum GeminiService {
         config.timeoutIntervalForRequest = timeout
         config.timeoutIntervalForResource = timeout * 2
         config.waitsForConnectivity = true
+        config.httpMaximumConnectionsPerHost = 6
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: config)
+    }
+
+    private static func retryDelay(for attempt: Int, response: HTTPURLResponse?) -> TimeInterval {
+        if let retryAfter = response?.value(forHTTPHeaderField: "Retry-After"),
+           let seconds = TimeInterval(retryAfter) {
+            return min(max(seconds, 0.5), 8)
+        }
+        let exponential = min(pow(2.0, Double(attempt)), 8)
+        return exponential + Double.random(in: 0...0.35)
     }
 }

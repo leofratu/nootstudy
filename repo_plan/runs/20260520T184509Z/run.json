@@ -1,0 +1,82 @@
+{
+  "task_id": "20260520-service-performance-gemini-backend",
+  "mode": "rpg",
+  "rpg_used": true,
+  "localization": {
+    "nodes": [
+      "iface.gemini_transport",
+      "iface.aria_stream_backpressure",
+      "iface.aria_context_fetch_budget",
+      "iface.review_queue_scope_cache",
+      "test.service_performance_regression"
+    ],
+    "files": [
+      "IBVault/Services/GeminiService.swift",
+      "IBVault/Services/ARIAService.swift",
+      "IBVault/Engine/ReviewQueueManager.swift",
+      "IBVaultTests/GeminiServiceTests.swift",
+      "IBVault.xcodeproj/project.pbxproj",
+      "repo_plan/rpg.json",
+      "repo_plan/file_index.json",
+      "repo_plan/runs/20260520T184509Z/run.json"
+    ],
+    "evidence": [
+      "GeminiService now uses typed Codable payloads/responses and reusable URLSession instances.",
+      "ARIA streaming now batches main-actor token updates and bounds context fetches.",
+      "ReviewQueueManager reuses a subject-indexed scope cache for due-card filtering."
+    ]
+  },
+  "tests": [
+    {
+      "cmd": "xcodegen generate",
+      "ok": true,
+      "interfaces": [
+        "test.service_performance_regression"
+      ]
+    },
+    {
+      "cmd": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS'",
+      "ok": true,
+      "interfaces": [
+        "iface.gemini_transport",
+        "iface.aria_stream_backpressure",
+        "iface.aria_context_fetch_budget",
+        "iface.review_queue_scope_cache",
+        "test.service_performance_regression"
+      ],
+      "summary": "50 tests in 8 suites passed."
+    },
+    {
+      "cmd": "python3 -m json.tool repo_plan/rpg.json >/dev/null && python3 -m json.tool repo_plan/file_index.json >/dev/null && python3 -m json.tool repo_plan/runs/20260520T184509Z/run.json >/dev/null",
+      "ok": true,
+      "interfaces": [
+        "iface.gemini_transport",
+        "iface.aria_stream_backpressure",
+        "iface.aria_context_fetch_budget",
+        "iface.review_queue_scope_cache",
+        "test.service_performance_regression"
+      ],
+      "summary": "RPG, file index, and run artifact are valid JSON."
+    }
+  ],
+  "implemented_interfaces": [
+    "iface.gemini_transport",
+    "iface.aria_stream_backpressure",
+    "iface.aria_context_fetch_budget",
+    "iface.review_queue_scope_cache",
+    "test.service_performance_regression"
+  ],
+  "tested_interfaces": [
+    "iface.gemini_transport",
+    "iface.aria_stream_backpressure",
+    "iface.aria_context_fetch_budget",
+    "iface.review_queue_scope_cache",
+    "test.service_performance_regression"
+  ],
+  "elapsed_s": null,
+  "tool_calls_count": null,
+  "notes": [
+    "scripts/validate_rpg.py and scripts/run_bench.py are absent in this checkout; JSON artifact validation was used and no benchmark uplift is claimed.",
+    "Existing unrelated dirty UI/icon edits and deleted historical run files were left unstaged."
+  ]
+}

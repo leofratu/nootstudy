@@ -53,6 +53,7 @@
 		BA9298FBF83891072E409AA3 /* SM2EngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8D6380A8672B03837E7602 /* SM2EngineTests.swift */; };
 		BE4BADD3C35B1DD876A58D08 /* IBVaultAppCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D5763D72BAAB509FA60995 /* IBVaultAppCommandTests.swift */; };
 		C8AB4A46E62DF86D13805CBD /* AnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D5C3D493F8E74D1A33CA70 /* AnalyticsView.swift */; };
+		C9D8ED43FDE5725AB1813DC4 /* GeminiServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */; };
 		CB620D7B2607DDB59B8D474C /* Subject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE35A2B5EB4D74B9779057D4 /* Subject.swift */; };
 		CE96FB3C86DF1E355C6233BF /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32D17D7E917936131C22F2ED /* OnboardingView.swift */; };
 		D1B4F94E70DE26FC4291CC4B /* ARIAMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D455212D8B12319B3E8CAF7 /* ARIAMemory.swift */; };
@@ -144,6 +145,7 @@
 		E25383C7CD4E2D5968FE6CA9 /* StudyGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyGuideView.swift; sourceTree = "<group>"; };
 		E463EB81821428C62738F69C /* SM2Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SM2Engine.swift; sourceTree = "<group>"; };
 		E4A21C149C9CDCC3E182E69C /* ProficiencyTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProficiencyTrackerTests.swift; sourceTree = "<group>"; };
+		EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiServiceTests.swift; sourceTree = "<group>"; };
 		ED97CD9D635EAE250C259E5F /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectDetailView.swift; sourceTree = "<group>"; };
 		FE35A2B5EB4D74B9779057D4 /* Subject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Subject.swift; sourceTree = "<group>"; };
@@ -343,6 +345,7 @@
 			isa = PBXGroup;
 			children = (
 				64457DA4883197D2A87251A1 /* ADHDMedicationTrackerTests.swift */,
+				EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */,
 				99D5763D72BAAB509FA60995 /* IBVaultAppCommandTests.swift */,
 				E4A21C149C9CDCC3E182E69C /* ProficiencyTrackerTests.swift */,
 				967852FAB1BFC2229E6856AF /* ReviewQueueManagerTests.swift */,
@@ -535,6 +538,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA3E53D96ABC17D25927D643 /* ADHDMedicationTrackerTests.swift in Sources */,
+				C9D8ED43FDE5725AB1813DC4 /* GeminiServiceTests.swift in Sources */,
 				BE4BADD3C35B1DD876A58D08 /* IBVaultAppCommandTests.swift in Sources */,
 				AF91A2FA0CDFD6F2491E071F /* ProficiencyTrackerTests.swift in Sources */,
 				337335D89ED5CB283CE47BBD /* ReviewQueueManagerTests.swift in Sources */,

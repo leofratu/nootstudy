@@ -13,6 +13,24 @@ final class ReviewQueueManager: @unchecked Sendable {
     private let lock = NSLock()
     private var isRefreshing = false
 
+    private struct ScopeIndex {
+        let scopesBySubject: [String: [StudyScope]]
+
+        init(scopes: [StudyScope]) {
+            scopesBySubject = Dictionary(grouping: scopes, by: \.subjectName)
+        }
+
+        var isEmpty: Bool {
+            scopesBySubject.isEmpty
+        }
+
+        func matches(_ card: StudyCard) -> Bool {
+            guard let subjectName = card.subject?.name,
+                  let scopes = scopesBySubject[subjectName] else { return false }
+            return scopes.contains { $0.matches(card) }
+        }
+    }
+
     // MARK: - Refresh (off-main-thread fetch)
     func refreshDueCards(context: ModelContext) {
         // Prevent concurrent redundant refreshes
@@ -34,13 +52,13 @@ final class ReviewQueueManager: @unchecked Sendable {
             descriptor.sortBy = [SortDescriptor(\.nextReviewDate, order: .forward)]
 
             do {
-                let studiedScopes = self.fetchStudiedScopes(in: backgroundContext)
+                let scopeIndex = ScopeIndex(scopes: self.fetchStudiedScopes(in: backgroundContext))
                 let fetched = try backgroundContext.fetch(descriptor)
                 let filtered: [StudyCard]
-                if studiedScopes.isEmpty {
+                if scopeIndex.isEmpty {
                     filtered = fetched
                 } else {
-                    filtered = self.filterCardsToScopes(fetched, matching: studiedScopes)
+                    filtered = self.filterCardsToScopes(fetched, matching: scopeIndex)
                 }
 
                 // Build O(1) per-subject count cache
@@ -87,7 +105,8 @@ final class ReviewQueueManager: @unchecked Sendable {
         do {
             let studiedScopes = fetchStudiedScopes(in: context)
             let fetched = try context.fetch(descriptor)
-            let filtered = studiedScopes.isEmpty ? fetched : filterCardsToScopes(fetched, matching: studiedScopes)
+            let scopeIndex = ScopeIndex(scopes: studiedScopes)
+            let filtered = scopeIndex.isEmpty ? fetched : filterCardsToScopes(fetched, matching: scopeIndex)
             applyDueCardsSnapshot(filtered)
         } catch {
             applyDueCardsSnapshot([])
@@ -103,14 +122,15 @@ final class ReviewQueueManager: @unchecked Sendable {
     func dueCardsForSubject(_ subject: Subject, context: ModelContext) -> [StudyCard] {
         let now = Date()
         let studiedScopes = fetchStudiedScopes(in: context).filter { $0.subjectName == subject.name }
+        let scopeIndex = ScopeIndex(scopes: studiedScopes)
 
-        if studiedScopes.isEmpty {
+        if scopeIndex.isEmpty {
             return subject.cards
                 .filter { $0.nextReviewDate <= now }
                 .sorted { $0.nextReviewDate < $1.nextReviewDate }
         }
 
-        return filterCardsToScopes(subject.cards, matching: studiedScopes)
+        return filterCardsToScopes(subject.cards, matching: scopeIndex)
             .filter { $0.nextReviewDate <= now }
             .sorted { $0.nextReviewDate < $1.nextReviewDate }
     }
@@ -134,10 +154,10 @@ final class ReviewQueueManager: @unchecked Sendable {
         descriptor.sortBy = [SortDescriptor(\.nextReviewDate)]
 
         do {
-            let studied = fetchStudiedScopes(in: context)
+            let scopeIndex = ScopeIndex(scopes: fetchStudiedScopes(in: context))
             let fetched = try context.fetch(descriptor)
-            if studied.isEmpty { return fetched }
-            return filterCardsToScopes(fetched, matching: studied)
+            if scopeIndex.isEmpty { return fetched }
+            return filterCardsToScopes(fetched, matching: scopeIndex)
         } catch {
             return []
         }
@@ -155,7 +175,7 @@ final class ReviewQueueManager: @unchecked Sendable {
         let studied = fetchStudiedScopes(in: context)
         let all = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
         if studied.isEmpty { return all }
-        return filterCardsToScopes(all, matching: studied)
+        return filterCardsToScopes(all, matching: ScopeIndex(scopes: studied))
     }
 
     // MARK: - Private helpers
@@ -180,11 +200,12 @@ final class ReviewQueueManager: @unchecked Sendable {
 
     private func filterCardsToScopes(_ cards: [StudyCard], matching scopes: [StudyScope]) -> [StudyCard] {
         guard !scopes.isEmpty else { return [] }
-        let scopesBySubject = Dictionary(grouping: scopes, by: \.subjectName)
-        return cards.filter { card in
-            guard let subjectName = card.subject?.name else { return false }
-            return scopesBySubject[subjectName]?.contains { $0.matches(card) } ?? false
-        }
+        return filterCardsToScopes(cards, matching: ScopeIndex(scopes: scopes))
+    }
+
+    private func filterCardsToScopes(_ cards: [StudyCard], matching scopeIndex: ScopeIndex) -> [StudyCard] {
+        guard !scopeIndex.isEmpty else { return [] }
+        return cards.filter { scopeIndex.matches($0) }
     }
 
     // Keep old name so callers continue to compile

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-05-20T18:31:54Z",
+  "generated_at": "2026-05-20T18:45:09Z",
   "root": "/Users/main/Desktop/nootstudy",
-  "source": "git ls-tree -r --name-only HEAD plus current macOS-native follow-up files",
+  "source": "git ls-files plus selected new service-performance artifacts",
   "files": [
     ".github/workflows/mac-release.yml",
     ".gitignore",
@@ -65,6 +65,7 @@
     "IBVault/Views/Subjects/SubjectsGridView.swift",
     "IBVault/Views/Subjects/TopicBrowserView.swift",
     "IBVaultTests/ADHDMedicationTrackerTests.swift",
+    "IBVaultTests/GeminiServiceTests.swift",
     "IBVaultTests/IBVaultAppCommandTests.swift",
     "IBVaultTests/ProficiencyTrackerTests.swift",
     "IBVaultTests/ReviewQueueManagerTests.swift",
@@ -104,6 +105,7 @@
     "repo_plan/runs/20260312T222040/run.json",
     "repo_plan/runs/20260312T222930/run.json",
     "repo_plan/runs/20260313T125930/run.json",
-    "repo_plan/runs/20260520T180853Z/run.json"
+    "repo_plan/runs/20260520T180853Z/run.json",
+    "repo_plan/runs/20260520T184509Z/run.json"
   ]
 }
