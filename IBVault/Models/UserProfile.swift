@@ -208,6 +208,11 @@ enum UserRank: String, Codable, CaseIterable, Sendable {
         guard let idx = all.firstIndex(of: self), idx + 1 < all.count else { return nil }
         return all[idx + 1]
     }
+
+    static func rank(forXP xp: Int) -> UserRank {
+        let normalizedXP = max(0, xp)
+        return allCases.last { normalizedXP >= $0.xpRequired } ?? .electron
+    }
 }
 
 @Model
@@ -232,6 +237,8 @@ final class UserProfile {
     var ibYearRaw: String
     var targetIBScore: Int
     var reportLastUploaded: Date?
+    var totalCardsReviewed: Int?
+    var rankUpDate: Date?
     
     var studyIntensity: StudyIntensity {
         get { StudyIntensity(rawValue: studyIntensityRaw) ?? .average }
@@ -252,18 +259,24 @@ final class UserProfile {
         guard let next = rank.next else { return 1.0 }
         let currentMin = rank.xpRequired
         let nextMin = next.xpRequired
-        return Double(totalXP - currentMin) / Double(nextMin - currentMin)
+        let progress = Double(totalXP - currentMin) / Double(nextMin - currentMin)
+        return min(max(progress, 0.0), 1.0)
     }
     
+    /// Adds XP, auto-promotes rank, and records the rank-up date.
     func addXP(_ amount: Int) {
+        guard amount > 0 else { return }
         totalXP += amount
-        let all = UserRank.allCases
-        for r in all.reversed() {
-            if totalXP >= r.xpRequired {
-                rank = r
-                break
-            }
+        let previousRank = rank
+        rank = UserRank.rank(forXP: totalXP)
+        if rank != previousRank {
+            rankUpDate = Date()
         }
+    }
+
+    /// Increments totalCardsReviewed by count.
+    func recordCardsReviewed(_ count: Int) {
+        totalCardsReviewed = (totalCardsReviewed ?? 0) + count
     }
     
     func checkAndUpdateStreak() {
@@ -306,24 +319,27 @@ final class UserProfile {
         
         if ibYear == .dp2 {
             totalXP += 100
-            let all = UserRank.allCases
-            for r in all.reversed() {
-                if totalXP >= r.xpRequired { rank = r; break }
-            }
+            rank = UserRank.rank(forXP: totalXP)
         }
     }
     
     func autoUpdateFromGrades(averageGrade: Double, totalReviews: Int) {
-        let gradeScore = averageGrade / 7.0
-        let consistencyScore = min(Double(totalReviews) / 200.0, 1.0)
+        let gradeScore = min(max(averageGrade / 7.0, 0.0), 1.0)
+        let consistencyScore = min(max(Double(totalReviews) / 200.0, 0.0), 1.0)
         let combined = (gradeScore * 0.6 + consistencyScore * 0.4)
-        
-        if combined >= 0.9 { if rank.xpRequired < UserRank.universe.xpRequired { rank = .universe; totalXP = max(totalXP, 4500) } }
-        else if combined >= 0.8 { if rank.xpRequired < UserRank.ecosystem.xpRequired { rank = .ecosystem; totalXP = max(totalXP, 2800) } }
-        else if combined >= 0.7 { if rank.xpRequired < UserRank.organism.xpRequired { rank = .organism; totalXP = max(totalXP, 1800) } }
-        else if combined >= 0.6 { if rank.xpRequired < UserRank.nucleus.xpRequired { rank = .nucleus; totalXP = max(totalXP, 1200) } }
-        else if combined >= 0.5 { if rank.xpRequired < UserRank.cell.xpRequired { rank = .cell; totalXP = max(totalXP, 800) } }
-        else if combined >= 0.4 { if rank.xpRequired < UserRank.catalyst.xpRequired { rank = .catalyst; totalXP = max(totalXP, 500) } }
+
+        let targetRank: UserRank?
+        if combined >= 0.9 { targetRank = .universe }
+        else if combined >= 0.8 { targetRank = .ecosystem }
+        else if combined >= 0.7 { targetRank = .organism }
+        else if combined >= 0.6 { targetRank = .nucleus }
+        else if combined >= 0.5 { targetRank = .cell }
+        else if combined >= 0.4 { targetRank = .catalyst }
+        else { targetRank = nil }
+
+        guard let targetRank, rank.xpRequired < targetRank.xpRequired else { return }
+        rank = targetRank
+        totalXP = max(totalXP, targetRank.xpRequired)
     }
     
     init() {
@@ -343,6 +359,8 @@ final class UserProfile {
         self.studyIntensityRaw = StudyIntensity.average.rawValue
         self.ibYearRaw = IBYear.dp1.rawValue
         self.targetIBScore = 30
+        self.totalCardsReviewed = nil
+        self.rankUpDate = nil
     }
 }
 
