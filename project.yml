@@ -49,3 +49,4 @@ targets:
       SWIFT_VERSION: 5.0
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.tests
       ENABLE_TESTING_SEARCH_PATHS: YES
+      GENERATE_INFOPLIST_FILE: YES
