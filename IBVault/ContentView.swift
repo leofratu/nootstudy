@@ -33,19 +33,12 @@ enum NavigationTab: String, CaseIterable, Hashable {
 }
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var context
     @State private var selectedTab: NavigationTab? = .dashboard
-    @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
-    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
-
-    private var studiedScopes: [StudyScope] {
-        StudySession.uniqueStudyScopes(from: studySessions)
-    }
+    @State private var reviewQueueManager = ReviewQueueManager()
 
     private var dueCount: Int {
-        guard !studiedScopes.isEmpty else { return 0 }
-        return allCards.filter { card in
-            card.isDue && studiedScopes.contains { $0.matches(card) }
-        }.count
+        reviewQueueManager.totalDueCount
     }
 
     var body: some View {
@@ -119,34 +112,54 @@ struct ContentView: View {
         #if os(macOS)
         .frame(minWidth: 1000, minHeight: 700)
         #endif
+        .environment(reviewQueueManager)
+        .onAppear {
+            reviewQueueManager.refreshDueCards(context: context)
+        }
+        .onChange(of: selectedTab) { _, _ in
+            reviewQueueManager.refreshDueCards(context: context)
+        }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: .ibVaultAppCommand)) { notification in
+            handleAppCommand(notification.object)
+        }
+        #endif
     }
 
     #if os(macOS)
     private func toggleSidebar() {
         NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
     }
+
+    private func handleAppCommand(_ payload: Any?) {
+        guard let command = IBVaultAppCommand.fromNotificationPayload(payload) else { return }
+
+        if let targetTab = command.targetTab {
+            selectedTab = targetTab
+        }
+
+        if command == .refreshReviewQueue {
+            reviewQueueManager.refreshDueCards(context: context)
+        }
+    }
     #endif
 }
 
 // MARK: - Review Launch
 struct ReviewLaunchView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(ReviewQueueManager.self) private var queueManager
     @State private var showReview = false
     @State private var showGuide = false
-    @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
 
-    private var studiedScopes: [StudyScope] {
-        StudySession.uniqueStudyScopes(from: studySessions)
+    private var eligibleCount: Int {
+        queueManager.eligibleCardsCount(context: context)
     }
 
-    private var eligibleCards: [StudyCard] {
-        guard !studiedScopes.isEmpty else { return [] }
-        return allCards.filter { card in
-            studiedScopes.contains { $0.matches(card) }
-        }
+    private var dueCardsCount: Int {
+        queueManager.dueCards.count
     }
-
-    private var dueCards: [StudyCard] { eligibleCards.filter { $0.isDue } }
 
     var body: some View {
         NavigationStack {
@@ -176,9 +189,9 @@ struct ReviewLaunchView: View {
 
                     // Stats
                     HStack(spacing: 0) {
-                        StatCard(value: "\(dueCards.count)", label: "Cards Due", color: dueCards.isEmpty ? .green : .orange, icon: "clock.badge.exclamationmark")
+                        StatCard(value: "\(dueCardsCount)", label: "Cards Due", color: dueCardsCount == 0 ? .green : .orange, icon: "clock.badge.exclamationmark")
                         Divider().frame(height: 50)
-                        StatCard(value: "\(eligibleCards.count)", label: "Review Pool", color: IBColors.electricBlue, icon: "square.stack.fill")
+                        StatCard(value: "\(eligibleCount)", label: "Review Pool", color: IBColors.electricBlue, icon: "square.stack.fill")
                     }
                     .padding(.vertical, 12)
                     .glassCard()
@@ -198,7 +211,7 @@ struct ReviewLaunchView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        .disabled(studySessions.isEmpty || dueCards.isEmpty)
+                        .disabled(studySessions.isEmpty || dueCardsCount == 0)
 
                         Button {
                             IBHaptics.soft()
