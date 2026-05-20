@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-05-20T18:51:19Z",
+  "generated_at": "2026-05-20T18:54:59Z",
   "root": "/Users/main/Desktop/nootstudy",
-  "source": "git ls-files plus tracked Materials placeholder after final repository cleanup",
+  "source": "git ls-files plus final wrap-up run artifact",
   "files": [
     ".github/workflows/mac-release.yml",
     ".gitignore",
@@ -79,6 +79,7 @@
     "repo_plan/file_index.json",
     "repo_plan/rpg.json",
     "repo_plan/runs/20260520T180853Z/run.json",
-    "repo_plan/runs/20260520T184509Z/run.json"
+    "repo_plan/runs/20260520T184509Z/run.json",
+    "repo_plan/runs/20260520T185459Z/run.json"
   ]
 }

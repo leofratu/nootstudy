@@ -339,7 +339,7 @@ struct ReviewSessionView: View {
     private func rateCard(_ quality: RecallQuality) {
         guard let card = currentCard else { return }
         SM2Engine.applyReview(to: card, quality: quality)
-        let xp = SM2Engine.xpForReview(quality: quality); sessionXP += xp
+        let xp = SM2Engine.xpForReview(quality); sessionXP += xp
         if quality == .good || quality == .easy { sessionCorrect += 1 }
         context.insert(ReviewSession(cardID: card.id, subjectName: card.subject?.name ?? "", topicName: card.topicName, qualityRating: quality.rawValue))
         switch quality { case .again: IBHaptics.warning(); case .hard: IBHaptics.light(); case .good: IBHaptics.medium(); case .easy: IBHaptics.success() }
