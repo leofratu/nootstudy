@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-05-20T18:45:09Z",
-  "task": "Optimize service-layer CPU/RAM usage and Gemini call efficiency without changing app behavior.",
+  "generated_at": "2026-05-20T18:48:26Z",
+  "task": "Final repository wrap-up: improve README documentation, clean repository metadata, prune stale RPG run artifacts, and preserve native macOS behavior.",
   "nodes": [
     {
       "id": "entry.ibvault_app.commands",
@@ -142,6 +142,41 @@
       "path": "IBVaultTests",
       "status": "tested",
       "summary": "Existing macOS test suite plus targeted service tests for transport/body/history behavior."
+    },
+    {
+      "id": "doc.root_readme",
+      "type": "interface",
+      "path": "README.md",
+      "status": "planned",
+      "summary": "Root project README accurately presents native macOS app scope, architecture, setup, test commands, and repo workflow."
+    },
+    {
+      "id": "doc.app_readme",
+      "type": "interface",
+      "path": "IBVault/README.md",
+      "status": "planned",
+      "summary": "App-level README gives focused developer notes for the IBVault target, services, data model, and QA commands."
+    },
+    {
+      "id": "iface.repo_hygiene",
+      "type": "interface",
+      "path": ".gitignore",
+      "status": "planned",
+      "summary": "Repository ignore rules cover common macOS/Xcode local artifacts without hiding source files."
+    },
+    {
+      "id": "iface.rpg_artifact_cleanup",
+      "type": "interface",
+      "path": "repo_plan",
+      "status": "planned",
+      "summary": "RPG plan, file index, and run artifacts reflect the final cleanup pass without stale deleted run logs."
+    },
+    {
+      "id": "test.final_wrap_verification",
+      "type": "test",
+      "path": "repo_plan/runs",
+      "status": "planned",
+      "summary": "Final JSON validation and macOS test command evidence for the wrap-up run."
     }
   ],
   "edges": [
@@ -238,6 +273,38 @@
       "from": "iface.review_queue_scope_cache",
       "to": "test.review_queue_manager",
       "type": "verification"
+    },
+    {
+      "from": "doc.root_readme",
+      "to": "doc.app_readme",
+      "type": "dependency",
+      "summary": "The app README expands the root README development guidance."
+    },
+    {
+      "from": "iface.repo_hygiene",
+      "to": "iface.rpg_artifact_cleanup",
+      "type": "dependency",
+      "summary": "Cleanup keeps generated/local files out of tracked RPG artifacts."
+    },
+    {
+      "from": "doc.root_readme",
+      "to": "test.final_wrap_verification",
+      "type": "verification"
+    },
+    {
+      "from": "doc.app_readme",
+      "to": "test.final_wrap_verification",
+      "type": "verification"
+    },
+    {
+      "from": "iface.repo_hygiene",
+      "to": "test.final_wrap_verification",
+      "type": "verification"
+    },
+    {
+      "from": "iface.rpg_artifact_cleanup",
+      "to": "test.final_wrap_verification",
+      "type": "verification"
     }
   ],
   "work_plan": [
@@ -320,6 +387,26 @@
     {
       "id": "test.service_performance_regression",
       "status": "tested"
+    },
+    {
+      "id": "doc.root_readme",
+      "status": "planned"
+    },
+    {
+      "id": "doc.app_readme",
+      "status": "planned"
+    },
+    {
+      "id": "iface.repo_hygiene",
+      "status": "planned"
+    },
+    {
+      "id": "iface.rpg_artifact_cleanup",
+      "status": "planned"
+    },
+    {
+      "id": "test.final_wrap_verification",
+      "status": "planned"
     }
   ]
 }
