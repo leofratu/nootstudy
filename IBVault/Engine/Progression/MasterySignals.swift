@@ -41,4 +41,15 @@ enum MasterySignals {
         let successful = recent.filter(\.isSuccessful).count
         return Double(successful) / Double(recent.count)
     }
+
+    /// Mean interval across reviewed cards, normalised against the target and
+    /// capped so one very mature card cannot carry a whole subject.
+    static func stability(cards: [CardSnapshot]) -> Double {
+        let seen = cards.filter { $0.repetitions >= 1 }
+        guard !seen.isEmpty else { return 0 }
+        let total = seen.reduce(0.0) { partial, card in
+            partial + min(Double(card.intervalDays) / stabilityTargetDays, 1.0)
+        }
+        return total / Double(seen.count)
+    }
 }

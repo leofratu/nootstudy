@@ -66,4 +66,30 @@ struct MasterySignalsTests {
         }
         #expect(MasterySignals.retention(reviews: stale + recent, now: now) == 0.0)
     }
+
+    @Test("Stability averages intervals normalised against the target, capped at one")
+    func stabilityNormalisesAgainstTarget() {
+        let cards = [
+            CardSnapshot(repetitions: 1, intervalDays: 21),   // 1.0
+            CardSnapshot(repetitions: 1, intervalDays: 42),   // capped to 1.0
+            CardSnapshot(repetitions: 1, intervalDays: 0),    // 0.0
+        ]
+        let value = MasterySignals.stability(cards: cards)
+        #expect(abs(value - (2.0 / 3.0)) < 0.0001)
+    }
+
+    @Test("Stability ignores cards that have never been reviewed")
+    func stabilityIgnoresUnseenCards() {
+        let cards = [
+            CardSnapshot(repetitions: 0, intervalDays: 0),
+            CardSnapshot(repetitions: 0, intervalDays: 0),
+            CardSnapshot(repetitions: 3, intervalDays: 21),
+        ]
+        #expect(MasterySignals.stability(cards: cards) == 1.0)
+    }
+
+    @Test("Stability with no seen cards is zero")
+    func stabilityWithNoSeenCardsIsZero() {
+        #expect(MasterySignals.stability(cards: [CardSnapshot(repetitions: 0, intervalDays: 0)]) == 0)
+    }
 }
