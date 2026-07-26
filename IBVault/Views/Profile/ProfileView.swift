@@ -63,15 +63,16 @@ struct ProfileView: View {
                 Circle()
                     .fill(IBColors.electricBlue.opacity(0.08))
                     .frame(width: 80, height: 80)
-                Text(profile?.rank.emoji ?? "⚡")
-                    .font(.system(size: 36))
+                Image(systemName: profile?.achievedStep.rank.symbolName ?? "bolt.circle")
+                    .font(.system(size: 32))
+                    .foregroundStyle(IBColors.electricBlue)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(profile?.studentName ?? "Student")
                     .font(.title2.bold())
                 HStack(spacing: 8) {
-                    Text(profile?.rank.rawValue ?? "Unranked")
+                    Text(profile?.achievedStep.displayName ?? "Unranked")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(IBColors.electricBlue)
                     Text("•")
@@ -102,27 +103,11 @@ struct ProfileView: View {
             }
 
             if let p = profile {
-                if let next = p.rank.next {
-                    HStack {
-                        Text(p.rank.emoji)
-                            .font(.title3)
-                        VStack(alignment: .leading, spacing: 4) {
-                            ProgressView(value: p.progressToNextRank)
-                                .tint(IBColors.electricBlue)
-                            Text("\(p.totalXP) / \(next.xpRequired) XP to \(next.rawValue)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(next.emoji)
-                            .font(.title3)
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        Image(systemName: "crown.fill")
-                            .foregroundStyle(.yellow)
-                        Text("Maximum rank achieved!")
-                            .font(.callout.weight(.medium))
-                    }
+                HStack(spacing: 8) {
+                    Image(systemName: p.achievedStep.rank.symbolName)
+                        .foregroundStyle(IBColors.electricBlue)
+                    Text(p.achievedStep.displayName)
+                        .font(.callout.weight(.medium))
                 }
             }
         }

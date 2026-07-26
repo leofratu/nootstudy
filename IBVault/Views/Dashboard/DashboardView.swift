@@ -109,7 +109,7 @@ struct DashboardView: View {
 
             Divider().frame(height: 50)
             StatCard(
-                value: "\(profile?.rank.emoji ?? "⚡") \(profile?.rank.rawValue ?? "—")",
+                value: profile?.achievedStep.displayName ?? "—",
                 label: "Current Rank",
                 color: IBColors.englishColor,
                 icon: nil

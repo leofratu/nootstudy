@@ -16,6 +16,7 @@ struct ReviewSessionView: View {
     @State private var isFlipped = false
     @State private var sessionComplete = false
     @State private var sessionXP = 0
+    @State private var sessionQualities: [RecallQuality] = []
     @State private var sessionCorrect = 0
     @State private var sessionStartTime = Date()
     @State private var showStudyGuide = false
@@ -40,6 +41,11 @@ struct ReviewSessionView: View {
     }
     private var dedicatedMinutesDouble: Double {
         Double(ARIAService.normalizedDurationMinutes(Date().timeIntervalSince(sessionStartTime) / 60))
+    }
+    /// Running total for the in-session counter, priced by the same engine
+    /// that awards the XP at completion.
+    private var liveSessionXP: Int {
+        XPCalculator.xp(forQualities: sessionQualities, intensity: profiles.first?.studyIntensity ?? .average)
     }
     private var reloadSignature: String {
         let sessionIDs = studySessions.map { $0.id.uuidString }.joined(separator: "|")
@@ -124,7 +130,7 @@ struct ReviewSessionView: View {
                         Image(systemName: "star.fill")
                             .foregroundStyle(.yellow)
                             .font(.caption)
-                        Text("+\(sessionXP) XP")
+                        Text("+\(liveSessionXP) XP")
                             .font(.callout.bold())
                             .foregroundStyle(IBColors.electricBlue)
                     }
@@ -339,7 +345,7 @@ struct ReviewSessionView: View {
     private func rateCard(_ quality: RecallQuality) {
         guard let card = currentCard else { return }
         SM2Engine.applyReview(to: card, quality: quality)
-        let xp = SM2Engine.xpForReview(quality); sessionXP += xp
+        sessionQualities.append(quality)
         if quality == .good || quality == .easy { sessionCorrect += 1 }
         context.insert(ReviewSession(cardID: card.id, subjectName: card.subject?.name ?? "", topicName: card.topicName, qualityRating: quality.rawValue))
         switch quality { case .again: IBHaptics.warning(); case .hard: IBHaptics.light(); case .good: IBHaptics.medium(); case .easy: IBHaptics.success() }
@@ -349,7 +355,11 @@ struct ReviewSessionView: View {
     }
 
     private func completeSession() {
-        if let p = profiles.first { p.addXP(sessionXP); p.checkAndUpdateStreak() }
+        if let p = profiles.first {
+            sessionXP = XPCalculator.xp(forQualities: sessionQualities, intensity: p.studyIntensity)
+            p.recordXP(sessionXP)
+            p.checkAndUpdateStreak()
+        }
         filterPlan?.isCompleted = true
         let today = Calendar.current.startOfDay(for: Date())
         let pred = #Predicate<StudyActivity> { $0.date == today }

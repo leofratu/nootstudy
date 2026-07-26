@@ -280,13 +280,15 @@ struct BackupMeta: Codable {
 
 struct ProfileBackup: Codable {
     let totalXP: Int; let currentStreak: Int; let longestStreak: Int
-    let streakFreezes: Int; let rankRaw: String; let dailyGoal: Int
+    let streakFreezes: Int; let dailyGoal: Int
+    let achievedRankRaw: Int; let achievedTierRaw: Int
     let studentName: String; let studyIntensityRaw: String; let ibYearRaw: String
     let targetIBScore: Int; let notificationHour: Int; let notificationMinute: Int
 
     init(from p: UserProfile) {
         totalXP = p.totalXP; currentStreak = p.currentStreak; longestStreak = p.longestStreak
-        streakFreezes = p.streakFreezes; rankRaw = p.rankRaw; dailyGoal = p.dailyGoal
+        streakFreezes = p.streakFreezes; dailyGoal = p.dailyGoal
+        achievedRankRaw = p.achievedRankRaw; achievedTierRaw = p.achievedTierRaw
         studentName = p.studentName; studyIntensityRaw = p.studyIntensityRaw; ibYearRaw = p.ibYearRaw
         targetIBScore = p.targetIBScore; notificationHour = p.notificationHour; notificationMinute = p.notificationMinute
     }
@@ -294,7 +296,8 @@ struct ProfileBackup: Codable {
     func toModel() -> UserProfile {
         let p = UserProfile()
         p.totalXP = totalXP; p.currentStreak = currentStreak; p.longestStreak = longestStreak
-        p.streakFreezes = streakFreezes; p.rankRaw = rankRaw; p.dailyGoal = dailyGoal
+        p.streakFreezes = streakFreezes; p.dailyGoal = dailyGoal
+        p.achievedRankRaw = achievedRankRaw; p.achievedTierRaw = achievedTierRaw
         p.studentName = studentName; p.studyIntensityRaw = studyIntensityRaw; p.ibYearRaw = ibYearRaw
         p.targetIBScore = targetIBScore; p.notificationHour = notificationHour; p.notificationMinute = notificationMinute
         p.onboardingCompleted = true

@@ -33,6 +33,8 @@ class ARIAService {
         let dailyGoal: Int?
         let targetIBScore: Int?
         let minutesStudied: Double?
+        /// Retained so previously stored payloads still decode. Never read:
+        /// XP is priced by XPCalculator, not by the model.
         let xpEarned: Int?
         let notes: String?
         let memoryCategory: String?
@@ -292,9 +294,6 @@ class ARIAService {
                     let modelChat = ChatMessage(role: "model", content: finalizedResponse, sessionID: session.id)
                     context.insert(modelChat)
                     self.updateSession(session, withAssistantReply: finalizedResponse)
-
-                    // Auto-update rank from grades after ARIA response
-                    self.autoUpdateRank(context: context)
 
                     try? context.save()
 
@@ -780,11 +779,8 @@ class ARIAService {
             touchedSubjects.insert(entry.subject.name)
         }
 
-        if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first,
-           let averageGrade = Subject.overallGradeAverage(for: subjects) {
-            let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
+        if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first {
             profile.reportLastUploaded = Date()
-            profile.autoUpdateFromGrades(averageGrade: averageGrade, totalReviews: totalReviews)
         }
 
         let subjectSummary = touchedSubjects.sorted().joined(separator: ", ")
@@ -1048,9 +1044,8 @@ class ARIAService {
         }
 
         let roundedMinutes = Int(action.minutesStudied ?? 0)
-        let xp = action.xpEarned ?? 0
-        guard roundedMinutes > 0 || xp > 0 else {
-            throw NSError(domain: "ARIAService", code: 8, userInfo: [NSLocalizedDescriptionKey: "ARIA needs a mastery level, minutes studied, or XP amount to update progress."])
+        guard roundedMinutes > 0 else {
+            throw NSError(domain: "ARIAService", code: 8, userInfo: [NSLocalizedDescriptionKey: "ARIA needs a mastery level or minutes studied to update progress."])
         }
 
         let today = Calendar.current.startOfDay(for: Date())
@@ -1062,9 +1057,14 @@ class ARIAService {
         }()
 
         activity.minutesStudied += Double(max(roundedMinutes, 0))
-        activity.xpEarned += max(xp, 0)
-        if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first, xp > 0 {
-            profile.addXP(xp)
+
+        // The model reports what happened; the engine decides what it is worth.
+        var xp = 0
+        if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first {
+            let minutes = max(action.minutesStudied ?? 0, 0)
+            xp = XPCalculator.xp(forStudyMinutes: minutes, intensity: profile.studyIntensity)
+            activity.xpEarned += xp
+            profile.recordXP(xp)
         }
 
         return "Logged \(roundedMinutes)m and \(xp) XP to today's study progress."
@@ -1643,7 +1643,7 @@ class ARIAService {
         if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first {
             let studentName = profile.studentName.isEmpty ? "Student" : profile.studentName
             lines.append("- Student: \(studentName), \(profile.ibYear.shortLabel), target \(profile.targetIBScore)/45, intensity \(profile.studyIntensity.rawValue)")
-            lines.append("- Momentum: streak \(profile.currentStreak), total XP \(profile.totalXP), rank \(profile.rank.rawValue), daily goal \(profile.dailyGoal) cards")
+            lines.append("- Momentum: streak \(profile.currentStreak), total XP \(profile.totalXP), rank \(profile.achievedStep.displayName), daily goal \(profile.dailyGoal) cards")
         }
 
         let duePredicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
@@ -2618,21 +2618,6 @@ class ARIAService {
 
     static func normalizedDurationMinutes(_ durationMinutes: Double) -> Int {
         max(1, Int(durationMinutes.rounded()))
-    }
-
-    // MARK: - Auto-Update Rank
-
-    private func autoUpdateRank(context: ModelContext) {
-        guard let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first else { return }
-        guard let subjects = try? context.fetch(FetchDescriptor<Subject>()) else { return }
-
-        let allGrades = subjects.flatMap { $0.grades }
-        guard !allGrades.isEmpty else { return }
-
-        guard let avg = Subject.overallGradeAverage(for: subjects) else { return }
-        let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
-
-        profile.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)
     }
 }
 

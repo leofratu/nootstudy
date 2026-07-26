@@ -122,7 +122,8 @@ struct SettingsView: View {
                 }
 
                 Button {
-                    p.applyPreset(); try? context.save()
+                    p.dailyGoal = p.studyIntensity.dailyCardSuggestion
+                    try? context.save()
                     presetApplied = true; IBHaptics.success()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { presetApplied = false }
                 } label: {
@@ -136,7 +137,7 @@ struct SettingsView: View {
         } header: {
             Label("Student Profile", systemImage: "graduationcap.fill")
         } footer: {
-            Text("Presets auto-adjust your daily goal, starting rank, and XP based on your study intensity and IB year. ARIA uses this data for personalised recommendations.")
+            Text("Presets auto-adjust your daily goal based on your study intensity. ARIA uses this data for personalised recommendations. Rank is earned from your review history.")
         }
     }
 
@@ -162,19 +163,6 @@ struct SettingsView: View {
                     Spacer()
                     Image(systemName: "chevron.right")
                         .foregroundStyle(.tertiary)
-                }
-            }
-
-            Button { autoRankFromGrades() } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("AI Auto-Update Rank")
-                        Text("ARIA analyses your grades & reviews to set your rank")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
         } header: {
@@ -608,16 +596,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - AI Auto-Rank
-    private func autoRankFromGrades() {
-        guard let p = profile else { return }
-        let allGrades = subjects.flatMap { $0.grades }
-        guard !allGrades.isEmpty else { IBHaptics.warning(); return }
-        guard let avg = Subject.overallGradeAverage(for: subjects) else { return }
-        let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
-        p.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)
-        try? context.save(); IBHaptics.success()
-    }
 }
 
 // MARK: - Gemini Model Picker View
@@ -858,13 +836,6 @@ struct ReportUploadView: View {
         }
         if let p = profiles.first {
             p.reportLastUploaded = Date()
-            let allGrades = subjects.flatMap { $0.grades }
-            if !allGrades.isEmpty {
-                if let avg = Subject.overallGradeAverage(for: subjects) {
-                    let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
-                    p.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)
-                }
-            }
         }
         try? context.save(); IBHaptics.success(); dismiss()
     }

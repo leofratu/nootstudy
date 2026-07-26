@@ -793,20 +793,11 @@ struct ActiveStudySessionView: View {
             // Rank progress
             if let profile = profiles.first {
                 HStack(spacing: 8) {
-                    Text(profile.rank.emoji)
+                    Image(systemName: profile.achievedStep.rank.symbolName)
                         .font(.system(size: 18))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(profile.rank.rawValue)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        ProgressView(value: profile.progressToNextRank)
-                            .tint(IBColors.electricBlue)
-                            .frame(width: 120)
-                    }
-                    if let next = profile.rank.next {
-                        Text("→ \(next.emoji) \(next.rawValue)")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                    }
+                        .foregroundStyle(IBColors.electricBlue)
+                    Text(profile.achievedStep.displayName)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                 }
                 .padding(10)
                 .background(
@@ -1139,10 +1130,10 @@ struct ActiveStudySessionView: View {
     // MARK: - Complete
 
     private var xpAwarded: Int {
-        let baseXP = max(10, dedicatedMinutes * 2)
-        let cardBonus = generatedCards.count * 3
-        let noteBonus = sessionNotes.count > 50 ? 10 : 0
-        return baseXP + cardBonus + noteBonus
+        XPCalculator.xp(
+            forStudyMinutes: dedicatedMinutesDouble,
+            intensity: profiles.first?.studyIntensity ?? .average
+        )
     }
 
     private func completeSession() {
@@ -1171,7 +1162,7 @@ struct ActiveStudySessionView: View {
 
         // Award XP
         if let profile = profiles.first {
-            profile.addXP(xpAwarded)
+            profile.recordXP(xpAwarded)
             profile.checkAndUpdateStreak()
         }
 
