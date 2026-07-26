@@ -31,6 +31,11 @@ targets:
       properties:
         LSMinimumSystemVersion: "14.0"
         NSUserNotificationAlertStyle: "alert"
+        # XcodeGen regenerates Info.plist from this block, so the version must
+        # live here. Editing Info.plist directly is silently reverted by the
+        # next `xcodegen generate`.
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "2"
     entitlements:
       path: IBVault/IBVault.entitlements
       properties:
