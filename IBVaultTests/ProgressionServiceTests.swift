@@ -60,6 +60,33 @@ struct ProgressionServiceTests {
 
     // MARK: - Achievements
 
+    /// Regression: `.cardsReviewed` rules were evaluated against a stored
+    /// tally that nothing ever incremented, so "First Steps" was unreachable.
+    @MainActor
+    @Test("A single recorded review unlocks the first_review achievement")
+    func firstReviewUnlocksAfterOneReview() throws {
+        let container = try Self.makeContainer()
+        let context = container.mainContext
+
+        context.insert(UserProfile())
+        Self.seedAchievements(into: context)
+
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "#10B981")
+        context.insert(subject)
+        Self.recordReviewedCard(topic: "Cells", in: subject, context: context, recalls: 1)
+
+        let events = ProgressionService.recompute(context: context)
+
+        let achievements = try context.fetch(FetchDescriptor<Achievement>())
+        let firstReview = try #require(achievements.first { $0.id == "first_review" })
+        #expect(firstReview.unlocked)
+        #expect(firstReview.unlockDate != nil)
+        #expect(events.contains(.achievementUnlocked(id: "first_review", title: firstReview.title)))
+
+        // The volume tiers above one review must stay locked.
+        #expect(achievements.first { $0.id == "cards_100" }?.unlocked == false)
+    }
+
     @MainActor
     @Test("Recompute is idempotent and never re-announces an unlocked achievement")
     func recomputeIsIdempotent() throws {

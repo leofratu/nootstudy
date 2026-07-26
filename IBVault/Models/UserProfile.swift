@@ -167,7 +167,6 @@ final class UserProfile {
     var ibYearRaw: String
     var targetIBScore: Int
     var reportLastUploaded: Date?
-    var totalCardsReviewed: Int?
     var rankUpDate: Date?
     
     var studyIntensity: StudyIntensity {
@@ -210,11 +209,6 @@ final class UserProfile {
         return advanced
     }
 
-    /// Increments totalCardsReviewed by count.
-    func recordCardsReviewed(_ count: Int) {
-        totalCardsReviewed = (totalCardsReviewed ?? 0) + count
-    }
-    
     func checkAndUpdateStreak() {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -261,7 +255,6 @@ final class UserProfile {
         self.studyIntensityRaw = StudyIntensity.average.rawValue
         self.ibYearRaw = IBYear.dp1.rawValue
         self.targetIBScore = 30
-        self.totalCardsReviewed = nil
         self.rankUpDate = nil
     }
 }

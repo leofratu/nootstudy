@@ -48,7 +48,11 @@ enum ProgressionService {
         let today = calendar.startOfDay(for: now)
         let todaysReviews = reviews.filter { calendar.startOfDay(for: $0.timestamp) == today }
         let achievementContext = AchievementContext(
-            totalCardsReviewed: profile.totalCardsReviewed ?? 0,
+            // Counted from the review history rather than a stored tally: the
+            // tally had no writer, so every .cardsReviewed rule was
+            // unsatisfiable. Deriving it is also self-healing for existing
+            // users and cannot drift out of step with recorded work.
+            totalCardsReviewed: reviews.count,
             currentStreak: profile.currentStreak,
             totalXP: profile.totalXP,
             globalMastery: globalMastery,
