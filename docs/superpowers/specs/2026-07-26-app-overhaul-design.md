@@ -118,8 +118,9 @@ Star → Supernova
 Both the global rank and each of the six subject tracks use this same ladder, so
 one badge vocabulary is learned once.
 
-Thresholds are evenly spaced across mastery 0.0 to 0.90, not 0.0 to 1.0 — 30
-steps of 0.03, with Supernova I reached at 0.90. A full 1.0 composite is
+Thresholds are evenly spaced in steps of 0.03 rather than spanning the full
+0.0–1.0 range: step ordinal is `min(29, floor(mastery / 0.03))`, so Electron III
+starts at 0.00 and Supernova I is entered at 0.87. A full 1.0 composite is
 effectively unreachable, since `freshness` alone caps a neglected subject at 0.75
 and `stability` requires every card sitting at a 21-day interval. Topping out the
 ladder must be hard but possible.
@@ -349,7 +350,7 @@ they test in the existing Swift Testing suite:
 - Rank and tier thresholds across all 30 steps, including boundaries.
 - HL/SL weighting of the global composite.
 - Rank never regresses when mastery falls; the fading flag does set.
-- Supernova I is reachable at 0.90 mastery and not below it.
+- Supernova I is entered at exactly 0.87 and not at 0.869.
 - Untaught units are excluded from planner scheduling and render distinctly in
   the mastery heatmap.
 - Achievement rules, including idempotency on repeated evaluation.
