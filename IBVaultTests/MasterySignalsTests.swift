@@ -92,4 +92,30 @@ struct MasterySignalsTests {
     func stabilityWithNoSeenCardsIsZero() {
         #expect(MasterySignals.stability(cards: [CardSnapshot(repetitions: 0, intervalDays: 0)]) == 0)
     }
+
+    @Test("Freshness is full within the first week and floors after sixty days")
+    func freshnessBoundaries() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        func daysAgo(_ days: Double) -> Date { now.addingTimeInterval(-days * 86_400) }
+
+        #expect(MasterySignals.freshness(lastReviewDate: now, now: now) == 1.0)
+        #expect(MasterySignals.freshness(lastReviewDate: daysAgo(7), now: now) == 1.0)
+        #expect(MasterySignals.freshness(lastReviewDate: daysAgo(60), now: now) == 0.75)
+        #expect(MasterySignals.freshness(lastReviewDate: daysAgo(365), now: now) == 0.75)
+    }
+
+    @Test("Freshness decays linearly between the full and floor boundaries")
+    func freshnessDecaysLinearly() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        // Midpoint between 7 and 60 days is 33.5, expecting halfway 1.0 -> 0.75.
+        let midpoint = now.addingTimeInterval(-33.5 * 86_400)
+        let value = MasterySignals.freshness(lastReviewDate: midpoint, now: now)
+        #expect(abs(value - 0.875) < 0.0001)
+    }
+
+    @Test("Freshness with no review history is the floor")
+    func freshnessWithoutHistoryIsFloor() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(MasterySignals.freshness(lastReviewDate: nil, now: now) == 0.75)
+    }
 }

@@ -52,4 +52,16 @@ enum MasterySignals {
         }
         return total / Double(seen.count)
     }
+
+    /// Decay factor for neglect. 1.0 up to `freshnessFullDays`, falling linearly
+    /// to `freshnessFloor` at `freshnessFloorDays` and never below it.
+    static func freshness(lastReviewDate: Date?, now: Date) -> Double {
+        guard let lastReviewDate else { return freshnessFloor }
+        let days = max(0, now.timeIntervalSince(lastReviewDate) / 86_400)
+        if days <= freshnessFullDays { return 1.0 }
+        if days >= freshnessFloorDays { return freshnessFloor }
+        let span = freshnessFloorDays - freshnessFullDays
+        let travelled = (days - freshnessFullDays) / span
+        return 1.0 - travelled * (1.0 - freshnessFloor)
+    }
 }
