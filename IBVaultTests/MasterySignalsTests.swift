@@ -29,4 +29,41 @@ struct MasterySignalsTests {
         ]
         #expect(MasterySignals.coverage(cards: cards) == 1.0)
     }
+
+    @Test("Retention counts reviews graded good or better within the window")
+    func retentionCountsSuccessfulRecentReviews() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        // 30 reviews, 24 successful, all within the last few days.
+        let reviews = (0..<30).map { index in
+            ReviewSnapshot(
+                timestamp: now.addingTimeInterval(-Double(index) * 3600),
+                qualityRating: index < 24 ? 3 : 0
+            )
+        }
+        let value = MasterySignals.retention(reviews: reviews, now: now)
+        #expect(abs(value - 0.8) < 0.0001)
+    }
+
+    @Test("Retention below the minimum sample returns neutral, not a wild value")
+    func retentionBelowSampleFloorIsNeutral() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let reviews = (0..<5).map { index in
+            ReviewSnapshot(timestamp: now.addingTimeInterval(-Double(index) * 3600), qualityRating: 5)
+        }
+        #expect(MasterySignals.retention(reviews: reviews, now: now) == 0.5)
+    }
+
+    @Test("Retention ignores reviews older than the ninety day window")
+    func retentionIgnoresStaleReviews() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let oldDay = -91.0 * 86_400
+        // 25 ancient perfect reviews plus 20 recent failures.
+        let stale = (0..<25).map { index in
+            ReviewSnapshot(timestamp: now.addingTimeInterval(oldDay - Double(index) * 3600), qualityRating: 5)
+        }
+        let recent = (0..<20).map { index in
+            ReviewSnapshot(timestamp: now.addingTimeInterval(-Double(index) * 3600), qualityRating: 0)
+        }
+        #expect(MasterySignals.retention(reviews: stale + recent, now: now) == 0.0)
+    }
 }

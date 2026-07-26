@@ -30,4 +30,15 @@ enum MasterySignals {
         let learned = cards.filter { $0.repetitions >= 2 }.count
         return Double(learned) / Double(cards.count)
     }
+
+    /// Fraction of reviews in the trailing window graded `good` (3) or better.
+    /// Returns a neutral value below the minimum sample so small samples do not
+    /// dominate the composite.
+    static func retention(reviews: [ReviewSnapshot], now: Date) -> Double {
+        let cutoff = now.addingTimeInterval(-retentionWindowDays * 86_400)
+        let recent = reviews.filter { $0.timestamp >= cutoff }
+        guard recent.count >= retentionMinimumSample else { return neutralRetention }
+        let successful = recent.filter(\.isSuccessful).count
+        return Double(successful) / Double(recent.count)
+    }
 }
