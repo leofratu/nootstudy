@@ -23,6 +23,9 @@ enum MasterySignals {
     /// `freshnessFloor`; freshness ramps linearly from 1.0 to the floor
     /// between `freshnessFullDays` and `freshnessFloorDays`.
     static let freshnessFloorDays = 60.0
+    /// Seconds in a day. Date math here is absolute-time, so a day is always
+    /// 86,400s regardless of local calendar transitions.
+    private static let secondsPerDay = 86_400.0
 
     /// Fraction of cards that have been successfully recalled at least twice.
     static func coverage(cards: [CardSnapshot]) -> Double {
@@ -35,7 +38,7 @@ enum MasterySignals {
     /// Returns a neutral value below the minimum sample so small samples do not
     /// dominate the composite.
     static func retention(reviews: [ReviewSnapshot], now: Date) -> Double {
-        let cutoff = now.addingTimeInterval(-retentionWindowDays * 86_400)
+        let cutoff = now.addingTimeInterval(-retentionWindowDays * secondsPerDay)
         let recent = reviews.filter { $0.timestamp >= cutoff }
         guard recent.count >= retentionMinimumSample else { return neutralRetention }
         let successful = recent.filter(\.isSuccessful).count
@@ -48,7 +51,7 @@ enum MasterySignals {
         let seen = cards.filter { $0.repetitions >= 1 }
         guard !seen.isEmpty else { return 0 }
         let total = seen.reduce(0.0) { partial, card in
-            partial + min(Double(card.intervalDays) / stabilityTargetDays, 1.0)
+            partial + min(max(Double(card.intervalDays), 0) / stabilityTargetDays, 1.0)
         }
         return total / Double(seen.count)
     }
@@ -57,7 +60,7 @@ enum MasterySignals {
     /// to `freshnessFloor` at `freshnessFloorDays` and never below it.
     static func freshness(lastReviewDate: Date?, now: Date) -> Double {
         guard let lastReviewDate else { return freshnessFloor }
-        let days = max(0, now.timeIntervalSince(lastReviewDate) / 86_400)
+        let days = max(0, now.timeIntervalSince(lastReviewDate) / secondsPerDay)
         if days <= freshnessFullDays { return 1.0 }
         if days >= freshnessFloorDays { return freshnessFloor }
         let span = freshnessFloorDays - freshnessFullDays

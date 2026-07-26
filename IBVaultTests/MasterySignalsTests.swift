@@ -67,6 +67,15 @@ struct MasterySignalsTests {
         #expect(MasterySignals.retention(reviews: stale + recent, now: now) == 0.0)
     }
 
+    @Test("Retention includes a review landing exactly on the window boundary")
+    func retentionIncludesBoundaryReview() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        // Exactly 90 days back is inside the window; 20 reviews meets the sample floor.
+        let boundary = now.addingTimeInterval(-90.0 * 86_400)
+        let reviews = (0..<20).map { _ in ReviewSnapshot(timestamp: boundary, qualityRating: 5) }
+        #expect(MasterySignals.retention(reviews: reviews, now: now) == 1.0)
+    }
+
     @Test("Stability averages intervals normalised against the target, capped at one")
     func stabilityNormalisesAgainstTarget() {
         let cards = [
@@ -93,6 +102,20 @@ struct MasterySignalsTests {
         #expect(MasterySignals.stability(cards: [CardSnapshot(repetitions: 0, intervalDays: 0)]) == 0)
     }
 
+    @Test("Stability scales proportionally between zero and the target interval")
+    func stabilityScalesProportionallyBelowTarget() {
+        // A single card at 10 of the 21 target days should contribute 10/21.
+        let cards = [CardSnapshot(repetitions: 2, intervalDays: 10)]
+        let value = MasterySignals.stability(cards: cards)
+        #expect(abs(value - (10.0 / 21.0)) < 0.0001)
+    }
+
+    @Test("Stability never goes negative on a malformed interval")
+    func stabilityClampsNegativeIntervals() {
+        let cards = [CardSnapshot(repetitions: 2, intervalDays: -30)]
+        #expect(MasterySignals.stability(cards: cards) == 0)
+    }
+
     @Test("Freshness is full within the first week and floors after sixty days")
     func freshnessBoundaries() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
@@ -117,5 +140,12 @@ struct MasterySignalsTests {
     func freshnessWithoutHistoryIsFloor() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         #expect(MasterySignals.freshness(lastReviewDate: nil, now: now) == 0.75)
+    }
+
+    @Test("Freshness treats a future review date as fully fresh")
+    func freshnessClampsFutureDates() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let future = now.addingTimeInterval(5 * 86_400)
+        #expect(MasterySignals.freshness(lastReviewDate: future, now: now) == 1.0)
     }
 }
