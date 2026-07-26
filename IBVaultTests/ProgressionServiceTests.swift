@@ -27,19 +27,7 @@ struct ProgressionServiceTests {
     /// Populates the achievement catalogue the way a real launch does.
     @MainActor
     private static func seedAchievements(into context: ModelContext) {
-        for definition in Achievement.definitions {
-            context.insert(
-                Achievement(
-                    id: definition.id,
-                    title: definition.title,
-                    desc: definition.desc,
-                    icon: definition.icon,
-                    category: definition.category,
-                    ruleRaw: definition.rule.rawValue,
-                    tier: definition.tier
-                )
-            )
-        }
+        Achievement.reconcile(context: context)
     }
 
     /// A card driven to `repetitions == 3` by three good recalls, plus one
@@ -193,5 +181,140 @@ struct ProgressionServiceTests {
         let physicsSnapshot = SnapshotBuilder.snapshot(for: physics, reviews: allReviews)
         #expect(physicsSnapshot.reviews.map(\.qualityRating) == [4])
         #expect(physicsSnapshot.level == .hl)
+    }
+}
+
+@Suite("Achievement Reconcile Tests")
+struct AchievementReconcileTests {
+
+    @MainActor
+    private static func makeContainer() throws -> ModelContainer {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return try ModelContainer(for: Achievement.self, configurations: config)
+    }
+
+    @MainActor
+    @Test("Reconciling an empty store installs the whole catalogue with usable rules")
+    func reconcileSeedsEmptyStore() throws {
+        let container = try Self.makeContainer()
+        let context = container.mainContext
+
+        Achievement.reconcile(context: context)
+
+        let rows = try context.fetch(FetchDescriptor<Achievement>())
+        #expect(rows.count == Achievement.definitions.count)
+        #expect(Set(rows.map(\.id)) == Set(Achievement.definitions.map(\.id)))
+        #expect(rows.allSatisfy { AchievementRule(rawValue: $0.ruleRaw) != nil })
+    }
+
+    @MainActor
+    @Test("Reconciling twice does not duplicate rows")
+    func reconcileIsIdempotent() throws {
+        let container = try Self.makeContainer()
+        let context = container.mainContext
+
+        Achievement.reconcile(context: context)
+        Achievement.reconcile(context: context)
+        Achievement.reconcile(context: context)
+
+        let rows = try context.fetch(FetchDescriptor<Achievement>())
+        #expect(rows.count == Achievement.definitions.count)
+    }
+
+    @MainActor
+    @Test("An upgraded row with an empty rule is repaired without being re-locked")
+    func reconcileBackfillsRuleAndPreservesUnlock() throws {
+        let container = try Self.makeContainer()
+        let context = container.mainContext
+
+        // How a pre-progression row migrates in: ruleRaw defaulted to "".
+        let earned = Achievement(
+            id: "first_review",
+            title: "First Steps",
+            desc: "Complete your first review",
+            icon: "figure.walk",
+            category: "milestone"
+        )
+        earned.unlocked = true
+        let unlockDate = Date(timeIntervalSince1970: 1_700_000_000)
+        earned.unlockDate = unlockDate
+        context.insert(earned)
+
+        Achievement.reconcile(context: context)
+
+        let rows = try context.fetch(FetchDescriptor<Achievement>())
+        let repaired = try #require(rows.first { $0.id == "first_review" })
+        #expect(AchievementRule(rawValue: repaired.ruleRaw) == .cardsReviewed(1))
+        #expect(repaired.unlocked)
+        #expect(repaired.unlockDate == unlockDate)
+        #expect(rows.count == Achievement.definitions.count)
+    }
+
+    @MainActor
+    @Test("A stored rule that still parses is left untouched")
+    func reconcileDoesNotOverwriteStoredRules() throws {
+        let container = try Self.makeContainer()
+        let context = container.mainContext
+
+        let customised = Achievement(
+            id: "cards_100",
+            title: "Century Club",
+            desc: "Review 100 cards total",
+            icon: "square.stack.3d.up.fill",
+            category: "volume",
+            ruleRaw: AchievementRule.cardsReviewed(42).rawValue,
+            tier: 3
+        )
+        context.insert(customised)
+
+        Achievement.reconcile(context: context)
+
+        let rows = try context.fetch(FetchDescriptor<Achievement>())
+        let row = try #require(rows.first { $0.id == "cards_100" })
+        #expect(AchievementRule(rawValue: row.ruleRaw) == .cardsReviewed(42))
+        #expect(row.tier == 3)
+    }
+
+    @MainActor
+    @Test("Retired ids are deleted and duplicates collapse onto the earned row")
+    func reconcileRemovesGhostsAndCollapsesDuplicates() throws {
+        let container = try Self.makeContainer()
+        let context = container.mainContext
+
+        for ghostID in ["perfect_10", "bio_master", "econ_master", "math_master"] {
+            context.insert(
+                Achievement(id: ghostID, title: ghostID, desc: "", icon: "star", category: "legacy")
+            )
+        }
+
+        // The old seed ran without an existence check, so stores can hold
+        // more than one row per id.
+        let locked = Achievement(
+            id: "streak_7",
+            title: "7-Day Warrior",
+            desc: "Maintain a 7-day streak",
+            icon: "flame.fill",
+            category: "streak"
+        )
+        let earned = Achievement(
+            id: "streak_7",
+            title: "7-Day Warrior",
+            desc: "Maintain a 7-day streak",
+            icon: "flame.fill",
+            category: "streak"
+        )
+        earned.unlocked = true
+        context.insert(locked)
+        context.insert(earned)
+
+        Achievement.reconcile(context: context)
+
+        let rows = try context.fetch(FetchDescriptor<Achievement>())
+        #expect(Set(rows.map(\.id)) == Set(Achievement.definitions.map(\.id)))
+        #expect(rows.count == Achievement.definitions.count)
+
+        let streak = rows.filter { $0.id == "streak_7" }
+        #expect(streak.count == 1)
+        #expect(streak.first?.unlocked == true)
     }
 }

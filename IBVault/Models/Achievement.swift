@@ -50,4 +50,68 @@ final class Achievement {
         ("night_owl", "Night Owl", "Study after 10 PM", "moon.stars.fill", "special", .studiedAfterHour(22), 1),
         ("early_bird", "Early Bird", "Study before 7 AM", "sunrise.fill", "special", .studiedBeforeHour(7), 1),
     ]
+
+    /// Brings the stored catalogue in line with `definitions`.
+    ///
+    /// Must run on every launch, not just the first one. Rows that were stored
+    /// before progression rules existed migrate in with an empty `ruleRaw`,
+    /// which `AchievementRule(rawValue:)` cannot parse, so `evaluate` skips
+    /// them forever and the Profile reports zero unlocks permanently. Seeding
+    /// only when no profile exists never reaches those users.
+    ///
+    /// Earned progress is sacred: `unlocked` and `unlockDate` are never
+    /// rewritten, so a reconcile can never re-lock an achievement.
+    static func reconcile(context: ModelContext) {
+        let shippedIDs = Set(definitions.map(\.id))
+        let existing = (try? context.fetch(FetchDescriptor<Achievement>())) ?? []
+
+        var kept: [String: Achievement] = [:]
+        for row in existing {
+            // Ids dropped from `definitions` linger as permanently locked
+            // ghosts that no rule can ever satisfy.
+            guard shippedIDs.contains(row.id) else {
+                context.delete(row)
+                continue
+            }
+            guard let incumbent = kept[row.id] else {
+                kept[row.id] = row
+                continue
+            }
+            // The old seed ran from an `onAppear` without an existence check,
+            // so a store can hold duplicates. Collapse them, preferring the
+            // earned row so no unlock is thrown away.
+            let winner = incumbent.unlocked ? incumbent : row
+            kept[row.id] = winner
+            context.delete(winner === incumbent ? row : incumbent)
+        }
+
+        for definition in definitions {
+            guard let row = kept[definition.id] else {
+                context.insert(
+                    Achievement(
+                        id: definition.id,
+                        title: definition.title,
+                        desc: definition.desc,
+                        icon: definition.icon,
+                        category: definition.category,
+                        ruleRaw: definition.rule.rawValue,
+                        tier: definition.tier
+                    )
+                )
+                continue
+            }
+            // Only repair rows that carry no usable rule; a stored rule is
+            // left alone so this stays a repair rather than a reset.
+            if row.ruleRaw.isEmpty {
+                row.ruleRaw = definition.rule.rawValue
+                row.tier = definition.tier
+            }
+        }
+
+        do {
+            try context.save()
+        } catch {
+            assertionFailure("Achievement reconcile failed: \(error.localizedDescription)")
+        }
+    }
 }

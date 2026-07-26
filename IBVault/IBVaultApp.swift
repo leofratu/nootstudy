@@ -139,6 +139,7 @@ struct RootView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @State private var hasAttemptedAutomaticBackup = false
+    @State private var hasReconciledAchievements = false
 
     private var orderedProfiles: [UserProfile] {
         profiles.sorted { $0.id.uuidString < $1.id.uuidString }
@@ -165,10 +166,21 @@ struct RootView: View {
                     .onAppear {
                         let profile = UserProfile()
                         context.insert(profile)
-                        seedAchievements()
                     }
             }
         }
+        // Deliberately outside the branches above: an upgrading user already
+        // has a profile, so anything hung off the "no profile yet" path never
+        // runs for them.
+        .onAppear {
+            reconcileAchievementsIfNeeded()
+        }
+    }
+
+    private func reconcileAchievementsIfNeeded() {
+        guard !hasReconciledAchievements else { return }
+        hasReconciledAchievements = true
+        Achievement.reconcile(context: context)
     }
 
     private func triggerAutomaticBackupIfNeeded() {
@@ -182,22 +194,6 @@ struct RootView: View {
         }
     }
 
-    private func seedAchievements() {
-        for def in Achievement.definitions {
-            let achievement = Achievement(
-                id: def.id,
-                title: def.title,
-                desc: def.desc,
-                icon: def.icon,
-                category: def.category,
-                ruleRaw: def.rule.rawValue,
-                tier: def.tier
-            )
-            context.insert(achievement)
-        }
-
-        try? context.save()
-    }
 }
 
 #if os(macOS)
