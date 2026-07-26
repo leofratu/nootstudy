@@ -24,6 +24,7 @@
 		33F81B4B1E53FB64783BBD2A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E125707A54C6B4B05D3DA55 /* SettingsView.swift */; };
 		3B446844F68A315BC9A4D7D3 /* StudySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43594ABE6B0E41B86138E5D8 /* StudySession.swift */; };
 		3DD75F20C73BA1064F0B14F9 /* MasterySignals.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7054635482B1FC324201C7 /* MasterySignals.swift */; };
+		41E7B7744D5CD36D9B634FBC /* MasteryCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46572174C584F070E8732E12 /* MasteryCalculator.swift */; };
 		45434FB663C699EED77D88D0 /* HeatmapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CBE422BE3736077D85F83C /* HeatmapView.swift */; };
 		4EE359B5212AAD28F1FEE995 /* NewStudySessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 409B8A12578D6E3872B9C1FA /* NewStudySessionView.swift */; };
 		5578BA0C7ABFA2BB8BFA742C /* StudySessionLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064639B44D2E11A0F608D188 /* StudySessionLogView.swift */; };
@@ -57,6 +58,7 @@
 		BE4BADD3C35B1DD876A58D08 /* IBVaultAppCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D5763D72BAAB509FA60995 /* IBVaultAppCommandTests.swift */; };
 		C8AB4A46E62DF86D13805CBD /* AnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D5C3D493F8E74D1A33CA70 /* AnalyticsView.swift */; };
 		C9D8ED43FDE5725AB1813DC4 /* GeminiServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */; };
+		CB14102F60B00C86F69F0803 /* MasteryCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */; };
 		CB620D7B2607DDB59B8D474C /* Subject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE35A2B5EB4D74B9779057D4 /* Subject.swift */; };
 		CE96FB3C86DF1E355C6233BF /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32D17D7E917936131C22F2ED /* OnboardingView.swift */; };
 		D1B4F94E70DE26FC4291CC4B /* ARIAMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D455212D8B12319B3E8CAF7 /* ARIAMemory.swift */; };
@@ -109,6 +111,7 @@
 		409B8A12578D6E3872B9C1FA /* NewStudySessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewStudySessionView.swift; sourceTree = "<group>"; };
 		43594ABE6B0E41B86138E5D8 /* StudySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudySession.swift; sourceTree = "<group>"; };
 		446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardGeneratorService.swift; sourceTree = "<group>"; };
+		46572174C584F070E8732E12 /* MasteryCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryCalculator.swift; sourceTree = "<group>"; };
 		4ED01AD46D3FF1E35B15C4F1 /* IBVaultTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IBVaultTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		56F393C55ED8372446273171 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
 		58F51DF6D5AB6A271B71A698 /* StudyPlannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlannerView.swift; sourceTree = "<group>"; };
@@ -134,6 +137,7 @@
 		99D5763D72BAAB509FA60995 /* IBVaultAppCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IBVaultAppCommandTests.swift; sourceTree = "<group>"; };
 		9A6EF035A1AF10213DA1FA65 /* Achievement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Achievement.swift; sourceTree = "<group>"; };
 		9BBBB8B078687079BC5D9480 /* ARIAMemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAMemoryView.swift; sourceTree = "<group>"; };
+		9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryCalculatorTests.swift; sourceTree = "<group>"; };
 		A0CBD332FD598F687CAE0EEE /* ADHDTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADHDTrackerView.swift; sourceTree = "<group>"; };
 		B1009A5CD3691D26599C4DEF /* StudyCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyCalendarView.swift; sourceTree = "<group>"; };
 		B48FD3453450F22FCB459C56 /* MaterialsLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaterialsLibraryView.swift; sourceTree = "<group>"; };
@@ -171,6 +175,7 @@
 		11E3ECDA9467076C27A14FE2 /* Progression */ = {
 			isa = PBXGroup;
 			children = (
+				46572174C584F070E8732E12 /* MasteryCalculator.swift */,
 				FD7054635482B1FC324201C7 /* MasterySignals.swift */,
 				14332BDDEDE3EF8620395333 /* ProgressionSnapshots.swift */,
 			);
@@ -363,6 +368,7 @@
 				64457DA4883197D2A87251A1 /* ADHDMedicationTrackerTests.swift */,
 				EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */,
 				99D5763D72BAAB509FA60995 /* IBVaultAppCommandTests.swift */,
+				9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */,
 				7C32B3A369EDF454A13A6276 /* MasterySignalsTests.swift */,
 				E4A21C149C9CDCC3E182E69C /* ProficiencyTrackerTests.swift */,
 				967852FAB1BFC2229E6856AF /* ReviewQueueManagerTests.swift */,
@@ -518,6 +524,7 @@
 				5B101A4BDFFA73E0ECEEF03C /* IBVaultApp.swift in Sources */,
 				10CC766826E31BEB74A6A705 /* KeychainService.swift in Sources */,
 				DAC573DD8DDF1CA7B838B50C /* LearningAnalyticsView.swift in Sources */,
+				41E7B7744D5CD36D9B634FBC /* MasteryCalculator.swift in Sources */,
 				3DD75F20C73BA1064F0B14F9 /* MasterySignals.swift in Sources */,
 				8C8382F7DB40BC3842F42288 /* MaterialsLibraryView.swift in Sources */,
 				4EE359B5212AAD28F1FEE995 /* NewStudySessionView.swift in Sources */,
@@ -559,6 +566,7 @@
 				AA3E53D96ABC17D25927D643 /* ADHDMedicationTrackerTests.swift in Sources */,
 				C9D8ED43FDE5725AB1813DC4 /* GeminiServiceTests.swift in Sources */,
 				BE4BADD3C35B1DD876A58D08 /* IBVaultAppCommandTests.swift in Sources */,
+				CB14102F60B00C86F69F0803 /* MasteryCalculatorTests.swift in Sources */,
 				7A5590C46CBC444247A4C18D /* MasterySignalsTests.swift in Sources */,
 				AF91A2FA0CDFD6F2491E071F /* ProficiencyTrackerTests.swift in Sources */,
 				337335D89ED5CB283CE47BBD /* ReviewQueueManagerTests.swift in Sources */,
