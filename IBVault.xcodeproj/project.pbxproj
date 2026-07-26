@@ -22,6 +22,7 @@
 		2E6108F8EA41CFBF27907F37 /* EffectivenessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6068C07FEC68B8172047E23A /* EffectivenessView.swift */; };
 		337335D89ED5CB283CE47BBD /* ReviewQueueManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 967852FAB1BFC2229E6856AF /* ReviewQueueManagerTests.swift */; };
 		33F81B4B1E53FB64783BBD2A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E125707A54C6B4B05D3DA55 /* SettingsView.swift */; };
+		34DED5CA5481058748C0B1B5 /* XPCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5524048C48A17DEF1898B2E3 /* XPCalculator.swift */; };
 		3B446844F68A315BC9A4D7D3 /* StudySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43594ABE6B0E41B86138E5D8 /* StudySession.swift */; };
 		3DD75F20C73BA1064F0B14F9 /* MasterySignals.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7054635482B1FC324201C7 /* MasterySignals.swift */; };
 		41E7B7744D5CD36D9B634FBC /* MasteryCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46572174C584F070E8732E12 /* MasteryCalculator.swift */; };
@@ -65,6 +66,7 @@
 		CB14102F60B00C86F69F0803 /* MasteryCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */; };
 		CB620D7B2607DDB59B8D474C /* Subject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE35A2B5EB4D74B9779057D4 /* Subject.swift */; };
 		CE96FB3C86DF1E355C6233BF /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32D17D7E917936131C22F2ED /* OnboardingView.swift */; };
+		CFD87C7AC43C98573EFE0E67 /* XPCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23E6259966D0700049C34520 /* XPCalculatorTests.swift */; };
 		D1B4F94E70DE26FC4291CC4B /* ARIAMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D455212D8B12319B3E8CAF7 /* ARIAMemory.swift */; };
 		DAC573DD8DDF1CA7B838B50C /* LearningAnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73711AF048136739D56C8EA9 /* LearningAnalyticsView.swift */; };
 		DF44F7CAB72D0F736F8EB8A5 /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1077C7C72B9221E2FE673F4D /* UserProfile.swift */; };
@@ -104,6 +106,7 @@
 		1C985AD5D381BE3EFB7E3647 /* ReviewRankingPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRankingPolicyTests.swift; sourceTree = "<group>"; };
 		1F435DA61625312BA239140B /* StudyPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlan.swift; sourceTree = "<group>"; };
 		2278D7F0854ECBB3FD1DD4BF /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		23E6259966D0700049C34520 /* XPCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XPCalculatorTests.swift; sourceTree = "<group>"; };
 		2563267FF51967587B50FEC5 /* PredictiveGradeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictiveGradeView.swift; sourceTree = "<group>"; };
 		27ABD428FFA80120ECFA4F39 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
 		2C62F1C144442B95388DE982 /* SubjectsGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectsGridView.swift; sourceTree = "<group>"; };
@@ -117,6 +120,7 @@
 		446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardGeneratorService.swift; sourceTree = "<group>"; };
 		46572174C584F070E8732E12 /* MasteryCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryCalculator.swift; sourceTree = "<group>"; };
 		4ED01AD46D3FF1E35B15C4F1 /* IBVaultTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IBVaultTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5524048C48A17DEF1898B2E3 /* XPCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XPCalculator.swift; sourceTree = "<group>"; };
 		56F393C55ED8372446273171 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
 		58F51DF6D5AB6A271B71A698 /* StudyPlannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlannerView.swift; sourceTree = "<group>"; };
 		5B2DAFFA003DB6E67E0614B3 /* ARIAService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAService.swift; sourceTree = "<group>"; };
@@ -188,6 +192,7 @@
 				14332BDDEDE3EF8620395333 /* ProgressionSnapshots.swift */,
 				C80E12FA09B76D5980E7D972 /* RankLadder.swift */,
 				97A440310E8DA6021B68587A /* RankProgress.swift */,
+				5524048C48A17DEF1898B2E3 /* XPCalculator.swift */,
 			);
 			path = Progression;
 			sourceTree = "<group>";
@@ -387,6 +392,7 @@
 				1C985AD5D381BE3EFB7E3647 /* ReviewRankingPolicyTests.swift */,
 				8A8D6380A8672B03837E7602 /* SM2EngineTests.swift */,
 				C35F5FBD2075533099751E27 /* UserRankTests.swift */,
+				23E6259966D0700049C34520 /* XPCalculatorTests.swift */,
 			);
 			path = IBVaultTests;
 			sourceTree = "<group>";
@@ -570,6 +576,7 @@
 				91A938936F44803FE63A8926 /* SyllabusSeeder.swift in Sources */,
 				FDEC1D8CE0720ECB213E467F /* TopicBrowserView.swift in Sources */,
 				DF44F7CAB72D0F736F8EB8A5 /* UserProfile.swift in Sources */,
+				34DED5CA5481058748C0B1B5 /* XPCalculator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -589,6 +596,7 @@
 				6320833E1FA26BFA2DDFBDD8 /* ReviewRankingPolicyTests.swift in Sources */,
 				BA9298FBF83891072E409AA3 /* SM2EngineTests.swift in Sources */,
 				A5B2A4E9EDB557E458E314E1 /* UserRankTests.swift in Sources */,
+				CFD87C7AC43C98573EFE0E67 /* XPCalculatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
