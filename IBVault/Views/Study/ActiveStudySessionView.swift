@@ -6,6 +6,7 @@ struct ActiveStudySessionView: View {
     var onComplete: (() -> Void)? = nil
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(ProgressionEventCenter.self) private var progressionEvents
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
 
@@ -1190,6 +1191,11 @@ struct ActiveStudySessionView: View {
 
         do {
             try context.save()
+
+            // Must run after the StudySession and StudyActivity records are in the
+            // context, or this session's work is invisible to the engine.
+            progressionEvents.enqueue(ProgressionService.recompute(context: context))
+
             IBHaptics.success()
             onComplete?()
             dismiss()

@@ -36,6 +36,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     @State private var selectedTab: NavigationTab? = .dashboard
     @State private var reviewQueueManager = ReviewQueueManager()
+    @State private var progressionEvents = ProgressionEventCenter()
 
     private var dueCount: Int {
         reviewQueueManager.totalDueCount
@@ -113,6 +114,7 @@ struct ContentView: View {
         .frame(minWidth: 1000, minHeight: 700)
         #endif
         .environment(reviewQueueManager)
+        .environment(progressionEvents)
         .onAppear {
             reviewQueueManager.refreshDueCards(context: context)
         }

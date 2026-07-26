@@ -4,6 +4,7 @@ import SwiftData
 struct ReviewSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(ProgressionEventCenter.self) private var progressionEvents
     @Query private var profiles: [UserProfile]
     @Query(sort: \StudyCard.nextReviewDate) private var allReviewCards: [StudyCard]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
@@ -398,6 +399,11 @@ struct ReviewSessionView: View {
         )
 
         try? context.save()
+
+        // Must run after the ReviewSession, StudyActivity and StudySession records
+        // are in the context, or this session's work is invisible to the engine.
+        progressionEvents.enqueue(ProgressionService.recompute(context: context))
+
         withAnimation(IBAnimation.smooth) { sessionComplete = true }; IBHaptics.success()
 
         // Schedule due card reminders
