@@ -184,7 +184,15 @@ struct RootView: View {
 
     private func seedAchievements() {
         for def in Achievement.definitions {
-            let achievement = Achievement(id: def.id, title: def.title, desc: def.desc, icon: def.icon, category: def.category)
+            let achievement = Achievement(
+                id: def.id,
+                title: def.title,
+                desc: def.desc,
+                icon: def.icon,
+                category: def.category,
+                ruleRaw: def.rule.rawValue,
+                tier: def.tier
+            )
             context.insert(achievement)
         }
 
