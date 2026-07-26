@@ -3,7 +3,7 @@ import Foundation
 @testable import IBVault
 
 @Suite("User Profile Progression Tests")
-struct UserRankTests {
+struct UserProfileProgressionTests {
 
     @Test("A new profile starts at the bottom of the ladder")
     func newProfileStartsAtElectronIII() {
