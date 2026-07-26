@@ -12,12 +12,27 @@ enum SubjectLevel: String, Codable, Sendable {
         }
     }
 
+    /// Coerces a persisted level string into the typed level.
+    ///
+    /// `Subject.level` is stored as a bare `String`, so this is the boundary
+    /// between untyped storage and the engine. Anything that is not "HL"
+    /// is treated as SL; that is deliberate, but it traps in debug builds so a
+    /// bad value surfaces in development instead of silently skewing mastery.
+    ///
+    /// Note this is intentionally lenient, unlike the synthesized failable
+    /// `init?(rawValue:)`.
     init(rawLevel: String) {
-        self = rawLevel.uppercased() == "HL" ? .hl : .sl
+        let normalized = rawLevel.uppercased()
+        assert(
+            normalized == "HL" || normalized == "SL",
+            "Unrecognized subject level '\(rawLevel)' coerced to SL"
+        )
+        self = normalized == "HL" ? .hl : .sl
     }
 }
 
 struct CardSnapshot: Sendable, Equatable {
+    /// SM-2 consecutive successful recall count.
     let repetitions: Int
     let intervalDays: Int
 
@@ -31,6 +46,8 @@ struct ReviewSnapshot: Sendable, Equatable {
     let timestamp: Date
     let qualityRating: Int
 
+    /// A recall counts as successful at `RecallQuality.good` (3) or better on
+    /// the 0–5 SM-2 scale; `again` (0) and `hard` (2) do not.
     var isSuccessful: Bool { qualityRating >= 3 }
 
     init(timestamp: Date, qualityRating: Int) {

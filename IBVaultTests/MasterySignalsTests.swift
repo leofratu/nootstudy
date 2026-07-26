@@ -20,4 +20,13 @@ struct MasterySignalsTests {
     func coverageOfEmptyIsZero() {
         #expect(MasterySignals.coverage(cards: []) == 0)
     }
+
+    @Test("Coverage of a fully learned card set is one")
+    func coverageOfFullyLearnedSetIsOne() {
+        let cards = [
+            CardSnapshot(repetitions: 2, intervalDays: 6),
+            CardSnapshot(repetitions: 9, intervalDays: 60),
+        ]
+        #expect(MasterySignals.coverage(cards: cards) == 1.0)
+    }
 }
