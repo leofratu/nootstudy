@@ -42,6 +42,7 @@
 		6BB5BE578A9C086D50A42E0B /* StudyPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F435DA61625312BA239140B /* StudyPlan.swift */; };
 		6BD4E18E615166A8145BF3A6 /* ReviewSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC41E2FCE8152E61CC560A4 /* ReviewSessionView.swift */; };
 		6FF95C5BFE1FBBF4E953D44C /* AchievementRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D9F64EDCEC91CEE062BA91 /* AchievementRule.swift */; };
+		75B0AE4B67162FD8215E4AE4 /* ProgressionEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D9C160A12D3DD94F6B217B /* ProgressionEventTests.swift */; };
 		768CEC0E869FE2ED060B5BA6 /* StudyPlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F51DF6D5AB6A271B71A698 /* StudyPlannerView.swift */; };
 		76B93476413B446A4D4B8361 /* SM2Engine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E463EB81821428C62738F69C /* SM2Engine.swift */; };
 		79E44E1EBCD34648F7CE098D /* StudyGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25383C7CD4E2D5968FE6CA9 /* StudyGuideView.swift */; };
@@ -50,6 +51,7 @@
 		80A3F6C4C54EC5C5AA5A71CD /* UnitState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32E59F06A5BB239E59A6F86C /* UnitState.swift */; };
 		81E2B41579F98E5CB885B048 /* ReviewSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 998605218B33DF3291D5649D /* ReviewSession.swift */; };
 		85E962C86D710F46AC69BE33 /* ProgressionSnapshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14332BDDEDE3EF8620395333 /* ProgressionSnapshots.swift */; };
+		88C617B4923C1F3EEAF4EECA /* ProgressionEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBEF0F514FDAF02DADE26C08 /* ProgressionEvent.swift */; };
 		8C8382F7DB40BC3842F42288 /* MaterialsLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B48FD3453450F22FCB459C56 /* MaterialsLibraryView.swift */; };
 		91A938936F44803FE63A8926 /* SyllabusSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAFA961AFC5ABD8A57067A9 /* SyllabusSeeder.swift */; };
 		9A7E2BAF03F3737E7D051984 /* SubjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */; };
@@ -164,6 +166,7 @@
 		B8F717785BEE4366BA0A9CE7 /* ProficiencyTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProficiencyTracker.swift; sourceTree = "<group>"; };
 		BB9713AFE0115FF39ABB53ED /* Materials */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Materials; path = IBVault/Materials; sourceTree = SOURCE_ROOT; };
 		C181DD379612F56FEB4EB918 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C5D9C160A12D3DD94F6B217B /* ProgressionEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionEventTests.swift; sourceTree = "<group>"; };
 		C6CE8EAB80FB636A55EE5742 /* tex-svg.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "tex-svg.js"; sourceTree = "<group>"; };
 		C729E73BE8AAA09B5A1FA06B /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		C7505D827B276C5D32D759F1 /* StudyActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyActivity.swift; sourceTree = "<group>"; };
@@ -178,6 +181,7 @@
 		ED97CD9D635EAE250C259E5F /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		F63A5FFC01907D815DF4632A /* SubjectTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectTrack.swift; sourceTree = "<group>"; };
 		F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectDetailView.swift; sourceTree = "<group>"; };
+		FBEF0F514FDAF02DADE26C08 /* ProgressionEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionEvent.swift; sourceTree = "<group>"; };
 		FD42C0B0534AB6E78452E12D /* UserProfileProgressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileProgressionTests.swift; sourceTree = "<group>"; };
 		FD7054635482B1FC324201C7 /* MasterySignals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasterySignals.swift; sourceTree = "<group>"; };
 		FE35A2B5EB4D74B9779057D4 /* Subject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Subject.swift; sourceTree = "<group>"; };
@@ -200,6 +204,7 @@
 				59D9F64EDCEC91CEE062BA91 /* AchievementRule.swift */,
 				46572174C584F070E8732E12 /* MasteryCalculator.swift */,
 				FD7054635482B1FC324201C7 /* MasterySignals.swift */,
+				FBEF0F514FDAF02DADE26C08 /* ProgressionEvent.swift */,
 				14332BDDEDE3EF8620395333 /* ProgressionSnapshots.swift */,
 				C80E12FA09B76D5980E7D972 /* RankLadder.swift */,
 				97A440310E8DA6021B68587A /* RankProgress.swift */,
@@ -401,6 +406,7 @@
 				9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */,
 				7C32B3A369EDF454A13A6276 /* MasterySignalsTests.swift */,
 				E4A21C149C9CDCC3E182E69C /* ProficiencyTrackerTests.swift */,
+				C5D9C160A12D3DD94F6B217B /* ProgressionEventTests.swift */,
 				83E12470134DF352846A1C65 /* RankLadderTests.swift */,
 				6144D151DC4BD2A57D019DFE /* RankProgressTests.swift */,
 				967852FAB1BFC2229E6856AF /* ReviewQueueManagerTests.swift */,
@@ -567,6 +573,7 @@
 				F0EF716789BD1BA7B4D79304 /* PredictiveGradeView.swift in Sources */,
 				E264EF0CA59F55FD71234BFD /* ProficiencyTracker.swift in Sources */,
 				F2715EEDDE42039EBD21DC06 /* ProfileView.swift in Sources */,
+				88C617B4923C1F3EEAF4EECA /* ProgressionEvent.swift in Sources */,
 				85E962C86D710F46AC69BE33 /* ProgressionSnapshots.swift in Sources */,
 				C2A0CD45FFEC4EFF8BC95B35 /* RankLadder.swift in Sources */,
 				449ADDA1C21F572EE1872A6C /* RankProgress.swift in Sources */,
@@ -610,6 +617,7 @@
 				CB14102F60B00C86F69F0803 /* MasteryCalculatorTests.swift in Sources */,
 				7A5590C46CBC444247A4C18D /* MasterySignalsTests.swift in Sources */,
 				AF91A2FA0CDFD6F2491E071F /* ProficiencyTrackerTests.swift in Sources */,
+				75B0AE4B67162FD8215E4AE4 /* ProgressionEventTests.swift in Sources */,
 				4B1165A2CB486FA1561FE6F7 /* RankLadderTests.swift in Sources */,
 				C3E188C183BC70CF0BAA868C /* RankProgressTests.swift in Sources */,
 				337335D89ED5CB283CE47BBD /* ReviewQueueManagerTests.swift in Sources */,
