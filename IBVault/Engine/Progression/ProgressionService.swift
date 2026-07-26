@@ -63,7 +63,14 @@ enum ProgressionService {
             events.append(.achievementUnlocked(id: unlocked.id, title: unlocked.title))
         }
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // The events above have already been handed to the caller to
+            // present. Losing this save would silently undo a rank-up the user
+            // has been congratulated on.
+            assertionFailure("Progression save failed: \(error.localizedDescription)")
+        }
         return events
     }
 }
