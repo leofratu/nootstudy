@@ -140,6 +140,7 @@ struct RootView: View {
     @Query private var profiles: [UserProfile]
     @State private var hasAttemptedAutomaticBackup = false
     @State private var hasReconciledAchievements = false
+    @State private var hasRecomputedProgression = false
 
     private var orderedProfiles: [UserProfile] {
         profiles.sorted { $0.id.uuidString < $1.id.uuidString }
@@ -174,6 +175,7 @@ struct RootView: View {
         // runs for them.
         .onAppear {
             reconcileAchievementsIfNeeded()
+            recomputeProgressionIfNeeded()
         }
     }
 
@@ -181,6 +183,17 @@ struct RootView: View {
         guard !hasReconciledAchievements else { return }
         hasReconciledAchievements = true
         Achievement.reconcile(context: context)
+    }
+
+    /// Progression otherwise only recomputes when a session completes, so an
+    /// existing user would open the app at Electron III with their whole review
+    /// history ignored until they happened to finish another session. Events are
+    /// discarded here deliberately: launch is not a moment to fire a rank-up
+    /// celebration for work done days ago.
+    private func recomputeProgressionIfNeeded() {
+        guard !hasRecomputedProgression else { return }
+        hasRecomputedProgression = true
+        ProgressionService.recompute(context: context)
     }
 
     private func triggerAutomaticBackupIfNeeded() {
