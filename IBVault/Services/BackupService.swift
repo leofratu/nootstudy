@@ -578,9 +578,33 @@ struct StudyPlanBackup: Codable {
 struct AchievementBackup: Codable {
     let id: String; let title: String; let desc: String; let icon: String
     let unlocked: Bool; let unlockDate: Date?; let category: String
-    init(from a: Achievement) { id = a.id; title = a.title; desc = a.desc; icon = a.icon; unlocked = a.unlocked; unlockDate = a.unlockDate; category = a.category }
+    /// Optional so backups written before progression rules existed still decode.
+    let ruleRaw: String?; let tier: Int?
+
+    init(from a: Achievement) {
+        id = a.id; title = a.title; desc = a.desc; icon = a.icon
+        unlocked = a.unlocked; unlockDate = a.unlockDate; category = a.category
+        ruleRaw = a.ruleRaw; tier = a.tier
+    }
+
     func toModel() -> Achievement {
-        let a = Achievement(id: id, title: title, desc: desc, icon: icon, category: category)
+        let definition = Achievement.definitions.first { $0.id == id }
+        // A missing or empty rule would make the achievement permanently unevaluable,
+        // so fall back to the shipped definition for this id.
+        let resolvedRule: String = {
+            if let ruleRaw, !ruleRaw.isEmpty { return ruleRaw }
+            return definition?.rule.rawValue ?? ""
+        }()
+        let resolvedTier = tier ?? definition?.tier ?? 1
+        let a = Achievement(
+            id: id,
+            title: title,
+            desc: desc,
+            icon: icon,
+            category: category,
+            ruleRaw: resolvedRule,
+            tier: resolvedTier
+        )
         a.unlocked = unlocked; a.unlockDate = unlockDate; return a
     }
 }

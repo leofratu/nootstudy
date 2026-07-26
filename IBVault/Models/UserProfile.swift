@@ -159,8 +159,8 @@ final class UserProfile {
     var notificationHour: Int
     var notificationMinute: Int
 
-    var achievedRankRaw: Int
-    var achievedTierRaw: Int
+    var achievedRankRaw: Int = 0
+    var achievedTierRaw: Int = 0
 
     var studentName: String
     var studyIntensityRaw: String

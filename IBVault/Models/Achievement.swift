@@ -10,8 +10,8 @@ final class Achievement {
     var unlocked: Bool
     var unlockDate: Date?
     var category: String
-    var ruleRaw: String
-    var tier: Int
+    var ruleRaw: String = ""
+    var tier: Int = 1
 
     init(
         id: String,
