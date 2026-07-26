@@ -24,7 +24,10 @@ struct IBVaultApp: App {
             ChatMessage.self,
             StudyActivity.self,
             StudySession.self,
-            StudyPlan.self
+            StudyPlan.self,
+            SubjectTrack.self,
+            UnitState.self,
+            WeeklyChallenge.self
         ], isAutosaveEnabled: true, isUndoEnabled: false)
         #if os(macOS)
         .defaultSize(width: 1100, height: 750)
