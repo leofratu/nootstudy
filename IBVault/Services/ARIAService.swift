@@ -1018,26 +1018,20 @@ class ARIAService {
                 throw NSError(domain: "ARIAService", code: 7, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find cards matching that scope to update mastery."])
             }
 
+            // Proficiency only. SM-2 scheduling state — repetitions, interval,
+            // easeFactor, nextReviewDate — and the consecutiveCorrect recall
+            // tally belong to SM2Engine.applyReview, which writes them from an
+            // actual recall.
+            //
+            // Writing repetitions here was a direct line from "the model said
+            // you know this" to your rank: mastery coverage is the fraction of
+            // cards with repetitions >= 2 and carries 40% of the composite, and
+            // rank never regresses, so one hallucinated call was permanent.
+            // consecutiveCorrect goes for the same reason on a smaller scale —
+            // inflating it hides a card from ProficiencyTracker.weakTopics and
+            // so from the recommendations built on it.
             for card in matchingCards {
                 card.proficiency = proficiency
-                switch proficiency {
-                case .novice:
-                    card.repetitions = 0
-                    card.consecutiveCorrect = 0
-                    card.nextReviewDate = Date()
-                case .developing:
-                    card.repetitions = max(card.repetitions, 1)
-                    card.consecutiveCorrect = max(card.consecutiveCorrect, 2)
-                    card.nextReviewDate = Calendar.current.date(byAdding: .day, value: 2, to: Date()) ?? Date()
-                case .proficient:
-                    card.repetitions = max(card.repetitions, 3)
-                    card.consecutiveCorrect = max(card.consecutiveCorrect, 4)
-                    card.nextReviewDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
-                case .mastered:
-                    card.repetitions = max(card.repetitions, 6)
-                    card.consecutiveCorrect = max(card.consecutiveCorrect, 7)
-                    card.nextReviewDate = Calendar.current.date(byAdding: .day, value: 21, to: Date()) ?? Date()
-                }
             }
 
             return "Updated \(matchingCards.count) cards in \(subject.name) to \(proficiency.rawValue.lowercased()) mastery."
