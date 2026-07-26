@@ -19,4 +19,14 @@ enum MasteryCalculator {
         let decayed = raw * MasterySignals.freshness(lastReviewDate: snapshot.lastReviewDate, now: now)
         return min(max(decayed, 0.0), 1.0)
     }
+
+    /// The headline composite: mean subject mastery weighted by teaching hours.
+    static func globalMastery(for snapshots: [SubjectSnapshot], now: Date) -> Double {
+        let totalWeight = snapshots.reduce(0.0) { $0 + $1.level.masteryWeight }
+        guard totalWeight > 0 else { return 0 }
+        let weightedSum = snapshots.reduce(0.0) { partial, snapshot in
+            partial + mastery(for: snapshot, now: now) * snapshot.level.masteryWeight
+        }
+        return min(max(weightedSum / totalWeight, 0.0), 1.0)
+    }
 }

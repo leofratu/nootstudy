@@ -52,4 +52,36 @@ struct MasteryCalculatorTests {
         let value = MasteryCalculator.mastery(for: snapshot(cards: cards, reviews: reviews), now: now)
         #expect(abs(value - expected) < 0.0001)
     }
+
+    /// Builds a snapshot whose mastery evaluates to 1.0: coverage, retention and
+    /// stability all maxed, with fully recent reviews so freshness is 1.0.
+    private func fullMasterySnapshot(name: String, level: SubjectLevel) -> SubjectSnapshot {
+        let cards = (0..<4).map { _ in CardSnapshot(repetitions: 3, intervalDays: 21) }
+        let reviews = (0..<20).map { index in
+            ReviewSnapshot(timestamp: now.addingTimeInterval(-Double(index) * 3600), qualityRating: 5)
+        }
+        return SubjectSnapshot(name: name, level: level, cards: cards, reviews: reviews)
+    }
+
+    @Test("Global mastery weights HL at 1.5 against SL at 1.0")
+    func globalMasteryWeightsHL() {
+        let hl = fullMasterySnapshot(name: "Economics", level: .hl)      // mastery 1.0
+        let sl = SubjectSnapshot(name: "Biology", level: .sl, cards: [], reviews: [])  // mastery 0
+        // (1.0 * 1.5 + 0.0 * 1.0) / 2.5 == 0.6
+        let value = MasteryCalculator.globalMastery(for: [hl, sl], now: now)
+        #expect(abs(value - 0.6) < 0.0001)
+    }
+
+    @Test("Global mastery of no subjects is zero, not a division by zero")
+    func globalMasteryOfEmptyIsZero() {
+        #expect(MasteryCalculator.globalMastery(for: [], now: now) == 0)
+    }
+
+    @Test("Global mastery of all-untouched subjects is zero")
+    func globalMasteryOfUntouchedIsZero() {
+        let subjects = ["Biology", "Economics"].map {
+            SubjectSnapshot(name: $0, level: .sl, cards: [], reviews: [])
+        }
+        #expect(MasteryCalculator.globalMastery(for: subjects, now: now) == 0)
+    }
 }
