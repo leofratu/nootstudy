@@ -32,7 +32,7 @@ struct IBVaultApp: App {
         ], isAutosaveEnabled: true, isUndoEnabled: false)
         #if os(macOS)
         .defaultSize(width: 1100, height: 750)
-        .windowResizability(.contentMinSize)
+        .windowResizability(.automatic)
         .windowToolbarStyle(.unified)
         .commands {
             IBVaultCommands()

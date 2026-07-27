@@ -136,7 +136,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         #if os(macOS)
-        .frame(minWidth: 1000, minHeight: 700)
+        .frame(minWidth: 820, minHeight: 560)
         #endif
         .environment(reviewQueueManager)
         .environment(progressionEvents)
