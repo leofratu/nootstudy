@@ -316,19 +316,38 @@ struct PromptChip: View {
 
     var body: some View {
         Button(action: { action(); IBHaptics.soft() }) {
-            Text(text)
-                .font(IBTypography.caption)
-                .foregroundColor(IBColors.electricBlue)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule()
-                        .fill(IBColors.electricBlue.opacity(0.08))
-                        .overlay(
-                            Capsule().stroke(IBColors.electricBlue.opacity(0.2), lineWidth: 1)
-                        )
-                )
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(IBColors.electricBlue)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(IBColors.electricBlue.opacity(0.1))
+                    )
+                Text(text)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(IBColors.ink)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(IBColors.tertiaryText)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(IBColors.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                    )
+            )
         }
+        .buttonStyle(.plain)
     }
 }
 

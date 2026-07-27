@@ -52,7 +52,7 @@ struct ARIAChatView: View {
                 VStack(spacing: 0) {
                     ScrollViewReader { proxy in
                         ScrollView {
-                            LazyVStack(spacing: 2) {
+                            LazyVStack(spacing: 10) {
                                 if messages.isEmpty && !ariaService.isLoading {
                                     emptyState
                                 }
@@ -70,8 +70,8 @@ struct ARIAChatView: View {
                                     }
                                 }
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 18)
                         }
                         .onChange(of: messages.last?.id) { _, newValue in
                             guard let newValue else { return }
@@ -139,11 +139,11 @@ struct ARIAChatView: View {
 
     private var sessionSidebar: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(IBColors.teal.opacity(0.12))
-                        .frame(width: 32, height: 32)
+                        .frame(width: 34, height: 34)
                     Image(systemName: "sparkles")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(IBColors.teal)
@@ -156,6 +156,12 @@ struct ARIAChatView: View {
                         .foregroundStyle(IBColors.teal)
                 }
                 Spacer(minLength: 4)
+                Text("\(visibleSessions.count)")
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(IBColors.secondaryText)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(IBColors.canvas))
                 Button {
                     createNewChat()
                 } label: {
@@ -165,8 +171,8 @@ struct ARIAChatView: View {
                 .buttonStyle(.borderless)
                 .disabled(ariaService.isLoading)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 14)
+            .frame(height: 58)
 
             Divider()
 
@@ -200,48 +206,47 @@ struct ARIAChatView: View {
                         }
                     }
                 }
-                .padding(12)
+                .padding(9)
             }
         }
-        .frame(width: 280)
+        .frame(width: 268)
         .background(IBColors.surface)
     }
 
     // MARK: - Empty State
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Spacer().frame(height: 40)
+        VStack(spacing: 18) {
+            Spacer().frame(height: 28)
 
             ZStack {
-                Circle()
-                    .fill(IBColors.electricBlue.opacity(0.08))
-                    .frame(width: 80, height: 80)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(IBColors.electricBlue.opacity(0.09))
+                    .frame(width: 58, height: 58)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 32, weight: .light))
+                    .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(IBColors.electricBlue)
             }
 
             VStack(spacing: 6) {
-                Text("Meet ARIA")
+                Text("Choose a starting point")
                     .font(.title2.bold())
-                Text("Your AI study companion. Ask about topics, request study guides, or tell ARIA to assign sessions, clean up flashcards, and update your study setup directly.")
+                Text("Your current curriculum and review history are ready.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 400)
             }
 
-            // Prompt chips
             VStack(spacing: 8) {
                 ForEach(ariaService.suggestedPrompts, id: \.self) { prompt in
                     PromptChip(text: prompt) { sendMessage(prompt) }
                 }
             }
             .padding(.top, 8)
+            .frame(maxWidth: 460)
 
             Spacer()
         }
-        .background(IBColors.surface)
     }
 
     private var thinkingIndicator: some View {
@@ -254,23 +259,63 @@ struct ARIAChatView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(IBColors.electricBlue)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 ProgressView().controlSize(.small)
                 Text(ariaService.currentStatus.isEmpty ? "Preparing your response…" : ariaService.currentStatus)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(IBColors.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                    )
+            )
             Spacer()
         }
-        .padding(.vertical, 6)
     }
 
     // MARK: - Input Bar
     private var inputBar: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 9) {
+            if let err = errorMessage {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(IBColors.danger)
+                        .padding(.top, 1)
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(IBColors.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button {
+                        errorMessage = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Dismiss error")
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(IBColors.danger.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(IBColors.danger.opacity(0.2), lineWidth: 1)
+                        )
+                )
+            }
+
             HStack(spacing: 8) {
                 Label(selectedProvider.displayName, systemImage: selectedProvider.symbolName)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(IBColors.teal)
                 Text(AIConfiguration.model(for: selectedProvider))
                     .font(.system(.caption2, design: .monospaced))
@@ -293,48 +338,46 @@ struct ARIAChatView: View {
                 }
                 Spacer()
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 9)
 
             HStack(alignment: .bottom, spacing: 10) {
                 TextField("Ask ARIA…", text: $inputText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
                     .lineLimit(1...5)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                     .onSubmit { sendMessage(inputText) }
 
                 Button {
                     sendMessage(inputText)
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundStyle(
-                            inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading
-                                ? Color.secondary.opacity(0.3) : IBColors.electricBlue
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle().fill(
+                                inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading
+                                    ? IBColors.tertiaryText.opacity(0.45) : IBColors.electricBlue
+                            )
                         )
                 }
                 .buttonStyle(.plain)
                 .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading)
                 .keyboardShortcut(.defaultAction)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            if let err = errorMessage {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                    Spacer()
-                    Button("Dismiss") { errorMessage = nil }
-                        .font(.caption)
-                        .buttonStyle(.borderless)
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-            }
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(IBColors.canvas)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                    )
+            )
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .background(IBColors.surface)
     }
 
     private func sendMessage(_ text: String) {
@@ -443,30 +486,36 @@ private struct ARIAChatSessionRow: View {
     let isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(session.title)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(isSelected ? IBColors.electricBlue : .primary)
-                .lineLimit(1)
+        HStack(spacing: 9) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(isSelected ? IBColors.electricBlue : Color.clear)
+                .frame(width: 3, height: 44)
 
-            Text(session.lastMessagePreview.isEmpty ? "No messages yet" : session.lastMessagePreview)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(session.title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(isSelected ? IBColors.electricBlue : IBColors.ink)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(session.updatedAt, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(IBColors.tertiaryText)
+                        .lineLimit(1)
+                }
 
-            Text(session.updatedAt, style: .relative)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                Text(session.lastMessagePreview.isEmpty ? "No messages yet" : session.lastMessagePreview)
+                    .font(.caption)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isSelected ? IBColors.electricBlue.opacity(0.08) : Color.primary.opacity(0.035))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isSelected ? IBColors.electricBlue.opacity(0.18) : Color.primary.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? IBColors.electricBlue.opacity(0.08) : Color.clear)
         )
     }
 }
@@ -478,37 +527,56 @@ struct MessageRow: View {
     private var isUser: Bool { message.role == "user" }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            if !isUser {
-                ariaAvatar
-            }
-
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
-                Text(isUser ? "You" : "ARIA")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(isUser ? .secondary : IBColors.electricBlue)
-                    .padding(.horizontal, 4)
-
-                FormattedMessageContent(text: message.content, preferRichRendering: !isUser)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(isUser ? Color.accentColor.opacity(0.1) : Color.primary.opacity(0.05))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(isUser ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.08), lineWidth: 0.5)
-                    )
-            }
-
+        Group {
             if isUser {
-                userAvatar
+                HStack(alignment: .top, spacing: 10) {
+                    Spacer(minLength: 80)
+                    VStack(alignment: .trailing, spacing: 5) {
+                        Text("You")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(IBColors.secondaryText)
+                        Text(message.content)
+                            .lineSpacing(3)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(IBColors.electricBlue.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(IBColors.electricBlue.opacity(0.16), lineWidth: 1)
+                                    )
+                            )
+                    }
+                    .frame(maxWidth: 590, alignment: .trailing)
+                    userAvatar
+                }
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    ariaAvatar
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("ARIA")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(IBColors.electricBlue)
+                        FormattedMessageContent(text: message.content, preferRichRendering: true)
+                            .textSelection(.enabled)
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(IBColors.surface)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                                    )
+                            )
+                    }
+                    .frame(maxWidth: 760, alignment: .leading)
+                    Spacer(minLength: 20)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .padding(.vertical, 6)
     }
 
     private var ariaAvatar: some View {
@@ -556,20 +624,19 @@ struct StreamingMessageRow: View {
                     .padding(.horizontal, 4)
                 FormattedMessageContent(text: text, preferRichRendering: true)
                     .textSelection(.enabled)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    .padding(14)
                     .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.primary.opacity(0.05))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(IBColors.surface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(IBColors.cardBorder, lineWidth: 1)
+                            )
                     )
             }
+            .frame(maxWidth: 760, alignment: .leading)
             Spacer()
         }
-        .padding(.vertical, 6)
     }
 }
 
@@ -633,11 +700,11 @@ private struct NativeMathBlockView: View {
                 .padding(.vertical, 10)
         }
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 8)
                 .fill(Color.primary.opacity(0.05))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
     }
@@ -792,15 +859,6 @@ private struct FlashcardMessageView: View {
                 text: back
             )
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.primary.opacity(0.035))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 
     private func flashcardSide(label: String, icon: String, tint: Color, text: String) -> some View {
@@ -821,7 +879,7 @@ private struct FlashcardMessageView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: 8)
                         .fill(tint.opacity(0.08))
                 )
         }
@@ -873,11 +931,11 @@ private struct CodeBlockView: View {
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 8)
                 .fill(Color.primary.opacity(0.04))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
     }
