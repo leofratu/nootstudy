@@ -50,6 +50,7 @@ enum AIReasoningEffort: String, CaseIterable, Codable, Identifiable, Sendable {
     case high
     case xhigh
     case max
+    case ultra
 
     var id: String { rawValue }
     var displayName: String {
@@ -67,6 +68,7 @@ enum AIReasoningEffort: String, CaseIterable, Codable, Identifiable, Sendable {
         case .high: return "Deeper reasoning for synthesis and exam analysis."
         case .xhigh: return "Extra depth for difficult, multi-step problems."
         case .max: return "Maximum depth for the hardest quality-first work."
+        case .ultra: return "The deepest local Codex reasoning for unusually difficult work."
         }
     }
 }
@@ -211,9 +213,9 @@ enum AIConfiguration {
     static func supportedReasoningEfforts(for provider: AIProviderKind) -> [AIReasoningEffort] {
         switch provider {
         case .codexCLI:
-            return [.low, .medium, .high, .xhigh, .max]
+            return [.low, .medium, .high, .xhigh, .max, .ultra]
         case .junali:
-            return AIReasoningEffort.allCases
+            return [.none, .low, .medium, .high, .xhigh, .max]
         case .gemini:
             return []
         }
@@ -225,7 +227,13 @@ enum AIConfiguration {
     ) -> AIReasoningEffort {
         let supported = supportedReasoningEfforts(for: provider)
         guard !supported.isEmpty else { return effort }
-        return supported.contains(effort) ? effort : .low
+        guard !supported.contains(effort) else { return effort }
+
+        switch (provider, effort) {
+        case (.codexCLI, .none): return .low
+        case (.junali, .ultra): return .max
+        default: return .medium
+        }
     }
 
     static func reasoningEffortValue(for provider: AIProviderKind) -> String {

@@ -131,8 +131,9 @@ struct AIConfigurationTests {
     func codexEffortLevels() {
         let efforts = AIConfiguration.supportedReasoningEfforts(for: .codexCLI)
 
-        #expect(efforts == [.low, .medium, .high, .xhigh, .max])
+        #expect(efforts == [.low, .medium, .high, .xhigh, .max, .ultra])
         #expect(AIConfiguration.normalizedReasoningEffort(.none, for: .codexCLI) == .low)
+        #expect(AIConfiguration.normalizedReasoningEffort(.ultra, for: .junali) == .max)
         #expect(AIConfiguration.supportedReasoningEfforts(for: .gemini).isEmpty)
     }
 
