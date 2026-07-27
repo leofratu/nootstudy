@@ -1,6 +1,6 @@
 import Foundation
 
-/// The ten-rank ladder, strictly increasing in physical scale.
+/// A fifteen-rank ladder that moves from subatomic scale to the observable universe.
 enum Rank: Int, CaseIterable, Codable, Sendable, Comparable {
     case electron = 0
     case atom
@@ -12,6 +12,11 @@ enum Rank: Int, CaseIterable, Codable, Sendable, Comparable {
     case planet
     case star
     case supernova
+    case nebula
+    case galaxy
+    case galaxyCluster
+    case cosmicWeb
+    case universe
 
     var displayName: String {
         switch self {
@@ -25,6 +30,11 @@ enum Rank: Int, CaseIterable, Codable, Sendable, Comparable {
         case .planet: return "Planet"
         case .star: return "Star"
         case .supernova: return "Supernova"
+        case .nebula: return "Nebula"
+        case .galaxy: return "Galaxy"
+        case .galaxyCluster: return "Galaxy Cluster"
+        case .cosmicWeb: return "Cosmic Web"
+        case .universe: return "Universe"
         }
     }
 
@@ -41,6 +51,11 @@ enum Rank: Int, CaseIterable, Codable, Sendable, Comparable {
         case .planet: return "circle.dotted.circle"
         case .star: return "star"
         case .supernova: return "sparkles"
+        case .nebula: return "cloud"
+        case .galaxy: return "hurricane"
+        case .galaxyCluster: return "circle.grid.3x3.fill"
+        case .cosmicWeb: return "network"
+        case .universe: return "globe.americas.fill"
         }
     }
 
@@ -64,13 +79,13 @@ enum RankTier: Int, CaseIterable, Codable, Sendable, Comparable {
     static func < (lhs: RankTier, rhs: RankTier) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
-/// One of the thirty positions on the ladder.
+/// One of the forty-five positions on the ladder.
 struct RankStep: Codable, Sendable, Equatable, Comparable {
     let rank: Rank
     let tier: RankTier
 
-    static let stepSize = 0.03
-    static let maxOrdinal = 29
+    static let maxOrdinal = Rank.allCases.count * RankTier.allCases.count - 1
+    static let stepSize = 1.0 / Double(maxOrdinal)
 
     /// Guards against binary representation error. `0.87 / 0.03` is
     /// 28.999999999999996, which would floor to the wrong step without this.
@@ -93,7 +108,7 @@ struct RankStep: Codable, Sendable, Equatable, Comparable {
     }
 
     init(forMastery mastery: Double) {
-        let clamped = max(mastery, 0)
+        let clamped = min(max(mastery, 0), 1)
         let raw = Int((clamped / Self.stepSize) + Self.epsilon)
         self.init(ordinal: min(raw, Self.maxOrdinal))
     }

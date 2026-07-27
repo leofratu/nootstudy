@@ -35,12 +35,13 @@ struct RankProgressTests {
 
     @Test("Progress towards the next step is a clamped fraction")
     func progressToNextStep() {
-        // Ordinal 3 spans 0.09 to 0.12; 0.105 is halfway.
-        let progress = RankProgress(liveMastery: 0.105, achieved: RankStep(ordinal: 0))
+        let ordinal = 3
+        let halfway = RankStep(ordinal: ordinal).masteryThreshold + (RankStep.stepSize / 2)
+        let progress = RankProgress(liveMastery: halfway, achieved: RankStep(ordinal: 0))
         #expect(abs(progress.fractionToNextStep - 0.5) < 0.0001)
 
         // At the top of the ladder there is nowhere further to go.
-        let topped = RankProgress(liveMastery: 0.95, achieved: RankStep(ordinal: 29))
+        let topped = RankProgress(liveMastery: 1.0, achieved: RankStep(ordinal: RankStep.maxOrdinal))
         #expect(topped.fractionToNextStep == 1.0)
     }
 }

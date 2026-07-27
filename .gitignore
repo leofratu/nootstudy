@@ -30,3 +30,7 @@ DerivedData/
 .env
 .env.*
 !.env.example
+
+# Generated design exploration and temporary ImageGen output
+output/
+tmp/
