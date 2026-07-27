@@ -222,11 +222,6 @@ class ARIAService {
         onComplete: @escaping (String) -> Void,
         onError: @escaping (Error) -> Void
     ) {
-        guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-            onError(GeminiError.noAPIKey)
-            return
-        }
-
         isLoading = true
         currentStreamText = ""
 
@@ -234,7 +229,13 @@ class ARIAService {
         let userChat = ChatMessage(role: "user", content: userMessage, sessionID: session.id)
         updateSession(session, withUserMessage: userMessage)
         context.insert(userChat)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            isLoading = false
+            onError(error)
+            return
+        }
 
         Task {
             do {
@@ -255,10 +256,9 @@ class ARIAService {
 
                 var fullResponse = ""
 
-                let stream = GeminiService.streamContent(
+                let stream = AIProviderService.streamContent(
                     messages: messages,
-                    systemInstruction: systemPrompt,
-                    apiKey: apiKey
+                    systemInstruction: systemPrompt
                 )
 
                 var lastStreamUpdate = Date.distantPast
@@ -290,16 +290,23 @@ class ARIAService {
                 let finalizedResponse = Self.finalizeAssistantResponse(fullResponse)
 
                 // Save assistant response
-                await MainActor.run {
+                let didSaveResponse = await MainActor.run { () -> Bool in
                     let modelChat = ChatMessage(role: "model", content: finalizedResponse, sessionID: session.id)
                     context.insert(modelChat)
                     self.updateSession(session, withAssistantReply: finalizedResponse)
-
-                    try? context.save()
-
-                    self.isLoading = false
-                    onComplete(finalizedResponse)
+                    do {
+                        try context.save()
+                        self.isLoading = false
+                        onComplete(finalizedResponse)
+                        return true
+                    } catch {
+                        context.delete(modelChat)
+                        self.isLoading = false
+                        onError(error)
+                        return false
+                    }
                 }
+                guard didSaveResponse else { return }
 
                 Self.recordARIAChatExchange(
                     subjectName: loggingContext.subjectName,
@@ -310,7 +317,7 @@ class ARIAService {
                 )
 
                 // Check if compaction needed
-                await checkAndCompact(context: context, apiKey: apiKey, sessionID: session.id)
+                await checkAndCompact(context: context, sessionID: session.id)
 
             } catch {
                 await MainActor.run {
@@ -331,12 +338,8 @@ class ARIAService {
             return ActionExecutionSummary(completed: [], failed: [])
         }
 
-        guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-            return ActionExecutionSummary(completed: [], failed: ["ARIA could not execute app actions because the API key is missing."])
-        }
-
         let planningPrompt = buildActionPlanningPrompt(userMessage: userMessage, context: context)
-        let response = try await GeminiService.generateContent(
+        let response = try await AIProviderService.generateContent(
             messages: [GeminiMessage(role: "user", text: planningPrompt)],
             systemInstruction: """
             You convert user requests into safe app actions for an IB study app.
@@ -365,8 +368,7 @@ class ARIAService {
             - Use frontText/backText when editing flashcards.
             - Use searchText only when the user gives identifying wording for a card or asks to clean up/delete cards.
             - For grade imports, copy the raw grade text into notes and include sourceName if it is obvious from the request.
-            """,
-            apiKey: apiKey
+            """
         )
 
         let actions = parsePlannedAppActions(from: response)
@@ -508,14 +510,14 @@ class ARIAService {
             throw NSError(domain: "ARIAService", code: 1, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject to create that study session."])
         }
 
-        let topics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let topics = sanitizedTopics(action.topics, subjectName: subject.name, subjectLevel: subject.level)
         guard !topics.isEmpty else {
             throw NSError(domain: "ARIAService", code: 2, userInfo: [NSLocalizedDescriptionKey: "ARIA needs at least one valid topic to create a study session."])
         }
 
         let scheduledDate = parseScheduledDate(action.scheduledAt) ?? defaultScheduledDate()
         let duration = min(max(action.durationMinutes ?? 60, 15), 180)
-        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: topics)
+        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, subjectLevel: subject.level, topics: topics)
 
         let plan = StudyPlan(
             subjectName: subject.name,
@@ -552,7 +554,7 @@ class ARIAService {
 
         let scheduledDate = parseScheduledDate(action.scheduledAt) ?? defaultScheduledDate()
         let duration = min(max(action.durationMinutes ?? 50, 15), 180)
-        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: topics)
+        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, subjectLevel: subject.level, topics: topics)
         let defaultNotes = """
         ### ARIA focus session
 
@@ -589,7 +591,7 @@ class ARIAService {
             throw NSError(domain: "ARIAService", code: 12, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject to assign that review session."])
         }
 
-        let requestedTopics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let requestedTopics = sanitizedTopics(action.topics, subjectName: subject.name, subjectLevel: subject.level)
         let topics = requestedTopics.isEmpty
             ? Array(uniqueWeakTopicNames(for: subject).prefix(2))
             : requestedTopics
@@ -597,7 +599,7 @@ class ARIAService {
             throw NSError(domain: "ARIAService", code: 13, userInfo: [NSLocalizedDescriptionKey: "ARIA could not determine which topics to review."])
         }
 
-        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: topics)
+        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, subjectLevel: subject.level, topics: topics)
         let scheduledDate = parseScheduledDate(action.scheduledAt) ?? defaultScheduledDate()
         let duration = min(max(action.durationMinutes ?? 30, 15), 90)
 
@@ -667,7 +669,7 @@ class ARIAService {
             throw NSError(domain: "ARIAService", code: 4, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject for flashcard generation."])
         }
 
-        let requestedTopics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let requestedTopics = sanitizedTopics(action.topics, subjectName: subject.name, subjectLevel: subject.level)
         let topics = requestedTopics.isEmpty
             ? Array(uniqueWeakTopicNames(for: subject).prefix(1))
             : requestedTopics
@@ -678,7 +680,7 @@ class ARIAService {
         var generatedTotal = 0
 
         for topic in topics {
-            let validSubtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: [topic])
+            let validSubtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, subjectLevel: subject.level, topics: [topic])
             let cards = try await CardGeneratorService.generateCards(
                 subject: subject,
                 topicName: topic,
@@ -1007,7 +1009,7 @@ class ARIAService {
             throw NSError(domain: "ARIAService", code: 6, userInfo: [NSLocalizedDescriptionKey: "ARIA could not find the subject to update progress."])
         }
 
-        let topics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let topics = sanitizedTopics(action.topics, subjectName: subject.name, subjectLevel: subject.level)
         let matchingCards = subject.cards.filter { card in
             topics.isEmpty || topics.contains(card.topicName)
         }
@@ -1145,9 +1147,9 @@ class ARIAService {
     }
 
     private func matchingCards(for action: PlannedAppAction, subject: Subject) -> [StudyCard] {
-        let topics = sanitizedTopics(action.topics, subjectName: subject.name)
+        let topics = sanitizedTopics(action.topics, subjectName: subject.name, subjectLevel: subject.level)
         let topicScope = topics.isEmpty ? uniqueTopicNames(for: subject) : topics
-        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, topics: topicScope)
+        let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, subjectLevel: subject.level, topics: topicScope)
         let searchTerms = [action.searchText, action.frontText]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
@@ -1180,17 +1182,17 @@ class ARIAService {
         return topics
     }
 
-    private func sanitizedTopics(_ topics: [String]?, subjectName: String) -> [String] {
+    private func sanitizedTopics(_ topics: [String]?, subjectName: String, subjectLevel: String) -> [String] {
         let requested = (topics ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         guard !requested.isEmpty else { return [] }
-        let valid = Set(SyllabusSeeder.curriculum(for: subjectName).flatMap { $0.topics.map(\.name) })
+        let valid = Set(SyllabusSeeder.curriculum(for: subjectName, level: subjectLevel).flatMap { $0.topics.map(\.name) })
         return requested.filter { valid.contains($0) }
     }
 
-    private func sanitizedSubtopics(_ subtopics: [String]?, subjectName: String, topics: [String]) -> [String] {
+    private func sanitizedSubtopics(_ subtopics: [String]?, subjectName: String, subjectLevel: String, topics: [String]) -> [String] {
         let requested = (subtopics ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         guard !requested.isEmpty else { return [] }
-        let valid = Set(topics.flatMap { SyllabusSeeder.subtopics(for: subjectName, topicName: $0) })
+        let valid = Set(topics.flatMap { SyllabusSeeder.subtopics(for: subjectName, level: subjectLevel, topicName: $0) })
         return requested.filter { valid.contains($0) }
     }
 
@@ -1352,96 +1354,40 @@ class ARIAService {
         let hasData = checkIfUserHasData(context: context)
         
         var prompt = """
-        You are ARIA (Adaptive Retrieval Intelligence Assistant), the most efficient AI study companion ever built for IB students.
+        Role: You are ARIA, an adaptive International Baccalaureate study coach inside IBVault.
 
-        CORE MISSION:
-        - Your #1 goal is MAXIMUM EFFICIENCY: every minute of study must produce the highest possible IB score improvement
-        - You use evidence-based learning science: spaced repetition, active recall, interleaving, elaborative interrogation
-        - You understand that IB is HARD — the global average is 30/45. A score of 38+ puts you in the top 5%
-        - You calibrate all advice to REAL IB DIFFICULTY, never oversimplifying
+        Personality: Warm, direct, calm, and intellectually honest. Treat the learner as capable. Acknowledge setbacks briefly, then move to a concrete next action.
 
-        PERSONALITY:
-        - Warm but direct — like the best tutor who genuinely wants you to succeed
-        - Never condescending. Celebrate wins genuinely.
-        - If the user's streak broke or grades dropped, acknowledge empathetically before pivoting to action
-        - Use occasional emojis for warmth, but keep it professional
+        Goal: Help the learner improve subject mastery and exam performance using their saved curriculum, grades, review history, study plans, and preferences.
 
-        \(hasData ? "" : "NEW USER BEHAVIOR: This user hasn't set up their subjects yet. Help them get started by asking what IB subjects they're taking, then guide them to add subjects in the app. Don't assume any subject knowledge.")
+        Success criteria:
+        - answer the learner's actual request before adding optional advice
+        - respect each subject's saved SL or HL level
+        - ground recommendations in the supplied app snapshot and curriculum nodes
+        - use active recall, spaced repetition, interleaving, worked examples, and error correction where useful
+        - distinguish a known fact from an inference or estimate
+        - never invent grade boundaries, assessment weightings, quotations, source titles, or syllabus requirements
+        - when a source is requested, name the available source and URL; if no source is available, say so plainly
 
-        RESPONSE FORMATTING:
-        - Use clean Markdown for structure: short paragraphs, bullet lists, and **bold** for key takeaways
-        - Use plain hyphen bullets and avoid em dashes in prose
-        - When writing maths or science equations, use LaTeX: inline as $...$ and display equations as $$...$$
-        - Use code blocks with ```language for any code examples
-        - Keep emoji use light and helpful, not excessive
-        - Do not dump raw JSON unless the user explicitly asks for it
-        - ALWAYS use proper spacing: separate sections with blank lines, use headers (###) for major sections
-        - Lists should use dash (-) or asterisk (*) bullets, not numbers unless sequential order matters
-        - When providing definitions, use: **Term**: Definition format
-        - When providing steps, use numbered lists with clear action verbs
+        Formatting:
+        - use clean Markdown with short sections and readable lists
+        - use $...$ for inline LaTeX and $$...$$ for display equations
+        - show units and intermediate steps in calculations
+        - use tables only when comparison is genuinely clearer
+        - do not expose internal JSON or hidden reasoning
 
-        STUDY GUIDE CAPABILITIES:
-        - Generate session-specific study guides that target weak areas first
-        - Create topic breakdowns with IB-calibrated difficulty ratings
-        - Produce focused review plans: what to study, in what order, for how long
-        - Build pre-session briefs: key concepts, common exam pitfalls, mark scheme hints
-        - Design post-session analyses: what improved, what needs more work
+        App actions:
+        - only change app data when the learner explicitly asks
+        - supported actions include study-session creation and scheduling, review assignment, flashcard generation and editing, grade import, profile updates, and durable memory
+        - report what changed and any action that failed
 
-        REAL IB DIFFICULTY CONTEXT:
-        - Biology SL: Paper 1 (20%, MCQ), Paper 2 (40%, short answer + extended), IA (20%). Common pitfalls: photosynthesis mechanisms, genetics pedigree analysis, ecology data analysis
-        - Economics HL: Paper 1 (20%, essay), Paper 2 (30%, data response), Paper 3 (30%, HL policy), IA (20%). Hardest: evaluation in essays, real-world examples, Paper 3 quantitative
-        - Business Management HL: Paper 1 (35%, case study), Paper 2 (35%, structured), IA (30%). Hardest: CUEGIS application, quantitative tools, stakeholder analysis depth
-        - English B HL: Paper 1 (25%, text handling), Paper 2 (25%, written production), IA (25% oral), Written Assignment (25%). Hardest: text type conventions, register accuracy, literary analysis
-        - Russian A Literature SL: Paper 1 (20%, guided analysis), Paper 2 (25%, essay), IA (30%), Written Assignment (25%). Hardest: close literary analysis, author technique identification
-        - Mathematics AA SL: Paper 1 (40%, no calc), Paper 2 (40%, calc), IA (20%). Hardest: proof questions, applications in Paper 1 without calculator, IA criterion E (use of math)
+        Flashcards:
+        - test one idea per card and vary recall, explanation, application, analysis, and evaluation
+        - adapt difficulty from the saved review history
+        - include valid LaTeX where needed and avoid ambiguous notation
+        - use the exact selected curriculum unit, topic, and subunit
 
-        IB GRADE BOUNDARIES (typical):
-        - 7: 70-80%+ (subject dependent)
-        - 6: 60-70%
-        - 5: 50-60%
-        - 4: 40-50%
-        - The jump from 5→6→7 requires exponentially more effort
-
-        CAPABILITIES:
-        - Analyse grades, predict IB outcomes, identify weak spots
-        - Create study plans and sprint plans calibrated to real IB difficulty
-        - Generate flashcards using dedicated FRONT/BACK blocks with a blank line between cards
-        - Quiz using Socratic questioning for active recall
-        - Explain concepts, structure essays, clarify mark schemes at IB level
-        - Track session-by-session and subject-by-subject progress
-        - When the user explicitly asks, you can execute app actions: create, assign, reschedule, complete, or cancel study sessions; generate, edit, or delete flashcards in the library; import assessment/report grades; and update progress/profile settings
-        - Produce study guides with difficulty ratings and time allocations
-        - TRACK FLASHCARD EFFECTIVENESS: You know which AI-generated flashcards are working (high review success) vs struggling (low review success). Use this to recommend regeneration of weak cards.
-        - XP & MASTERY TRACKING: You have full access to student's XP, rank progression, and subject mastery percentages. Reference this to motivate students ("You're 200XP away from leveling up to Atom!").
-        - SUBJECT MASTERY: You can see per-subject mastery percentages and use this to recommend which subjects need more attention based on their target IB score.
-
-        FLASHCARD GENERATION:
-        When the user asks you to create flashcards, generate them in this exact format:
-        - Start each card with "FRONT:" followed by the question
-        - Follow with "BACK:" followed by the answer
-        - Separate cards with a blank line
-        - Never put FRONT and BACK on the same line with pipes or extra labels
-        - Generate IB-exam-level questions that test understanding, not just recall
-        - Include a mix of definitions, applications, analysis, and evaluation questions
-        - For science/math: include formulas and worked examples where relevant
-        - For humanities: include real-world examples and evaluation points
-        - The user can also use the "Browse Curriculum" button in any subject to generate cards automatically via the Topic Browser
-
-        CURRICULUM AWARENESS:
-        - You know the full IB DP 2027 curriculum structure for all enrolled subjects
-        - Each subject has Units → Topics → Subtopics
-        - When recommending study focus, reference specific topics and subtopics
-        - Guide students to use the Topic Browser to generate cards for weak subtopics
-
-        STUDY SESSION PLANNING:
-        - Students can create structured study sessions via the Study Sessions tab
-        - You generate time-blocked study plans with warm-up, active learning, practice, and review phases
-        - ***CRITICAL FORMATTING***: You must use explicit double newlines (`\n\n`) to create paragraphs and separate sections clearly. Never return a single continuous block of text! Use Markdown headers `###` and bullet points formatted spaciously.
-        - School finishes at 4pm — suggest study slots between 4pm and 10pm
-        - Plans should be exam-focused: include specific concepts, practice question types, and mark scheme hints
-        - Students can refine plans by chatting with you during the planning phase
-        - During active sessions, students can ask you questions about the topic they're studying
-
+        \(hasData ? "" : "The learner has no saved study data yet. Help them complete subject setup before making personalized claims.")
         """
 
         // Inject memory preamble
@@ -1467,16 +1413,13 @@ class ARIAService {
         prompt += """
 
         EFFICIENCY INSTRUCTIONS:
-        - Always reference the user's ACTUAL data — grades, session history, weak topics
+        - Reference only the user's actual saved grades, session history, weak topics, and explicit goals
         - If cards are overdue, mention it proactively with urgency proportional to count
-        - When making study plans, base on: weak topics FIRST, then upcoming exam dates, then IB weighting
-        - Use session-by-session data to track improvement trends ("Last 5 sessions you averaged 72% on Bio, up from 60%")
-        - Use subject-by-subject data to prioritise ("Economics is your weakest at 45% mastery — focus here")
-        - Reference their target IB score gap: how many points they need and where to find them
-        - For study guides: rank topics by (difficulty × weakness × exam weight) to maximise score per hour
-        - If DP2: be more urgent, reference exam timeline, focus on highest-yield improvements
+        - Prioritize weak topics first, then user-entered exam dates and recent assessment evidence
+        - Calculate trends from the supplied numbers before describing an improvement or decline
+        - Do not claim an exam weighting or predicted score impact unless the app snapshot contains that evidence
+        - If DP2, emphasize exam technique and consolidation without inventing an exam countdown
         - Tailor pace to their study intensity preset
-        - After generating a study guide, explicitly state expected time and predicted score impact
 
         CURRENT SESSION CONTEXT:
         """
@@ -1487,52 +1430,21 @@ class ARIAService {
         timeFormatter.dateFormat = "EEEE, d MMMM yyyy 'at' HH:mm"
         prompt += "\n- Current time: \(timeFormatter.string(from: now))"
 
-        // ADHD medication context
-        let doseMg = UserDefaults.standard.integer(forKey: "adhdDoseMg")
-        if doseMg > 0 {
-            let hour = Calendar.current.component(.hour, from: now)
-            let minute = Calendar.current.component(.minute, from: now)
-            let hoursSince9 = Double(hour - 9) + Double(minute) / 60.0
+        // Medical settings are intentionally excluded from provider prompts.
+        // They remain local, matching the privacy promise in Settings.
 
-            var focusLevel = "Not active (before first dose or late night)"
-            if hoursSince9 >= 0 && hoursSince9 <= 15 {
-                // Simplified PK estimation
-                let peakHours: [Double] = [2, 6, 11]  // hours after 9 AM
-                let isNearPeak = peakHours.contains { abs(hoursSince9 - $0) < 1.5 }
-                let isWearingOff = [4.0, 8.5, 14.0].contains { abs(hoursSince9 - $0) < 1 }
-                if isNearPeak { focusLevel = "Peak focus (near dose peak)" }
-                else if isWearingOff { focusLevel = "Wearing off (consider timing study accordingly)" }
-                else { focusLevel = "Effective range" }
-            }
-            prompt += "\n- ADHD Medication: Ritalin IR \(doseMg)mg, 3× daily. Current focus: \(focusLevel)"
-            prompt += "\n  → Adapt study recommendations to medication peaks. Harder topics during peak focus."
-        }
-
-        // Effectiveness context
-        prompt += "\n- Study method effectiveness: IB Vault (spaced repetition + active recall) = 1.7× baseline re-reading"
-        prompt += "\n  → Reference this when motivating the student ('every hour here equals 1h 42m of re-reading')"
-
-        // Exam timeline — DP1 vs DP2 awareness
+        // Use only dates the learner explicitly saved on subjects.
         if let profileData = try? context.fetch(FetchDescriptor<UserProfile>()).first {
-            let currentYear = Calendar.current.component(.year, from: now)
-            if profileData.ibYear == .dp2 {
-                // DP2: exams this May — urgent mode
-                let examDate = Calendar.current.date(from: DateComponents(year: currentYear, month: 5, day: 5))!
-                let daysToExam = Calendar.current.dateComponents([.day], from: now, to: examDate).day ?? 0
-                if daysToExam > 0 {
-                    prompt += "\n- ⚠️ EXAM COUNTDOWN: \(daysToExam) days until IB exams. Every session counts."
-                    prompt += "\n  → DP2 mode: prioritise highest-yield topics, triage weak areas, focus on exam technique."
-                }
-            } else {
-                // DP1: exams next May — foundation building mode
-                let examDate = Calendar.current.date(from: DateComponents(year: currentYear + 1, month: 5, day: 5))!
-                let monthsToExam = Calendar.current.dateComponents([.month], from: now, to: examDate).month ?? 0
-                prompt += "\n- 📅 DP1 STUDENT: ~\(monthsToExam) months until IB exams (May \(currentYear + 1))."
-                prompt += "\n  → DP1 mode: build strong foundations NOW. Deep understanding > cramming."
-                prompt += "\n  → Focus on: mastering core concepts, starting IA research early, building consistent study habits."
-                prompt += "\n  → This is the advantage window — students who build spaced repetition habits in DP1 score significantly higher."
-                prompt += "\n  → Encourage exploration and genuine understanding rather than surface-level memorization."
+            prompt += "\n- Programme stage: \(profileData.ibYear.shortLabel)"
+        }
+        let savedExamDates = ((try? context.fetch(FetchDescriptor<Subject>())) ?? [])
+            .compactMap { subject -> String? in
+                guard let examDate = subject.examDate, examDate > now else { return nil }
+                let days = Calendar.current.dateComponents([.day], from: now, to: examDate).day ?? 0
+                return "\(subject.name) \(subject.level): \(days) days (\(examDate.formatted(date: .abbreviated, time: .omitted)))"
             }
+        if !savedExamDates.isEmpty {
+            prompt += "\n- Saved exam dates: \(savedExamDates.joined(separator: "; "))"
         }
 
         return prompt
@@ -1860,7 +1772,7 @@ class ARIAService {
     // MARK: - Context Compaction
 
     @MainActor
-    private func checkAndCompact(context: ModelContext, apiKey: String, sessionID: UUID) async {
+    private func checkAndCompact(context: ModelContext, sessionID: UUID) async {
         var descriptor = FetchDescriptor<ChatMessage>(
             predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID },
             sortBy: [SortDescriptor(\.timestamp, order: .forward)]
@@ -1904,10 +1816,9 @@ class ARIAService {
         """
 
         do {
-            let summary = try await GeminiService.generateContent(
+            let summary = try await AIProviderService.generateContent(
                 messages: [GeminiMessage(role: "user", text: prompt)],
-                systemInstruction: "You are a conversation summarizer. Extract and categorize key information.",
-                apiKey: apiKey
+                systemInstruction: "You are a conversation summarizer. Extract and categorize key information."
             )
 
             // Save compacted summary
@@ -2075,6 +1986,9 @@ class ARIAService {
         }
 
         var lines = [headline]
+        let curriculum = SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
+        let metadata = SyllabusSeeder.metadata(for: subject.name)
+        lines.append("    curriculum: \(curriculum.count) units, \(curriculum.flatMap(\.topics).count) topics, \(curriculum.flatMap(\.topics).flatMap(\.subtopics).count) subunits; source: \(metadata.sourceTitle) \(metadata.sourceURL.absoluteString)")
         if !weakTopics.isEmpty {
             lines.append("    weak topics: \(weakTopics.joined(separator: ", "))")
         }
@@ -2118,16 +2032,18 @@ class ARIAService {
         var seen = Set<String>()
         var topics: [String] = []
 
-        for card in subject.cards {
-            let candidates = [card.topicName, card.subtopic]
-            for candidate in candidates {
-                let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
-                let key = trimmed.lowercased()
-                guard !seen.contains(key), keywordOverlapScore(in: trimmed, keywords: keywords) > 0 else { continue }
-                seen.insert(key)
-                topics.append(trimmed)
+        let curriculumCandidates = SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
+            .flatMap { unit in
+                [unit.name] + unit.topics.flatMap { [$0.name] + $0.subtopics }
             }
+        let cardCandidates = subject.cards.flatMap { [$0.topicName, $0.subtopic] }
+        for candidate in curriculumCandidates + cardCandidates {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.lowercased()
+            guard !seen.contains(key), keywordOverlapScore(in: trimmed, keywords: keywords) > 0 else { continue }
+            seen.insert(key)
+            topics.append(trimmed)
         }
 
         return topics.sorted()

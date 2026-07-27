@@ -8,6 +8,8 @@ struct ARIAChatView: View {
     @Query(sort: \ChatMessage.timestamp) private var allMessages: [ChatMessage]
     @Query(sort: \ARIAChatSession.updatedAt, order: .reverse) private var sessions: [ARIAChatSession]
     @AppStorage("ariaChatSidebarVisible") private var isSidebarVisible = true
+    @AppStorage("ariaProvider") private var selectedProviderRaw = AIProviderKind.gemini.rawValue
+    @AppStorage("ariaReasoningEffort") private var reasoningEffortRaw = AIReasoningEffort.medium.rawValue
     @State private var ariaService = ARIAService()
     @State private var inputText = ""
     @State private var streamingText = ""
@@ -30,6 +32,10 @@ struct ARIAChatView: View {
     private var messages: [ChatMessage] {
         guard let sessionID = selectedSession?.id else { return [] }
         return allMessages.filter { $0.sessionID == sessionID }
+    }
+
+    private var selectedProvider: AIProviderKind {
+        AIProviderKind(rawValue: selectedProviderRaw) ?? .gemini
     }
 
     var body: some View {
@@ -89,7 +95,7 @@ struct ARIAChatView: View {
                     inputBar
                 }
             }
-            .background(.background)
+            .background(IBColors.canvas)
             .navigationTitle(selectedSession?.title ?? "ARIA")
             .toolbar {
                 ToolbarItem(placement: .navigation) {
@@ -133,21 +139,34 @@ struct ARIAChatView: View {
 
     private var sessionSidebar: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Chats")
-                    .font(.headline)
-                Spacer()
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(IBColors.teal.opacity(0.12))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(IBColors.teal)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ARIA")
+                        .font(.system(size: 15, weight: .bold))
+                    Text("STUDY COMPANION")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(IBColors.teal)
+                }
+                Spacer(minLength: 4)
                 Button {
                     createNewChat()
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 13, weight: .bold))
                 }
                 .buttonStyle(.borderless)
                 .disabled(ariaService.isLoading)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.vertical, 16)
 
             Divider()
 
@@ -185,7 +204,7 @@ struct ARIAChatView: View {
             }
         }
         .frame(width: 280)
-        .background(Color.primary.opacity(0.02))
+        .background(IBColors.surface)
     }
 
     // MARK: - Empty State
@@ -222,6 +241,7 @@ struct ARIAChatView: View {
 
             Spacer()
         }
+        .background(IBColors.surface)
     }
 
     private var thinkingIndicator: some View {
@@ -248,6 +268,24 @@ struct ARIAChatView: View {
     // MARK: - Input Bar
     private var inputBar: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Label(selectedProvider.displayName, systemImage: selectedProvider.symbolName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(IBColors.teal)
+                Text(AIConfiguration.model(for: selectedProvider))
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                Text("\((AIReasoningEffort(rawValue: reasoningEffortRaw) ?? .medium).displayName) effort")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 9)
+
             HStack(alignment: .bottom, spacing: 10) {
                 TextField("Ask ARIA…", text: $inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
