@@ -110,85 +110,122 @@ struct ARIAChatView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            HStack(spacing: 0) {
-                if isSidebarVisible {
-                    sessionSidebar
-                        .transition(.move(edge: .leading).combined(with: .opacity))
+        GeometryReader { geometry in
+            let usesExpandedChatLayout = geometry.size.width >= 1_100
+            let showsSessionSidebar = isSidebarVisible && usesExpandedChatLayout
 
-                    Divider()
-                }
+            NavigationStack {
+                HStack(spacing: 0) {
+                    if showsSessionSidebar {
+                        sessionSidebar
+                            .transition(.move(edge: .leading).combined(with: .opacity))
 
-                VStack(spacing: 0) {
-                    if let selectedSession {
-                        ARIASessionConversationView(
-                            sessionID: selectedSession.id,
-                            isLoading: ariaService.isLoading && activeSessionID == selectedSession.id,
-                            currentStatus: ariaService.currentStatus,
-                            streamingText: activeSessionID == selectedSession.id ? streamingText : "",
-                            failure: visibleFailure(for: selectedSession.id),
-                            onRetry: retryFailure,
-                            onReconnectCodex: reconnectCodex,
-                            onDismissFailure: dismissFailure
-                        ) {
-                            emptyState
-                        }
-                        .id(selectedSession.id)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .layoutPriority(1)
-                    } else {
-                        emptyState
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        Divider()
                     }
 
-                    Divider()
+                    VStack(spacing: 0) {
+                        if let selectedSession {
+                            ARIASessionConversationView(
+                                sessionID: selectedSession.id,
+                                isLoading: ariaService.isLoading && activeSessionID == selectedSession.id,
+                                currentStatus: ariaService.currentStatus,
+                                streamingText: activeSessionID == selectedSession.id ? streamingText : "",
+                                failure: visibleFailure(for: selectedSession.id),
+                                onRetry: retryFailure,
+                                onReconnectCodex: reconnectCodex,
+                                onDismissFailure: dismissFailure
+                            ) {
+                                emptyState
+                            }
+                            .id(selectedSession.id)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .layoutPriority(1)
+                        } else {
+                            emptyState
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
 
-                    inputBar
+                        Divider()
+
+                        inputBar
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(IBColors.canvas)
-            .navigationTitle(selectedSession?.title ?? "ARIA")
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isSidebarVisible.toggle()
+                .background(IBColors.canvas)
+                .navigationTitle(selectedSession?.title ?? "ARIA")
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        if usesExpandedChatLayout {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    isSidebarVisible.toggle()
+                                }
+                            } label: {
+                                Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.right")
+                            }
+                            .help(isSidebarVisible ? "Hide Chats" : "Show Chats")
+                        } else {
+                            compactSessionMenu
                         }
-                    } label: {
-                        Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.right")
                     }
-                    .help(isSidebarVisible ? "Hide Chats" : "Show Chats")
-                }
 
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        createNewChat()
-                    } label: {
-                        Label("New Chat", systemImage: "square.and.pencil")
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            createNewChat()
+                        } label: {
+                            Label("New Chat", systemImage: "square.and.pencil")
+                        }
+                        .disabled(ariaService.isLoading)
                     }
-                    .disabled(ariaService.isLoading)
-                }
 
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showMemory = true } label: {
-                        Label("Memory", systemImage: "brain")
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { showMemory = true } label: {
+                            Label("Memory", systemImage: "brain")
+                        }
                     }
                 }
-            }
-            .sheet(isPresented: $showMemory) { ARIAMemoryView() }
-            .task {
-                await MainActor.run {
+                .sheet(isPresented: $showMemory) { ARIAMemoryView() }
+                .task {
+                    await MainActor.run {
+                        bootstrapSessionsIfNeeded()
+                        normalizeChatConfiguration()
+                        ariaService.updateSuggestedPrompts(context: context)
+                    }
+                }
+                .onChange(of: sessions.count) { _, _ in
                     bootstrapSessionsIfNeeded()
-                    normalizeChatConfiguration()
-                    ariaService.updateSuggestedPrompts(context: context)
                 }
-            }
-            .onChange(of: sessions.count) { _, _ in
-                bootstrapSessionsIfNeeded()
             }
         }
+    }
+
+    private var compactSessionMenu: some View {
+        Menu {
+            ForEach(visibleSessions, id: \.id) { session in
+                Button {
+                    selectedSessionID = session.id
+                    streamingText = ""
+                } label: {
+                    Label(
+                        session.title,
+                        systemImage: session.id == selectedSession?.id ? "checkmark" : "bubble.left"
+                    )
+                }
+            }
+
+            Divider()
+
+            Button {
+                createNewChat()
+            } label: {
+                Label("New Chat", systemImage: "square.and.pencil")
+            }
+        } label: {
+            Image(systemName: "bubble.left.and.bubble.right")
+        }
+        .help("Switch chat")
+        .disabled(ariaService.isLoading)
     }
 
     private var sessionSidebar: some View {
@@ -1183,6 +1220,7 @@ struct MessageRow: View {
                             .foregroundStyle(IBColors.secondaryText)
                         Text(message.content)
                             .lineSpacing(3)
+                            .foregroundStyle(IBColors.ink)
                             .textSelection(.enabled)
                             .padding(.horizontal, 13)
                             .padding(.vertical, 10)
@@ -1303,6 +1341,7 @@ struct FormattedMessageContent: View {
                 sectionView(section)
             }
         }
+        .foregroundStyle(IBColors.ink)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: text) { _, newText in
             sections = FormattedMessageFormatter.sections(from: newText)
@@ -1321,6 +1360,18 @@ struct FormattedMessageContent: View {
             } else {
                 Text(markdown)
                     .lineSpacing(5)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+        case .listItem(let marker, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(marker)
+                    .fontWeight(.semibold)
+                    .frame(width: 20, alignment: .trailing)
+
+                Text(FormattedMessageFormatter.attributedMarkdown(from: text) ?? AttributedString(text))
+                    .lineSpacing(4)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -1484,8 +1535,9 @@ private struct NativeCasesMathView: View {
     }
 }
 
-enum FormattedMessageSection {
+enum FormattedMessageSection: Equatable {
     case markdown(String)
+    case listItem(marker: String, text: String)
     case mathBlock(String)
     case codeBlock(code: String, language: String)
     case flashcard(front: String, back: String)
@@ -1619,7 +1671,7 @@ enum FormattedMessageFormatter {
                 markdownLines.removeAll()
                 return
             }
-            appendMathAwareSections(from: markdown, into: &sections)
+            appendStructuredMarkdownSections(from: markdown, into: &sections)
             markdownLines.removeAll()
         }
 
@@ -1816,7 +1868,7 @@ enum FormattedMessageFormatter {
         result = replaceRegex(pattern: #"(?m)(?<!\n)(#{1,6}\s)"#, template: "\n\n$1", in: result)
         result = replaceRegex(pattern: #"(?m)^\s*#{1,6}\s*$"#, template: "", in: result)
         result = replaceRegex(pattern: #"(?m)^\s*(?:[-*•]|\d+[.)])\s*$"#, template: "", in: result)
-        result = replaceRegex(pattern: #"(?<=[^\n])\s+((?:[-*•]|\d+[.)])\s)"#, template: "\n$1", in: result)
+        result = replaceRegex(pattern: #"(?<=[^\n])\s+((?:[*•]|\d+[.)])\s)"#, template: "\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s*(FRONT:)"#, template: "\n\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s*(BACK:)"#, template: "\n$1", in: result)
         result = replaceRegex(pattern: #"(?m)^(#{1,6}\s+.+)\n(#{1,6}\s+.+)$"#, template: "$1\n\n$2", in: result)
@@ -1838,11 +1890,56 @@ enum FormattedMessageFormatter {
     }
 
     private static func displayFriendlyMarkdown(_ source: String) -> String {
-        var result = source
+        source
             .replacingOccurrences(of: "—", with: " - ")
             .replacingOccurrences(of: "–", with: " - ")
-        result = replaceRegex(pattern: #"(?m)^(\s*)[-*]\s+"#, template: "$1• ", in: result)
-        return result
+    }
+
+    private static func appendStructuredMarkdownSections(
+        from markdown: String,
+        into sections: inout [FormattedMessageSection]
+    ) {
+        var paragraphLines: [String] = []
+
+        func flushParagraph() {
+            let paragraph = paragraphLines.joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !paragraph.isEmpty {
+                appendMathAwareSections(from: paragraph, into: &sections)
+            }
+            paragraphLines.removeAll()
+        }
+
+        for line in markdown.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let item = listItem(from: trimmed) {
+                flushParagraph()
+                sections.append(.listItem(marker: item.marker, text: item.text))
+            } else {
+                paragraphLines.append(line)
+            }
+        }
+
+        flushParagraph()
+    }
+
+    private static func listItem(from line: String) -> (marker: String, text: String)? {
+        for prefix in ["- ", "* ", "• "] where line.hasPrefix(prefix) {
+            let text = String(line.dropFirst(prefix.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : ("•", text)
+        }
+
+        let components = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
+        guard components.count == 2 else { return nil }
+        let marker = String(components[0])
+        let number = marker.dropLast()
+        guard (marker.hasSuffix(".") || marker.hasSuffix(")")),
+              Int(number) != nil else {
+            return nil
+        }
+        let text = String(components[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : (marker, text)
     }
 
     private static func collapseNewlinesPreservingCodeBlocks(in source: String) -> String {

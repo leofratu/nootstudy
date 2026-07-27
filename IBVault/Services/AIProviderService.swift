@@ -37,10 +37,6 @@ struct AIProviderStatus: Sendable {
     let message: String
 }
 
-private struct CodexLoginStatus: Sendable {
-    let usesAPIKey: Bool
-}
-
 struct CodexEventUpdate: Equatable, Sendable {
     let status: String?
     let message: String?
@@ -400,7 +396,7 @@ enum AIProviderService {
                 do {
                     let executable = try codexExecutableURL()
                     onStatus("Checking Local Codex sign-in")
-                    let loginStatus = try await codexLoginStatus(executableURL: executable)
+                    try await codexLoginStatus(executableURL: executable)
                     try Task.checkCancellation()
                     try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
                     defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
@@ -429,17 +425,18 @@ enum AIProviderService {
                         stderrBuffer.append(handle.availableData)
                     }
 
-                    process.executableURL = executable
-                    process.arguments = codexArguments(
-                        temporaryDirectory: temporaryDirectory,
-                        finalMessageURL: finalMessageURL,
-                        model: model,
-                        reasoningEffort: reasoningEffort,
-                        verbosity: verbosity,
-                        webSearchMode: webSearchMode,
-                        usesAPIKeyAuthentication: loginStatus.usesAPIKey
+                    configureCodexProcess(
+                        process,
+                        executableURL: executable,
+                        arguments: codexArguments(
+                            temporaryDirectory: temporaryDirectory,
+                            finalMessageURL: finalMessageURL,
+                            model: model,
+                            reasoningEffort: reasoningEffort,
+                            verbosity: verbosity,
+                            webSearchMode: webSearchMode
+                        )
                     )
-                    process.environment = sanitizedCodexEnvironment()
                     process.standardOutput = stdoutPipe
                     process.standardError = stderrPipe
                     process.standardInput = stdinPipe
@@ -517,36 +514,15 @@ enum AIProviderService {
         model: String,
         reasoningEffort: String,
         verbosity: String,
-        webSearchMode: AIWebSearchMode,
-        usesAPIKeyAuthentication: Bool
+        webSearchMode: AIWebSearchMode
     ) -> [String] {
-        var arguments = [
+        [
             "exec",
             "--ephemeral",
-            "--ignore-user-config",
-            "--ignore-rules",
             "--skip-git-repo-check",
             "--sandbox", "read-only",
             "--cd", temporaryDirectory.path,
-            "--model", model
-        ]
-
-        // API-key sessions use a dedicated provider so invalid credentials fail once
-        // instead of being retried over WebSocket and HTTP for nearly a minute.
-        if usesAPIKeyAuthentication {
-            arguments += [
-                "--config", "model_provider=\"ibvault-openai\"",
-                "--config", "model_providers.ibvault-openai.name=\"IBVault OpenAI\"",
-                "--config", "model_providers.ibvault-openai.base_url=\"https://api.openai.com/v1\"",
-                "--config", "model_providers.ibvault-openai.wire_api=\"responses\"",
-                "--config", "model_providers.ibvault-openai.requires_openai_auth=true",
-                "--config", "model_providers.ibvault-openai.request_max_retries=0",
-                "--config", "model_providers.ibvault-openai.stream_max_retries=0",
-                "--config", "model_providers.ibvault-openai.supports_websockets=false"
-            ]
-        }
-
-        arguments += [
+            "--model", model,
             "--config", "model_reasoning_effort=\"\(reasoningEffort)\"",
             "--config", "model_verbosity=\"\(verbosity)\"",
             "--config", "web_search=\"\(webSearchMode.rawValue)\"",
@@ -554,7 +530,25 @@ enum AIProviderService {
             "--output-last-message", finalMessageURL.path,
             "-"
         ]
-        return arguments
+    }
+
+    static func codexLoginShellArguments(
+        executableURL: URL,
+        arguments: [String]
+    ) -> [String] {
+        ["-lc", "exec \"$@\"", "ibvault-codex", executableURL.path] + arguments
+    }
+
+    private static func configureCodexProcess(
+        _ process: Process,
+        executableURL: URL,
+        arguments: [String]
+    ) {
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = codexLoginShellArguments(
+            executableURL: executableURL,
+            arguments: arguments
+        )
     }
 
     private static func codexPrompt(
@@ -684,9 +678,18 @@ enum AIProviderService {
         let detail = [stderr, eventDetail]
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let lowercasedDetail = detail.lowercased()
-        let authenticationFailure = ["login", "authentication", "unauthorized", "invalid_api_key", "incorrect api key"]
-            .contains { lowercasedDetail.contains($0) }
+        let lowercasedEventDetail = eventDetail.lowercased()
+        let lowercasedStderr = stderr.lowercased()
+        let authenticationFailure = [
+            "unauthorized",
+            "invalid_api_key",
+            "incorrect api key",
+            "api key was rejected",
+            "status 401"
+        ].contains { lowercasedEventDetail.contains($0) }
+            || ["not logged in", "run codex login", "please login"].contains {
+                lowercasedStderr.contains($0)
+            }
         if authenticationFailure {
             return .codexNotAuthenticated(
                 "Codex CLI credentials were rejected. Sign in again, then retry this message."
@@ -720,12 +723,13 @@ enum AIProviderService {
         throw AIProviderError.codexNotInstalled
     }
 
-    private static func codexLoginStatus(executableURL: URL) async throws -> CodexLoginStatus {
+    private static func codexLoginStatus(executableURL: URL) async throws {
         let result = try await runProcess(
             executableURL: executableURL,
             arguments: ["login", "status"],
             input: nil,
-            timeout: 12
+            timeout: 12,
+            useLoginShell: true
         )
         let detail = [result.stdout, result.stderr]
             .joined(separator: " ")
@@ -737,14 +741,6 @@ enum AIProviderService {
                     : detail
             )
         }
-        return CodexLoginStatus(
-            usesAPIKey: codexLoginUsesAPIKey(detail)
-        )
-    }
-
-    static func codexLoginUsesAPIKey(_ detail: String) -> Bool {
-        let normalized = detail.lowercased()
-        return normalized.contains("api key") || normalized.contains("api-key")
     }
 
     static func codexLoginCommand() throws -> String {
@@ -903,20 +899,12 @@ enum AIProviderService {
         }
     }
 
-    private static func sanitizedCodexEnvironment() -> [String: String] {
-        // A process-level API key can override the account selected by `codex login`.
-        var environment = ProcessInfo.processInfo.environment
-        for key in ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID", "OPENAI_PROJECT_ID", "CODEX_API_KEY"] {
-            environment.removeValue(forKey: key)
-        }
-        return environment
-    }
-
     private static func runProcess(
         executableURL: URL,
         arguments: [String],
         input: String?,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        useLoginShell: Bool = false
     ) async throws -> ProcessResult {
         try await Task.detached(priority: .userInitiated) {
             let process = Process()
@@ -933,9 +921,16 @@ enum AIProviderService {
                 stderrBuffer.append(handle.availableData)
             }
 
-            process.executableURL = executableURL
-            process.arguments = arguments
-            process.environment = sanitizedCodexEnvironment()
+            if useLoginShell {
+                configureCodexProcess(
+                    process,
+                    executableURL: executableURL,
+                    arguments: arguments
+                )
+            } else {
+                process.executableURL = executableURL
+                process.arguments = arguments
+            }
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
             if input != nil { process.standardInput = stdinPipe }

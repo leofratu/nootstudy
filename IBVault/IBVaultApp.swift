@@ -180,6 +180,7 @@ struct RootView: View {
             reconcileAchievementsIfNeeded()
             recomputeProgressionIfNeeded()
         }
+        .preferredColorScheme(.light)
     }
 
     private func synchronizeCurriculumIfNeeded() {

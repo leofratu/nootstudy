@@ -125,39 +125,59 @@ struct LocalCodexEventTests {
         #expect(update?.error == "Saved login was rejected")
     }
 
-    @Test("Codex identifies API-key login status")
-    func detectsAPIKeyLogin() {
-        #expect(AIProviderService.codexLoginUsesAPIKey("Logged in using an API key"))
-        #expect(!AIProviderService.codexLoginUsesAPIKey("Logged in using ChatGPT"))
-    }
-
-    @Test("API-key runs disable transport retries without changing ChatGPT runs")
-    func configuresFastAPIKeyFailure() {
+    @Test("Codex runs preserve the user's CLI configuration")
+    func preservesUserConfiguration() {
         let temporaryDirectory = URL(fileURLWithPath: "/tmp/ibvault-codex-test")
         let finalMessageURL = temporaryDirectory.appendingPathComponent("final.md")
-        let apiKeyArguments = AIProviderService.codexArguments(
+        let arguments = AIProviderService.codexArguments(
             temporaryDirectory: temporaryDirectory,
             finalMessageURL: finalMessageURL,
             model: "gpt-5.6-sol",
             reasoningEffort: "high",
             verbosity: "medium",
-            webSearchMode: .cached,
-            usesAPIKeyAuthentication: true
-        )
-        let chatGPTArguments = AIProviderService.codexArguments(
-            temporaryDirectory: temporaryDirectory,
-            finalMessageURL: finalMessageURL,
-            model: "gpt-5.6-sol",
-            reasoningEffort: "high",
-            verbosity: "medium",
-            webSearchMode: .cached,
-            usesAPIKeyAuthentication: false
+            webSearchMode: .cached
         )
 
-        #expect(apiKeyArguments.contains("model_providers.ibvault-openai.request_max_retries=0"))
-        #expect(apiKeyArguments.contains("model_providers.ibvault-openai.stream_max_retries=0"))
-        #expect(apiKeyArguments.contains("model_providers.ibvault-openai.supports_websockets=false"))
-        #expect(!chatGPTArguments.contains("model_provider=\"ibvault-openai\""))
+        #expect(!arguments.contains("--ignore-user-config"))
+        #expect(!arguments.contains("--ignore-rules"))
+        #expect(!arguments.contains(where: { $0.contains("model_provider") }))
+        #expect(arguments.contains("--model"))
+        #expect(arguments.contains("model_reasoning_effort=\"high\""))
+    }
+
+    @Test("Codex inherits the user's login-shell environment")
+    func usesLoginShellEnvironment() {
+        let executable = URL(fileURLWithPath: "/Users/student/.local/bin/codex")
+        let arguments = AIProviderService.codexLoginShellArguments(
+            executableURL: executable,
+            arguments: ["login", "status"]
+        )
+
+        #expect(arguments == [
+            "-lc",
+            "exec \"$@\"",
+            "ibvault-codex",
+            "/Users/student/.local/bin/codex",
+            "login",
+            "status"
+        ])
+    }
+}
+
+@Suite("ARIA Message Formatting Tests")
+struct ARIAMessageFormattingTests {
+    @Test("Markdown lists remain distinct renderable rows")
+    func preservesListRows() {
+        let sections = FormattedMessageFormatter.sections(from: """
+        Priorities:
+        - Review concepts
+        - Practise for 25 - 30 minutes
+        1. Check the markscheme
+        """)
+
+        #expect(sections.contains(.listItem(marker: "•", text: "Review concepts")))
+        #expect(sections.contains(.listItem(marker: "•", text: "Practise for 25 - 30 minutes")))
+        #expect(sections.contains(.listItem(marker: "1.", text: "Check the markscheme")))
     }
 }
 
