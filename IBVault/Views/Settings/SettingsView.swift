@@ -50,7 +50,6 @@ struct SettingsView: View {
     @AppStorage("junaliBaseURL") private var junaliBaseURL = AIConfiguration.junaliDefaultBaseURL
     @AppStorage("codexCLIPath") private var codexCLIPath = ""
     @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
-    @AppStorage("ariaMaxTokens") private var ariaMaxTokens = 4096
     @AppStorage("ariaAutoCompact") private var ariaAutoCompact = true
     @AppStorage("ariaContextWindow") private var ariaContextWindow = 20
 
@@ -492,8 +491,6 @@ struct SettingsView: View {
                     Text(temperatureDescription).font(.caption).foregroundStyle(.secondary)
                 }
             }
-
-            Stepper("Max output: \(ariaMaxTokens) tokens", value: $ariaMaxTokens, in: 1024...65536, step: 1024)
         } header: {
             Label("Model & Reasoning", systemImage: "cpu")
         } footer: {
@@ -867,7 +864,6 @@ struct SettingsView: View {
             }
             LabeledContent("Reasoning", value: selectedReasoningEffort.wrappedValue.displayName)
             LabeledContent("Answer Detail", value: selectedVerbosity.wrappedValue.displayName)
-            LabeledContent("Max Tokens", value: "\(ariaMaxTokens)")
         } header: {
             Label("About", systemImage: "info.circle")
         }

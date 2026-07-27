@@ -5,7 +5,6 @@ struct GeminiConfig: Sendable {
     var defaultRequestTimeout: TimeInterval = 90
     var defaultResourceTimeout: TimeInterval = 180
     var defaultTemperature: Double = 0.7
-    var defaultMaxTokens: Int = 4096
     var defaultTopP: Double = 0.95
     var maxRetries: Int = 3
     
@@ -66,7 +65,6 @@ struct GeminiPart: Codable {
 struct GeminiGenerationConfig: Encodable {
     let temperature: Double
     let topP: Double
-    let maxOutputTokens: Int
 }
 
 private struct GeminiListModelsResponse: Decodable {
@@ -195,11 +193,6 @@ enum GeminiService {
         return temp > 0 ? temp : 0.7
     }
     
-    private static var maxTokens: Int {
-        let tokens = UserDefaults.standard.integer(forKey: "ariaMaxTokens")
-        return tokens > 0 ? tokens : 4096
-    }
-    
     static func listModels(apiKey: String, config: GeminiConfig = .default) async throws -> [GeminiModel] {
         let url = URL(string: "\(config.apiBase)/models?key=\(apiKey)")!
         var request = URLRequest(url: url)
@@ -254,7 +247,6 @@ enum GeminiService {
             messages: messages,
             systemInstruction: systemInstruction,
             temperature: temperature,
-            maxTokens: maxTokens,
             topP: config.defaultTopP
         )
         request.httpBody = try encoder.encode(body)
@@ -297,7 +289,6 @@ enum GeminiService {
                         messages: messages,
                         systemInstruction: systemInstruction,
                         temperature: temperature,
-                        maxTokens: maxTokens,
                         topP: config.defaultTopP
                     )
                     request.httpBody = try encoder.encode(body)
@@ -354,7 +345,6 @@ enum GeminiService {
         messages: [GeminiMessage],
         systemInstruction: String,
         temperature: Double,
-        maxTokens: Int,
         topP: Double
     ) -> GeminiRequestBody {
         let systemInstruction = systemInstruction.isEmpty
@@ -368,8 +358,7 @@ enum GeminiService {
             contents: contents,
             generationConfig: GeminiGenerationConfig(
                 temperature: temperature,
-                topP: topP,
-                maxOutputTokens: maxTokens
+                topP: topP
             )
         )
     }
@@ -378,14 +367,12 @@ enum GeminiService {
         messages: [GeminiMessage],
         systemInstruction: String,
         temperature: Double,
-        maxTokens: Int,
         topP: Double
     ) throws -> Data {
         try encoder.encode(buildRequestBody(
             messages: messages,
             systemInstruction: systemInstruction,
             temperature: temperature,
-            maxTokens: maxTokens,
             topP: topP
         ))
     }

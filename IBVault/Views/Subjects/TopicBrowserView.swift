@@ -5,6 +5,8 @@ struct TopicBrowserView: View {
     let subject: Subject
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \CurriculumNode.topicName) private var curriculumNodes: [CurriculumNode]
+    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     @State private var selectedUnit: CurriculumUnit?
     @State private var selectedTopic: CurriculumTopic?
     @State private var isGenerating = false
@@ -15,6 +17,7 @@ struct TopicBrowserView: View {
     @State private var generationProgress: String?
     @State private var searchText = ""
     @State private var hoveredSubtopic: String?
+    @State private var masteryError: String?
 
     private var curriculum: [CurriculumUnit] {
         let full = SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
@@ -38,6 +41,12 @@ struct TopicBrowserView: View {
     private var accent: Color { Color(hex: subject.accentColorHex) }
     private var topicCount: Int { curriculum.flatMap(\.topics).count }
     private var subtopicCount: Int { curriculum.flatMap(\.topics).flatMap(\.subtopics).count }
+    private var subjectCurriculumNodes: [CurriculumNode] {
+        curriculumNodes.filter {
+            $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame &&
+                $0.level.caseInsensitiveCompare(subject.level) == .orderedSame
+        }
+    }
     private let coverageCardCounts = [2, 3, 5]
 
     var body: some View {
@@ -66,6 +75,14 @@ struct TopicBrowserView: View {
         }
         .onAppear { synchronizeSelection() }
         .onChange(of: searchText) { _, _ in synchronizeSelection() }
+        .alert("Could Not Save Mastery", isPresented: Binding(
+            get: { masteryError != nil },
+            set: { if !$0 { masteryError = nil } }
+        )) {
+            Button("OK") { masteryError = nil }
+        } message: {
+            Text(masteryError ?? "The mastery update could not be saved.")
+        }
     }
 
     private var browserHeader: some View {
@@ -190,7 +207,12 @@ struct TopicBrowserView: View {
 
     private func topicSelectionRow(_ topic: CurriculumTopic) -> some View {
         let count = cardCount(for: topic.name)
-        let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topic.name)
+        let mastery = CurriculumProgressService.topicMastery(
+            subject: subject,
+            topicName: topic.name,
+            subtopics: topic.subtopics,
+            nodes: subjectCurriculumNodes
+        )
         let isSelected = selectedTopic?.name == topic.name
 
         return Button {
@@ -214,18 +236,14 @@ struct TopicBrowserView: View {
                     Label("\(topic.subtopics.count)", systemImage: "list.bullet")
                     Text("\(count) cards")
                     Spacer()
-                    if count > 0 {
-                        Text("\(Int(mastery * 100))%")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(accent)
-                    }
+                    Text("\(Int(mastery * 100))%")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(accent)
                 }
                 .font(.caption2)
                 .foregroundStyle(IBColors.secondaryText)
 
-                if count > 0 {
-                    MasteryBar(progress: mastery, height: 3, color: accent)
-                }
+                MasteryBar(progress: mastery, height: 3, color: accent)
             }
             .padding(11)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -384,15 +402,30 @@ struct TopicBrowserView: View {
 
     private func subtopicRow(index: Int, topic: String, subtopic: String) -> some View {
         let count = subtopicCardCount(topic: topic, subtopic: subtopic)
-        let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topic, subtopic: subtopic)
+        let cards = subject.cards.filter { $0.topicName == topic && $0.subtopic == subtopic }
+        let node = CurriculumProgressService.node(
+            in: subjectCurriculumNodes,
+            subjectName: subject.name,
+            level: subject.level,
+            topicName: topic,
+            subtopicName: subtopic
+        )
+        let mastery = CurriculumProgressService.effectiveMastery(cards: cards, node: node)
+        let workSessions = CurriculumProgressService.matchingWorkSessions(
+            in: studySessions,
+            subjectName: subject.name,
+            topicName: topic,
+            subtopicName: subtopic
+        )
+        let hasProgress = count > 0 || node?.recordedProficiency != nil || !workSessions.isEmpty
         let isHovered = hoveredSubtopic == subtopic
 
         return HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(count > 0 ? accent.opacity(0.14) : IBColors.canvas)
+                    .fill(hasProgress ? accent.opacity(0.14) : IBColors.canvas)
                     .frame(width: 28, height: 28)
-                if count > 0 {
+                if hasProgress {
                     Image(systemName: "checkmark")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(accent)
@@ -411,7 +444,10 @@ struct TopicBrowserView: View {
 
                 HStack(spacing: 8) {
                     Text("\(count) cards")
-                    if count > 0 {
+                    if !workSessions.isEmpty {
+                        Text("\(workSessions.count) work")
+                    }
+                    if count > 0 || node?.recordedProficiency != nil {
                         MasteryBar(progress: mastery, height: 3, color: accent)
                             .frame(width: 58)
                         Text("\(Int(mastery * 100))% mastery")
@@ -422,6 +458,20 @@ struct TopicBrowserView: View {
             }
 
             Spacer(minLength: 8)
+
+            if let recorded = node?.recordedProficiency {
+                Text(recorded.rawValue)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(proficiencyColor(recorded))
+                    .padding(.horizontal, 7)
+                    .frame(height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(proficiencyColor(recorded).opacity(0.1))
+                    )
+            }
+
+            masteryMenu(current: node?.recordedProficiency, topic: topic, subtopic: subtopic)
 
             Button {
                 generateCards(topic: topic, subtopic: subtopic)
@@ -444,6 +494,68 @@ struct TopicBrowserView: View {
         )
         .onHover { hovering in
             hoveredSubtopic = hovering ? subtopic : nil
+        }
+    }
+
+    private func proficiencyColor(_ level: ProficiencyLevel) -> Color {
+        switch level {
+        case .novice: return IBColors.danger
+        case .developing: return IBColors.warning
+        case .proficient: return IBColors.electricBlue
+        case .mastered: return IBColors.success
+        }
+    }
+
+    private func masteryMenu(current: ProficiencyLevel?, topic: String, subtopic: String) -> some View {
+        Menu {
+            ForEach(ProficiencyLevel.allCases, id: \.self) { level in
+                Button {
+                    setMastery(level, topic: topic, subtopic: subtopic)
+                } label: {
+                    Label(level.rawValue, systemImage: current == level ? "checkmark" : "gauge")
+                }
+            }
+            if current != nil {
+                Divider()
+                Button("Clear Recorded Mastery", role: .destructive) {
+                    clearMastery(topic: topic, subtopic: subtopic)
+                }
+            }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 28, height: 28)
+        }
+        .menuStyle(.borderlessButton)
+        .help("Set recorded mastery for \(subtopic)")
+    }
+
+    private func setMastery(_ level: ProficiencyLevel, topic: String, subtopic: String) {
+        do {
+            try CurriculumProgressService.setMastery(
+                level,
+                subject: subject,
+                unitName: SyllabusSeeder.unitName(for: subject.name, level: subject.level, topicName: topic) ?? "Curriculum",
+                topicName: topic,
+                subtopicName: subtopic,
+                source: "Manual",
+                context: context
+            )
+        } catch {
+            masteryError = error.localizedDescription
+        }
+    }
+
+    private func clearMastery(topic: String, subtopic: String) {
+        do {
+            try CurriculumProgressService.clearMastery(
+                subject: subject,
+                topicName: topic,
+                subtopicName: subtopic,
+                context: context
+            )
+        } catch {
+            masteryError = error.localizedDescription
         }
     }
 

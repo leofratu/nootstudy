@@ -56,6 +56,19 @@ enum ProficiencyTracker {
         }
         return calculateMastery(for: subtopicCards)
     }
+
+    static func masteryPercentage(for cards: [StudyCard]) -> Double {
+        calculateMastery(for: cards)
+    }
+
+    static func masteryValue(for level: ProficiencyLevel) -> Double {
+        switch level {
+        case .novice: return 0
+        case .developing: return 0.33
+        case .proficient: return 0.66
+        case .mastered: return 1
+        }
+    }
     
     static func weakTopics(for subject: Subject) -> [StudyCard] {
         subject.cards
@@ -101,15 +114,8 @@ enum ProficiencyTracker {
     private static func calculateMastery(for cards: [StudyCard]) -> Double {
         guard !cards.isEmpty else { return 0 }
         
-        let weights: [ProficiencyLevel: Double] = [
-            .novice: 0,
-            .developing: 0.33,
-            .proficient: 0.66,
-            .mastered: 1.0
-        ]
-        
         let score = cards.reduce(0.0) { sum, card in
-            sum + (weights[card.proficiency] ?? 0)
+            sum + masteryValue(for: card.proficiency)
         }
         
         return score / Double(cards.count)

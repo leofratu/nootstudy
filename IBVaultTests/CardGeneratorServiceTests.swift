@@ -96,6 +96,86 @@ struct CardGeneratorServiceTests {
     }
 }
 
+@Suite("Curriculum Progress Tests")
+struct CurriculumProgressTests {
+    @MainActor
+    @Test("Recorded mastery persists without flashcards")
+    func recordedMasteryPersistsWithoutCards() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Subject.self,
+            StudyCard.self,
+            CurriculumNode.self,
+            configurations: configuration
+        )
+        let context = container.mainContext
+        let subject = Subject(name: "Biology", level: "HL", accentColorHex: "10B981")
+        context.insert(subject)
+
+        let node = try CurriculumProgressService.setMastery(
+            .proficient,
+            subject: subject,
+            unitName: "Cell biology",
+            topicName: "Cells and Cell Structure",
+            subtopicName: "Prokaryotic cell structure",
+            source: "Test",
+            context: context
+        )
+
+        #expect(node.recordedProficiency == .proficient)
+        #expect(node.masterySource == "Test")
+        #expect(CurriculumProgressService.effectiveMastery(cards: [], node: node) == 0.66)
+    }
+
+    @Test("Scoped work only appears on matching curriculum subunits")
+    func scopedWorkMatchesSubunit() {
+        let matching = StudySession(
+            subjectName: "Biology",
+            topicsCovered: "Cells and Cell Structure",
+            subtopicsCovered: "Prokaryotic cell structure",
+            startDate: Date().addingTimeInterval(-1800),
+            cardsReviewed: 0,
+            correctCount: 0,
+            xpEarned: 10
+        )
+        let other = StudySession(
+            subjectName: "Biology",
+            topicsCovered: "Genetics",
+            startDate: Date().addingTimeInterval(-1200),
+            cardsReviewed: 0,
+            correctCount: 0,
+            xpEarned: 5
+        )
+
+        let sessions = CurriculumProgressService.matchingWorkSessions(
+            in: [matching, other],
+            subjectName: "Biology",
+            topicName: "Cells and Cell Structure",
+            subtopicName: "Prokaryotic cell structure"
+        )
+
+        #expect(sessions.map(\.id) == [matching.id])
+    }
+
+    @Test("Study session backups retain subunit scope")
+    func studySessionBackupRetainsSubunitScope() {
+        let original = StudySession(
+            subjectName: "Economics",
+            topicsCovered: "Demand",
+            subtopicsCovered: "The law of demand",
+            startDate: Date().addingTimeInterval(-2400),
+            cardsReviewed: 3,
+            correctCount: 2,
+            xpEarned: 12
+        )
+
+        let restored = StudySessionBackup(from: original).toModel()
+
+        #expect(restored.subtopicsCovered == "The law of demand")
+        #expect(restored.studyScope.subtopicNames == ["The law of demand"])
+    }
+}
+
 @Suite("Local Codex Event Tests")
 struct LocalCodexEventTests {
     @Test("Completed agent messages become learner-visible output")

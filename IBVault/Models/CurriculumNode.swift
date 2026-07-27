@@ -13,6 +13,15 @@ final class CurriculumNode {
     var sourceTitle: String
     var sourceURLString: String
     var updatedAt: Date
+    var recordedMasteryRaw: String?
+    var masteryUpdatedAt: Date?
+    var masterySource: String?
+    var masteryNote: String?
+
+    var recordedProficiency: ProficiencyLevel? {
+        get { recordedMasteryRaw.flatMap(ProficiencyLevel.init(rawValue:)) }
+        set { recordedMasteryRaw = newValue?.rawValue }
+    }
 
     var stableKey: String {
         Self.stableKey(
@@ -44,6 +53,10 @@ final class CurriculumNode {
         self.sourceTitle = sourceTitle
         self.sourceURLString = sourceURLString
         self.updatedAt = Date()
+        self.recordedMasteryRaw = nil
+        self.masteryUpdatedAt = nil
+        self.masterySource = nil
+        self.masteryNote = nil
     }
 
     static func stableKey(
@@ -56,5 +69,143 @@ final class CurriculumNode {
         [subjectName, level, unitName, topicName, subtopicName]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .joined(separator: "|")
+    }
+}
+
+enum CurriculumProgressService {
+    static func node(
+        in nodes: [CurriculumNode],
+        subjectName: String,
+        level: String,
+        topicName: String,
+        subtopicName: String
+    ) -> CurriculumNode? {
+        nodes.first {
+            $0.subjectName.caseInsensitiveCompare(subjectName) == .orderedSame &&
+                $0.level.caseInsensitiveCompare(level) == .orderedSame &&
+                $0.topicName.caseInsensitiveCompare(topicName) == .orderedSame &&
+                $0.subtopicName.caseInsensitiveCompare(subtopicName) == .orderedSame
+        }
+    }
+
+    static func effectiveMastery(cards: [StudyCard], node: CurriculumNode?) -> Double {
+        if let recorded = node?.recordedProficiency {
+            return ProficiencyTracker.masteryValue(for: recorded)
+        }
+        return ProficiencyTracker.masteryPercentage(for: cards)
+    }
+
+    static func topicMastery(
+        subject: Subject,
+        topicName: String,
+        subtopics: [String],
+        nodes: [CurriculumNode]
+    ) -> Double {
+        guard !subtopics.isEmpty else { return 0 }
+        let score = subtopics.reduce(0.0) { partial, subtopic in
+            let cards = subject.cards.filter {
+                $0.topicName == topicName && $0.subtopic == subtopic
+            }
+            let node = node(
+                in: nodes,
+                subjectName: subject.name,
+                level: subject.level,
+                topicName: topicName,
+                subtopicName: subtopic
+            )
+            return partial + effectiveMastery(cards: cards, node: node)
+        }
+        return score / Double(subtopics.count)
+    }
+
+    static func matchingWorkSessions(
+        in sessions: [StudySession],
+        subjectName: String,
+        topicName: String,
+        subtopicName: String
+    ) -> [StudySession] {
+        sessions.filter { session in
+            guard session.subjectName.caseInsensitiveCompare(subjectName) == .orderedSame else {
+                return false
+            }
+            let topicMatches = session.selectedTopicNames.contains {
+                $0.caseInsensitiveCompare(topicName) == .orderedSame
+            }
+            guard topicMatches else { return false }
+
+            let sessionSubtopics = StudyScope.parseList(session.subtopicsCovered ?? "")
+            return sessionSubtopics.isEmpty || sessionSubtopics.contains {
+                $0.caseInsensitiveCompare(subtopicName) == .orderedSame
+            }
+        }
+    }
+
+    @MainActor
+    @discardableResult
+    static func setMastery(
+        _ proficiency: ProficiencyLevel,
+        subject: Subject,
+        unitName: String,
+        topicName: String,
+        subtopicName: String,
+        source: String,
+        note: String? = nil,
+        context: ModelContext
+    ) throws -> CurriculumNode {
+        let existing = (try? context.fetch(FetchDescriptor<CurriculumNode>())) ?? []
+        let target = node(
+            in: existing,
+            subjectName: subject.name,
+            level: subject.level,
+            topicName: topicName,
+            subtopicName: subtopicName
+        ) ?? {
+            let metadata = SyllabusSeeder.metadata(for: subject.name)
+            let created = CurriculumNode(
+                subjectName: subject.name,
+                level: subject.level,
+                unitName: unitName,
+                topicName: topicName,
+                subtopicName: subtopicName,
+                catalogVersion: metadata.catalogVersion,
+                sourceTitle: metadata.sourceTitle,
+                sourceURLString: metadata.sourceURL.absoluteString
+            )
+            context.insert(created)
+            return created
+        }()
+
+        target.recordedProficiency = proficiency
+        target.masteryUpdatedAt = Date()
+        target.masterySource = source
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        target.masteryNote = trimmedNote.isEmpty ? nil : trimmedNote
+        target.updatedAt = Date()
+        try context.save()
+        return target
+    }
+
+    @MainActor
+    static func clearMastery(
+        subject: Subject,
+        topicName: String,
+        subtopicName: String,
+        context: ModelContext
+    ) throws {
+        let existing = (try? context.fetch(FetchDescriptor<CurriculumNode>())) ?? []
+        guard let target = node(
+            in: existing,
+            subjectName: subject.name,
+            level: subject.level,
+            topicName: topicName,
+            subtopicName: subtopicName
+        ) else { return }
+
+        target.recordedProficiency = nil
+        target.masteryUpdatedAt = nil
+        target.masterySource = nil
+        target.masteryNote = nil
+        target.updatedAt = Date()
+        try context.save()
     }
 }

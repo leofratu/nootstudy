@@ -240,11 +240,6 @@ enum AIConfiguration {
         normalizedReasoningEffort(reasoningEffort, for: provider).rawValue
     }
 
-    static var maxOutputTokens: Int {
-        let stored = UserDefaults.standard.integer(forKey: "ariaMaxTokens")
-        return stored > 0 ? stored : 4096
-    }
-
     static var conversationWindow: Int {
         let stored = UserDefaults.standard.integer(forKey: "ariaContextWindow")
         return min(max(stored > 0 ? stored : 20, 5), 50)

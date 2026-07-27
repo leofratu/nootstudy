@@ -1306,7 +1306,9 @@ struct StreamingMessageRow: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(IBColors.electricBlue)
                     .padding(.horizontal, 4)
-                FormattedMessageContent(text: text, preferRichRendering: true)
+                Text(text)
+                    .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                     .padding(14)
                     .background(

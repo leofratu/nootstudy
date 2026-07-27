@@ -105,6 +105,11 @@ struct BackupService {
             try write(unitStates.map(UnitStateBackup.init), named: "unit_states.json", into: backupDir, encoder: encoder)
             writtenFiles.append("unit_states.json")
         }
+
+        if let curriculumNodes = try? context.fetch(FetchDescriptor<CurriculumNode>()) {
+            try write(curriculumNodes.map(CurriculumNodeBackup.init), named: "curriculum_progress.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("curriculum_progress.json")
+        }
         
         let adhdSettings = ADHDMedicationSettings.loadFromDefaults()
         try write(ADHDMedicationBackup(from: adhdSettings), named: "adhd_medication.json", into: backupDir, encoder: encoder)
@@ -216,6 +221,12 @@ struct BackupService {
         }
 
         if let backups = decode([UnitStateBackup].self, from: directory.appendingPathComponent("unit_states.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
+            }
+        }
+
+        if let backups = decode([CurriculumNodeBackup].self, from: directory.appendingPathComponent("curriculum_progress.json"), decoder: decoder) {
             for backup in backups {
                 context.insert(backup.toModel())
             }
@@ -402,6 +413,60 @@ struct UnitStateBackup: Codable {
     }
 }
 
+struct CurriculumNodeBackup: Codable {
+    let id: UUID
+    let subjectName: String
+    let level: String
+    let unitName: String
+    let topicName: String
+    let subtopicName: String
+    let catalogVersion: String
+    let sourceTitle: String
+    let sourceURLString: String
+    let updatedAt: Date
+    let recordedMasteryRaw: String?
+    let masteryUpdatedAt: Date?
+    let masterySource: String?
+    let masteryNote: String?
+
+    init(from node: CurriculumNode) {
+        id = node.id
+        subjectName = node.subjectName
+        level = node.level
+        unitName = node.unitName
+        topicName = node.topicName
+        subtopicName = node.subtopicName
+        catalogVersion = node.catalogVersion
+        sourceTitle = node.sourceTitle
+        sourceURLString = node.sourceURLString
+        updatedAt = node.updatedAt
+        recordedMasteryRaw = node.recordedMasteryRaw
+        masteryUpdatedAt = node.masteryUpdatedAt
+        masterySource = node.masterySource
+        masteryNote = node.masteryNote
+    }
+
+    func toModel() -> CurriculumNode {
+        let node = CurriculumNode(
+            subjectName: subjectName,
+            level: level,
+            unitName: unitName,
+            topicName: topicName,
+            subtopicName: subtopicName,
+            catalogVersion: catalogVersion,
+            sourceTitle: sourceTitle,
+            sourceURLString: sourceURLString
+        )
+        node.id = id
+        node.updatedAt = updatedAt
+        node.recordedMasteryRaw = recordedMasteryRaw
+        node.masteryUpdatedAt = masteryUpdatedAt
+        node.masterySource = masterySource
+        node.masteryNote = masteryNote
+        return node
+    }
+}
+
 struct GradeBackup: Codable {
     let id: UUID; let component: String; let score: Int; let predictedGrade: Int?
     let date: Date; let teacherFeedback: String; let subjectName: String
@@ -554,10 +619,12 @@ struct ActivityBackup: Codable {
 
 struct StudySessionBackup: Codable {
     let id: UUID; let subjectName: String; let topicsCovered: String
+    let subtopicsCovered: String?
     let startDate: Date; let endDate: Date; let cardsReviewed: Int; let correctCount: Int; let xpEarned: Int
 
     init(from session: StudySession) {
         id = session.id; subjectName = session.subjectName; topicsCovered = session.topicsCovered
+        subtopicsCovered = session.subtopicsCovered
         startDate = session.startDate; endDate = session.endDate; cardsReviewed = session.cardsReviewed
         correctCount = session.correctCount; xpEarned = session.xpEarned
     }
@@ -566,6 +633,7 @@ struct StudySessionBackup: Codable {
         let session = StudySession(
             subjectName: subjectName,
             topicsCovered: topicsCovered,
+            subtopicsCovered: subtopicsCovered ?? "",
             startDate: startDate,
             endDate: endDate,
             cardsReviewed: cardsReviewed,

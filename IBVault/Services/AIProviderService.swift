@@ -249,7 +249,6 @@ enum AIProviderService {
             "input": input,
             "reasoning": ["effort": AIConfiguration.reasoningEffortValue(for: .junali)],
             "text": ["verbosity": AIConfiguration.verbosity.rawValue],
-            "max_output_tokens": AIConfiguration.maxOutputTokens,
             "store": false
         ]
 
@@ -294,8 +293,7 @@ enum AIProviderService {
         let body: [String: Any] = [
             "model": model,
             "messages": payloadMessages,
-            "reasoning_effort": AIConfiguration.reasoningEffortValue(for: .junali),
-            "max_completion_tokens": AIConfiguration.maxOutputTokens
+            "reasoning_effort": AIConfiguration.reasoningEffortValue(for: .junali)
         ]
         let data = try await sendJSON(
             url: baseURL

@@ -13,7 +13,6 @@ struct GeminiServiceTests {
             ],
             systemInstruction: "You are an IB tutor.",
             temperature: 0.4,
-            maxTokens: 512,
             topP: 0.9
         )
 
@@ -26,7 +25,7 @@ struct GeminiServiceTests {
         #expect(systemParts?.first?["text"] as? String == "You are an IB tutor.")
         #expect(contents?.count == 2)
         #expect(contents?.first?["role"] as? String == "user")
-        #expect(generationConfig?["maxOutputTokens"] as? Int == 512)
+        #expect(generationConfig?["maxOutputTokens"] == nil)
         #expect(generationConfig?["temperature"] as? Double == 0.4)
         #expect(generationConfig?["topP"] as? Double == 0.9)
     }
