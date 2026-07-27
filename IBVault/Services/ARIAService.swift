@@ -124,13 +124,13 @@ class ARIAService {
             
             // Get subjects with due cards
             let now = Date()
-            let subjectsWithDue = subjects.filter { subject in
-                subject.cards.contains { $0.nextReviewDate <= now }
+            let dueSubjects = subjects.compactMap { subject -> (subject: Subject, count: Int)? in
+                let count = subject.cards.lazy.filter { $0.nextReviewDate <= now }.count
+                return count > 0 ? (subject, count) : nil
             }
-            
-            if let randomSubject = subjectsWithDue.randomElement() {
-                let dueCount = randomSubject.cards.filter { $0.nextReviewDate <= now }.count
-                prompts.append("Review \(dueCount) cards from \(randomSubject.name)")
+
+            if let mostDue = dueSubjects.max(by: { $0.count < $1.count }) {
+                prompts.append("Review \(mostDue.count) cards from \(mostDue.subject.name)")
             }
         }
         
@@ -141,8 +141,8 @@ class ARIAService {
             "Quiz me!"
         ])
         
-        // Limit and deduplicate
-        suggestedPrompts = Array(Set(prompts)).prefix(4).map { $0 }
+        var seenPrompts = Set<String>()
+        suggestedPrompts = Array(prompts.filter { seenPrompts.insert($0).inserted }.prefix(4))
     }
 
     private static let stopWords: Set<String> = [
@@ -1661,12 +1661,11 @@ class ARIAService {
     
     @MainActor
     private func buildConversationHistory(context: ModelContext, queryProfile: QueryProfile, sessionID: UUID) async -> [GeminiMessage] {
-        let windowSize = UserDefaults.standard.integer(forKey: "ariaContextWindow")
         var descriptor = FetchDescriptor<ChatMessage>(
             predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
-        descriptor.fetchLimit = max(windowSize, 30)
+        descriptor.fetchLimit = AIConfiguration.conversationWindow
 
         guard let messages = try? context.fetch(descriptor), !messages.isEmpty else { return [] }
 
@@ -1831,6 +1830,8 @@ class ARIAService {
 
     @MainActor
     private func checkAndCompact(context: ModelContext, sessionID: UUID) async {
+        guard AIConfiguration.autoCompactEnabled else { return }
+
         var descriptor = FetchDescriptor<ChatMessage>(
             predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID },
             sortBy: [SortDescriptor(\.timestamp, order: .forward)]

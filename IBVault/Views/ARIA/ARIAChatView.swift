@@ -5,24 +5,25 @@ import SwiftUI
 
 struct ARIAChatView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \ChatMessage.timestamp) private var allMessages: [ChatMessage]
     @Query(sort: \ARIAChatSession.updatedAt, order: .reverse) private var sessions: [ARIAChatSession]
     @AppStorage("ariaChatSidebarVisible") private var isSidebarVisible = true
     @AppStorage("ariaProvider") private var selectedProviderRaw = AIProviderKind.gemini.rawValue
     @AppStorage("ariaReasoningEffort") private var reasoningEffortRaw = AIReasoningEffort.medium.rawValue
+    @AppStorage("ariaVerbosity") private var verbosityRaw = AIResponseVerbosity.medium.rawValue
     @AppStorage("ariaWebSearchMode") private var webSearchModeRaw = AIWebSearchMode.cached.rawValue
+    @AppStorage("geminiModel") private var geminiModel = "gemini-2.0-flash"
+    @AppStorage("junaliModel") private var junaliModel = AIConfiguration.codexDefaultModel
+    @AppStorage("codexModel") private var codexModel = AIConfiguration.codexDefaultModel
+    @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
     @State private var ariaService = ARIAService()
     @State private var inputText = ""
     @State private var streamingText = ""
     @State private var showMemory = false
     @State private var errorMessage: String?
-    @State private var pendingScrollTarget: AnyHashable?
     @State private var selectedSessionID: UUID?
 
     private var visibleSessions: [ARIAChatSession] {
-        sessions
-            .filter { !$0.isArchived }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        sessions.filter { !$0.isArchived }
     }
 
     private var selectedSession: ARIAChatSession? {
@@ -30,13 +31,35 @@ struct ARIAChatView: View {
         return visibleSessions.first(where: { $0.id == selectedSessionID }) ?? visibleSessions.first
     }
 
-    private var messages: [ChatMessage] {
-        guard let sessionID = selectedSession?.id else { return [] }
-        return allMessages.filter { $0.sessionID == sessionID }
-    }
-
     private var selectedProvider: AIProviderKind {
         AIProviderKind(rawValue: selectedProviderRaw) ?? .gemini
+    }
+
+    private var selectedReasoningEffort: AIReasoningEffort {
+        let stored = AIReasoningEffort(rawValue: reasoningEffortRaw) ?? .medium
+        return AIConfiguration.normalizedReasoningEffort(stored, for: selectedProvider)
+    }
+
+    private var selectedVerbosity: AIResponseVerbosity {
+        AIResponseVerbosity(rawValue: verbosityRaw) ?? .medium
+    }
+
+    private var selectedWebSearchMode: AIWebSearchMode {
+        AIWebSearchMode(rawValue: webSearchModeRaw) ?? .cached
+    }
+
+    private var selectedModel: String {
+        switch selectedProvider {
+        case .gemini: return geminiModel
+        case .junali: return junaliModel
+        case .codexCLI: return codexModel
+        }
+    }
+
+    private var geminiCreativityName: String {
+        if ariaTemperature <= 0.35 { return "Precise" }
+        if ariaTemperature <= 0.85 { return "Balanced" }
+        return "Exploratory"
     }
 
     var body: some View {
@@ -50,44 +73,18 @@ struct ARIAChatView: View {
                 }
 
                 VStack(spacing: 0) {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 10) {
-                                if messages.isEmpty && !ariaService.isLoading {
-                                    emptyState
-                                }
-
-                                ForEach(messages, id: \.id) { message in
-                                    MessageRow(message: message)
-                                        .id(message.id)
-                                }
-
-                                if ariaService.isLoading, selectedSession != nil {
-                                    thinkingIndicator
-                                    if !streamingText.isEmpty {
-                                        StreamingMessageRow(text: streamingText)
-                                            .id("streaming")
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 18)
+                    if let selectedSession {
+                        ARIASessionConversationView(
+                            sessionID: selectedSession.id,
+                            isLoading: ariaService.isLoading,
+                            currentStatus: ariaService.currentStatus,
+                            streamingText: streamingText
+                        ) {
+                            emptyState
                         }
-                        .onChange(of: messages.last?.id) { _, newValue in
-                            guard let newValue else { return }
-                            pendingScrollTarget = AnyHashable(newValue)
-                        }
-                        .onChange(of: streamingText.count) { _, newValue in
-                            guard ariaService.isLoading, newValue > 0 else { return }
-                            pendingScrollTarget = AnyHashable("streaming")
-                        }
-                        .task(id: pendingScrollTarget) {
-                            guard let pendingScrollTarget else { return }
-                            await Task.yield()
-                            withAnimation {
-                                proxy.scrollTo(pendingScrollTarget, anchor: .bottom)
-                            }
-                        }
+                        .id(selectedSession.id)
+                    } else {
+                        emptyState
                     }
 
                     Divider()
@@ -128,6 +125,7 @@ struct ARIAChatView: View {
             .task {
                 await MainActor.run {
                     bootstrapSessionsIfNeeded()
+                    normalizeChatConfiguration()
                     ariaService.updateSuggestedPrompts(context: context)
                 }
             }
@@ -249,36 +247,6 @@ struct ARIAChatView: View {
         }
     }
 
-    private var thinkingIndicator: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(IBColors.electricBlue.opacity(0.12))
-                    .frame(width: 30, height: 30)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(IBColors.electricBlue)
-            }
-            HStack(spacing: 9) {
-                ProgressView().controlSize(.small)
-                Text(ariaService.currentStatus.isEmpty ? "Preparing your response…" : ariaService.currentStatus)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 36)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.cardBorder, lineWidth: 1)
-                    )
-            )
-            Spacer()
-        }
-    }
-
     // MARK: - Input Bar
     private var inputBar: some View {
         VStack(spacing: 9) {
@@ -313,31 +281,7 @@ struct ARIAChatView: View {
                 )
             }
 
-            HStack(spacing: 8) {
-                Label(selectedProvider.displayName, systemImage: selectedProvider.symbolName)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(IBColors.teal)
-                Text(AIConfiguration.model(for: selectedProvider))
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text("·")
-                    .foregroundStyle(.tertiary)
-                Text("\((AIReasoningEffort(rawValue: reasoningEffortRaw) ?? .medium).displayName) effort")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                if selectedProvider == .codexCLI {
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Label(
-                        (AIWebSearchMode(rawValue: webSearchModeRaw) ?? .cached).displayName,
-                        systemImage: "globe"
-                    )
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
+            configurationRail
 
             HStack(alignment: .bottom, spacing: 10) {
                 TextField("Ask ARIA…", text: $inputText, axis: .vertical)
@@ -380,12 +324,155 @@ struct ARIAChatView: View {
         .background(IBColors.surface)
     }
 
+    private var configurationRail: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Menu {
+                    ForEach(AIProviderKind.allCases) { provider in
+                        Button {
+                            selectProvider(provider)
+                        } label: {
+                            Label(
+                                provider.displayName,
+                                systemImage: provider == selectedProvider ? "checkmark" : provider.symbolName
+                            )
+                        }
+                    }
+                } label: {
+                    ARIAConfigurationMenuLabel(
+                        title: selectedProvider.shortName,
+                        symbol: selectedProvider.symbolName,
+                        tint: IBColors.teal
+                    )
+                }
+                .help("AI provider")
+
+                Menu {
+                    ForEach(AIConfiguration.knownModels[selectedProvider] ?? []) { option in
+                        Button {
+                            setSelectedModel(option.id)
+                        } label: {
+                            Label(
+                                "\(option.name) · \(option.role)",
+                                systemImage: option.id == selectedModel ? "checkmark" : "cpu"
+                            )
+                        }
+                    }
+
+                    if !(AIConfiguration.knownModels[selectedProvider] ?? []).contains(where: { $0.id == selectedModel }) {
+                        Divider()
+                        Text("Custom: \(selectedModel)")
+                    }
+                } label: {
+                    ARIAConfigurationMenuLabel(
+                        title: AIConfiguration.modelDisplayName(selectedModel, for: selectedProvider),
+                        symbol: "cpu",
+                        tint: IBColors.electricBlue
+                    )
+                }
+                .help("Model")
+
+                if selectedProvider == .gemini {
+                    Menu {
+                        Button {
+                            ariaTemperature = 0.2
+                        } label: {
+                            Label("Precise", systemImage: geminiCreativityName == "Precise" ? "checkmark" : "scope")
+                        }
+                        Button {
+                            ariaTemperature = 0.7
+                        } label: {
+                            Label("Balanced", systemImage: geminiCreativityName == "Balanced" ? "checkmark" : "dial.medium")
+                        }
+                        Button {
+                            ariaTemperature = 1.1
+                        } label: {
+                            Label("Exploratory", systemImage: geminiCreativityName == "Exploratory" ? "checkmark" : "wand.and.stars")
+                        }
+                    } label: {
+                        ARIAConfigurationMenuLabel(
+                            title: geminiCreativityName,
+                            symbol: "dial.medium",
+                            tint: IBColors.gold
+                        )
+                    }
+                    .help("Response creativity")
+                } else {
+                    Menu {
+                        ForEach(AIConfiguration.supportedReasoningEfforts(for: selectedProvider)) { effort in
+                            Button {
+                                reasoningEffortRaw = effort.rawValue
+                            } label: {
+                                Label(
+                                    effort.displayName,
+                                    systemImage: effort == selectedReasoningEffort ? "checkmark" : "brain.head.profile"
+                                )
+                            }
+                        }
+                    } label: {
+                        ARIAConfigurationMenuLabel(
+                            title: selectedReasoningEffort.displayName,
+                            symbol: "brain.head.profile",
+                            tint: IBColors.gold
+                        )
+                    }
+                    .help("Reasoning effort: \(selectedReasoningEffort.detail)")
+
+                    Menu {
+                        ForEach(AIResponseVerbosity.allCases) { verbosity in
+                            Button {
+                                verbosityRaw = verbosity.rawValue
+                            } label: {
+                                Label(
+                                    verbosity.displayName,
+                                    systemImage: verbosity == selectedVerbosity ? "checkmark" : "text.alignleft"
+                                )
+                            }
+                        }
+                    } label: {
+                        ARIAConfigurationMenuLabel(
+                            title: selectedVerbosity.displayName,
+                            symbol: "text.alignleft",
+                            tint: IBColors.ink
+                        )
+                    }
+                    .help("Answer detail")
+                }
+
+                if selectedProvider == .codexCLI {
+                    Menu {
+                        ForEach(AIWebSearchMode.allCases) { mode in
+                            Button {
+                                webSearchModeRaw = mode.rawValue
+                            } label: {
+                                Label(
+                                    mode.displayName,
+                                    systemImage: mode == selectedWebSearchMode ? "checkmark" : "globe"
+                                )
+                            }
+                        }
+                    } label: {
+                        ARIAConfigurationMenuLabel(
+                            title: selectedWebSearchMode.displayName,
+                            symbol: "globe",
+                            tint: IBColors.success
+                        )
+                    }
+                    .help("Web search: \(selectedWebSearchMode.detail)")
+                }
+            }
+        }
+        .scrollClipDisabled()
+        .disabled(ariaService.isLoading)
+    }
+
     private func sendMessage(_ text: String) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard let selectedSession else {
             bootstrapSessionsIfNeeded()
             return
         }
+        persistSelectedConfiguration()
         let msg = text; inputText = ""; streamingText = ""; errorMessage = nil; IBHaptics.light()
         ariaService.sendMessage(msg, context: context, session: selectedSession,
             onToken: { partial in streamingText = partial },
@@ -399,7 +486,11 @@ struct ARIAChatView: View {
         var didMutate = false
         var preferredSelection = selectedSessionID
 
-        let orphanMessages = allMessages.filter { $0.sessionID == nil }
+        let orphanDescriptor = FetchDescriptor<ChatMessage>(
+            predicate: #Predicate<ChatMessage> { $0.sessionID == nil },
+            sortBy: [SortDescriptor(\.timestamp, order: .forward)]
+        )
+        let orphanMessages = (try? context.fetch(orphanDescriptor)) ?? []
         if !orphanMessages.isEmpty {
             let legacySession = ARIAChatSession(
                 title: "Previous Chat",
@@ -461,11 +552,11 @@ struct ARIAChatView: View {
     @MainActor
     private func deleteChat(_ session: ARIAChatSession) {
         let sessionID = session.id
-        let allChatMessages = try? context.fetch(FetchDescriptor<ChatMessage>())
-        for msg in (allChatMessages ?? []) {
-            if msg.sessionID == sessionID {
-                context.delete(msg)
-            }
+        let messageDescriptor = FetchDescriptor<ChatMessage>(
+            predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID }
+        )
+        for message in (try? context.fetch(messageDescriptor)) ?? [] {
+            context.delete(message)
         }
         context.delete(session)
         do {
@@ -478,6 +569,180 @@ struct ARIAChatView: View {
         if selectedSessionID == sessionID {
             selectedSessionID = visibleSessions.first(where: { $0.id != sessionID })?.id
         }
+    }
+
+    private func selectProvider(_ provider: AIProviderKind) {
+        selectedProviderRaw = provider.rawValue
+        reasoningEffortRaw = AIConfiguration.normalizedReasoningEffort(
+            AIReasoningEffort(rawValue: reasoningEffortRaw) ?? .medium,
+            for: provider
+        ).rawValue
+        errorMessage = nil
+    }
+
+    private func setSelectedModel(_ model: String) {
+        switch selectedProvider {
+        case .gemini: geminiModel = model
+        case .junali: junaliModel = model
+        case .codexCLI: codexModel = model
+        }
+    }
+
+    private func normalizeChatConfiguration() {
+        selectProvider(selectedProvider)
+    }
+
+    private func persistSelectedConfiguration() {
+        AIConfiguration.provider = selectedProvider
+        AIConfiguration.setModel(selectedModel, for: selectedProvider)
+        AIConfiguration.reasoningEffort = selectedReasoningEffort
+        AIConfiguration.verbosity = selectedVerbosity
+        AIConfiguration.webSearchMode = selectedWebSearchMode
+    }
+}
+
+private struct ARIASessionConversationView<EmptyContent: View>: View {
+    @Query private var messages: [ChatMessage]
+    let isLoading: Bool
+    let currentStatus: String
+    let streamingText: String
+    let emptyContent: EmptyContent
+    @State private var lastStreamingScrollCount = 0
+
+    init(
+        sessionID: UUID,
+        isLoading: Bool,
+        currentStatus: String,
+        streamingText: String,
+        @ViewBuilder emptyContent: () -> EmptyContent
+    ) {
+        let selectedSessionID = sessionID
+        _messages = Query(
+            filter: #Predicate<ChatMessage> { $0.sessionID == selectedSessionID },
+            sort: \ChatMessage.timestamp
+        )
+        self.isLoading = isLoading
+        self.currentStatus = currentStatus
+        self.streamingText = streamingText
+        self.emptyContent = emptyContent()
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    if messages.isEmpty && !isLoading {
+                        emptyContent
+                    }
+
+                    ForEach(messages, id: \.id) { message in
+                        MessageRow(message: message)
+                            .id(message.id)
+                    }
+
+                    if isLoading {
+                        ARIAThinkingIndicator(status: currentStatus)
+                        if !streamingText.isEmpty {
+                            StreamingMessageRow(text: streamingText)
+                                .id("streaming")
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 18)
+            }
+            .onAppear {
+                guard let lastMessageID = messages.last?.id else { return }
+                proxy.scrollTo(lastMessageID, anchor: .bottom)
+            }
+            .onChange(of: messages.last?.id) { _, newValue in
+                guard let newValue else { return }
+                Task { @MainActor in
+                    await Task.yield()
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        proxy.scrollTo(newValue, anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: streamingText.count) { _, newValue in
+                if newValue == 0 {
+                    lastStreamingScrollCount = 0
+                    return
+                }
+                guard isLoading,
+                      lastStreamingScrollCount == 0 || newValue - lastStreamingScrollCount >= 192 else { return }
+                lastStreamingScrollCount = newValue
+                Task { @MainActor in
+                    await Task.yield()
+                    proxy.scrollTo("streaming", anchor: .bottom)
+                }
+            }
+        }
+    }
+}
+
+private struct ARIAThinkingIndicator: View {
+    let status: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(IBColors.electricBlue.opacity(0.12))
+                    .frame(width: 30, height: 30)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(IBColors.electricBlue)
+            }
+            HStack(spacing: 9) {
+                ProgressView().controlSize(.small)
+                Text(status.isEmpty ? "Preparing your response…" : status)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(IBColors.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                    )
+            )
+            Spacer()
+        }
+    }
+}
+
+private struct ARIAConfigurationMenuLabel: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(tint)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(IBColors.ink)
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(IBColors.tertiaryText)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(IBColors.canvas)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(IBColors.cardBorder, lineWidth: 1)
+                )
+        )
     }
 }
 
@@ -643,9 +908,12 @@ struct StreamingMessageRow: View {
 struct FormattedMessageContent: View {
     let text: String
     var preferRichRendering = false
+    @State private var sections: [FormattedMessageSection]
 
-    private var sections: [FormattedMessageSection] {
-        FormattedMessageFormatter.sections(from: text)
+    init(text: String, preferRichRendering: Bool = false) {
+        self.text = text
+        self.preferRichRendering = preferRichRendering
+        _sections = State(initialValue: FormattedMessageFormatter.sections(from: text))
     }
 
     var body: some View {
@@ -655,6 +923,9 @@ struct FormattedMessageContent: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: text) { _, newText in
+            sections = FormattedMessageFormatter.sections(from: newText)
+        }
     }
 
     @ViewBuilder

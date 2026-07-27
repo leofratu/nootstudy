@@ -124,3 +124,21 @@ struct LocalCodexEventTests {
         #expect(update?.error == "Saved login was rejected")
     }
 }
+
+@Suite("AI Configuration Tests")
+struct AIConfigurationTests {
+    @Test("Local Codex exposes only supported GPT-5.6 effort levels")
+    func codexEffortLevels() {
+        let efforts = AIConfiguration.supportedReasoningEfforts(for: .codexCLI)
+
+        #expect(efforts == [.low, .medium, .high, .xhigh, .max])
+        #expect(AIConfiguration.normalizedReasoningEffort(.none, for: .codexCLI) == .low)
+        #expect(AIConfiguration.supportedReasoningEfforts(for: .gemini).isEmpty)
+    }
+
+    @Test("Known model slugs receive human-readable names")
+    func modelDisplayNames() {
+        #expect(AIConfiguration.modelDisplayName("gpt-5.6-sol", for: .codexCLI) == "GPT-5.6 Sol")
+        #expect(AIConfiguration.modelDisplayName("custom-model", for: .junali) == "custom-model")
+    }
+}

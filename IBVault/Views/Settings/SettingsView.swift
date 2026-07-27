@@ -262,6 +262,10 @@ struct SettingsView: View {
             .pickerStyle(.segmented)
             .onChange(of: selectedProviderRaw) { _, _ in
                 providerStatus = nil
+                reasoningEffortRaw = AIConfiguration.normalizedReasoningEffort(
+                    selectedReasoningEffort.wrappedValue,
+                    for: selectedProvider
+                ).rawValue
             }
 
             Text(selectedProvider.detail)
@@ -446,19 +450,25 @@ struct SettingsView: View {
                 }
             }
 
-            Picker("Reasoning effort", selection: selectedReasoningEffort) {
-                ForEach(AIReasoningEffort.allCases) { effort in
-                    Text(effort.displayName).tag(effort)
+            if selectedProvider != .gemini {
+                Picker("Reasoning effort", selection: selectedReasoningEffort) {
+                    ForEach(AIConfiguration.supportedReasoningEfforts(for: selectedProvider)) { effort in
+                        Text(effort.displayName).tag(effort)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
+                .pickerStyle(.menu)
 
-            Picker("Answer detail", selection: selectedVerbosity) {
-                ForEach(AIResponseVerbosity.allCases) { verbosity in
-                    Text(verbosity.displayName).tag(verbosity)
+                Text(selectedReasoningEffort.wrappedValue.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Answer detail", selection: selectedVerbosity) {
+                    ForEach(AIResponseVerbosity.allCases) { verbosity in
+                        Text(verbosity.displayName).tag(verbosity)
+                    }
                 }
+                .pickerStyle(.segmented)
             }
-            .pickerStyle(.segmented)
 
             if selectedProvider == .codexCLI {
                 VStack(alignment: .leading, spacing: 6) {

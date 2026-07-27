@@ -258,9 +258,9 @@ enum AIProviderService {
             "model": model,
             "instructions": systemInstruction,
             "input": input,
-            "reasoning": ["effort": AIConfiguration.reasoningEffort.rawValue],
+            "reasoning": ["effort": AIConfiguration.reasoningEffortValue(for: .junali)],
             "text": ["verbosity": AIConfiguration.verbosity.rawValue],
-            "max_output_tokens": max(UserDefaults.standard.integer(forKey: "ariaMaxTokens"), 1024),
+            "max_output_tokens": AIConfiguration.maxOutputTokens,
             "store": false
         ]
 
@@ -305,8 +305,8 @@ enum AIProviderService {
         let body: [String: Any] = [
             "model": model,
             "messages": payloadMessages,
-            "reasoning_effort": AIConfiguration.reasoningEffort.rawValue,
-            "max_completion_tokens": max(UserDefaults.standard.integer(forKey: "ariaMaxTokens"), 1024)
+            "reasoning_effort": AIConfiguration.reasoningEffortValue(for: .junali),
+            "max_completion_tokens": AIConfiguration.maxOutputTokens
         ]
         let data = try await sendJSON(
             url: baseURL
@@ -396,7 +396,7 @@ enum AIProviderService {
     ) -> AsyncThrowingStream<String, Error> {
         let processController = ProcessController()
         let webSearchMode = AIConfiguration.webSearchMode
-        let reasoningEffort = AIConfiguration.reasoningEffort.codexValue
+        let reasoningEffort = AIConfiguration.reasoningEffortValue(for: .codexCLI)
         let verbosity = AIConfiguration.verbosity.rawValue
 
         return AsyncThrowingStream { continuation in

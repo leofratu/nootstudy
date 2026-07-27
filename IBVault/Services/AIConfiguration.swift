@@ -49,12 +49,25 @@ enum AIReasoningEffort: String, CaseIterable, Codable, Identifiable, Sendable {
     case medium
     case high
     case xhigh
+    case max
 
     var id: String { rawValue }
-    var displayName: String { rawValue == "xhigh" ? "Extra high" : rawValue.capitalized }
+    var displayName: String {
+        switch self {
+        case .xhigh: return "Extra high"
+        default: return rawValue.capitalized
+        }
+    }
 
-    var codexValue: String {
-        self == .none ? "minimal" : rawValue
+    var detail: String {
+        switch self {
+        case .none: return "Fastest response with no deliberate reasoning budget."
+        case .low: return "Lower latency for routine questions and quick review."
+        case .medium: return "Balanced speed and depth for everyday study support."
+        case .high: return "Deeper reasoning for synthesis and exam analysis."
+        case .xhigh: return "Extra depth for difficult, multi-step problems."
+        case .max: return "Maximum depth for the hardest quality-first work."
+        }
     }
 }
 
@@ -189,6 +202,49 @@ enum AIConfiguration {
         case .codexCLI: key = Key.codexModel
         }
         UserDefaults.standard.set(model.trimmingCharacters(in: .whitespacesAndNewlines), forKey: key)
+    }
+
+    static func modelDisplayName(_ model: String, for provider: AIProviderKind) -> String {
+        knownModels[provider]?.first(where: { $0.id == model })?.name ?? model
+    }
+
+    static func supportedReasoningEfforts(for provider: AIProviderKind) -> [AIReasoningEffort] {
+        switch provider {
+        case .codexCLI:
+            return [.low, .medium, .high, .xhigh, .max]
+        case .junali:
+            return AIReasoningEffort.allCases
+        case .gemini:
+            return []
+        }
+    }
+
+    static func normalizedReasoningEffort(
+        _ effort: AIReasoningEffort,
+        for provider: AIProviderKind
+    ) -> AIReasoningEffort {
+        let supported = supportedReasoningEfforts(for: provider)
+        guard !supported.isEmpty else { return effort }
+        return supported.contains(effort) ? effort : .low
+    }
+
+    static func reasoningEffortValue(for provider: AIProviderKind) -> String {
+        normalizedReasoningEffort(reasoningEffort, for: provider).rawValue
+    }
+
+    static var maxOutputTokens: Int {
+        let stored = UserDefaults.standard.integer(forKey: "ariaMaxTokens")
+        return stored > 0 ? stored : 4096
+    }
+
+    static var conversationWindow: Int {
+        let stored = UserDefaults.standard.integer(forKey: "ariaContextWindow")
+        return min(max(stored > 0 ? stored : 20, 5), 50)
+    }
+
+    static var autoCompactEnabled: Bool {
+        guard UserDefaults.standard.object(forKey: "ariaAutoCompact") != nil else { return true }
+        return UserDefaults.standard.bool(forKey: "ariaAutoCompact")
     }
 
     static var junaliBaseURL: String {
