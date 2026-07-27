@@ -532,13 +532,15 @@ struct ARIAChatView: View {
                 activeSessionID = nil
                 activePrompt = nil
             },
-            onError: { error in
-                chatFailure = ARIAChatFailure(
-                    error: error,
-                    sessionID: session.id,
-                    prompt: message,
-                    provider: provider
-                )
+            onError: { error, persistedFailureID in
+                if persistedFailureID == nil {
+                    chatFailure = ARIAChatFailure(
+                        error: error,
+                        sessionID: session.id,
+                        prompt: message,
+                        provider: provider
+                    )
+                }
                 streamingText = ""
                 activeSessionID = nil
                 activePrompt = nil
@@ -555,6 +557,9 @@ struct ARIAChatView: View {
         }
         selectedSessionID = sessionID
         persistSelectedConfiguration()
+        if !removePersistedFailure(id: failure.id) {
+            return
+        }
         beginMessage(prompt, in: session, persistUserMessage: false)
     }
 
@@ -563,16 +568,23 @@ struct ARIAChatView: View {
         let sessionID = activeSessionID
         let prompt = activePrompt
         let provider = activeProvider
-        ariaService.cancelCurrentRequest()
+        let session = sessionID.flatMap { id in visibleSessions.first(where: { $0.id == id }) }
+        let persistedFailureID = ariaService.cancelCurrentRequest(
+            context: context,
+            session: session,
+            provider: provider
+        )
         streamingText = ""
         activeSessionID = nil
         activePrompt = nil
-        chatFailure = ARIAChatFailure(
-            message: "Response stopped. Your message is saved and can be retried.",
-            sessionID: sessionID,
-            prompt: prompt,
-            provider: provider
-        )
+        if persistedFailureID == nil {
+            chatFailure = ARIAChatFailure(
+                message: "Response stopped. Your message is saved and can be retried.",
+                sessionID: sessionID,
+                prompt: prompt,
+                provider: provider
+            )
+        }
     }
 
     private func visibleFailure(for sessionID: UUID) -> ARIAChatFailure? {
@@ -584,8 +596,52 @@ struct ARIAChatView: View {
     }
 
     private func dismissFailure(_ failure: ARIAChatFailure) {
-        guard chatFailure?.id == failure.id else { return }
-        chatFailure = nil
+        if chatFailure?.id == failure.id {
+            chatFailure = nil
+            return
+        }
+
+        guard let message = persistedMessage(id: failure.id),
+              ChatMessageRole.isFailure(message.role) else { return }
+        message.role = ChatMessageRole.dismissed(message.role)
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            chatFailure = ARIAChatFailure(
+                message: "This recovery notice could not be dismissed: \(error.localizedDescription)",
+                sessionID: failure.sessionID,
+                prompt: failure.prompt,
+                provider: failure.provider
+            )
+        }
+    }
+
+    private func removePersistedFailure(id: UUID) -> Bool {
+        guard let message = persistedMessage(id: id) else { return true }
+        guard ChatMessageRole.isFailure(message.role) else { return true }
+        context.delete(message)
+        do {
+            try context.save()
+            return true
+        } catch {
+            context.rollback()
+            chatFailure = ARIAChatFailure(
+                message: "The saved response could not be prepared for retry: \(error.localizedDescription)",
+                sessionID: message.sessionID,
+                provider: ChatMessageRole.failureProvider(for: message.role) ?? selectedProvider
+            )
+            return false
+        }
+    }
+
+    private func persistedMessage(id: UUID) -> ChatMessage? {
+        let targetID = id
+        var descriptor = FetchDescriptor<ChatMessage>(
+            predicate: #Predicate<ChatMessage> { $0.id == targetID }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     private func reconnectCodex(_ failure: ARIAChatFailure) {
@@ -603,19 +659,38 @@ struct ARIAChatView: View {
                 throw AIProviderError.processFailed("Could not open Terminal. The Codex sign-in command is on your clipboard.")
             }
 
-            chatFailure = ARIAChatFailure(
-                message: "Terminal is open and the Codex sign-in command is copied. Paste it, finish the browser sign-in, then retry this message.",
-                sessionID: failure.sessionID,
-                prompt: failure.prompt,
-                provider: .codexCLI
-            )
+            let statusMessage = "Terminal is open and the Codex sign-in command is copied. Paste it, finish the browser sign-in, then retry this message."
+            if !updatePersistedFailure(failure, content: statusMessage) {
+                chatFailure = ARIAChatFailure(
+                    message: statusMessage,
+                    sessionID: failure.sessionID,
+                    prompt: failure.prompt,
+                    provider: .codexCLI
+                )
+            }
         } catch {
-            chatFailure = ARIAChatFailure(
-                error: error,
-                sessionID: failure.sessionID,
-                prompt: failure.prompt,
-                provider: .codexCLI
-            )
+            if !updatePersistedFailure(failure, content: error.localizedDescription) {
+                chatFailure = ARIAChatFailure(
+                    error: error,
+                    sessionID: failure.sessionID,
+                    prompt: failure.prompt,
+                    provider: .codexCLI
+                )
+            }
+        }
+    }
+
+    private func updatePersistedFailure(_ failure: ARIAChatFailure, content: String) -> Bool {
+        guard let message = persistedMessage(id: failure.id),
+              ChatMessageRole.isFailure(message.role) else { return false }
+        message.content = content
+        do {
+            try context.save()
+            chatFailure = nil
+            return true
+        } catch {
+            context.rollback()
+            return false
         }
     }
 
@@ -768,7 +843,7 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
         if let failure { return failure }
         guard !isLoading,
               let lastMessage = messages.last,
-              lastMessage.role == "user",
+              lastMessage.role == ChatMessageRole.user,
               dismissedRecoveredFailureID != lastMessage.id else {
             return nil
         }
@@ -816,8 +891,18 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
                     }
 
                     ForEach(messages, id: \.id) { message in
-                        MessageRow(message: message)
+                        if let persistedFailure = persistedFailure(for: message) {
+                            ARIAChatFailureRow(
+                                failure: persistedFailure,
+                                onRetry: { onRetry(persistedFailure) },
+                                onReconnectCodex: { onReconnectCodex(persistedFailure) },
+                                onDismiss: { onDismissFailure(persistedFailure) }
+                            )
                             .id(message.id)
+                        } else if ChatMessageRole.isConversationRole(message.role) {
+                            MessageRow(message: message)
+                                .id(message.id)
+                        }
                     }
 
                     if isLoading {
@@ -883,6 +968,26 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
+    private func persistedFailure(for message: ChatMessage) -> ARIAChatFailure? {
+        guard ChatMessageRole.isFailure(message.role),
+              let provider = ChatMessageRole.failureProvider(for: message.role),
+              let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else {
+            return nil
+        }
+
+        let prompt = messages[..<messageIndex]
+            .last(where: { $0.role == ChatMessageRole.user })?
+            .content
+        return ARIAChatFailure(
+            message: message.content,
+            sessionID: message.sessionID,
+            prompt: prompt,
+            provider: provider,
+            needsCodexSignIn: ChatMessageRole.needsCodexAuthentication(message.role),
+            id: message.id
+        )
+    }
 }
 
 private struct ARIAChatFailureRow: View {
@@ -924,7 +1029,7 @@ private struct ARIAChatFailureRow: View {
                 HStack(spacing: 8) {
                     if failure.needsCodexSignIn {
                         Button(action: onReconnectCodex) {
-                            Label("Open sign-in", systemImage: "terminal")
+                            Label("Reconnect Codex", systemImage: "terminal")
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -935,6 +1040,7 @@ private struct ARIAChatFailureRow: View {
                             Label("Retry", systemImage: "arrow.clockwise")
                         }
                         .buttonStyle(.bordered)
+                        .tint(IBColors.electricBlue)
                         .controlSize(.small)
                     }
                 }
@@ -1064,7 +1170,7 @@ private struct ARIAChatSessionRow: View {
 struct MessageRow: View {
     let message: ChatMessage
 
-    private var isUser: Bool { message.role == "user" }
+    private var isUser: Bool { message.role == ChatMessageRole.user }
 
     var body: some View {
         Group {

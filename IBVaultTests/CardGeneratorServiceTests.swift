@@ -179,3 +179,54 @@ struct AIConfigurationTests {
         #expect(AIConfiguration.modelDisplayName("custom-model", for: .junali) == "custom-model")
     }
 }
+
+@Suite("ARIA Chat Persistence Tests")
+struct ARIAChatPersistenceTests {
+    @Test("Failure roles preserve provider and recovery intent")
+    func failureRolesRoundTrip() {
+        let authFailure = ChatMessageRole.failure(for: .codexCLI, needsAuthentication: true)
+        let cancellation = ChatMessageRole.cancellation(for: .junali)
+
+        #expect(ChatMessageRole.isFailure(authFailure))
+        #expect(ChatMessageRole.failureProvider(for: authFailure) == .codexCLI)
+        #expect(ChatMessageRole.needsCodexAuthentication(authFailure))
+        #expect(ChatMessageRole.isFailure(cancellation))
+        #expect(ChatMessageRole.failureProvider(for: cancellation) == .junali)
+    }
+
+    @Test("Recovery records never enter provider conversation history")
+    func recoveryRolesAreNotConversationTurns() {
+        #expect(ChatMessageRole.isConversationRole(ChatMessageRole.user))
+        #expect(ChatMessageRole.isConversationRole(ChatMessageRole.model))
+        #expect(!ChatMessageRole.isConversationRole(ChatMessageRole.failure(for: .gemini)))
+        #expect(!ChatMessageRole.isFailure(ChatMessageRole.dismissed(ChatMessageRole.failure(for: .gemini))))
+    }
+
+    @MainActor
+    @Test("Stopped responses persist a provider-specific retry record")
+    func cancellationPersistsRecoveryRecord() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: ARIAChatSession.self,
+            ChatMessage.self,
+            configurations: configuration
+        )
+        let context = container.mainContext
+        let session = ARIAChatSession(title: "Retry test")
+        context.insert(session)
+        try context.save()
+
+        let service = ARIAService()
+        let failureID = service.cancelCurrentRequest(
+            context: context,
+            session: session,
+            provider: .junali
+        )
+        let messages = try context.fetch(FetchDescriptor<ChatMessage>())
+
+        #expect(failureID != nil)
+        #expect(messages.count == 1)
+        #expect(messages.first?.role == ChatMessageRole.cancellation(for: .junali))
+        #expect(messages.first?.content.contains("retried") == true)
+    }
+}

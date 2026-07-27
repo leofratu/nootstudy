@@ -1,6 +1,54 @@
 import Foundation
 import SwiftData
 
+enum ChatMessageRole {
+    static let user = "user"
+    static let model = "model"
+
+    private static let failurePrefix = "error."
+    private static let cancelledPrefix = "cancelled."
+    private static let dismissedPrefix = "dismissed."
+    private static let authenticationSuffix = ".authentication"
+
+    static func failure(for provider: AIProviderKind, needsAuthentication: Bool = false) -> String {
+        let suffix = needsAuthentication ? authenticationSuffix : ""
+        return failurePrefix + provider.rawValue + suffix
+    }
+
+    static func cancellation(for provider: AIProviderKind) -> String {
+        cancelledPrefix + provider.rawValue
+    }
+
+    static func dismissed(_ role: String) -> String {
+        dismissedPrefix + role
+    }
+
+    static func isConversationRole(_ role: String) -> Bool {
+        role == user || role == model
+    }
+
+    static func isFailure(_ role: String) -> Bool {
+        role.hasPrefix(failurePrefix) || role.hasPrefix(cancelledPrefix)
+    }
+
+    static func failureProvider(for role: String) -> AIProviderKind? {
+        let providerRaw: String
+        if role.hasPrefix(failurePrefix) {
+            providerRaw = String(role.dropFirst(failurePrefix.count))
+                .replacingOccurrences(of: authenticationSuffix, with: "")
+        } else if role.hasPrefix(cancelledPrefix) {
+            providerRaw = String(role.dropFirst(cancelledPrefix.count))
+        } else {
+            return nil
+        }
+        return AIProviderKind(rawValue: providerRaw)
+    }
+
+    static func needsCodexAuthentication(_ role: String) -> Bool {
+        role == failure(for: .codexCLI, needsAuthentication: true)
+    }
+}
+
 enum MemoryCategory: String, Codable, CaseIterable {
     case grades = "Grades & Targets"
     case weakTopics = "Weak Topics"
@@ -149,7 +197,7 @@ final class ARIAMemory {
 @Model
 final class ChatMessage {
     var id: UUID
-    var role: String // "user" or "model"
+    var role: String
     var content: String
     var timestamp: Date
     var sessionID: UUID?

@@ -229,13 +229,14 @@ class ARIAService {
         persistUserMessage: Bool = true,
         onToken: @escaping (String) -> Void,
         onComplete: @escaping (String) -> Void,
-        onError: @escaping (Error) -> Void
+        onError: @escaping (Error, UUID?) -> Void
     ) {
         guard activeRequestID == nil else { return }
         let trimmedMessage = userMessage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedMessage.isEmpty else { return }
 
         let requestID = UUID()
+        let requestProvider = AIConfiguration.provider
         activeRequestID = requestID
         isLoading = true
         currentStreamText = ""
@@ -243,14 +244,14 @@ class ARIAService {
 
         if persistUserMessage {
             retryActionSummary = nil
-            let userChat = ChatMessage(role: "user", content: trimmedMessage, sessionID: session.id)
+            let userChat = ChatMessage(role: ChatMessageRole.user, content: trimmedMessage, sessionID: session.id)
             updateSession(session, withUserMessage: trimmedMessage)
             context.insert(userChat)
             do {
                 try context.save()
             } catch {
                 finishRequest(requestID)
-                onError(error)
+                onError(error, nil)
                 return
             }
         }
@@ -265,11 +266,16 @@ class ARIAService {
                 let loggingContext = inferredLoggingContext(context: context, queryProfile: queryProfile)
                 self.currentStatus = "Checking requested app changes"
                 let actionSummary: ActionExecutionSummary
-                if !persistUserMessage,
-                   let cachedSummary = self.retryActionSummary,
-                   cachedSummary.sessionID == session.id,
-                   cachedSummary.prompt == trimmedMessage {
-                    actionSummary = cachedSummary.summary
+                if !persistUserMessage {
+                    if let cachedSummary = self.retryActionSummary,
+                       cachedSummary.sessionID == session.id,
+                       cachedSummary.prompt == trimmedMessage {
+                        actionSummary = cachedSummary.summary
+                    } else {
+                        // A relaunched retry cannot prove which app actions already committed.
+                        // Reuse the saved prompt without risking duplicate sessions or cards.
+                        actionSummary = ActionExecutionSummary(completed: [], failed: [])
+                    }
                 } else {
                     actionSummary = try await self.planAndExecuteAppActions(
                         for: trimmedMessage,
@@ -336,7 +342,7 @@ class ARIAService {
                 }
 
                 // Save assistant response
-                let modelChat = ChatMessage(role: "model", content: finalizedResponse, sessionID: session.id)
+                let modelChat = ChatMessage(role: ChatMessageRole.model, content: finalizedResponse, sessionID: session.id)
                 context.insert(modelChat)
                 self.updateSession(session, withAssistantReply: finalizedResponse)
                 do {
@@ -345,7 +351,7 @@ class ARIAService {
                     onComplete(finalizedResponse)
                 } catch {
                     context.delete(modelChat)
-                    onError(error)
+                    onError(error, nil)
                     return
                 }
 
@@ -363,18 +369,37 @@ class ARIAService {
             } catch is CancellationError {
                 return
             } catch {
-                onError(error)
+                let failureID = self.persistFailure(
+                    error,
+                    context: context,
+                    session: session,
+                    provider: requestProvider
+                )
+                onError(error, failureID)
             }
         }
     }
 
-    func cancelCurrentRequest() {
+    @discardableResult
+    func cancelCurrentRequest(
+        context: ModelContext? = nil,
+        session: ARIAChatSession? = nil,
+        provider: AIProviderKind? = nil
+    ) -> UUID? {
         activeRequest?.cancel()
         activeRequest = nil
         activeRequestID = nil
         isLoading = false
         currentStreamText = ""
         currentStatus = ""
+
+        guard let context, let session, let provider else { return nil }
+        return persistFailureMessage(
+            role: ChatMessageRole.cancellation(for: provider),
+            content: "Response stopped. Your message is saved and can be retried.",
+            context: context,
+            session: session
+        )
     }
 
     private func finishRequest(_ requestID: UUID) {
@@ -384,6 +409,49 @@ class ARIAService {
         isLoading = false
         currentStreamText = ""
         currentStatus = ""
+    }
+
+    @discardableResult
+    private func persistFailure(
+        _ error: Error,
+        context: ModelContext,
+        session: ARIAChatSession,
+        provider: AIProviderKind
+    ) -> UUID? {
+        let needsAuthentication: Bool
+        if let providerError = error as? AIProviderError,
+           case .codexNotAuthenticated = providerError {
+            needsAuthentication = true
+        } else {
+            needsAuthentication = false
+        }
+
+        return persistFailureMessage(
+            role: ChatMessageRole.failure(for: provider, needsAuthentication: needsAuthentication),
+            content: error.localizedDescription,
+            context: context,
+            session: session
+        )
+    }
+
+    @discardableResult
+    private func persistFailureMessage(
+        role: String,
+        content: String,
+        context: ModelContext,
+        session: ARIAChatSession
+    ) -> UUID? {
+        let failureMessage = ChatMessage(role: role, content: content, sessionID: session.id)
+        context.insert(failureMessage)
+        session.updatedAt = Date()
+
+        do {
+            try context.save()
+            return failureMessage.id
+        } catch {
+            context.delete(failureMessage)
+            return nil
+        }
     }
 
     @MainActor
@@ -1713,9 +1781,15 @@ class ARIAService {
             predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
-        descriptor.fetchLimit = AIConfiguration.conversationWindow
+        descriptor.fetchLimit = max(AIConfiguration.conversationWindow * 2, 48)
 
-        guard let messages = try? context.fetch(descriptor), !messages.isEmpty else { return [] }
+        guard let storedMessages = try? context.fetch(descriptor) else { return [] }
+        let messages = Array(
+            storedMessages
+                .filter { ChatMessageRole.isConversationRole($0.role) }
+                .prefix(AIConfiguration.conversationWindow)
+        )
+        guard !messages.isEmpty else { return [] }
 
         let estimatedTokenBudget = queryProfile.historyCharacterBudget / tokenToCharRatio
         
@@ -1886,7 +1960,8 @@ class ARIAService {
         )
         descriptor.fetchLimit = maxCompactionMessages
 
-        guard let allMessages = try? context.fetch(descriptor) else { return }
+        guard let storedMessages = try? context.fetch(descriptor) else { return }
+        let allMessages = storedMessages.filter { ChatMessageRole.isConversationRole($0.role) }
         guard allMessages.count >= minMessagesBeforeCompaction else { return }
 
         // Rough token estimate (4 chars per token)
