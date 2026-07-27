@@ -45,7 +45,30 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedTab) {
-                Section("Study") {
+                Section {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(IBColors.electricBlue)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "books.vertical.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("IB Vault")
+                                .font(.system(size: 14, weight: .bold))
+                            Text("Study studio")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 5)
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+                Section("WORKSPACE") {
                     ForEach([NavigationTab.dashboard, .subjects, .studySessions, .review], id: \.self) { tab in
                         Label(tab.rawValue, systemImage: tab.icon)
                             .tag(tab)
@@ -53,12 +76,12 @@ struct ContentView: View {
                     }
                 }
 
-                Section("Assistant") {
+                Section("ASSISTANT") {
                     Label(NavigationTab.aria.rawValue, systemImage: NavigationTab.aria.icon)
                         .tag(NavigationTab.aria)
                 }
 
-                Section("Insights") {
+                Section("INSIGHTS") {
                     Label(NavigationTab.analytics.rawValue, systemImage: NavigationTab.analytics.icon)
                         .tag(NavigationTab.analytics)
                     Label(NavigationTab.recommendations.rawValue, systemImage: NavigationTab.recommendations.icon)
@@ -67,7 +90,7 @@ struct ContentView: View {
                         .tag(NavigationTab.predictions)
                 }
 
-                Section("Account") {
+                Section("ACCOUNT") {
                     Label(NavigationTab.profile.rawValue, systemImage: NavigationTab.profile.icon)
                         .tag(NavigationTab.profile)
                     Label(NavigationTab.settings.rawValue, systemImage: NavigationTab.settings.icon)
@@ -75,6 +98,8 @@ struct ContentView: View {
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(IBColors.canvas)
             .navigationTitle("IB Vault")
             #if os(macOS)
             .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
@@ -166,74 +191,72 @@ struct ReviewLaunchView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    Spacer().frame(height: 20)
-
-                    // Hero
-                    ZStack {
-                        Circle()
-                            .fill(IBColors.electricBlue.opacity(0.08))
-                            .frame(width: 100, height: 100)
-                        Image(systemName: "brain.head.profile")
-                            .font(.system(size: 40, weight: .light))
-                            .foregroundStyle(IBColors.electricBlue)
+                VStack(alignment: .leading, spacing: 22) {
+                    StudioPageHeader(
+                        eyebrow: "Active recall",
+                        title: "Review workspace",
+                        subtitle: reviewSubtitle,
+                        symbol: "brain.head.profile",
+                        tint: IBColors.electricBlue
+                    ) {
+                        StudioPill(title: dueCardsCount == 0 ? "QUEUE CLEAR" : "\(dueCardsCount) DUE", tint: dueCardsCount == 0 ? IBColors.success : IBColors.coral)
                     }
 
-                    VStack(spacing: 6) {
-                        Text("Spaced Repetition")
-                            .font(.title2.bold())
-                        Text(reviewSubtitle)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 450)
-                    }
-
-                    // Stats
-                    HStack(spacing: 0) {
-                        StatCard(value: "\(dueCardsCount)", label: "Cards Due", color: dueCardsCount == 0 ? .green : .orange, icon: "clock.badge.exclamationmark")
-                        Divider().frame(height: 50)
-                        StatCard(value: "\(eligibleCount)", label: "Review Pool", color: IBColors.electricBlue, icon: "square.stack.fill")
-                    }
-                    .padding(.vertical, 12)
-                    .glassCard()
-                    .padding(.horizontal, 40)
-
-                    // Actions
                     HStack(spacing: 12) {
-                        Button {
-                            IBHaptics.medium()
-                            showReview = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "play.fill")
-                                Text("Begin Session")
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .disabled(studySessions.isEmpty || dueCardsCount == 0)
-
-                        Button {
-                            IBHaptics.soft()
-                            showGuide = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "book.fill")
-                                Text("Study Guide")
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+                        StudioMetricTile(value: "\(dueCardsCount)", label: "Due now", symbol: "clock.badge.exclamationmark", tint: dueCardsCount == 0 ? IBColors.success : IBColors.coral, detail: dueCardsCount == 0 ? "No urgent cards" : "Ready for recall")
+                        StudioMetricTile(value: "\(eligibleCount)", label: "Review pool", symbol: "square.stack.fill", tint: IBColors.electricBlue, detail: "Cards from studied material")
+                        StudioMetricTile(value: studySessions.isEmpty ? "-" : "Ready", label: "Session status", symbol: "checkmark.seal.fill", tint: studySessions.isEmpty ? IBColors.tertiaryText : IBColors.teal, detail: studySessions.isEmpty ? "Study first" : "Start when focused")
                     }
-                    .padding(.horizontal, 40)
 
-                    Spacer()
+                    VStack(alignment: .leading, spacing: 16) {
+                        StudioSectionHeader("Your next review", subtitle: dueCardsCount == 0 ? "There is nothing scheduled for immediate review." : "Work through cards while recall is still effortful.", symbol: "play.rectangle.fill", tint: IBColors.electricBlue) {
+                            EmptyView()
+                        }
+
+                        HStack(alignment: .center, spacing: 18) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(dueCardsCount == 0 ? "Queue complete" : "Start a focused recall session")
+                                    .font(.title3.bold())
+                                    .foregroundStyle(IBColors.ink)
+                                Text("Each response updates scheduling and builds a more reliable picture of what you know.")
+                                    .font(.callout)
+                                    .foregroundStyle(IBColors.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 20)
+                            VStack(spacing: 10) {
+                                Button {
+                                    IBHaptics.medium()
+                                    showReview = true
+                                } label: {
+                                    Label("Begin review", systemImage: "play.fill")
+                                        .frame(minWidth: 160)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.large)
+                                .tint(IBColors.electricBlue)
+                                .disabled(studySessions.isEmpty || dueCardsCount == 0)
+
+                                Button {
+                                    IBHaptics.soft()
+                                    showGuide = true
+                                } label: {
+                                    Label("Open study guide", systemImage: "book.closed.fill")
+                                        .frame(minWidth: 160)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                    .padding(20)
+                    .glassCard()
                 }
+                .frame(maxWidth: 960, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .background(.background)
+            .background(IBColors.canvas)
             .navigationTitle("Review")
             .sheet(isPresented: $showReview) { ReviewSessionView() }
             .sheet(isPresented: $showGuide) { StudyGuideView(subject: nil, mode: .preSession) }

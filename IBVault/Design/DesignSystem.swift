@@ -1,30 +1,36 @@
 import SwiftUI
 import AppKit
 
-// MARK: - Color Palette — macOS native with subtle accents
+// MARK: - Color Palette
 struct IBColors {
-    // Backgrounds
-    static let navy = Color(nsColor: .windowBackgroundColor)
-    static let deepNavy = Color(nsColor: .underPageBackgroundColor)
-    static let surface = Color(nsColor: .controlBackgroundColor)
-    static let surfaceHover = Color(nsColor: .controlBackgroundColor)
-    static let overlay = Color(nsColor: .textBackgroundColor)
+    // Neutral workspace surfaces
+    static let navy = Color(hex: "F4F6FA")
+    static let deepNavy = Color(hex: "E9EDF5")
+    static let surface = Color.white
+    static let surfaceHover = Color(hex: "EEF3FB")
+    static let overlay = Color.white
+    static let canvas = Color(hex: "F4F6FA")
+    static let ink = Color(hex: "1C2536")
+    static let subduedInk = Color(hex: "64708A")
 
     // Accents
-    static let electricBlue = Color(hex: "5BA4FF")
-    static let electricBlueLight = Color(hex: "8BC4FF")
-    static let electricBlueMuted = Color(hex: "3A6CA8")
+    static let electricBlue = Color(hex: "2868E8")
+    static let electricBlueLight = Color(hex: "8DB8FF")
+    static let electricBlueMuted = Color(hex: "2956AB")
+    static let teal = Color(hex: "10A89A")
+    static let coral = Color(hex: "F06A4D")
+    static let gold = Color(hex: "E39B16")
 
     // Text
-    static let softWhite = Color(nsColor: .labelColor)
-    static let secondaryText = Color(nsColor: .secondaryLabelColor)
-    static let mutedGray = Color(nsColor: .secondaryLabelColor)
-    static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
+    static let softWhite = ink
+    static let secondaryText = subduedInk
+    static let mutedGray = subduedInk
+    static let tertiaryText = Color(hex: "909BB0")
 
     // Cards
-    static let cardBackground = Color.white.opacity(0.96)
-    static let cardBorder = Color.black.opacity(0.08)
-    static let cardInnerShadow = Color.black.opacity(0.04)
+    static let cardBackground = Color.white
+    static let cardBorder = Color(hex: "DDE3EE")
+    static let cardInnerShadow = Color(hex: "1C2536").opacity(0.04)
 
     // Semantic
     static let success = Color(hex: "34D399")
@@ -40,7 +46,7 @@ struct IBColors {
     static let economicsColor = Color(hex: "FBB940")
     static let businessColor = Color(hex: "F06060")
 
-    // Gradients — subtle but visible
+    // Kept for the handful of data visualizations that benefit from a range.
     static let blueGradient = LinearGradient(
         colors: [Color(hex: "5BA4FF"), Color(hex: "7B6CF6")],
         startPoint: .topLeading, endPoint: .bottomTrailing
@@ -49,11 +55,6 @@ struct IBColors {
         colors: [Color.white.opacity(0.95), Color(hex: "F0F4FA")],
         startPoint: .top, endPoint: .bottom
     )
-    static let meshGlow = RadialGradient(
-        colors: [Color(hex: "5BA4FF").opacity(0.06), Color.clear],
-        center: .topTrailing, startRadius: 0, endRadius: 400
-    )
-
     static func subjectColor(for name: String) -> Color {
         switch name.lowercased() {
         case let n where n.contains("english"): return englishColor
@@ -87,7 +88,7 @@ extension Color {
 // MARK: - Typography
 struct IBTypography {
     static let largeTitle = Font.system(.largeTitle, design: .default, weight: .bold)
-    static let title = Font.system(.title2, design: .default, weight: .semibold)
+    static let title = Font.system(.title2, design: .default, weight: .bold)
     static let title3 = Font.system(.title3, design: .default, weight: .medium)
     static let headline = Font.system(.headline, design: .default, weight: .semibold)
     static let body = Font.system(.body, design: .default, weight: .regular)
@@ -95,8 +96,8 @@ struct IBTypography {
     static let caption = Font.system(.caption, design: .default, weight: .regular)
     static let captionBold = Font.system(.caption, design: .default, weight: .semibold)
     static let mono = Font.system(.footnote, design: .monospaced, weight: .medium)
-    static let stat = Font.system(size: 28, weight: .bold, design: .rounded)
-    static let bigStat = Font.system(size: 42, weight: .heavy, design: .rounded)
+    static let stat = Font.system(size: 26, weight: .bold, design: .rounded)
+    static let bigStat = Font.system(size: 40, weight: .bold, design: .rounded)
 }
 
 // MARK: - Spacing
@@ -112,10 +113,10 @@ struct IBSpacing {
 // MARK: - Corner Radii
 struct IBRadius {
     static let sm: CGFloat = 8
-    static let md: CGFloat = 10
-    static let lg: CGFloat = 14
-    static let xl: CGFloat = 18
-    static let card: CGFloat = 12
+    static let md: CGFloat = 8
+    static let lg: CGFloat = 8
+    static let xl: CGFloat = 8
+    static let card: CGFloat = 8
 }
 
 // MARK: - Glass Card Modifier
@@ -128,11 +129,11 @@ struct GlassCardModifier: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.background)
-                    .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+                    .fill(IBColors.surface)
+                    .shadow(color: IBColors.ink.opacity(0.045), radius: 12, x: 0, y: 4)
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius)
-                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                            .stroke(IBColors.cardBorder, lineWidth: 1)
                     )
             )
     }
@@ -201,8 +202,8 @@ struct IBHaptics {
 
 // MARK: - Animations
 struct IBAnimation {
-    static let snappy = Animation.spring(response: 0.3, dampingFraction: 0.7)
-    static let smooth = Animation.spring(response: 0.5, dampingFraction: 0.85)
+    static let snappy = Animation.spring(response: 0.28, dampingFraction: 0.78)
+    static let smooth = Animation.spring(response: 0.42, dampingFraction: 0.9)
     static let gentle = Animation.spring(response: 0.6, dampingFraction: 0.9)
     static let bounce = Animation.spring(response: 0.4, dampingFraction: 0.6)
     static let premium = Animation.interpolatingSpring(stiffness: 250, damping: 22)

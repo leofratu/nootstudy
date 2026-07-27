@@ -19,6 +19,167 @@ struct GlassCard<Content: View>: View {
     }
 }
 
+// MARK: - Study Studio Shell
+struct StudioPageHeader<Trailing: View>: View {
+    let eyebrow: String
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let tint: Color
+    let trailing: Trailing
+
+    init(
+        eyebrow: String,
+        title: String,
+        subtitle: String,
+        symbol: String,
+        tint: Color = IBColors.electricBlue,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.eyebrow = eyebrow
+        self.title = title
+        self.subtitle = subtitle
+        self.symbol = symbol
+        self.tint = tint
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: IBSpacing.lg) {
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: IBRadius.md)
+                        .fill(tint.opacity(0.12))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: symbol)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(eyebrow.uppercased())
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(tint)
+                    Text(title)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(IBColors.ink)
+                    Text(subtitle)
+                        .font(.callout)
+                        .foregroundStyle(IBColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 16)
+            trailing
+        }
+    }
+}
+
+struct StudioSectionHeader<Trailing: View>: View {
+    let title: String
+    let subtitle: String?
+    let symbol: String
+    let tint: Color
+    let trailing: Trailing
+
+    init(
+        _ title: String,
+        subtitle: String? = nil,
+        symbol: String,
+        tint: Color = IBColors.electricBlue,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.symbol = symbol
+        self.tint = tint
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(IBColors.ink)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(IBColors.secondaryText)
+                }
+            }
+            Spacer(minLength: 8)
+            trailing
+        }
+    }
+}
+
+struct StudioMetricTile: View {
+    let value: String
+    let label: String
+    let symbol: String
+    let tint: Color
+    var detail: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(tint)
+                Spacer()
+                Circle()
+                    .fill(tint.opacity(0.13))
+                    .frame(width: 8, height: 8)
+            }
+            Text(value)
+                .font(IBTypography.stat)
+                .foregroundStyle(IBColors.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(IBColors.ink)
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(IBColors.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: IBRadius.card)
+                .fill(IBColors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: IBRadius.card)
+                        .stroke(IBColors.cardBorder, lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct StudioPill: View {
+    let title: String
+    var tint: Color = IBColors.electricBlue
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(tint.opacity(0.11)))
+    }
+}
+
 // MARK: - Progress Ring
 struct ProgressRing: View {
     let progress: Double

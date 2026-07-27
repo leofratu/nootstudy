@@ -24,19 +24,43 @@ struct StudyPlannerView: View {
         allPlans.filter { $0.isCompleted }.suffix(10).reversed()
     }
 
+    private var weekSessionsCount: Int {
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast
+        return recentSessions.filter { $0.startDate >= weekAgo }.count
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    // Hero
-                    heroCard
-                        .padding(.horizontal, 28)
-                        .padding(.top, 24)
+                VStack(alignment: .leading, spacing: 22) {
+                    StudioPageHeader(
+                        eyebrow: "Study cadence",
+                        title: "Study sessions",
+                        subtitle: todayPlans.isEmpty ? "Plan a focused block, then turn the work into a review path you can trust." : "\(todayPlans.count) sessions are lined up for today.",
+                        symbol: "calendar.badge.clock",
+                        tint: IBColors.electricBlue
+                    ) {
+                        Button {
+                            showNewSession = true
+                            IBHaptics.medium()
+                        } label: {
+                            Label("New session", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .tint(IBColors.electricBlue)
+                        .keyboardShortcut("n", modifiers: .command)
+                    }
+
+                    HStack(spacing: 12) {
+                        StudioMetricTile(value: "\(todayPlans.count)", label: "Today", symbol: "calendar", tint: IBColors.coral, detail: todayPlans.isEmpty ? "Open space" : "Scheduled blocks")
+                        StudioMetricTile(value: "\(upcomingPlans.count)", label: "Upcoming", symbol: "clock.arrow.circlepath", tint: IBColors.electricBlue, detail: "On your horizon")
+                        StudioMetricTile(value: "\(weekSessionsCount)", label: "This week", symbol: "checkmark.seal.fill", tint: IBColors.teal, detail: "Completed sessions")
+                    }
 
                     // Today's Sessions
                     if !todayPlans.isEmpty {
                         todaySection
-                            .padding(.horizontal, 28)
                     }
 
                     // Calendar
@@ -45,42 +69,29 @@ struct StudyPlannerView: View {
                     } onDeletePlan: { plan in
                         deletePlan(plan)
                     }
-                    .padding(.horizontal, 28)
 
                     // Upcoming
                     if !upcomingPlans.isEmpty {
                         upcomingSection
-                            .padding(.horizontal, 28)
                     }
 
                     // Recent Sessions
                     if !recentSessions.isEmpty {
                         recentSessionsSection
-                            .padding(.horizontal, 28)
                     }
 
                     // Empty state
                     if allPlans.isEmpty && recentSessions.isEmpty {
                         emptyState
-                            .padding(.horizontal, 28)
                     }
-
-                    Spacer().frame(height: 24)
                 }
+                .frame(maxWidth: 1240, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .background(.background)
+            .background(IBColors.canvas)
             .navigationTitle("Study Planner")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showNewSession = true
-                        IBHaptics.medium()
-                    } label: {
-                        Label("New Session", systemImage: "plus.circle.fill")
-                    }
-                    .keyboardShortcut("n", modifiers: .command)
-                }
-            }
             .sheet(isPresented: $showNewSession) {
                 NewStudySessionView()
             }
