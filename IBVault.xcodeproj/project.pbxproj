@@ -29,9 +29,11 @@
 		41E7B7744D5CD36D9B634FBC /* MasteryCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46572174C584F070E8732E12 /* MasteryCalculator.swift */; };
 		449ADDA1C21F572EE1872A6C /* RankProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97A440310E8DA6021B68587A /* RankProgress.swift */; };
 		45434FB663C699EED77D88D0 /* HeatmapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CBE422BE3736077D85F83C /* HeatmapView.swift */; };
+		46DA567E643175829DC0B7E3 /* CurriculumNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BC5408382187E921958667 /* CurriculumNode.swift */; };
 		4B1165A2CB486FA1561FE6F7 /* RankLadderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E12470134DF352846A1C65 /* RankLadderTests.swift */; };
 		4EE359B5212AAD28F1FEE995 /* NewStudySessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 409B8A12578D6E3872B9C1FA /* NewStudySessionView.swift */; };
 		516BA94C13C65BF91F437613 /* UserProfileProgressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD42C0B0534AB6E78452E12D /* UserProfileProgressionTests.swift */; };
+		51A5C76B4FC9D8F91D4C75C9 /* AIProviderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED89DC549CFC92D3CC602B5 /* AIProviderService.swift */; };
 		5578BA0C7ABFA2BB8BFA742C /* StudySessionLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064639B44D2E11A0F608D188 /* StudySessionLogView.swift */; };
 		5839DFD9945FDFFFD3420911 /* ReviewQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */; };
 		5B101A4BDFFA73E0ECEEF03C /* IBVaultApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748EFDA3DB3CD359B6901879 /* IBVaultApp.swift */; };
@@ -44,6 +46,7 @@
 		6BD4E18E615166A8145BF3A6 /* ReviewSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC41E2FCE8152E61CC560A4 /* ReviewSessionView.swift */; };
 		6FF95C5BFE1FBBF4E953D44C /* AchievementRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D9F64EDCEC91CEE062BA91 /* AchievementRule.swift */; };
 		721EEBF0877E1F4567E0A3EF /* SnapshotBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A509D28E1909411F56D71D14 /* SnapshotBuilder.swift */; };
+		74F907BB6FD0CE9CFE7B5731 /* SyllabusSeederTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B3FD673726F5C6639FD59F /* SyllabusSeederTests.swift */; };
 		75B0AE4B67162FD8215E4AE4 /* ProgressionEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D9C160A12D3DD94F6B217B /* ProgressionEventTests.swift */; };
 		768CEC0E869FE2ED060B5BA6 /* StudyPlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58F51DF6D5AB6A271B71A698 /* StudyPlannerView.swift */; };
 		76B93476413B446A4D4B8361 /* SM2Engine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E463EB81821428C62738F69C /* SM2Engine.swift */; };
@@ -55,6 +58,7 @@
 		81E2B41579F98E5CB885B048 /* ReviewSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 998605218B33DF3291D5649D /* ReviewSession.swift */; };
 		85E962C86D710F46AC69BE33 /* ProgressionSnapshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14332BDDEDE3EF8620395333 /* ProgressionSnapshots.swift */; };
 		88C617B4923C1F3EEAF4EECA /* ProgressionEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBEF0F514FDAF02DADE26C08 /* ProgressionEvent.swift */; };
+		8AA1412E45B0177CD5ACDD18 /* AIConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B3D4F61BB1E0B086E7C6333 /* AIConfiguration.swift */; };
 		8C8382F7DB40BC3842F42288 /* MaterialsLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B48FD3453450F22FCB459C56 /* MaterialsLibraryView.swift */; };
 		91A938936F44803FE63A8926 /* SyllabusSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAFA961AFC5ABD8A57067A9 /* SyllabusSeeder.swift */; };
 		9A7E2BAF03F3737E7D051984 /* SubjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */; };
@@ -81,6 +85,7 @@
 		DF44F7CAB72D0F736F8EB8A5 /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1077C7C72B9221E2FE673F4D /* UserProfile.swift */; };
 		E264EF0CA59F55FD71234BFD /* ProficiencyTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8F717785BEE4366BA0A9CE7 /* ProficiencyTracker.swift */; };
 		E3D6D00A8390BB738BC0DD11 /* ARIAService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2DAFFA003DB6E67E0614B3 /* ARIAService.swift */; };
+		E672DA2CB1B64A1E5C43F1DF /* CardGeneratorServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1255C79E6636C1720B49819F /* CardGeneratorServiceTests.swift */; };
 		EB08D3857E24FAAA8B7B7A08 /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27ABD428FFA80120ECFA4F39 /* GeminiService.swift */; };
 		EFF3C377CDD0C92E7D20BB58 /* SubjectsGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C62F1C144442B95388DE982 /* SubjectsGridView.swift */; };
 		F0EF716789BD1BA7B4D79304 /* PredictiveGradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2563267FF51967587B50FEC5 /* PredictiveGradeView.swift */; };
@@ -110,6 +115,7 @@
 		0E125707A54C6B4B05D3DA55 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		1005F0902AD14EE836086B46 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		1077C7C72B9221E2FE673F4D /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
+		1255C79E6636C1720B49819F /* CardGeneratorServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardGeneratorServiceTests.swift; sourceTree = "<group>"; };
 		1340E54936B6170CB5F6D70F /* AchievementEvaluatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AchievementEvaluatorTests.swift; sourceTree = "<group>"; };
 		14332BDDEDE3EF8620395333 /* ProgressionSnapshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionSnapshots.swift; sourceTree = "<group>"; };
 		15D105C387E41396D66371BE /* ReviewScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScheduler.swift; sourceTree = "<group>"; };
@@ -126,6 +132,7 @@
 		32D17D7E917936131C22F2ED /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		32E59F06A5BB239E59A6F86C /* UnitState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitState.swift; sourceTree = "<group>"; };
 		349F1CBB7C178EC42E6B64F7 /* BackupListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupListView.swift; sourceTree = "<group>"; };
+		3B3D4F61BB1E0B086E7C6333 /* AIConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfiguration.swift; sourceTree = "<group>"; };
 		3EC41E2FCE8152E61CC560A4 /* ReviewSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSessionView.swift; sourceTree = "<group>"; };
 		409B8A12578D6E3872B9C1FA /* NewStudySessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewStudySessionView.swift; sourceTree = "<group>"; };
 		43594ABE6B0E41B86138E5D8 /* StudySession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudySession.swift; sourceTree = "<group>"; };
@@ -142,6 +149,7 @@
 		6240C9F2594DA0B2C567AB5F /* IBVault.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IBVault.entitlements; sourceTree = "<group>"; };
 		64457DA4883197D2A87251A1 /* ADHDMedicationTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADHDMedicationTrackerTests.swift; sourceTree = "<group>"; };
 		64866ADFA36E9AE318F56941 /* IBVault.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IBVault.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		67BC5408382187E921958667 /* CurriculumNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurriculumNode.swift; sourceTree = "<group>"; };
 		69F1ABD16621DF2227D783B7 /* ActiveStudySessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveStudySessionView.swift; sourceTree = "<group>"; };
 		70CC2F3B159CB0FFCD0C26E8 /* RecallModeSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecallModeSelector.swift; sourceTree = "<group>"; };
 		73711AF048136739D56C8EA9 /* LearningAnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningAnalyticsView.swift; sourceTree = "<group>"; };
@@ -178,6 +186,7 @@
 		C80E12FA09B76D5980E7D972 /* RankLadder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankLadder.swift; sourceTree = "<group>"; };
 		C950800C62B1C64FBEC68ED6 /* ARIAChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAChatView.swift; sourceTree = "<group>"; };
 		CB8501D80DB14A3C686E56FD /* SmartRecommendationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartRecommendationsView.swift; sourceTree = "<group>"; };
+		CED89DC549CFC92D3CC602B5 /* AIProviderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProviderService.swift; sourceTree = "<group>"; };
 		DEAFA961AFC5ABD8A57067A9 /* SyllabusSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllabusSeeder.swift; sourceTree = "<group>"; };
 		E25383C7CD4E2D5968FE6CA9 /* StudyGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyGuideView.swift; sourceTree = "<group>"; };
 		E463EB81821428C62738F69C /* SM2Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SM2Engine.swift; sourceTree = "<group>"; };
@@ -185,6 +194,7 @@
 		E7D91CC409D22DBFA50EB73E /* ProgressionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionService.swift; sourceTree = "<group>"; };
 		EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiServiceTests.swift; sourceTree = "<group>"; };
 		ED97CD9D635EAE250C259E5F /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		F2B3FD673726F5C6639FD59F /* SyllabusSeederTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllabusSeederTests.swift; sourceTree = "<group>"; };
 		F63A5FFC01907D815DF4632A /* SubjectTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectTrack.swift; sourceTree = "<group>"; };
 		F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectDetailView.swift; sourceTree = "<group>"; };
 		FBEF0F514FDAF02DADE26C08 /* ProgressionEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionEvent.swift; sourceTree = "<group>"; };
@@ -283,6 +293,8 @@
 		8F5D79102B8442B0BEAD7C7C /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				3B3D4F61BB1E0B086E7C6333 /* AIConfiguration.swift */,
+				CED89DC549CFC92D3CC602B5 /* AIProviderService.swift */,
 				5B2DAFFA003DB6E67E0614B3 /* ARIAService.swift */,
 				56F393C55ED8372446273171 /* BackupService.swift */,
 				446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */,
@@ -299,6 +311,7 @@
 			children = (
 				9A6EF035A1AF10213DA1FA65 /* Achievement.swift */,
 				2D455212D8B12319B3E8CAF7 /* ARIAMemory.swift */,
+				67BC5408382187E921958667 /* CurriculumNode.swift */,
 				02C83017CAF22B22F672B78C /* Grade.swift */,
 				998605218B33DF3291D5649D /* ReviewSession.swift */,
 				C7505D827B276C5D32D759F1 /* StudyActivity.swift */,
@@ -409,6 +422,7 @@
 			children = (
 				1340E54936B6170CB5F6D70F /* AchievementEvaluatorTests.swift */,
 				64457DA4883197D2A87251A1 /* ADHDMedicationTrackerTests.swift */,
+				1255C79E6636C1720B49819F /* CardGeneratorServiceTests.swift */,
 				EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */,
 				99D5763D72BAAB509FA60995 /* IBVaultAppCommandTests.swift */,
 				9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */,
@@ -421,6 +435,7 @@
 				967852FAB1BFC2229E6856AF /* ReviewQueueManagerTests.swift */,
 				1C985AD5D381BE3EFB7E3647 /* ReviewRankingPolicyTests.swift */,
 				8A8D6380A8672B03837E7602 /* SM2EngineTests.swift */,
+				F2B3FD673726F5C6639FD59F /* SyllabusSeederTests.swift */,
 				FD42C0B0534AB6E78452E12D /* UserProfileProgressionTests.swift */,
 				23E6259966D0700049C34520 /* XPCalculatorTests.swift */,
 			);
@@ -551,6 +566,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				06E28858193E70D583BC5CBD /* ADHDTrackerView.swift in Sources */,
+				8AA1412E45B0177CD5ACDD18 /* AIConfiguration.swift in Sources */,
+				51A5C76B4FC9D8F91D4C75C9 /* AIProviderService.swift in Sources */,
 				AFBE8C94BC9CF93C8ED856EA /* ARIAChatView.swift in Sources */,
 				D1B4F94E70DE26FC4291CC4B /* ARIAMemory.swift in Sources */,
 				FB2B6F45BCD2D53911D81EB8 /* ARIAMemoryView.swift in Sources */,
@@ -564,6 +581,7 @@
 				1C14D164525849C978E9410A /* CardGeneratorService.swift in Sources */,
 				FAB7006BDFEDD13413FBE915 /* Components.swift in Sources */,
 				257730CBAAE031461F3EB6AE /* ContentView.swift in Sources */,
+				46DA567E643175829DC0B7E3 /* CurriculumNode.swift in Sources */,
 				F103A1E5F76E417E026DA182 /* DashboardView.swift in Sources */,
 				9D1F50FAE95AFD66C6E15506 /* DesignSystem.swift in Sources */,
 				2E6108F8EA41CFBF27907F37 /* EffectivenessView.swift in Sources */,
@@ -623,6 +641,7 @@
 			files = (
 				AA3E53D96ABC17D25927D643 /* ADHDMedicationTrackerTests.swift in Sources */,
 				AE24B8801C0F6336AEC74B5A /* AchievementEvaluatorTests.swift in Sources */,
+				E672DA2CB1B64A1E5C43F1DF /* CardGeneratorServiceTests.swift in Sources */,
 				C9D8ED43FDE5725AB1813DC4 /* GeminiServiceTests.swift in Sources */,
 				BE4BADD3C35B1DD876A58D08 /* IBVaultAppCommandTests.swift in Sources */,
 				CB14102F60B00C86F69F0803 /* MasteryCalculatorTests.swift in Sources */,
@@ -635,6 +654,7 @@
 				337335D89ED5CB283CE47BBD /* ReviewQueueManagerTests.swift in Sources */,
 				6320833E1FA26BFA2DDFBDD8 /* ReviewRankingPolicyTests.swift in Sources */,
 				BA9298FBF83891072E409AA3 /* SM2EngineTests.swift in Sources */,
+				74F907BB6FD0CE9CFE7B5731 /* SyllabusSeederTests.swift in Sources */,
 				516BA94C13C65BF91F437613 /* UserProfileProgressionTests.swift in Sources */,
 				CFD87C7AC43C98573EFE0E67 /* XPCalculatorTests.swift in Sources */,
 			);

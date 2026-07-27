@@ -2,6 +2,15 @@ import Foundation
 import SwiftData
 
 // MARK: - Curriculum Structure
+enum IBCourseLevel: String, CaseIterable, Codable, Hashable, Sendable {
+    case sl = "SL"
+    case hl = "HL"
+
+    init(_ rawValue: String) {
+        self = rawValue.uppercased() == "HL" ? .hl : .sl
+    }
+}
+
 struct CurriculumUnit {
     let name: String
     let topics: [CurriculumTopic]
@@ -10,19 +19,37 @@ struct CurriculumUnit {
 struct CurriculumTopic {
     let name: String
     let subtopics: [String]
+    let levels: Set<IBCourseLevel>
+
+    init(
+        name: String,
+        subtopics: [String],
+        levels: Set<IBCourseLevel> = Set(IBCourseLevel.allCases)
+    ) {
+        self.name = name
+        self.subtopics = subtopics
+        self.levels = levels
+    }
+}
+
+struct CurriculumMetadata: Sendable {
+    let catalogVersion: String
+    let firstAssessment: String
+    let sourceTitle: String
+    let sourceURL: URL
 }
 
 struct SyllabusSeeder {
     static func seedIfNeeded(context: ModelContext) {
         let descriptor = FetchDescriptor<Subject>()
         let existingCount = (try? context.fetchCount(descriptor)) ?? 0
-        guard existingCount == 0 else { return }
-
-        let subjects = createSubjects()
-        for subject in subjects {
-            context.insert(subject)
+        if existingCount == 0 {
+            let subjects = createSubjects()
+            for subject in subjects {
+                context.insert(subject)
+            }
         }
-        try? context.save()
+        synchronizeCurriculum(context: context)
     }
 
     /// Returns the curriculum tree for a subject (used by TopicBrowserView)
@@ -38,8 +65,143 @@ struct SyllabusSeeder {
         }
     }
 
-    static func unitName(for subjectName: String, topicName: String) -> String? {
-        curriculum(for: subjectName)
+    static func curriculum(for subjectName: String, level: String) -> [CurriculumUnit] {
+        let selectedLevel = IBCourseLevel(level)
+        return curriculum(for: subjectName).compactMap { unit in
+            let topics = unit.topics.compactMap { topic -> CurriculumTopic? in
+                guard topic.levels.contains(selectedLevel) else { return nil }
+                let subtopics = topic.subtopics.compactMap { rawValue -> String? in
+                    let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.hasPrefix("HL:") {
+                        guard selectedLevel == .hl else { return nil }
+                        return trimmed.replacingOccurrences(of: "HL:", with: "", options: [.anchored])
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                    return trimmed
+                }
+                guard !subtopics.isEmpty else { return nil }
+                return CurriculumTopic(name: topic.name, subtopics: subtopics, levels: topic.levels)
+            }
+            guard !topics.isEmpty else { return nil }
+            return CurriculumUnit(name: unit.name, topics: topics)
+        }
+    }
+
+    static func metadata(for subjectName: String) -> CurriculumMetadata {
+        switch subjectName {
+        case "Biology":
+            return metadata(
+                firstAssessment: "2025",
+                title: "IB Diploma Programme Biology",
+                path: "programmes/diploma-programme/curriculum/sciences/biology/"
+            )
+        case "Mathematics AA":
+            return metadata(
+                firstAssessment: "2021",
+                title: "IB Mathematics: analysis and approaches",
+                path: "programmes/diploma-programme/curriculum/mathematics/"
+            )
+        case "Economics":
+            return metadata(
+                firstAssessment: "2022",
+                title: "IB Diploma Programme Economics",
+                path: "programmes/diploma-programme/curriculum/individuals-and-societies/economics/"
+            )
+        case "Business Management":
+            return metadata(
+                firstAssessment: "2024",
+                title: "IB Diploma Programme Business management",
+                path: "programmes/diploma-programme/curriculum/individuals-and-societies/business-management/"
+            )
+        case "English B":
+            return metadata(
+                firstAssessment: "2020",
+                title: "IB Diploma Programme Language acquisition",
+                path: "programmes/diploma-programme/curriculum/language-acquisition/"
+            )
+        case "Russian A Literature":
+            return metadata(
+                firstAssessment: "2021",
+                title: "IB Diploma Programme Language and literature",
+                path: "programmes/diploma-programme/curriculum/language-and-literature/"
+            )
+        default:
+            return metadata(firstAssessment: "Current", title: "IB Diploma Programme", path: "programmes/diploma-programme/curriculum/")
+        }
+    }
+
+    static func synchronizeCurriculum(context: ModelContext) {
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        let existingNodes = (try? context.fetch(FetchDescriptor<CurriculumNode>())) ?? []
+        var nodesByKey: [String: CurriculumNode] = [:]
+        for node in existingNodes {
+            if nodesByKey[node.stableKey] == nil {
+                nodesByKey[node.stableKey] = node
+            } else {
+                context.delete(node)
+            }
+        }
+        var expectedKeys = Set<String>()
+
+        for subject in subjects {
+            let metadata = metadata(for: subject.name)
+            for unit in curriculum(for: subject.name, level: subject.level) {
+                for topic in unit.topics {
+                    for subtopic in topic.subtopics {
+                        let key = CurriculumNode.stableKey(
+                            subjectName: subject.name,
+                            level: subject.level,
+                            unitName: unit.name,
+                            topicName: topic.name,
+                            subtopicName: subtopic
+                        )
+                        expectedKeys.insert(key)
+                        if let node = nodesByKey.removeValue(forKey: key) {
+                            node.catalogVersion = metadata.catalogVersion
+                            node.sourceTitle = metadata.sourceTitle
+                            node.sourceURLString = metadata.sourceURL.absoluteString
+                            node.updatedAt = Date()
+                        } else {
+                            context.insert(CurriculumNode(
+                                subjectName: subject.name,
+                                level: subject.level,
+                                unitName: unit.name,
+                                topicName: topic.name,
+                                subtopicName: subtopic,
+                                catalogVersion: metadata.catalogVersion,
+                                sourceTitle: metadata.sourceTitle,
+                                sourceURLString: metadata.sourceURL.absoluteString
+                            ))
+                        }
+                    }
+                }
+            }
+        }
+
+        for (key, node) in nodesByKey where !expectedKeys.contains(key) {
+            context.delete(node)
+        }
+
+        // Remove generic placeholder cards from early builds. They were topic
+        // indexes disguised as cards and distorted mastery and review queues.
+        let placeholderCards = ((try? context.fetch(FetchDescriptor<StudyCard>())) ?? []).filter {
+            $0.front.hasPrefix("What are the key concepts and learning objectives for ") &&
+                $0.back.hasPrefix("This topic covers:")
+        }
+        for card in placeholderCards {
+            card.subject?.cards.removeAll { $0.id == card.id }
+            context.delete(card)
+        }
+
+        do {
+            try context.save()
+        } catch {
+            assertionFailure("Failed to synchronize curriculum: \(error.localizedDescription)")
+        }
+    }
+
+    static func unitName(for subjectName: String, level: String? = nil, topicName: String) -> String? {
+        (level.map { curriculum(for: subjectName, level: $0) } ?? curriculum(for: subjectName))
             .first { unit in unit.topics.contains { $0.name == topicName } }?
             .name
     }
@@ -53,8 +215,9 @@ struct SyllabusSeeder {
         return names
     }
 
-    static func topic(named topicName: String, in subjectName: String) -> CurriculumTopic? {
-        for unit in curriculum(for: subjectName) {
+    static func topic(named topicName: String, in subjectName: String, level: String? = nil) -> CurriculumTopic? {
+        let units = level.map { curriculum(for: subjectName, level: $0) } ?? curriculum(for: subjectName)
+        for unit in units {
             if let topic = unit.topics.first(where: { $0.name == topicName }) {
                 return topic
             }
@@ -62,8 +225,17 @@ struct SyllabusSeeder {
         return nil
     }
 
-    static func subtopics(for subjectName: String, topicName: String) -> [String] {
-        topic(named: topicName, in: subjectName)?.subtopics ?? []
+    static func subtopics(for subjectName: String, level: String? = nil, topicName: String) -> [String] {
+        topic(named: topicName, in: subjectName, level: level)?.subtopics ?? []
+    }
+
+    private static func metadata(firstAssessment: String, title: String, path: String) -> CurriculumMetadata {
+        CurriculumMetadata(
+            catalogVersion: "2026.1 / first assessment \(firstAssessment)",
+            firstAssessment: firstAssessment,
+            sourceTitle: title,
+            sourceURL: URL(string: "https://www.ibo.org/\(path)")!
+        )
     }
 
     // MARK: - Create Subjects with Seed Cards
@@ -72,46 +244,24 @@ struct SyllabusSeeder {
         var subjects: [Subject] = []
 
         let english = Subject(name: "English B", level: "HL", accentColorHex: "8B5CF6")
-        seedFromCurriculum(english, curriculum: englishBCurriculum)
         subjects.append(english)
 
         let russian = Subject(name: "Russian A Literature", level: "SL", accentColorHex: "EC4899")
-        seedFromCurriculum(russian, curriculum: russianLitCurriculum)
         subjects.append(russian)
 
         let biology = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")
-        seedFromCurriculum(biology, curriculum: biologyCurriculum)
         subjects.append(biology)
 
         let math = Subject(name: "Mathematics AA", level: "SL", accentColorHex: "3B82F6")
-        seedFromCurriculum(math, curriculum: mathAACurriculum)
         subjects.append(math)
 
         let economics = Subject(name: "Economics", level: "HL", accentColorHex: "F59E0B")
-        seedFromCurriculum(economics, curriculum: economicsCurriculum)
         subjects.append(economics)
 
         let business = Subject(name: "Business Management", level: "HL", accentColorHex: "EF4444")
-        seedFromCurriculum(business, curriculum: businessCurriculum)
         subjects.append(business)
 
         return subjects
-    }
-
-    /// Seed one starter card per topic from the curriculum
-    private static func seedFromCurriculum(_ subject: Subject, curriculum: [CurriculumUnit]) {
-        for unit in curriculum {
-            for topic in unit.topics {
-                let card = StudyCard(
-                    topicName: topic.name,
-                    subtopic: unit.name,
-                    front: "What are the key concepts and learning objectives for \(topic.name) in IB \(subject.name)?",
-                    back: "This topic covers: \(topic.subtopics.joined(separator: ", ")). Use ARIA to generate detailed flashcards for each subtopic.",
-                    subject: subject
-                )
-                subject.cards.append(card)
-            }
-        }
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -657,6 +807,27 @@ struct SyllabusSeeder {
                 ]),
             ]),
 
+            CurriculumUnit(name: "Higher Level Extension", topics: [
+                CurriculumTopic(name: "Advanced Molecular Biology", subtopics: [
+                    "HL: DNA replication and the roles of polymerases",
+                    "HL: Transcription regulation and RNA processing",
+                    "HL: Translation, ribosome structure and polypeptide synthesis",
+                    "HL: Gene expression, epigenetics and environmental influence"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "Advanced Physiology", subtopics: [
+                    "HL: Muscle contraction and the sliding filament model",
+                    "HL: Kidney function, osmoregulation and hormonal control",
+                    "HL: Reproduction, gametogenesis and hormonal regulation",
+                    "HL: Immune response, antibody production and vaccination"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "Advanced Ecology and Evolution", subtopics: [
+                    "HL: Gene pools, allele frequencies and population change",
+                    "HL: Speciation mechanisms and reproductive isolation",
+                    "HL: Community succession and ecosystem stability",
+                    "HL: Statistical testing and interpretation in biological investigations"
+                ], levels: [.hl]),
+            ]),
+
             CurriculumUnit(name: "Additional Components", topics: [
                 CurriculumTopic(name: "Nature of Science", subtopics: [
                     "Observations and hypotheses",
@@ -814,6 +985,35 @@ struct SyllabusSeeder {
                 ]),
             ]),
 
+            CurriculumUnit(name: "Higher Level Extension", topics: [
+                CurriculumTopic(name: "Proof, Complex Numbers and Advanced Algebra", subtopics: [
+                    "HL: Proof by induction, contradiction and counterexample",
+                    "HL: Complex numbers in Cartesian, polar and exponential form",
+                    "HL: De Moivre's theorem and roots of complex numbers",
+                    "HL: Polynomial roots, sums and products of roots",
+                    "HL: Systems of linear equations and solution structure"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "Vectors and Advanced Geometry", subtopics: [
+                    "HL: Vector equations of lines and planes",
+                    "HL: Intersections, angles and distances in three dimensions",
+                    "HL: Scalar and vector products",
+                    "HL: Geometric transformations using matrices"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "Advanced Statistics and Probability", subtopics: [
+                    "HL: Discrete and continuous random variables",
+                    "HL: Binomial and Poisson distributions",
+                    "HL: Expectation, variance and linear combinations",
+                    "HL: Hypothesis testing and confidence intervals"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "Advanced Calculus", subtopics: [
+                    "HL: Implicit differentiation and related rates",
+                    "HL: Integration by parts and partial fractions",
+                    "HL: First-order differential equations and Euler's method",
+                    "HL: Maclaurin series and local approximation",
+                    "HL: Volumes of revolution and advanced optimisation"
+                ], levels: [.hl]),
+            ]),
+
             CurriculumUnit(name: "Internal Assessment", topics: [
                 CurriculumTopic(name: "Mathematical Exploration (IA)", subtopics: [
                     "Choosing a topic with personal engagement",
@@ -873,7 +1073,7 @@ struct SyllabusSeeder {
                 CurriculumTopic(name: "Higher Level Extension", subtopics: [
                     "Literary analysis and criticism", "Responding to literature",
                     "Comparative literary discussion", "Cultural context and texts"
-                ]),
+                ], levels: [.hl]),
             ]),
         ]
     }
@@ -916,6 +1116,12 @@ struct SyllabusSeeder {
                     "Connecting text to global issues", "Close textual analysis",
                     "Presentation and discussion skills", "Evidence-based argumentation"
                 ]),
+                CurriculumTopic(name: "Higher Level Essay", subtopics: [
+                    "HL: Formulating a focused line of inquiry",
+                    "HL: Sustaining a literary argument across 1,200-1,500 words",
+                    "HL: Integrating close analysis and broader authorial choices",
+                    "HL: Academic referencing and independent drafting"
+                ], levels: [.hl]),
                 CurriculumTopic(name: "Literary Analysis Skills", subtopics: [
                     "Figurative language and imagery", "Narrative voice and perspective",
                     "Characterisation techniques", "Symbolism and motifs",

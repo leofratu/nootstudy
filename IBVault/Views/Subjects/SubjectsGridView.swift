@@ -4,49 +4,80 @@ import SwiftData
 struct SubjectsGridView: View {
     @Query private var subjects: [Subject]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
+    @State private var searchText = ""
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 270, maximum: 420), spacing: 14)
+    ]
 
     private var sortedSubjects: [Subject] {
-        subjects.sorted { $0.name < $1.name }
+        subjects
+            .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
+            .sorted { $0.name < $1.name }
     }
 
-    let columns = [
-        GridItem(.adaptive(minimum: 260, maximum: 400), spacing: 16)
-    ]
+    private var averageMastery: Int {
+        guard !subjects.isEmpty else { return 0 }
+        return Int(subjects.map(\.masteryProgress).reduce(0, +) / Double(subjects.count) * 100)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                if sortedSubjects.isEmpty {
-                    VStack(spacing: 16) {
-                        Spacer().frame(height: 60)
-                        Image(systemName: "books.vertical")
-                            .font(.system(size: 48, weight: .light))
-                            .foregroundStyle(.tertiary)
-                        Text("No Subjects")
-                            .font(.title3.bold())
-                        Text("Complete onboarding or seed the syllabus to add your study subjects.")
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 350)
+                VStack(alignment: .leading, spacing: 22) {
+                    StudioPageHeader(
+                        eyebrow: "Knowledge library",
+                        title: "Subjects",
+                        subtitle: "Open a subject to see its curriculum, recall progress, and the next work worth doing.",
+                        symbol: "books.vertical.fill",
+                        tint: IBColors.englishColor
+                    ) {
+                        StudioPill(title: "\(subjects.count) SUBJECTS", tint: IBColors.englishColor)
                     }
-                    .frame(maxWidth: .infinity)
-                } else {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(sortedSubjects, id: \.id) { subject in
-                            NavigationLink(destination: SubjectDetailView(subject: subject)) {
-                                SubjectGridCard(
-                                    subject: subject,
-                                    dueCount: scopedDueCount(for: subject)
-                                )
+
+                    HStack(spacing: 12) {
+                        StudioMetricTile(value: "\(subjects.count)", label: "Enrolled", symbol: "books.vertical.fill", tint: IBColors.englishColor, detail: "Your IB syllabus")
+                        StudioMetricTile(value: "\(averageMastery)%", label: "Average mastery", symbol: "chart.bar.fill", tint: IBColors.teal, detail: "Across active subjects")
+                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + scopedDueCount(for: $1) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.coral, detail: "Within studied scopes")
+                    }
+
+                    StudioSectionHeader(
+                        searchText.isEmpty ? "Subject portfolio" : "Search results",
+                        subtitle: searchText.isEmpty ? "Mastery reflects active recall, not time spent." : "\(sortedSubjects.count) matching subjects",
+                        symbol: "square.grid.2x2.fill",
+                        tint: IBColors.electricBlue
+                    ) {
+                        EmptyView()
+                    }
+
+                    if sortedSubjects.isEmpty {
+                        EmptyStateView(
+                            icon: searchText.isEmpty ? "books.vertical" : "magnifyingglass",
+                            title: searchText.isEmpty ? "No subjects yet" : "No matching subjects",
+                            message: searchText.isEmpty ? "Complete onboarding or seed the syllabus to add your study subjects." : "Try a different subject name."
+                        )
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 14) {
+                            ForEach(sortedSubjects, id: \.id) { subject in
+                                NavigationLink {
+                                    SubjectDetailView(subject: subject)
+                                } label: {
+                                    SubjectGridCard(subject: subject, dueCount: scopedDueCount(for: subject))
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(24)
                 }
+                .frame(maxWidth: 1240, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .background(.background)
+            .background(IBColors.canvas)
             .navigationTitle("Subjects")
+            .searchable(text: $searchText, placement: .toolbar, prompt: "Find a subject")
         }
     }
 
@@ -60,76 +91,88 @@ struct SubjectsGridView: View {
     }
 }
 
-// MARK: - Subject Card
 struct SubjectGridCard: View {
     let subject: Subject
     let dueCount: Int
 
-    private var color: Color { Color(hex: subject.accentColorHex) }
+    private var tint: Color { Color(hex: subject.accentColorHex) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(color)
-                    .frame(width: 4, height: 24)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(tint.opacity(0.13))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: subjectSymbol)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(subject.name)
                         .font(.headline)
-                    Text(subject.level)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(IBColors.ink)
+                        .lineLimit(1)
+                    StudioPill(title: subject.level, tint: tint)
                 }
-
                 Spacer()
-
-                ProgressRing(
-                    progress: subject.masteryProgress,
-                    lineWidth: 3,
-                    size: 40,
-                    color: color
-                )
+                Text("\(Int(subject.masteryProgress * 100))%")
+                    .font(.system(size: 21, weight: .bold, design: .rounded))
+                    .foregroundStyle(tint)
             }
 
-            Divider()
-
-            // Stats row
-            HStack(spacing: 16) {
-                Label("\(subject.cards.count)", systemImage: "square.stack")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if dueCount > 0 {
-                    Label("\(dueCount) due", systemImage: "clock.badge.exclamationmark")
-                        .font(.caption.bold())
-                        .foregroundStyle(.orange)
-                } else {
-                    Label("All clear", systemImage: "checkmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Text("Mastery")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(IBColors.secondaryText)
+                    Spacer()
+                    Text(masteryLabel)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
                 }
-
-                Spacer()
-
-                // Proficiency breakdown mini
-                let breakdown = subject.overallProficiencyBreakdown
-                HStack(spacing: 2) {
-                    ForEach(ProficiencyLevel.allCases, id: \.self) { level in
-                        if let count = breakdown[level], count > 0 {
-                            Text(level.emoji)
-                                .font(.system(size: 10))
-                        }
-                    }
-                }
+                MasteryBar(progress: subject.masteryProgress, height: 6, color: tint)
             }
 
-            // Mastery bar
-            MasteryBar(progress: subject.masteryProgress, height: 5, color: color)
+            HStack(spacing: 14) {
+                Label("\(subject.cards.count) cards", systemImage: "square.stack")
+                Spacer()
+                Label(dueCount == 0 ? "Clear" : "\(dueCount) due", systemImage: dueCount == 0 ? "checkmark.circle.fill" : "clock.badge.exclamationmark")
+                    .foregroundStyle(dueCount == 0 ? IBColors.success : IBColors.coral)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(IBColors.secondaryText)
         }
-        .padding(16)
-        .glassCard()
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: IBRadius.card)
+                .fill(IBColors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: IBRadius.card)
+                        .stroke(IBColors.cardBorder, lineWidth: 1)
+                )
+        )
         .contentShape(Rectangle())
+    }
+
+    private var masteryLabel: String {
+        switch subject.masteryProgress {
+        case 0..<0.25: return "Starting"
+        case 0.25..<0.6: return "Building"
+        case 0.6..<0.85: return "Reliable"
+        default: return "Strong"
+        }
+    }
+
+    private var subjectSymbol: String {
+        switch subject.name {
+        case let name where name.contains("Math"): return "function"
+        case let name where name.contains("Biology"): return "leaf.fill"
+        case let name where name.contains("Economics"): return "chart.line.uptrend.xyaxis"
+        case let name where name.contains("Business"): return "briefcase.fill"
+        case let name where name.contains("English"): return "text.book.closed.fill"
+        default: return "book.closed.fill"
+        }
     }
 }

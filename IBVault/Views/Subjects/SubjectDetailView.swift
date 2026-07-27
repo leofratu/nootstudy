@@ -12,6 +12,11 @@ struct SubjectDetailView: View {
     private var color: Color { Color(hex: subject.accentColorHex) }
     private var sortedCards: [StudyCard] { subject.cards.sorted { $0.topicName < $1.topicName } }
     private var sortedGrades: [Grade] { subject.grades.sorted { $0.date > $1.date } }
+    private var curriculum: [CurriculumUnit] {
+        SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
+    }
+    private var curriculumTopicCount: Int { curriculum.flatMap(\.topics).count }
+    private var curriculumSubunitCount: Int { curriculum.flatMap(\.topics).flatMap(\.subtopics).count }
     private var reviewableDueCount: Int {
         let studiedScopes = StudySession.uniqueStudyScopes(from: studySessions)
             .filter { $0.subjectName == subject.name }
@@ -92,7 +97,8 @@ struct SubjectDetailView: View {
                 }
 
                 HStack(spacing: 16) {
-                    Label("\(subject.cards.count) topics", systemImage: "square.stack")
+                    Label("\(curriculumTopicCount) topics", systemImage: "square.stack")
+                    Label("\(curriculumSubunitCount) subunits", systemImage: "list.bullet.indent")
                     if reviewableDueCount > 0 {
                         Label("\(reviewableDueCount) due now", systemImage: "clock.badge.exclamationmark")
                             .foregroundStyle(.orange)
@@ -212,129 +218,74 @@ struct SubjectDetailView: View {
                 Text("Curriculum Mastery")
                     .font(.headline)
                 Spacer()
-                Text("\(subject.cards.count) cards")
+                Text("\(curriculumSubunitCount) subunits · \(subject.cards.count) cards")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if subject.cards.isEmpty {
-                HStack {
-                    Spacer()
-                    Text("No topics available yet. Browse curriculum to start.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 12)
-                    Spacer()
-                }
-            } else {
-                let topics = Dictionary(grouping: subject.cards, by: { $0.topicName })
-                    .sorted { 
-                        let mastery1 = ProficiencyTracker.masteryPercentage(for: subject, topicName: $0.key)
-                        let mastery2 = ProficiencyTracker.masteryPercentage(for: subject, topicName: $1.key)
-                        return mastery1 < mastery2
-                    }
+            ForEach(curriculum, id: \.name) { unit in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(unit.name)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(color)
+                        .textCase(.uppercase)
 
-                ForEach(topics, id: \.key) { topicName, topicCards in
-                    DisclosureGroup {
-                        let subtopics = Dictionary(grouping: topicCards, by: { $0.subtopic })
-                            .sorted { 
-                                let mastery1 = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: $0.key)
-                                let mastery2 = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: $1.key)
-                                return mastery1 < mastery2
-                            }
-
-                        VStack(spacing: 0) {
-                            ForEach(subtopics, id: \.key) { subtopicName, subCards in
-                                let subName = subtopicName.isEmpty ? "General" : subtopicName
-                                let subMastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: subtopicName)
-                                let dueCount = subCards.filter { $0.isDue }.count
-                                
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        HStack(spacing: 6) {
-                                            Text(subName)
-                                                .font(.callout)
-                                            if dueCount > 0 {
-                                                Text("\(dueCount) due")
-                                                    .font(.caption2)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(Capsule().fill(.orange.opacity(0.2)))
-                                                    .foregroundStyle(.orange)
-                                            }
-                                            if subMastery < 0.3 {
-                                                Text("Weak")
-                                                    .font(.caption2)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(Capsule().fill(.red.opacity(0.15)))
-                                                    .foregroundStyle(.red)
-                                            }
+                    ForEach(unit.topics, id: \.name) { topic in
+                        let topicCards = subject.cards.filter { $0.topicName == topic.name }
+                        let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topic.name)
+                        DisclosureGroup {
+                            VStack(spacing: 0) {
+                                ForEach(topic.subtopics, id: \.self) { subtopic in
+                                    let cards = topicCards.filter { $0.subtopic == subtopic }
+                                    let subMastery = ProficiencyTracker.masteryPercentage(
+                                        for: subject,
+                                        topicName: topic.name,
+                                        subtopic: subtopic
+                                    )
+                                    HStack(spacing: 10) {
+                                        Image(systemName: cards.isEmpty ? "circle" : "checkmark.circle.fill")
+                                            .foregroundStyle(cards.isEmpty ? Color.secondary : color)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(subtopic).font(.callout)
+                                            Text(cards.isEmpty ? "Ready for card generation" : "\(cards.count) cards · \(cards.filter(\.isDue).count) due")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
                                         }
-                                        Text("\(subCards.count) cards")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        if !cards.isEmpty {
+                                            Text("\(Int(subMastery * 100))%")
+                                                .font(.caption.weight(.bold))
+                                                .foregroundStyle(color)
+                                            MasteryBar(progress: subMastery, height: 4, color: color)
+                                                .frame(width: 54)
+                                        }
                                     }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 4) {
-                                        Text("\(Int(subMastery * 100))%")
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                                            .foregroundStyle(color)
-                                        MasteryBar(progress: subMastery, height: 4, color: color)
-                                            .frame(width: 60)
-                                    }
-                                }
-                                .padding(.vertical, 8)
-                                .padding(.leading, 12)
-                                
-                                if subtopicName != subtopics.last?.key {
-                                    Divider().padding(.leading, 12)
+                                    .padding(.vertical, 7)
+                                    .padding(.leading, 12)
                                 }
                             }
-                        }
-                        .padding(.top, 4)
-                        
-                    } label: {
-                        let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName)
-                        let dueCount = topicCards.filter { $0.isDue }.count
-                        
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
-                                    Text(topicName)
-                                        .font(.callout.weight(.medium))
+                        } label: {
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(topic.name)
+                                        .font(.callout.weight(.semibold))
                                         .foregroundStyle(.primary)
-                                    if mastery < 0.3 {
-                                        Circle()
-                                            .fill(.red)
-                                            .frame(width: 6, height: 6)
-                                    }
+                                    Text("\(topic.subtopics.count) subunits · \(topicCards.count) cards")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
-                                HStack(spacing: 8) {
-                                    Text("\(topicCards.count) cards")
-                                    Text("•")
-                                    Text("\(Int(mastery * 100))% mastered")
-                                    if dueCount > 0 {
-                                        Text("•")
-                                        Text("\(dueCount) due")
-                                            .foregroundStyle(.orange)
-                                    }
+                                Spacer()
+                                if !topicCards.isEmpty {
+                                    MasteryBar(progress: mastery, height: 5, color: color)
+                                        .frame(width: 76)
                                 }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                             }
-                            Spacer()
-                            MasteryBar(progress: mastery, height: 5, color: color)
-                                .frame(width: 80)
+                            .padding(.vertical, 3)
                         }
-                        .padding(.vertical, 4)
-                    }
-                    .tint(color)
-
-                    if topicName != topics.last?.key {
-                        Divider()
+                        .tint(color)
                     }
                 }
+                if unit.name != curriculum.last?.name { Divider() }
             }
         }
         .padding(16)

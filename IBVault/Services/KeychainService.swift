@@ -27,68 +27,102 @@ enum KeychainError: Error, LocalizedError {
 enum KeychainService {
     private static let service = "com.nootstudy.ibvault"
     private static let apiKeyAccount = "gemini_api_key"
-    
+    private static let junaliAPIKeyAccount = "junali_api_key"
     private static let userDefaultsFallbackKey = "gemini_api_key_fallback"
-    
+
     static func saveAPIKey(_ key: String) -> Bool {
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = trimmed.data(using: .utf8) else { return false }
-        
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: apiKeyAccount,
-            kSecValueData as String: data
-        ]
-        
-        SecItemDelete(query as CFDictionary)
-        
-        let status = SecItemAdd(query as CFDictionary, nil)
-        
-        if status == errSecSuccess {
-            UserDefaults.standard.set(trimmed, forKey: userDefaultsFallbackKey)
-            return true
-        }
-        
-        UserDefaults.standard.set(trimmed, forKey: userDefaultsFallbackKey)
-        return true
+        saveSecret(key, account: apiKeyAccount)
     }
-    
+
     static func loadAPIKey() -> String? {
+        if let key = loadSecret(account: apiKeyAccount) {
+            return key
+        }
+
+        // One-time migration from older builds that incorrectly persisted the
+        // Gemini key in UserDefaults. Never retain the plaintext fallback.
+        guard let legacy = UserDefaults.standard.string(forKey: userDefaultsFallbackKey), !legacy.isEmpty else {
+            return nil
+        }
+        let migrated = saveSecret(legacy, account: apiKeyAccount)
+        UserDefaults.standard.removeObject(forKey: userDefaultsFallbackKey)
+        return migrated ? legacy : nil
+    }
+
+    static func deleteAPIKey() -> Bool {
+        UserDefaults.standard.removeObject(forKey: userDefaultsFallbackKey)
+        return deleteSecret(account: apiKeyAccount)
+    }
+
+    static var hasAPIKey: Bool {
+        loadAPIKey()?.isEmpty == false
+    }
+
+    static func saveJunaliAPIKey(_ key: String) -> Bool {
+        saveSecret(key, account: junaliAPIKeyAccount)
+    }
+
+    static func loadJunaliAPIKey() -> String? {
+        loadSecret(account: junaliAPIKeyAccount)
+    }
+
+    static func deleteJunaliAPIKey() -> Bool {
+        deleteSecret(account: junaliAPIKeyAccount)
+    }
+
+    static var hasJunaliAPIKey: Bool {
+        loadJunaliAPIKey()?.isEmpty == false
+    }
+
+    private static func saveSecret(_ value: String, account: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return false }
+
+        let lookup: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        let updateStatus = SecItemUpdate(
+            lookup as CFDictionary,
+            [kSecValueData as String: data] as CFDictionary
+        )
+        if updateStatus == errSecSuccess { return true }
+        guard updateStatus == errSecItemNotFound else { return false }
+
+        var insertion = lookup
+        insertion[kSecValueData as String] = data
+        return SecItemAdd(insertion as CFDictionary, nil) == errSecSuccess
+    }
+
+    private static func loadSecret(account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: apiKeyAccount,
+            kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
-        
+
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        
-        if status == errSecSuccess,
-           let data = result as? Data,
-           let key = String(data: data, encoding: .utf8) {
-            return key
+
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let value = String(data: data, encoding: .utf8) else {
+            return nil
         }
-        
-        return UserDefaults.standard.string(forKey: userDefaultsFallbackKey)
+        return value
     }
-    
-    static func deleteAPIKey() -> Bool {
+
+    private static func deleteSecret(account: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: apiKeyAccount
+            kSecAttrAccount as String: account
         ]
-        
-        SecItemDelete(query as CFDictionary)
-        UserDefaults.standard.removeObject(forKey: userDefaultsFallbackKey)
-        
-        return true
-    }
-    
-    static var hasAPIKey: Bool {
-        loadAPIKey() != nil
+
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 }

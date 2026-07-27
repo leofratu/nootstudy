@@ -100,6 +100,11 @@ struct BackupService {
             try write(achievements.map(AchievementBackup.init), named: "achievements.json", into: backupDir, encoder: encoder)
             writtenFiles.append("achievements.json")
         }
+
+        if let unitStates = try? context.fetch(FetchDescriptor<UnitState>()) {
+            try write(unitStates.map(UnitStateBackup.init), named: "unit_states.json", into: backupDir, encoder: encoder)
+            writtenFiles.append("unit_states.json")
+        }
         
         let adhdSettings = ADHDMedicationSettings.loadFromDefaults()
         try write(ADHDMedicationBackup(from: adhdSettings), named: "adhd_medication.json", into: backupDir, encoder: encoder)
@@ -140,6 +145,8 @@ struct BackupService {
         clearAll(StudySession.self, context: context)
         clearAll(StudyPlan.self, context: context)
         clearAll(Achievement.self, context: context)
+        clearAll(UnitState.self, context: context)
+        clearAll(CurriculumNode.self, context: context)
 
         if let backup = decode(ProfileBackup.self, from: directory.appendingPathComponent("profile.json"), decoder: decoder) {
             context.insert(backup.toModel())
@@ -207,6 +214,12 @@ struct BackupService {
                 context.insert(backup.toModel())
             }
         }
+
+        if let backups = decode([UnitStateBackup].self, from: directory.appendingPathComponent("unit_states.json"), decoder: decoder) {
+            for backup in backups {
+                context.insert(backup.toModel())
+            }
+        }
         
         if let adhdBackup = decode(ADHDMedicationBackup.self, from: directory.appendingPathComponent("adhd_medication.json"), decoder: decoder) {
             let adhdSettings = adhdBackup.toSettings()
@@ -214,6 +227,7 @@ struct BackupService {
         }
 
         try context.save()
+        SyllabusSeeder.synchronizeCurriculum(context: context)
     }
 
     // MARK: - List Backups
@@ -332,6 +346,9 @@ struct CardBackup: Codable {
     let isCustom: Bool; let isAIGenerated: Bool?; let createdDate: Date
     let lastReviewedDate: Date?; let generationSource: String?
     let totalReviewCount: Int; let successfulReviewCount: Int
+    let hint: String?; let difficultyRaw: String?; let cognitiveSkillRaw: String?
+    let sourceTitle: String?; let sourceURLString: String?; let syllabusReference: String?
+    let adaptationReason: String?; let generationPromptVersion: Int?
 
     init(from c: StudyCard) {
         id = c.id; topicName = c.topicName; subtopic = c.subtopic; front = c.front; back = c.back
@@ -341,6 +358,9 @@ struct CardBackup: Codable {
         isAIGenerated = c.isAIGenerated; createdDate = c.createdDate
         lastReviewedDate = c.lastReviewedDate; generationSource = c.generationSource
         totalReviewCount = c.totalReviewCount; successfulReviewCount = c.successfulReviewCount
+        hint = c.hint; difficultyRaw = c.difficultyRaw; cognitiveSkillRaw = c.cognitiveSkillRaw
+        sourceTitle = c.sourceTitle; sourceURLString = c.sourceURLString; syllabusReference = c.syllabusReference
+        adaptationReason = c.adaptationReason; generationPromptVersion = c.generationPromptVersion
     }
 
     func toModel() -> StudyCard {
@@ -359,7 +379,26 @@ struct CardBackup: Codable {
         c.consecutiveCorrect = consecutiveCorrect
         c.createdDate = createdDate; c.lastReviewedDate = lastReviewedDate
         c.totalReviewCount = totalReviewCount; c.successfulReviewCount = successfulReviewCount
+        c.hint = hint; c.difficultyRaw = difficultyRaw; c.cognitiveSkillRaw = cognitiveSkillRaw
+        c.sourceTitle = sourceTitle; c.sourceURLString = sourceURLString; c.syllabusReference = syllabusReference
+        c.adaptationReason = adaptationReason; c.generationPromptVersion = generationPromptVersion
         return c
+    }
+}
+
+struct UnitStateBackup: Codable {
+    let subjectName: String
+    let unitName: String
+    let isTaught: Bool
+
+    init(from state: UnitState) {
+        subjectName = state.subjectName
+        unitName = state.unitName
+        isTaught = state.isTaught
+    }
+
+    func toModel() -> UnitState {
+        UnitState(subjectName: subjectName, unitName: unitName, isTaught: isTaught)
     }
 }
 

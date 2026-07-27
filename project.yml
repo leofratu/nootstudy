@@ -39,7 +39,10 @@ targets:
     entitlements:
       path: IBVault/IBVault.entitlements
       properties:
-        com.apple.security.app-sandbox: true
+        # Local Codex provider launches the user's authenticated Codex CLI.
+        # Re-enable App Sandbox for a store build and ship that provider through
+        # a separately signed helper/XPC service instead.
+        com.apple.security.app-sandbox: false
         com.apple.security.network.client: true
     settings:
       CODE_SIGN_IDENTITY: "-"

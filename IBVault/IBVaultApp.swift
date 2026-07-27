@@ -27,6 +27,7 @@ struct IBVaultApp: App {
             StudyPlan.self,
             SubjectTrack.self,
             UnitState.self,
+            CurriculumNode.self,
             WeeklyChallenge.self
         ], isAutosaveEnabled: true, isUndoEnabled: false)
         #if os(macOS)
@@ -141,6 +142,7 @@ struct RootView: View {
     @State private var hasAttemptedAutomaticBackup = false
     @State private var hasReconciledAchievements = false
     @State private var hasRecomputedProgression = false
+    @State private var hasSynchronizedCurriculum = false
 
     private var orderedProfiles: [UserProfile] {
         profiles.sorted { $0.id.uuidString < $1.id.uuidString }
@@ -174,9 +176,16 @@ struct RootView: View {
         // has a profile, so anything hung off the "no profile yet" path never
         // runs for them.
         .onAppear {
+            synchronizeCurriculumIfNeeded()
             reconcileAchievementsIfNeeded()
             recomputeProgressionIfNeeded()
         }
+    }
+
+    private func synchronizeCurriculumIfNeeded() {
+        guard !hasSynchronizedCurriculum else { return }
+        hasSynchronizedCurriculum = true
+        SyllabusSeeder.seedIfNeeded(context: context)
     }
 
     private func reconcileAchievementsIfNeeded() {

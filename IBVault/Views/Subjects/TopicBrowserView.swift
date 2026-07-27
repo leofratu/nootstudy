@@ -11,29 +11,74 @@ struct TopicBrowserView: View {
     @State private var generationCount = 10
     @State private var generationError: String?
     @State private var generatedCount: Int?
+    @State private var searchText = ""
 
     private var curriculum: [CurriculumUnit] {
-        SyllabusSeeder.curriculum(for: subject.name)
+        let full = SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return full }
+        return full.compactMap { unit in
+            let topics = unit.topics.compactMap { topic -> CurriculumTopic? in
+                if topic.name.localizedCaseInsensitiveContains(query) {
+                    return topic
+                }
+                let subtopics = topic.subtopics.filter { $0.localizedCaseInsensitiveContains(query) }
+                guard !subtopics.isEmpty else { return nil }
+                return CurriculumTopic(name: topic.name, subtopics: subtopics, levels: topic.levels)
+            }
+            guard unit.name.localizedCaseInsensitiveContains(query) || !topics.isEmpty else { return nil }
+            return CurriculumUnit(name: unit.name, topics: topics.isEmpty ? unit.topics : topics)
+        }
     }
+
+    private var metadata: CurriculumMetadata { SyllabusSeeder.metadata(for: subject.name) }
+
+    private var topicCount: Int { curriculum.flatMap(\.topics).count }
+    private var subtopicCount: Int { curriculum.flatMap(\.topics).flatMap(\.subtopics).count }
 
     private let cardCounts = [5, 10, 15, 20]
 
     var body: some View {
-        HSplitView {
-            // Left: Unit list
-            unitList
-                .frame(minWidth: 200, idealWidth: 220)
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(subject.name)
+                            .font(.title3.weight(.bold))
+                        StudioPill(title: subject.level, tint: Color(hex: subject.accentColorHex))
+                    }
+                    Text("\(topicCount) topics · \(subtopicCount) subunits · \(metadata.catalogVersion)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                TextField("Search curriculum", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 240)
+                Link(destination: metadata.sourceURL) {
+                    Label("IB source", systemImage: "arrow.up.right.square")
+                        .font(.caption.weight(.semibold))
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(IBColors.surface)
 
-            // Middle: Topic list
-            topicList
-                .frame(minWidth: 220, idealWidth: 260)
+            Divider()
 
-            // Right: Subtopics + generation
-            subtopicDetail
-                .frame(minWidth: 300, idealWidth: 400)
+            HSplitView {
+                unitList
+                    .frame(minWidth: 200, idealWidth: 220)
+
+                topicList
+                    .frame(minWidth: 220, idealWidth: 260)
+
+                subtopicDetail
+                    .frame(minWidth: 300, idealWidth: 400)
+            }
         }
         .frame(minWidth: 720, minHeight: 500)
-        .navigationTitle("\(subject.name) Curriculum")
+        .navigationTitle("Curriculum")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close") { dismiss() }
@@ -244,7 +289,7 @@ struct TopicBrowserView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(.background)
+        .background(IBColors.canvas)
     }
 
     // MARK: - Generate All Section
