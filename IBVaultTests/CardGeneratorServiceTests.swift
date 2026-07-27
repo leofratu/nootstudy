@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 import SwiftData
 @testable import IBVault
 
@@ -122,6 +123,41 @@ struct LocalCodexEventTests {
         let update = AIProviderService.parseCodexEvent(line)
 
         #expect(update?.error == "Saved login was rejected")
+    }
+
+    @Test("Codex identifies API-key login status")
+    func detectsAPIKeyLogin() {
+        #expect(AIProviderService.codexLoginUsesAPIKey("Logged in using an API key"))
+        #expect(!AIProviderService.codexLoginUsesAPIKey("Logged in using ChatGPT"))
+    }
+
+    @Test("API-key runs disable transport retries without changing ChatGPT runs")
+    func configuresFastAPIKeyFailure() {
+        let temporaryDirectory = URL(fileURLWithPath: "/tmp/ibvault-codex-test")
+        let finalMessageURL = temporaryDirectory.appendingPathComponent("final.md")
+        let apiKeyArguments = AIProviderService.codexArguments(
+            temporaryDirectory: temporaryDirectory,
+            finalMessageURL: finalMessageURL,
+            model: "gpt-5.6-sol",
+            reasoningEffort: "high",
+            verbosity: "medium",
+            webSearchMode: .cached,
+            usesAPIKeyAuthentication: true
+        )
+        let chatGPTArguments = AIProviderService.codexArguments(
+            temporaryDirectory: temporaryDirectory,
+            finalMessageURL: finalMessageURL,
+            model: "gpt-5.6-sol",
+            reasoningEffort: "high",
+            verbosity: "medium",
+            webSearchMode: .cached,
+            usesAPIKeyAuthentication: false
+        )
+
+        #expect(apiKeyArguments.contains("model_providers.ibvault-openai.request_max_retries=0"))
+        #expect(apiKeyArguments.contains("model_providers.ibvault-openai.stream_max_retries=0"))
+        #expect(apiKeyArguments.contains("model_providers.ibvault-openai.supports_websockets=false"))
+        #expect(!chatGPTArguments.contains("model_provider=\"ibvault-openai\""))
     }
 }
 

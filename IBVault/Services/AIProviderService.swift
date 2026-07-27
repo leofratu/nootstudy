@@ -37,6 +37,10 @@ struct AIProviderStatus: Sendable {
     let message: String
 }
 
+private struct CodexLoginStatus: Sendable {
+    let usesAPIKey: Bool
+}
+
 struct CodexEventUpdate: Equatable, Sendable {
     let status: String?
     let message: String?
@@ -176,18 +180,7 @@ enum AIProviderService {
         case .codexCLI:
             do {
                 let executable = try codexExecutableURL()
-                let result = try await runProcess(
-                    executableURL: executable,
-                    arguments: ["login", "status"],
-                    input: nil,
-                    timeout: 15
-                )
-                let detail = [result.stdout, result.stderr]
-                    .joined(separator: " ")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard result.exitCode == 0 else {
-                    return AIProviderStatus(isReady: false, message: detail.isEmpty ? "Codex is not signed in." : detail)
-                }
+                _ = try await codexLoginStatus(executableURL: executable)
                 _ = try await generateCodex(
                     messages: [GeminiMessage(role: "user", text: "Reply with READY.")],
                     systemInstruction: "This is a provider health check. Return only READY.",
@@ -406,6 +399,9 @@ enum AIProviderService {
 
                 do {
                     let executable = try codexExecutableURL()
+                    onStatus("Checking Local Codex sign-in")
+                    let loginStatus = try await codexLoginStatus(executableURL: executable)
+                    try Task.checkCancellation()
                     try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
                     defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
@@ -440,16 +436,16 @@ enum AIProviderService {
                         model: model,
                         reasoningEffort: reasoningEffort,
                         verbosity: verbosity,
-                        webSearchMode: webSearchMode
+                        webSearchMode: webSearchMode,
+                        usesAPIKeyAuthentication: loginStatus.usesAPIKey
                     )
                     process.environment = sanitizedCodexEnvironment()
                     process.standardOutput = stdoutPipe
                     process.standardError = stderrPipe
                     process.standardInput = stdinPipe
-                    processController.attach(process)
 
                     onStatus("Starting Local Codex")
-                    try process.run()
+                    try processController.run(process)
 
                     if let data = codexPrompt(
                         messages: messages,
@@ -515,15 +511,16 @@ enum AIProviderService {
         }
     }
 
-    private static func codexArguments(
+    static func codexArguments(
         temporaryDirectory: URL,
         finalMessageURL: URL,
         model: String,
         reasoningEffort: String,
         verbosity: String,
-        webSearchMode: AIWebSearchMode
+        webSearchMode: AIWebSearchMode,
+        usesAPIKeyAuthentication: Bool
     ) -> [String] {
-        [
+        var arguments = [
             "exec",
             "--ephemeral",
             "--ignore-user-config",
@@ -531,7 +528,25 @@ enum AIProviderService {
             "--skip-git-repo-check",
             "--sandbox", "read-only",
             "--cd", temporaryDirectory.path,
-            "--model", model,
+            "--model", model
+        ]
+
+        // API-key sessions use a dedicated provider so invalid credentials fail once
+        // instead of being retried over WebSocket and HTTP for nearly a minute.
+        if usesAPIKeyAuthentication {
+            arguments += [
+                "--config", "model_provider=\"ibvault-openai\"",
+                "--config", "model_providers.ibvault-openai.name=\"IBVault OpenAI\"",
+                "--config", "model_providers.ibvault-openai.base_url=\"https://api.openai.com/v1\"",
+                "--config", "model_providers.ibvault-openai.wire_api=\"responses\"",
+                "--config", "model_providers.ibvault-openai.requires_openai_auth=true",
+                "--config", "model_providers.ibvault-openai.request_max_retries=0",
+                "--config", "model_providers.ibvault-openai.stream_max_retries=0",
+                "--config", "model_providers.ibvault-openai.supports_websockets=false"
+            ]
+        }
+
+        arguments += [
             "--config", "model_reasoning_effort=\"\(reasoningEffort)\"",
             "--config", "model_verbosity=\"\(verbosity)\"",
             "--config", "web_search=\"\(webSearchMode.rawValue)\"",
@@ -539,6 +554,7 @@ enum AIProviderService {
             "--output-last-message", finalMessageURL.path,
             "-"
         ]
+        return arguments
     }
 
     private static func codexPrompt(
@@ -673,7 +689,7 @@ enum AIProviderService {
             .contains { lowercasedDetail.contains($0) }
         if authenticationFailure {
             return .codexNotAuthenticated(
-                "Codex CLI credentials were rejected. Run `codex logout`, then `codex login`, and retry."
+                "Codex CLI credentials were rejected. Sign in again, then retry this message."
             )
         }
         let bestDetail = eventDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -702,6 +718,39 @@ enum AIProviderService {
             return URL(fileURLWithPath: path)
         }
         throw AIProviderError.codexNotInstalled
+    }
+
+    private static func codexLoginStatus(executableURL: URL) async throws -> CodexLoginStatus {
+        let result = try await runProcess(
+            executableURL: executableURL,
+            arguments: ["login", "status"],
+            input: nil,
+            timeout: 12
+        )
+        let detail = [result.stdout, result.stderr]
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard result.exitCode == 0 else {
+            throw AIProviderError.codexNotAuthenticated(
+                detail.isEmpty
+                    ? "Codex CLI is not signed in. Run codex login, then retry."
+                    : detail
+            )
+        }
+        return CodexLoginStatus(
+            usesAPIKey: codexLoginUsesAPIKey(detail)
+        )
+    }
+
+    static func codexLoginUsesAPIKey(_ detail: String) -> Bool {
+        let normalized = detail.lowercased()
+        return normalized.contains("api key") || normalized.contains("api-key")
+    }
+
+    static func codexLoginCommand() throws -> String {
+        let executablePath = try codexExecutableURL().path
+        let quotedPath = "'" + executablePath.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        return "\(quotedPath) logout && \(quotedPath) login"
     }
 
     private static func normalizedBaseURL(_ rawValue: String) -> URL? {
@@ -819,6 +868,7 @@ enum AIProviderService {
         private let lock = NSLock()
         private var process: Process?
         private var timedOut = false
+        private var terminationRequested = false
 
         var didTimeOut: Bool {
             lock.lock()
@@ -826,14 +876,26 @@ enum AIProviderService {
             return timedOut
         }
 
-        func attach(_ process: Process) {
+        func run(_ process: Process) throws {
             lock.lock()
+            guard !terminationRequested else {
+                lock.unlock()
+                throw CancellationError()
+            }
             self.process = process
-            lock.unlock()
+            do {
+                try process.run()
+                lock.unlock()
+            } catch {
+                self.process = nil
+                lock.unlock()
+                throw error
+            }
         }
 
         func terminate(timedOut: Bool = false) {
             lock.lock()
+            terminationRequested = true
             if timedOut { self.timedOut = true }
             let process = self.process
             lock.unlock()

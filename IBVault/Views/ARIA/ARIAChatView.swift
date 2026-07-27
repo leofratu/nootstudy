@@ -3,6 +3,50 @@ import AppKit
 import SwiftData
 import SwiftUI
 
+private struct ARIAChatFailure: Identifiable {
+    let id: UUID
+    let sessionID: UUID?
+    let prompt: String?
+    let provider: AIProviderKind
+    let message: String
+    let needsCodexSignIn: Bool
+
+    init(
+        error: Error,
+        sessionID: UUID?,
+        prompt: String?,
+        provider: AIProviderKind
+    ) {
+        self.id = UUID()
+        self.sessionID = sessionID
+        self.prompt = prompt
+        self.provider = provider
+        self.message = error.localizedDescription
+        if let providerError = error as? AIProviderError,
+           case .codexNotAuthenticated = providerError {
+            self.needsCodexSignIn = true
+        } else {
+            self.needsCodexSignIn = false
+        }
+    }
+
+    init(
+        message: String,
+        sessionID: UUID?,
+        prompt: String? = nil,
+        provider: AIProviderKind,
+        needsCodexSignIn: Bool = false,
+        id: UUID = UUID()
+    ) {
+        self.id = id
+        self.sessionID = sessionID
+        self.prompt = prompt
+        self.provider = provider
+        self.message = message
+        self.needsCodexSignIn = needsCodexSignIn
+    }
+}
+
 struct ARIAChatView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \ARIAChatSession.updatedAt, order: .reverse) private var sessions: [ARIAChatSession]
@@ -19,8 +63,11 @@ struct ARIAChatView: View {
     @State private var inputText = ""
     @State private var streamingText = ""
     @State private var showMemory = false
-    @State private var errorMessage: String?
+    @State private var chatFailure: ARIAChatFailure?
     @State private var selectedSessionID: UUID?
+    @State private var activeSessionID: UUID?
+    @State private var activePrompt: String?
+    @State private var activeProvider = AIProviderKind.gemini
 
     private var visibleSessions: [ARIAChatSession] {
         sessions.filter { !$0.isArchived }
@@ -76,22 +123,31 @@ struct ARIAChatView: View {
                     if let selectedSession {
                         ARIASessionConversationView(
                             sessionID: selectedSession.id,
-                            isLoading: ariaService.isLoading,
+                            isLoading: ariaService.isLoading && activeSessionID == selectedSession.id,
                             currentStatus: ariaService.currentStatus,
-                            streamingText: streamingText
+                            streamingText: activeSessionID == selectedSession.id ? streamingText : "",
+                            failure: visibleFailure(for: selectedSession.id),
+                            onRetry: retryFailure,
+                            onReconnectCodex: reconnectCodex,
+                            onDismissFailure: dismissFailure
                         ) {
                             emptyState
                         }
                         .id(selectedSession.id)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .layoutPriority(1)
                     } else {
                         emptyState
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
 
                     Divider()
 
                     inputBar
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(IBColors.canvas)
             .navigationTitle(selectedSession?.title ?? "ARIA")
             .toolbar {
@@ -180,7 +236,6 @@ struct ARIAChatView: View {
                         Button {
                             selectedSessionID = session.id
                             streamingText = ""
-                            errorMessage = nil
                         } label: {
                             ARIAChatSessionRow(
                                 session: session,
@@ -208,6 +263,7 @@ struct ARIAChatView: View {
             }
         }
         .frame(width: 268)
+        .frame(maxHeight: .infinity)
         .background(IBColors.surface)
     }
 
@@ -250,37 +306,6 @@ struct ARIAChatView: View {
     // MARK: - Input Bar
     private var inputBar: some View {
         VStack(spacing: 9) {
-            if let err = errorMessage {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(IBColors.danger)
-                        .padding(.top, 1)
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(IBColors.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Button {
-                        errorMessage = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Dismiss error")
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 9)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(IBColors.danger.opacity(0.08))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(IBColors.danger.opacity(0.2), lineWidth: 1)
-                        )
-                )
-            }
-
             configurationRail
 
             HStack(alignment: .bottom, spacing: 10) {
@@ -290,24 +315,29 @@ struct ARIAChatView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .onSubmit { sendMessage(inputText) }
+                    .disabled(ariaService.isLoading)
 
                 Button {
-                    sendMessage(inputText)
+                    if ariaService.isLoading {
+                        cancelGeneration()
+                    } else {
+                        sendMessage(inputText)
+                    }
                 } label: {
-                    Image(systemName: "arrow.up")
+                    Image(systemName: ariaService.isLoading ? "stop.fill" : "arrow.up")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 32, height: 32)
                         .background(
                             Circle().fill(
-                                inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading
+                                inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !ariaService.isLoading
                                     ? IBColors.tertiaryText.opacity(0.45) : IBColors.electricBlue
                             )
                         )
                 }
                 .buttonStyle(.plain)
-                .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading)
-                .keyboardShortcut(.defaultAction)
+                .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !ariaService.isLoading)
+                .help(ariaService.isLoading ? "Stop response" : "Send message")
             }
             .padding(4)
             .background(
@@ -467,18 +497,126 @@ struct ARIAChatView: View {
     }
 
     private func sendMessage(_ text: String) {
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { return }
         guard let selectedSession else {
             bootstrapSessionsIfNeeded()
             return
         }
         persistSelectedConfiguration()
-        let msg = text; inputText = ""; streamingText = ""; errorMessage = nil; IBHaptics.light()
-        ariaService.sendMessage(msg, context: context, session: selectedSession,
+        inputText = ""
+        beginMessage(message, in: selectedSession, persistUserMessage: true)
+    }
+
+    private func beginMessage(
+        _ message: String,
+        in session: ARIAChatSession,
+        persistUserMessage: Bool
+    ) {
+        guard !ariaService.isLoading else { return }
+        let provider = selectedProvider
+        streamingText = ""
+        chatFailure = nil
+        activeSessionID = session.id
+        activePrompt = message
+        activeProvider = provider
+        IBHaptics.light()
+        ariaService.sendMessage(
+            message,
+            context: context,
+            session: session,
+            persistUserMessage: persistUserMessage,
             onToken: { partial in streamingText = partial },
-            onComplete: { _ in streamingText = "" },
-            onError: { error in errorMessage = error.localizedDescription; streamingText = "" }
+            onComplete: { _ in
+                streamingText = ""
+                activeSessionID = nil
+                activePrompt = nil
+            },
+            onError: { error in
+                chatFailure = ARIAChatFailure(
+                    error: error,
+                    sessionID: session.id,
+                    prompt: message,
+                    provider: provider
+                )
+                streamingText = ""
+                activeSessionID = nil
+                activePrompt = nil
+            }
         )
+    }
+
+    private func retryFailure(_ failure: ARIAChatFailure) {
+        guard !ariaService.isLoading,
+              let prompt = failure.prompt,
+              let sessionID = failure.sessionID,
+              let session = visibleSessions.first(where: { $0.id == sessionID }) else {
+            return
+        }
+        selectedSessionID = sessionID
+        persistSelectedConfiguration()
+        beginMessage(prompt, in: session, persistUserMessage: false)
+    }
+
+    private func cancelGeneration() {
+        guard ariaService.isLoading else { return }
+        let sessionID = activeSessionID
+        let prompt = activePrompt
+        let provider = activeProvider
+        ariaService.cancelCurrentRequest()
+        streamingText = ""
+        activeSessionID = nil
+        activePrompt = nil
+        chatFailure = ARIAChatFailure(
+            message: "Response stopped. Your message is saved and can be retried.",
+            sessionID: sessionID,
+            prompt: prompt,
+            provider: provider
+        )
+    }
+
+    private func visibleFailure(for sessionID: UUID) -> ARIAChatFailure? {
+        guard let chatFailure,
+              chatFailure.sessionID == nil || chatFailure.sessionID == sessionID else {
+            return nil
+        }
+        return chatFailure
+    }
+
+    private func dismissFailure(_ failure: ARIAChatFailure) {
+        guard chatFailure?.id == failure.id else { return }
+        chatFailure = nil
+    }
+
+    private func reconnectCodex(_ failure: ARIAChatFailure) {
+        do {
+            let command = try AIProviderService.codexLoginCommand()
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(command, forType: .string)
+
+            let terminalPaths = [
+                "/System/Applications/Utilities/Terminal.app",
+                "/Applications/Utilities/Terminal.app"
+            ]
+            guard let terminalPath = terminalPaths.first(where: { FileManager.default.fileExists(atPath: $0) }),
+                  NSWorkspace.shared.open(URL(fileURLWithPath: terminalPath)) else {
+                throw AIProviderError.processFailed("Could not open Terminal. The Codex sign-in command is on your clipboard.")
+            }
+
+            chatFailure = ARIAChatFailure(
+                message: "Terminal is open and the Codex sign-in command is copied. Paste it, finish the browser sign-in, then retry this message.",
+                sessionID: failure.sessionID,
+                prompt: failure.prompt,
+                provider: .codexCLI
+            )
+        } catch {
+            chatFailure = ARIAChatFailure(
+                error: error,
+                sessionID: failure.sessionID,
+                prompt: failure.prompt,
+                provider: .codexCLI
+            )
+        }
     }
 
     @MainActor
@@ -517,7 +655,11 @@ struct ARIAChatView: View {
                 try context.save()
             } catch {
                 context.rollback()
-                errorMessage = "Chat setup could not be saved: \(error.localizedDescription)"
+                chatFailure = ARIAChatFailure(
+                    message: "Chat setup could not be saved: \(error.localizedDescription)",
+                    sessionID: selectedSessionID,
+                    provider: selectedProvider
+                )
                 return
             }
         }
@@ -540,13 +682,17 @@ struct ARIAChatView: View {
             try context.save()
         } catch {
             context.rollback()
-            errorMessage = "The new chat could not be saved: \(error.localizedDescription)"
+            chatFailure = ARIAChatFailure(
+                message: "The new chat could not be saved: \(error.localizedDescription)",
+                sessionID: selectedSessionID,
+                provider: selectedProvider
+            )
             return
         }
         selectedSessionID = session.id
         inputText = ""
         streamingText = ""
-        errorMessage = nil
+        chatFailure = nil
     }
 
     @MainActor
@@ -563,7 +709,11 @@ struct ARIAChatView: View {
             try context.save()
         } catch {
             context.rollback()
-            errorMessage = "The chat could not be deleted: \(error.localizedDescription)"
+            chatFailure = ARIAChatFailure(
+                message: "The chat could not be deleted: \(error.localizedDescription)",
+                sessionID: selectedSessionID,
+                provider: selectedProvider
+            )
             return
         }
         if selectedSessionID == sessionID {
@@ -577,7 +727,7 @@ struct ARIAChatView: View {
             AIReasoningEffort(rawValue: reasoningEffortRaw) ?? .medium,
             for: provider
         ).rawValue
-        errorMessage = nil
+        chatFailure = nil
     }
 
     private func setSelectedModel(_ model: String) {
@@ -606,14 +756,40 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
     let isLoading: Bool
     let currentStatus: String
     let streamingText: String
+    let failure: ARIAChatFailure?
+    let onRetry: (ARIAChatFailure) -> Void
+    let onReconnectCodex: (ARIAChatFailure) -> Void
+    let onDismissFailure: (ARIAChatFailure) -> Void
     let emptyContent: EmptyContent
     @State private var lastStreamingScrollCount = 0
+    @State private var dismissedRecoveredFailureID: UUID?
+
+    private var displayedFailure: ARIAChatFailure? {
+        if let failure { return failure }
+        guard !isLoading,
+              let lastMessage = messages.last,
+              lastMessage.role == "user",
+              dismissedRecoveredFailureID != lastMessage.id else {
+            return nil
+        }
+        return ARIAChatFailure(
+            message: "ARIA did not finish this response. The saved message can be retried without creating a duplicate.",
+            sessionID: lastMessage.sessionID,
+            prompt: lastMessage.content,
+            provider: AIConfiguration.provider,
+            id: lastMessage.id
+        )
+    }
 
     init(
         sessionID: UUID,
         isLoading: Bool,
         currentStatus: String,
         streamingText: String,
+        failure: ARIAChatFailure?,
+        onRetry: @escaping (ARIAChatFailure) -> Void,
+        onReconnectCodex: @escaping (ARIAChatFailure) -> Void,
+        onDismissFailure: @escaping (ARIAChatFailure) -> Void,
         @ViewBuilder emptyContent: () -> EmptyContent
     ) {
         let selectedSessionID = sessionID
@@ -624,6 +800,10 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
         self.isLoading = isLoading
         self.currentStatus = currentStatus
         self.streamingText = streamingText
+        self.failure = failure
+        self.onRetry = onRetry
+        self.onReconnectCodex = onReconnectCodex
+        self.onDismissFailure = onDismissFailure
         self.emptyContent = emptyContent()
     }
 
@@ -646,6 +826,22 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
                             StreamingMessageRow(text: streamingText)
                                 .id("streaming")
                         }
+                    }
+
+                    if let failure = displayedFailure {
+                        ARIAChatFailureRow(
+                            failure: failure,
+                            onRetry: { onRetry(failure) },
+                            onReconnectCodex: { onReconnectCodex(failure) },
+                            onDismiss: {
+                                if self.failure?.id == failure.id {
+                                    onDismissFailure(failure)
+                                } else {
+                                    dismissedRecoveredFailureID = failure.id
+                                }
+                            }
+                        )
+                        .id(failure.id)
                     }
                 }
                 .padding(.horizontal, 24)
@@ -677,7 +873,86 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
                     proxy.scrollTo("streaming", anchor: .bottom)
                 }
             }
+            .onChange(of: displayedFailure?.id) { _, failureID in
+                guard let failureID else { return }
+                Task { @MainActor in
+                    await Task.yield()
+                    proxy.scrollTo(failureID, anchor: .bottom)
+                }
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct ARIAChatFailureRow: View {
+    let failure: ARIAChatFailure
+    let onRetry: () -> Void
+    let onReconnectCodex: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(IBColors.danger.opacity(0.1))
+                    .frame(width: 30, height: 30)
+                Image(systemName: "exclamationmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(IBColors.danger)
+            }
+
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 8) {
+                    Text("\(failure.provider.shortName) could not answer")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(IBColors.ink)
+                    Spacer(minLength: 8)
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Dismiss")
+                }
+
+                Text(failure.message)
+                    .font(.caption)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    if failure.needsCodexSignIn {
+                        Button(action: onReconnectCodex) {
+                            Label("Open sign-in", systemImage: "terminal")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+
+                    if failure.prompt != nil {
+                        Button(action: onRetry) {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: 680, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(IBColors.danger.opacity(0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(IBColors.danger.opacity(0.18), lineWidth: 1)
+                    )
+            )
+
+            Spacer(minLength: 20)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -10,6 +10,13 @@ class ARIAService {
     var currentStatus = ""
     var isOnline = true
     var suggestedPrompts: [String] = []
+    private var activeRequest: Task<Void, Never>?
+    private var activeRequestID: UUID?
+    private var retryActionSummary: (
+        sessionID: UUID,
+        prompt: String,
+        summary: ActionExecutionSummary
+    )?
 
     private let tokenThreshold = 12000
     private let maxMemoryItems = 8
@@ -219,37 +226,65 @@ class ARIAService {
         _ userMessage: String,
         context: ModelContext,
         session: ARIAChatSession,
+        persistUserMessage: Bool = true,
         onToken: @escaping (String) -> Void,
         onComplete: @escaping (String) -> Void,
         onError: @escaping (Error) -> Void
     ) {
+        guard activeRequestID == nil else { return }
+        let trimmedMessage = userMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedMessage.isEmpty else { return }
+
+        let requestID = UUID()
+        activeRequestID = requestID
         isLoading = true
         currentStreamText = ""
         currentStatus = "Preparing your study context"
 
-        // Save user message
-        let userChat = ChatMessage(role: "user", content: userMessage, sessionID: session.id)
-        updateSession(session, withUserMessage: userMessage)
-        context.insert(userChat)
-        do {
-            try context.save()
-        } catch {
-            isLoading = false
-            currentStatus = ""
-            onError(error)
-            return
+        if persistUserMessage {
+            retryActionSummary = nil
+            let userChat = ChatMessage(role: "user", content: trimmedMessage, sessionID: session.id)
+            updateSession(session, withUserMessage: trimmedMessage)
+            context.insert(userChat)
+            do {
+                try context.save()
+            } catch {
+                finishRequest(requestID)
+                onError(error)
+                return
+            }
         }
 
-        Task {
+        activeRequest = Task { [weak self] in
+            guard let self else { return }
+            defer { self.finishRequest(requestID) }
+
             do {
-                let queryProfile = analyzeQuery(userMessage)
+                try Task.checkCancellation()
+                let queryProfile = analyzeQuery(trimmedMessage)
                 let loggingContext = inferredLoggingContext(context: context, queryProfile: queryProfile)
                 self.currentStatus = "Checking requested app changes"
-                let actionSummary = try await self.planAndExecuteAppActions(
-                    for: userMessage,
-                    context: context,
-                    queryProfile: queryProfile
-                )
+                let actionSummary: ActionExecutionSummary
+                if !persistUserMessage,
+                   let cachedSummary = self.retryActionSummary,
+                   cachedSummary.sessionID == session.id,
+                   cachedSummary.prompt == trimmedMessage {
+                    actionSummary = cachedSummary.summary
+                } else {
+                    actionSummary = try await self.planAndExecuteAppActions(
+                        for: trimmedMessage,
+                        context: context,
+                        queryProfile: queryProfile
+                    )
+                    if !actionSummary.isEmpty {
+                        self.retryActionSummary = (
+                            sessionID: session.id,
+                            prompt: trimmedMessage,
+                            summary: actionSummary
+                        )
+                    }
+                }
+                try Task.checkCancellation()
 
                 // Build context
                 self.currentStatus = "Building your study context"
@@ -275,6 +310,7 @@ class ARIAService {
                 var pendingStreamCharacters = 0
 
                 for try await token in stream {
+                    try Task.checkCancellation()
                     Self.appendStreamChunk(token, to: &fullResponse)
                     pendingStreamCharacters += token.count
 
@@ -286,44 +322,37 @@ class ARIAService {
 
                     pendingStreamCharacters = 0
                     lastStreamUpdate = now
-                    await MainActor.run {
-                        self.currentStreamText = fullResponse
-                        onToken(fullResponse)
-                    }
-                }
-
-                await MainActor.run {
                     self.currentStreamText = fullResponse
                     onToken(fullResponse)
                 }
 
+                try Task.checkCancellation()
+                self.currentStreamText = fullResponse
+                onToken(fullResponse)
+
                 let finalizedResponse = Self.finalizeAssistantResponse(fullResponse)
+                guard !finalizedResponse.isEmpty else {
+                    throw AIProviderError.emptyResponse
+                }
 
                 // Save assistant response
-                let didSaveResponse = await MainActor.run { () -> Bool in
-                    let modelChat = ChatMessage(role: "model", content: finalizedResponse, sessionID: session.id)
-                    context.insert(modelChat)
-                    self.updateSession(session, withAssistantReply: finalizedResponse)
-                    do {
-                        try context.save()
-                        self.isLoading = false
-                        self.currentStatus = ""
-                        onComplete(finalizedResponse)
-                        return true
-                    } catch {
-                        context.delete(modelChat)
-                        self.isLoading = false
-                        self.currentStatus = ""
-                        onError(error)
-                        return false
-                    }
+                let modelChat = ChatMessage(role: "model", content: finalizedResponse, sessionID: session.id)
+                context.insert(modelChat)
+                self.updateSession(session, withAssistantReply: finalizedResponse)
+                do {
+                    try context.save()
+                    self.retryActionSummary = nil
+                    onComplete(finalizedResponse)
+                } catch {
+                    context.delete(modelChat)
+                    onError(error)
+                    return
                 }
-                guard didSaveResponse else { return }
 
                 Self.recordARIAChatExchange(
                     subjectName: loggingContext.subjectName,
                     topicNames: loggingContext.topicNames,
-                    userMessage: userMessage,
+                    userMessage: trimmedMessage,
                     assistantReply: finalizedResponse,
                     sourceReference: "ARIAService.sendMessage"
                 )
@@ -331,14 +360,30 @@ class ARIAService {
                 // Check if compaction needed
                 await checkAndCompact(context: context, sessionID: session.id)
 
+            } catch is CancellationError {
+                return
             } catch {
-                await MainActor.run {
-                    self.isLoading = false
-                    self.currentStatus = ""
-                    onError(error)
-                }
+                onError(error)
             }
         }
+    }
+
+    func cancelCurrentRequest() {
+        activeRequest?.cancel()
+        activeRequest = nil
+        activeRequestID = nil
+        isLoading = false
+        currentStreamText = ""
+        currentStatus = ""
+    }
+
+    private func finishRequest(_ requestID: UUID) {
+        guard activeRequestID == requestID else { return }
+        activeRequest = nil
+        activeRequestID = nil
+        isLoading = false
+        currentStreamText = ""
+        currentStatus = ""
     }
 
     @MainActor
@@ -394,11 +439,14 @@ class ARIAService {
         var failed: [String] = []
 
         for action in actions.prefix(4) {
+            try Task.checkCancellation()
             do {
                 if let summary = try await execute(action: action, context: context) {
                     try context.save()
                     completed.append(summary)
                 }
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 context.rollback()
                 failed.append(error.localizedDescription)
