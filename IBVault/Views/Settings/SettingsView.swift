@@ -46,6 +46,7 @@ struct SettingsView: View {
     @AppStorage("ariaProvider") private var selectedProviderRaw = AIProviderKind.gemini.rawValue
     @AppStorage("ariaReasoningEffort") private var reasoningEffortRaw = AIReasoningEffort.medium.rawValue
     @AppStorage("ariaVerbosity") private var verbosityRaw = AIResponseVerbosity.medium.rawValue
+    @AppStorage("ariaWebSearchMode") private var webSearchModeRaw = AIWebSearchMode.cached.rawValue
     @AppStorage("junaliBaseURL") private var junaliBaseURL = AIConfiguration.junaliDefaultBaseURL
     @AppStorage("codexCLIPath") private var codexCLIPath = ""
     @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
@@ -80,6 +81,13 @@ struct SettingsView: View {
         Binding(
             get: { AIResponseVerbosity(rawValue: verbosityRaw) ?? .medium },
             set: { verbosityRaw = $0.rawValue }
+        )
+    }
+
+    private var selectedWebSearchMode: Binding<AIWebSearchMode> {
+        Binding(
+            get: { AIWebSearchMode(rawValue: webSearchModeRaw) ?? .cached },
+            set: { webSearchModeRaw = $0.rawValue }
         )
     }
 
@@ -452,6 +460,21 @@ struct SettingsView: View {
             }
             .pickerStyle(.segmented)
 
+            if selectedProvider == .codexCLI {
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker("Web search", selection: selectedWebSearchMode) {
+                        ForEach(AIWebSearchMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(selectedWebSearchMode.wrappedValue.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if selectedProvider == .gemini {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Temperature: \(String(format: "%.1f", ariaTemperature))")
@@ -712,6 +735,7 @@ struct SettingsView: View {
         AIConfiguration.provider = selectedProvider
         AIConfiguration.reasoningEffort = selectedReasoningEffort.wrappedValue
         AIConfiguration.verbosity = selectedVerbosity.wrappedValue
+        AIConfiguration.webSearchMode = selectedWebSearchMode.wrappedValue
         AIConfiguration.junaliBaseURL = junaliBaseURL
         AIConfiguration.codexCLIPath = codexCLIPath
         AIConfiguration.setModel(activeModel.wrappedValue, for: selectedProvider)

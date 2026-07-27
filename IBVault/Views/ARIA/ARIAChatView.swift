@@ -10,6 +10,7 @@ struct ARIAChatView: View {
     @AppStorage("ariaChatSidebarVisible") private var isSidebarVisible = true
     @AppStorage("ariaProvider") private var selectedProviderRaw = AIProviderKind.gemini.rawValue
     @AppStorage("ariaReasoningEffort") private var reasoningEffortRaw = AIReasoningEffort.medium.rawValue
+    @AppStorage("ariaWebSearchMode") private var webSearchModeRaw = AIWebSearchMode.cached.rawValue
     @State private var ariaService = ARIAService()
     @State private var inputText = ""
     @State private var streamingText = ""
@@ -62,9 +63,8 @@ struct ARIAChatView: View {
                                 }
 
                                 if ariaService.isLoading, selectedSession != nil {
-                                    if streamingText.isEmpty {
-                                        thinkingIndicator
-                                    } else {
+                                    thinkingIndicator
+                                    if !streamingText.isEmpty {
                                         StreamingMessageRow(text: streamingText)
                                             .id("streaming")
                                     }
@@ -256,7 +256,7 @@ struct ARIAChatView: View {
             }
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("ARIA is thinking…")
+                Text(ariaService.currentStatus.isEmpty ? "Preparing your response…" : ariaService.currentStatus)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -281,6 +281,16 @@ struct ARIAChatView: View {
                 Text("\((AIReasoningEffort(rawValue: reasoningEffortRaw) ?? .medium).displayName) effort")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                if selectedProvider == .codexCLI {
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                    Label(
+                        (AIWebSearchMode(rawValue: webSearchModeRaw) ?? .cached).displayName,
+                        systemImage: "globe"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
                 Spacer()
             }
             .padding(.horizontal, 16)
@@ -369,7 +379,13 @@ struct ARIAChatView: View {
         }
 
         if didMutate {
-            try? context.save()
+            do {
+                try context.save()
+            } catch {
+                context.rollback()
+                errorMessage = "Chat setup could not be saved: \(error.localizedDescription)"
+                return
+            }
         }
 
         if selectedSessionID == nil {
@@ -386,7 +402,13 @@ struct ARIAChatView: View {
         }
         let session = ARIAChatSession()
         context.insert(session)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            errorMessage = "The new chat could not be saved: \(error.localizedDescription)"
+            return
+        }
         selectedSessionID = session.id
         inputText = ""
         streamingText = ""
@@ -403,7 +425,13 @@ struct ARIAChatView: View {
             }
         }
         context.delete(session)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            errorMessage = "The chat could not be deleted: \(error.localizedDescription)"
+            return
+        }
         if selectedSessionID == sessionID {
             selectedSessionID = visibleSessions.first(where: { $0.id != sessionID })?.id
         }

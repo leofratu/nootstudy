@@ -9,8 +9,10 @@ struct TopicBrowserView: View {
     @State private var selectedTopic: CurriculumTopic?
     @State private var isGenerating = false
     @State private var generationCount = 10
+    @State private var cardsPerSubtopic = 3
     @State private var generationError: String?
-    @State private var generatedCount: Int?
+    @State private var generationSuccessMessage: String?
+    @State private var generationProgress: String?
     @State private var searchText = ""
 
     private var curriculum: [CurriculumUnit] {
@@ -36,7 +38,7 @@ struct TopicBrowserView: View {
     private var topicCount: Int { curriculum.flatMap(\.topics).count }
     private var subtopicCount: Int { curriculum.flatMap(\.topics).flatMap(\.subtopics).count }
 
-    private let cardCounts = [5, 10, 15, 20]
+    private let coverageCardCounts = [2, 3, 5]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -244,7 +246,7 @@ struct TopicBrowserView: View {
                     if isGenerating {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
-                            Text("ARIA is generating flashcards…")
+                            Text(generationProgress ?? "ARIA is generating flashcards…")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -262,11 +264,11 @@ struct TopicBrowserView: View {
                         .padding(.horizontal, 20)
                     }
 
-                    if let count = generatedCount {
+                    if let message = generationSuccessMessage {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
-                            Text("\(count) cards generated successfully!")
+                            Text(message)
                                 .font(.callout)
                                 .foregroundStyle(.green)
                         }
@@ -303,19 +305,19 @@ struct TopicBrowserView: View {
             }
 
             HStack(spacing: 12) {
-                Picker("Cards per subtopic:", selection: $generationCount) {
-                    ForEach(cardCounts, id: \.self) { n in
-                        Text("\(n) cards").tag(n)
+                Picker("Cards per subunit", selection: $cardsPerSubtopic) {
+                    ForEach(coverageCardCounts, id: \.self) { n in
+                        Text("\(n) each").tag(n)
                     }
                 }
                 .frame(width: 200)
 
                 Button {
-                    generateCards(topic: topic.name, subtopic: "")
+                    generateCoverage(for: topic)
                 } label: {
                     HStack {
                         Image(systemName: "sparkles")
-                        Text("Generate \(generationCount) Cards")
+                        Text("Build Full Coverage")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -344,7 +346,8 @@ struct TopicBrowserView: View {
     private func generateCards(topic: String, subtopic: String) {
         isGenerating = true
         generationError = nil
-        generatedCount = nil
+        generationSuccessMessage = nil
+        generationProgress = subtopic.isEmpty ? "Generating cards for \(topic)…" : "Generating cards for \(subtopic)…"
         IBHaptics.light()
 
         Task {
@@ -360,18 +363,75 @@ struct TopicBrowserView: View {
                 await MainActor.run {
                     for card in cards {
                         context.insert(card)
-                        subject.cards.append(card)
                     }
-                    try? context.save()
-                    generatedCount = cards.count
-                    isGenerating = false
-                    IBHaptics.success()
+                    do {
+                        try context.save()
+                        generationSuccessMessage = "Generated \(cards.count) adaptive cards for this subunit."
+                        generationProgress = nil
+                        isGenerating = false
+                        IBHaptics.success()
+                    } catch {
+                        cards.forEach(context.delete)
+                        generationError = "Cards were generated but could not be saved: \(error.localizedDescription)"
+                        generationProgress = nil
+                        isGenerating = false
+                    }
                 }
             } catch {
                 await MainActor.run {
                     generationError = error.localizedDescription
+                    generationProgress = nil
                     isGenerating = false
                 }
+            }
+        }
+    }
+
+    private func generateCoverage(for topic: CurriculumTopic) {
+        isGenerating = true
+        generationError = nil
+        generationSuccessMessage = nil
+        generationProgress = "Preparing \(topic.subtopics.count) subunits…"
+        IBHaptics.light()
+
+        Task { @MainActor in
+            let result = await CardGeneratorService.generateCoverage(
+                subject: subject,
+                topic: topic,
+                cardsPerSubtopic: cardsPerSubtopic,
+                context: context
+            ) { current, total, subtopic in
+                generationProgress = "Subunit \(current) of \(total): \(subtopic)"
+            }
+
+            for card in result.cards {
+                context.insert(card)
+            }
+
+            do {
+                try context.save()
+                generationSuccessMessage = result.cards.isEmpty
+                    ? "All \(result.coveredSubtopics) subunits already meet the selected coverage."
+                    : "Generated \(result.cards.count) cards; \(result.coveredSubtopics) of \(topic.subtopics.count) subunits now meet the target."
+                if result.failures.isEmpty {
+                    generationError = nil
+                } else {
+                    let preview = result.failures.prefix(3).joined(separator: "\n")
+                    let remaining = result.failures.count - min(result.failures.count, 3)
+                    generationError = remaining > 0
+                        ? "\(preview)\n…and \(remaining) more subunits need attention."
+                        : preview
+                }
+                generationProgress = nil
+                isGenerating = false
+                if !result.cards.isEmpty || result.skippedSubtopics == topic.subtopics.count {
+                    IBHaptics.success()
+                }
+            } catch {
+                result.cards.forEach(context.delete)
+                generationError = "Generated coverage could not be saved: \(error.localizedDescription)"
+                generationProgress = nil
+                isGenerating = false
             }
         }
     }

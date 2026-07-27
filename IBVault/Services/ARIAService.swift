@@ -7,6 +7,7 @@ import SwiftUI
 class ARIAService {
     var isLoading = false
     var currentStreamText = ""
+    var currentStatus = ""
     var isOnline = true
     var suggestedPrompts: [String] = []
 
@@ -224,6 +225,7 @@ class ARIAService {
     ) {
         isLoading = true
         currentStreamText = ""
+        currentStatus = "Preparing your study context"
 
         // Save user message
         let userChat = ChatMessage(role: "user", content: userMessage, sessionID: session.id)
@@ -233,6 +235,7 @@ class ARIAService {
             try context.save()
         } catch {
             isLoading = false
+            currentStatus = ""
             onError(error)
             return
         }
@@ -241,6 +244,7 @@ class ARIAService {
             do {
                 let queryProfile = analyzeQuery(userMessage)
                 let loggingContext = inferredLoggingContext(context: context, queryProfile: queryProfile)
+                self.currentStatus = "Checking requested app changes"
                 let actionSummary = try await self.planAndExecuteAppActions(
                     for: userMessage,
                     context: context,
@@ -248,6 +252,7 @@ class ARIAService {
                 )
 
                 // Build context
+                self.currentStatus = "Building your study context"
                 var systemPrompt = await buildSystemPrompt(context: context, queryProfile: queryProfile)
                 if !actionSummary.isEmpty {
                     systemPrompt += "\n\n\(actionSummary.promptContext)\nReference these concrete changes in your reply briefly before giving any next-step guidance."
@@ -258,7 +263,12 @@ class ARIAService {
 
                 let stream = AIProviderService.streamContent(
                     messages: messages,
-                    systemInstruction: systemPrompt
+                    systemInstruction: systemPrompt,
+                    onStatus: { [weak self] status in
+                        Task { @MainActor in
+                            self?.currentStatus = status
+                        }
+                    }
                 )
 
                 var lastStreamUpdate = Date.distantPast
@@ -297,11 +307,13 @@ class ARIAService {
                     do {
                         try context.save()
                         self.isLoading = false
+                        self.currentStatus = ""
                         onComplete(finalizedResponse)
                         return true
                     } catch {
                         context.delete(modelChat)
                         self.isLoading = false
+                        self.currentStatus = ""
                         onError(error)
                         return false
                     }
@@ -322,6 +334,7 @@ class ARIAService {
             } catch {
                 await MainActor.run {
                     self.isLoading = false
+                    self.currentStatus = ""
                     onError(error)
                 }
             }
@@ -365,6 +378,7 @@ class ARIAService {
             - Prefer concrete subject names that exist in the provided app state.
             - Use ISO-8601 timestamps for scheduledAt.
             - Keep topics/subtopics arrays empty rather than inventing values.
+            - When the learner requests a whole topic, leave subtopics empty so the app can cover every real curriculum subunit.
             - Use frontText/backText when editing flashcards.
             - Use searchText only when the user gives identifying wording for a card or asks to clean up/delete cards.
             - For grade imports, copy the raw grade text into notes and include sourceName if it is obvious from the request.
@@ -382,15 +396,13 @@ class ARIAService {
         for action in actions.prefix(4) {
             do {
                 if let summary = try await execute(action: action, context: context) {
+                    try context.save()
                     completed.append(summary)
                 }
             } catch {
+                context.rollback()
                 failed.append(error.localizedDescription)
             }
-        }
-
-        if !completed.isEmpty || !failed.isEmpty {
-            try? context.save()
         }
 
         return ActionExecutionSummary(completed: completed, failed: failed)
@@ -678,37 +690,83 @@ class ARIAService {
         }
         let count = min(max(action.cardCount ?? 10, 1), 40)
         var generatedTotal = 0
+        var alreadyCoveredSubtopics = 0
+        var generationFailures: [String] = []
 
         for topic in topics {
             let validSubtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, subjectLevel: subject.level, topics: [topic])
-            let cards = try await CardGeneratorService.generateCards(
-                subject: subject,
-                topicName: topic,
-                subtopic: validSubtopics.joined(separator: ", "),
-                count: count,
-                context: context
-            )
+            if validSubtopics.isEmpty,
+               let curriculumTopic = SyllabusSeeder.topic(named: topic, in: subject.name, level: subject.level),
+               !curriculumTopic.subtopics.isEmpty {
+                let targetPerSubtopic = max(
+                    Int(ceil(Double(count) / Double(curriculumTopic.subtopics.count))),
+                    1
+                )
+                let result = await CardGeneratorService.generateCoverage(
+                    subject: subject,
+                    topic: curriculumTopic,
+                    cardsPerSubtopic: targetPerSubtopic,
+                    context: context,
+                    onProgress: { _, _, _ in }
+                )
+                result.cards.forEach(context.insert)
+                generatedTotal += result.cards.count
+                alreadyCoveredSubtopics += result.skippedSubtopics
+                generationFailures.append(contentsOf: result.failures.map { "\(topic) — \($0)" })
 
-            for card in cards {
-                context.insert(card)
-                subject.cards.append(card)
+                ARIAService.recordFlashcardGeneration(
+                    subjectName: subject.name,
+                    topicName: topic,
+                    subtopicName: "Full curriculum coverage",
+                    generatedCards: result.cards.map { ($0.front, $0.back) },
+                    sourceReference: "ARIAService.executeGenerateFlashcards"
+                )
+                continue
             }
-            generatedTotal += cards.count
 
-            ARIAService.recordFlashcardGeneration(
-                subjectName: subject.name,
-                topicName: topic,
-                subtopicName: validSubtopics.joined(separator: ", "),
-                generatedCards: cards.map { ($0.front, $0.back) },
-                sourceReference: "ARIAService.executeGenerateFlashcards"
-            )
+            let generationTargets = validSubtopics.isEmpty ? [""] : validSubtopics
+            let cardsPerTarget = max(Int(ceil(Double(count) / Double(generationTargets.count))), 1)
+            for subtopic in generationTargets {
+                do {
+                    let cards = try await CardGeneratorService.generateCards(
+                        subject: subject,
+                        topicName: topic,
+                        subtopic: subtopic,
+                        count: cardsPerTarget,
+                        context: context
+                    )
+                    cards.forEach(context.insert)
+                    generatedTotal += cards.count
+
+                    ARIAService.recordFlashcardGeneration(
+                        subjectName: subject.name,
+                        topicName: topic,
+                        subtopicName: subtopic,
+                        generatedCards: cards.map { ($0.front, $0.back) },
+                        sourceReference: "ARIAService.executeGenerateFlashcards"
+                    )
+                } catch {
+                    let label = subtopic.isEmpty ? topic : "\(topic) — \(subtopic)"
+                    generationFailures.append("\(label): \(error.localizedDescription)")
+                }
+            }
         }
 
-        guard generatedTotal > 0 else {
-            throw NSError(domain: "ARIAService", code: 5, userInfo: [NSLocalizedDescriptionKey: "ARIA did not generate any flashcards for that request."])
+        guard generatedTotal > 0 || alreadyCoveredSubtopics > 0 else {
+            let detail = generationFailures.first ?? "ARIA did not generate any flashcards for that request."
+            throw NSError(domain: "ARIAService", code: 5, userInfo: [NSLocalizedDescriptionKey: detail])
         }
 
-        return "Generated \(generatedTotal) flashcards for \(subject.name) across \(topics.joined(separator: ", "))."
+        var summary = generatedTotal > 0
+            ? "Generated \(generatedTotal) adaptive flashcards for \(subject.name) across \(topics.joined(separator: ", "))."
+            : "The requested \(subject.name) subunits already meet the selected card coverage."
+        if alreadyCoveredSubtopics > 0 {
+            summary += " \(alreadyCoveredSubtopics) subunits already had enough cards."
+        }
+        if !generationFailures.isEmpty {
+            summary += " \(generationFailures.count) subunits still need attention."
+        }
+        return summary
     }
 
     private struct ParsedGradeImport {
@@ -1830,8 +1888,9 @@ class ARIAService {
                 context.delete(msg)
             }
 
-            try? context.save()
+            try context.save()
         } catch {
+            context.rollback()
             print("Compaction failed: \(error)")
         }
     }

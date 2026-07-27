@@ -37,6 +37,12 @@ struct AIProviderStatus: Sendable {
     let message: String
 }
 
+struct CodexEventUpdate: Equatable, Sendable {
+    let status: String?
+    let message: String?
+    let error: String?
+}
+
 enum AIProviderService {
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
@@ -84,31 +90,53 @@ enum AIProviderService {
 
     static func streamContent(
         messages: [GeminiMessage],
-        systemInstruction: String
+        systemInstruction: String,
+        onStatus: @escaping @Sendable (String) -> Void = { _ in }
     ) -> AsyncThrowingStream<String, Error> {
-        if AIConfiguration.provider == .gemini,
-           let apiKey = KeychainService.loadAPIKey(),
-           !apiKey.isEmpty {
+        switch AIConfiguration.provider {
+        case .gemini:
+            guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
+                return failedStream(AIProviderError.missingCredential(provider: .gemini))
+            }
+            onStatus("Generating with Gemini")
             return GeminiService.streamContent(
                 messages: messages,
                 systemInstruction: systemInstruction,
                 apiKey: apiKey
             )
-        }
-
-        return AsyncThrowingStream { continuation in
-            Task {
-                do {
-                    let response = try await generateContent(
-                        messages: messages,
-                        systemInstruction: systemInstruction
-                    )
-                    continuation.yield(response)
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
+        case .junali:
+            return AsyncThrowingStream { continuation in
+                let task = Task {
+                    do {
+                        onStatus("Contacting Junali")
+                        let response = try await generateJunali(
+                            messages: messages,
+                            systemInstruction: systemInstruction,
+                            model: AIConfiguration.model(for: .junali),
+                            timeout: 120
+                        )
+                        continuation.yield(response)
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
                 }
+                continuation.onTermination = { _ in task.cancel() }
             }
+        case .codexCLI:
+            return streamCodex(
+                messages: messages,
+                systemInstruction: systemInstruction,
+                model: AIConfiguration.model(for: .codexCLI),
+                timeout: 180,
+                onStatus: onStatus
+            )
+        }
+    }
+
+    private static func failedStream(_ error: Error) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish(throwing: error)
         }
     }
 
@@ -340,28 +368,213 @@ enum AIProviderService {
         model: String,
         timeout: TimeInterval
     ) async throws -> String {
-        let executable = try codexExecutableURL()
-        let temporaryDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("IBVault-Codex-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-        let finalMessageURL = temporaryDirectory.appendingPathComponent("final-response.md")
+        var response = ""
+        let stream = streamCodex(
+            messages: messages,
+            systemInstruction: systemInstruction,
+            model: model,
+            timeout: timeout
+        )
+        for try await chunk in stream {
+            if response.isEmpty {
+                response = chunk
+            } else {
+                response += "\n\n\(chunk)"
+            }
+        }
+        response = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !response.isEmpty else { throw AIProviderError.emptyResponse }
+        return response
+    }
 
+    private static func streamCodex(
+        messages: [GeminiMessage],
+        systemInstruction: String,
+        model: String,
+        timeout: TimeInterval,
+        onStatus: @escaping @Sendable (String) -> Void = { _ in }
+    ) -> AsyncThrowingStream<String, Error> {
+        let processController = ProcessController()
+        let webSearchMode = AIConfiguration.webSearchMode
+        let reasoningEffort = AIConfiguration.reasoningEffort.codexValue
+        let verbosity = AIConfiguration.verbosity.rawValue
+
+        return AsyncThrowingStream { continuation in
+            let task = Task.detached(priority: .userInitiated) {
+                let temporaryDirectory = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("IBVault-Codex-\(UUID().uuidString)", isDirectory: true)
+
+                do {
+                    let executable = try codexExecutableURL()
+                    try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+                    defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+                    let finalMessageURL = temporaryDirectory.appendingPathComponent("final-response.md")
+                    let process = Process()
+                    let stdoutPipe = Pipe()
+                    let stderrPipe = Pipe()
+                    let stdinPipe = Pipe()
+                    let lineBuffer = JSONLineBuffer()
+                    let stderrBuffer = ProcessOutputBuffer()
+                    let responseState = CodexResponseState()
+
+                    stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+                        let data = handle.availableData
+                        for line in lineBuffer.append(data) {
+                            handleCodexEvent(
+                                line,
+                                state: responseState,
+                                continuation: continuation,
+                                onStatus: onStatus
+                            )
+                        }
+                    }
+                    stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+                        stderrBuffer.append(handle.availableData)
+                    }
+
+                    process.executableURL = executable
+                    process.arguments = codexArguments(
+                        temporaryDirectory: temporaryDirectory,
+                        finalMessageURL: finalMessageURL,
+                        model: model,
+                        reasoningEffort: reasoningEffort,
+                        verbosity: verbosity,
+                        webSearchMode: webSearchMode
+                    )
+                    process.environment = sanitizedCodexEnvironment()
+                    process.standardOutput = stdoutPipe
+                    process.standardError = stderrPipe
+                    process.standardInput = stdinPipe
+                    processController.attach(process)
+
+                    onStatus("Starting Local Codex")
+                    try process.run()
+
+                    if let data = codexPrompt(
+                        messages: messages,
+                        systemInstruction: systemInstruction,
+                        webSearchMode: webSearchMode
+                    ).data(using: .utf8) {
+                        stdinPipe.fileHandleForWriting.write(data)
+                    }
+                    try? stdinPipe.fileHandleForWriting.close()
+
+                    let timeoutWork = DispatchWorkItem {
+                        processController.terminate(timedOut: true)
+                    }
+                    DispatchQueue.global(qos: .utility).asyncAfter(
+                        deadline: .now() + timeout,
+                        execute: timeoutWork
+                    )
+                    process.waitUntilExit()
+                    timeoutWork.cancel()
+
+                    stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                    stderrPipe.fileHandleForReading.readabilityHandler = nil
+                    for line in lineBuffer.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile()) + lineBuffer.flush() {
+                        handleCodexEvent(
+                            line,
+                            state: responseState,
+                            continuation: continuation,
+                            onStatus: onStatus
+                        )
+                    }
+                    stderrBuffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+
+                    guard !Task.isCancelled else {
+                        continuation.finish()
+                        return
+                    }
+                    guard process.terminationStatus == 0 else {
+                        throw codexProcessError(
+                            exitCode: process.terminationStatus,
+                            stderr: stderrBuffer.string(),
+                            eventDetail: responseState.errorDetail,
+                            timedOut: processController.didTimeOut
+                        )
+                    }
+
+                    if !responseState.didYieldMessage {
+                        let fallback = (try? String(contentsOf: finalMessageURL, encoding: .utf8))?
+                            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        guard !fallback.isEmpty else { throw AIProviderError.emptyResponse }
+                        continuation.yield(fallback)
+                    }
+                    onStatus("Response complete")
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { _ in
+                processController.terminate()
+                task.cancel()
+            }
+        }
+    }
+
+    private static func codexArguments(
+        temporaryDirectory: URL,
+        finalMessageURL: URL,
+        model: String,
+        reasoningEffort: String,
+        verbosity: String,
+        webSearchMode: AIWebSearchMode
+    ) -> [String] {
+        [
+            "exec",
+            "--ephemeral",
+            "--ignore-user-config",
+            "--ignore-rules",
+            "--skip-git-repo-check",
+            "--sandbox", "read-only",
+            "--cd", temporaryDirectory.path,
+            "--model", model,
+            "--config", "model_reasoning_effort=\"\(reasoningEffort)\"",
+            "--config", "model_verbosity=\"\(verbosity)\"",
+            "--config", "web_search=\"\(webSearchMode.rawValue)\"",
+            "--json",
+            "--output-last-message", finalMessageURL.path,
+            "-"
+        ]
+    }
+
+    private static func codexPrompt(
+        messages: [GeminiMessage],
+        systemInstruction: String,
+        webSearchMode: AIWebSearchMode
+    ) -> String {
         let transcript = messages.map { message in
             let role = message.role == "model" ? "ASSISTANT" : message.role.uppercased()
             return "\(role):\n\(message.text)"
         }.joined(separator: "\n\n")
-        let prompt = """
+        let sourcePolicy: String
+        switch webSearchMode {
+        case .disabled:
+            sourcePolicy = "Web search is disabled. Be explicit when the supplied context is insufficient for a reliable answer."
+        case .cached, .live:
+            sourcePolicy = "Use web search only when the learner asks for sources or the answer depends on external, current, or source-sensitive facts. Cite only pages actually retrieved, with direct links, and stop once enough evidence supports the answer."
+        }
+
+        return """
         Role: You are ARIA, a rigorous and encouraging International Baccalaureate study coach inside IBVault.
 
         Goal: Answer the learner's latest request accurately, at the requested IB subject level, using the supplied study context.
 
         Success criteria:
         - teach the concept, not merely state an answer
+        - adapt depth and command terms to the learner's SL or HL course
         - use clean Markdown and valid LaTeX delimiters: $...$ inline and $$...$$ for display equations
         - distinguish sourced facts from inference and never invent a citation
         - preserve the learner's requested output format
         - return only the final learner-facing response
+
+        Tool and source rules:
+        - \(sourcePolicy)
+        - use tools only when they materially improve correctness
+        - validate the final answer against the learner's request before stopping
 
         Constraints:
         - do not inspect local files or modify the machine
@@ -373,43 +586,105 @@ enum AIProviderService {
         CONVERSATION:
         \(transcript)
         """
+    }
 
-        let arguments = [
-            "exec",
-            "--ephemeral",
-            "--ignore-user-config",
-            "--ignore-rules",
-            "--skip-git-repo-check",
-            "--sandbox", "read-only",
-            "--cd", temporaryDirectory.path,
-            "--model", model,
-            "--config", "model_reasoning_effort=\"\(AIConfiguration.reasoningEffort.codexValue)\"",
-            "--config", "model_verbosity=\"\(AIConfiguration.verbosity.rawValue)\"",
-            "--config", "web_search=\"cached\"",
-            "--output-last-message", finalMessageURL.path,
-            "-"
-        ]
-        let result = try await runProcess(
-            executableURL: executable,
-            arguments: arguments,
-            input: prompt,
-            timeout: timeout
-        )
-        guard result.exitCode == 0 else {
-            let detail = result.stderr.lowercased()
-            let authenticationFailure = ["login", "authentication", "unauthorized", "invalid_api_key", "incorrect api key"]
-                .contains { detail.contains($0) }
-            if authenticationFailure {
-                throw AIProviderError.codexNotAuthenticated(
-                    "Codex CLI credentials were rejected. Run `codex logout`, then `codex login`, and retry."
-                )
-            }
-            throw AIProviderError.processFailed("Codex CLI exited with status \(result.exitCode).")
+    private static func handleCodexEvent(
+        _ line: String,
+        state: CodexResponseState,
+        continuation: AsyncThrowingStream<String, Error>.Continuation,
+        onStatus: @escaping @Sendable (String) -> Void
+    ) {
+        guard let update = parseCodexEvent(line) else { return }
+        if let status = update.status { onStatus(status) }
+        if let error = update.error { state.appendError(error) }
+        if let message = update.message {
+            state.markMessageYielded()
+            continuation.yield(message)
         }
-        let response = (try? String(contentsOf: finalMessageURL, encoding: .utf8))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !response.isEmpty else { throw AIProviderError.emptyResponse }
-        return response
+    }
+
+    static func parseCodexEvent(_ line: String) -> CodexEventUpdate? {
+        guard let data = line.data(using: .utf8),
+              let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = event["type"] as? String else {
+            return nil
+        }
+
+        switch type {
+        case "thread.started":
+            return CodexEventUpdate(status: "Local Codex session started", message: nil, error: nil)
+        case "turn.started":
+            return CodexEventUpdate(status: "Analyzing your study context", message: nil, error: nil)
+        case "turn.completed":
+            return CodexEventUpdate(status: "Finalizing the answer", message: nil, error: nil)
+        case "turn.failed", "error":
+            return CodexEventUpdate(status: nil, message: nil, error: eventMessage(from: event))
+        case "item.started", "item.updated", "item.completed":
+            guard let item = event["item"] as? [String: Any],
+                  let itemType = item["type"] as? String else {
+                return nil
+            }
+            let status: String?
+            switch itemType {
+            case "reasoning": status = "Working through the problem"
+            case "web_search": status = "Researching supporting sources"
+            case "command_execution": status = "Using a local study tool"
+            case "mcp_tool_call": status = "Using a connected tool"
+            case "plan": status = "Planning the response"
+            default: status = nil
+            }
+            let message: String?
+            if itemType == "agent_message", type == "item.completed" {
+                let text = (item["text"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                message = text.isEmpty ? nil : text
+            } else {
+                message = nil
+            }
+            guard status != nil || message != nil else { return nil }
+            return CodexEventUpdate(status: status, message: message, error: nil)
+        default:
+            return nil
+        }
+    }
+
+    private static func eventMessage(from event: [String: Any]) -> String {
+        if let message = event["message"] as? String { return message }
+        if let error = event["error"] as? [String: Any] {
+            return error["message"] as? String ?? ""
+        }
+        return ""
+    }
+
+    private static func codexProcessError(
+        exitCode: Int32,
+        stderr: String,
+        eventDetail: String,
+        timedOut: Bool
+    ) -> AIProviderError {
+        if timedOut {
+            return .processFailed("Local Codex timed out before completing the answer.")
+        }
+        let detail = [stderr, eventDetail]
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercasedDetail = detail.lowercased()
+        let authenticationFailure = ["login", "authentication", "unauthorized", "invalid_api_key", "incorrect api key"]
+            .contains { lowercasedDetail.contains($0) }
+        if authenticationFailure {
+            return .codexNotAuthenticated(
+                "Codex CLI credentials were rejected. Run `codex logout`, then `codex login`, and retry."
+            )
+        }
+        let bestDetail = eventDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            : eventDetail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let conciseDetail = String(bestDetail.prefix(500))
+        return .processFailed(
+            conciseDetail.isEmpty
+                ? "Codex CLI exited with status \(exitCode)."
+                : "Codex CLI failed: \(conciseDetail)"
+        )
     }
 
     private static func codexExecutableURL() throws -> URL {
@@ -465,6 +740,116 @@ enum AIProviderService {
         }
     }
 
+    private final class JSONLineBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data = Data()
+
+        func append(_ newData: Data) -> [String] {
+            guard !newData.isEmpty else { return [] }
+            lock.lock()
+            data.append(newData)
+            let lines = extractCompleteLines()
+            lock.unlock()
+            return lines
+        }
+
+        func flush() -> [String] {
+            lock.lock()
+            defer {
+                data.removeAll(keepingCapacity: false)
+                lock.unlock()
+            }
+            guard !data.isEmpty,
+                  let line = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !line.isEmpty else {
+                return []
+            }
+            return [line]
+        }
+
+        private func extractCompleteLines() -> [String] {
+            var lines: [String] = []
+            while let newlineIndex = data.firstIndex(of: 0x0A) {
+                let lineData = data[..<newlineIndex]
+                data.removeSubrange(...newlineIndex)
+                guard let line = String(data: lineData, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                      !line.isEmpty else {
+                    continue
+                }
+                lines.append(line)
+            }
+            return lines
+        }
+    }
+
+    private final class CodexResponseState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var yieldedMessage = false
+        private var errors: [String] = []
+
+        var didYieldMessage: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return yieldedMessage
+        }
+
+        var errorDetail: String {
+            lock.lock()
+            defer { lock.unlock() }
+            return errors.joined(separator: " ")
+        }
+
+        func markMessageYielded() {
+            lock.lock()
+            yieldedMessage = true
+            lock.unlock()
+        }
+
+        func appendError(_ message: String) {
+            guard !message.isEmpty else { return }
+            lock.lock()
+            errors.append(message)
+            lock.unlock()
+        }
+    }
+
+    private final class ProcessController: @unchecked Sendable {
+        private let lock = NSLock()
+        private var process: Process?
+        private var timedOut = false
+
+        var didTimeOut: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return timedOut
+        }
+
+        func attach(_ process: Process) {
+            lock.lock()
+            self.process = process
+            lock.unlock()
+        }
+
+        func terminate(timedOut: Bool = false) {
+            lock.lock()
+            if timedOut { self.timedOut = true }
+            let process = self.process
+            lock.unlock()
+            if process?.isRunning == true { process?.terminate() }
+        }
+    }
+
+    private static func sanitizedCodexEnvironment() -> [String: String] {
+        // A process-level API key can override the account selected by `codex login`.
+        var environment = ProcessInfo.processInfo.environment
+        for key in ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID", "OPENAI_PROJECT_ID", "CODEX_API_KEY"] {
+            environment.removeValue(forKey: key)
+        }
+        return environment
+    }
+
     private static func runProcess(
         executableURL: URL,
         arguments: [String],
@@ -488,14 +873,7 @@ enum AIProviderService {
 
             process.executableURL = executableURL
             process.arguments = arguments
-            // The local provider intentionally uses the account already authenticated by
-            // `codex login`. An inherited API key can override that login and make a
-            // desktop launch behave differently from the CLI the learner has configured.
-            var environment = ProcessInfo.processInfo.environment
-            for key in ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORG_ID", "OPENAI_PROJECT_ID", "CODEX_API_KEY"] {
-                environment.removeValue(forKey: key)
-            }
-            process.environment = environment
+            process.environment = sanitizedCodexEnvironment()
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
             if input != nil { process.standardInput = stdinPipe }

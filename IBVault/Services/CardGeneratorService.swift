@@ -11,6 +11,13 @@ struct CardGeneratorService {
         let reason: String
     }
 
+    struct CoverageResult {
+        let cards: [StudyCard]
+        let coveredSubtopics: Int
+        let skippedSubtopics: Int
+        let failures: [String]
+    }
+
     private struct GeneratedCardPayload: Decodable {
         let front: String
         let back: String
@@ -110,6 +117,60 @@ struct CardGeneratorService {
             return collectedCards
         }
         throw lastError ?? CardGeneratorError.noCardsGenerated
+    }
+
+    @MainActor
+    static func generateCoverage(
+        subject: Subject,
+        topic: CurriculumTopic,
+        cardsPerSubtopic: Int,
+        context: ModelContext,
+        onProgress: @escaping @MainActor (_ current: Int, _ total: Int, _ subtopic: String) -> Void
+    ) async -> CoverageResult {
+        let target = max(cardsPerSubtopic, 1)
+        var generated: [StudyCard] = []
+        var coveredSubtopics = 0
+        var skippedSubtopics = 0
+        var failures: [String] = []
+
+        for (index, subtopic) in topic.subtopics.enumerated() {
+            onProgress(index + 1, topic.subtopics.count, subtopic)
+            let existingCount = subject.cards.filter {
+                $0.topicName == topic.name && $0.subtopic == subtopic
+            }.count
+            let remaining = max(target - existingCount, 0)
+
+            guard remaining > 0 else {
+                coveredSubtopics += 1
+                skippedSubtopics += 1
+                continue
+            }
+
+            do {
+                let cards = try await generateCards(
+                    subject: subject,
+                    topicName: topic.name,
+                    subtopic: subtopic,
+                    count: remaining,
+                    context: context
+                )
+                generated.append(contentsOf: cards)
+                if existingCount + cards.count >= target {
+                    coveredSubtopics += 1
+                } else {
+                    failures.append("\(subtopic) returned only \(cards.count) of \(remaining) requested cards")
+                }
+            } catch {
+                failures.append("\(subtopic): \(error.localizedDescription)")
+            }
+        }
+
+        return CoverageResult(
+            cards: generated,
+            coveredSubtopics: coveredSubtopics,
+            skippedSubtopics: skippedSubtopics,
+            failures: failures
+        )
     }
 
     /// Parse ARIA's response into StudyCard objects

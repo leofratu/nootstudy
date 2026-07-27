@@ -67,6 +67,33 @@ enum AIResponseVerbosity: String, CaseIterable, Codable, Identifiable, Sendable 
     var displayName: String { rawValue.capitalized }
 }
 
+enum AIWebSearchMode: String, CaseIterable, Codable, Identifiable, Sendable {
+    case disabled
+    case cached
+    case live
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .disabled: return "Off"
+        case .cached: return "Cached"
+        case .live: return "Live"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .disabled:
+            return "Answer only from the app context and the model's existing knowledge."
+        case .cached:
+            return "Allow Codex to use OpenAI's cached search index when sources are useful."
+        case .live:
+            return "Allow fresh web search for current or source-sensitive questions."
+        }
+    }
+}
+
 struct AIModelOption: Identifiable, Hashable, Sendable {
     let id: String
     let name: String
@@ -84,6 +111,7 @@ enum AIConfiguration {
         static let codexModel = "codexModel"
         static let reasoningEffort = "ariaReasoningEffort"
         static let verbosity = "ariaVerbosity"
+        static let webSearchMode = "ariaWebSearchMode"
         static let junaliBaseURL = "junaliBaseURL"
         static let codexCLIPath = "codexCLIPath"
     }
@@ -119,6 +147,17 @@ enum AIConfiguration {
             return verbosity
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: Key.verbosity) }
+    }
+
+    static var webSearchMode: AIWebSearchMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: Key.webSearchMode),
+                  let mode = AIWebSearchMode(rawValue: raw) else {
+                return .cached
+            }
+            return mode
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: Key.webSearchMode) }
     }
 
     static var selectedModel: String {

@@ -638,7 +638,6 @@ struct ReviewSessionView: View {
 
                     for card in generated {
                         context.insert(card)
-                        subject.cards.append(card)
                     }
                     insertedAny = insertedAny || !generated.isEmpty
                 }
