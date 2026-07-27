@@ -1,8 +1,9 @@
 import Foundation
 import SwiftData
 
+@MainActor
 @Observable
-final class ReviewQueueManager: @unchecked Sendable {
+final class ReviewQueueManager {
     // MARK: - Published State
     private(set) var dueCards: [StudyCard] = []
     private(set) var totalDueCount: Int = 0
@@ -10,7 +11,6 @@ final class ReviewQueueManager: @unchecked Sendable {
     // O(1) per-subject due count cache: keyed by subject UUID string
     private(set) var dueCountCache: [String: Int] = [:]
 
-    private let lock = NSLock()
     private var isRefreshing = false
 
     private struct ScopeIndex {
@@ -31,63 +31,12 @@ final class ReviewQueueManager: @unchecked Sendable {
         }
     }
 
-    // MARK: - Refresh (off-main-thread fetch)
+    // MARK: - Refresh
     func refreshDueCards(context: ModelContext) {
-        // Prevent concurrent redundant refreshes
-        lock.lock()
-        guard !isRefreshing else { lock.unlock(); return }
+        guard !isRefreshing else { return }
         isRefreshing = true
-        lock.unlock()
-
-        // Capture the persistent container so we can create a background context
-        let container = context.container
-
-        Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self else { return }
-
-            let backgroundContext = ModelContext(container)
-            let now = Date()
-            let predicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
-            var descriptor = FetchDescriptor<StudyCard>(predicate: predicate)
-            descriptor.sortBy = [SortDescriptor(\.nextReviewDate, order: .forward)]
-
-            do {
-                let scopeIndex = ScopeIndex(scopes: self.fetchStudiedScopes(in: backgroundContext))
-                let fetched = try backgroundContext.fetch(descriptor)
-                let filtered: [StudyCard]
-                if scopeIndex.isEmpty {
-                    filtered = fetched
-                } else {
-                    filtered = self.filterCardsToScopes(fetched, matching: scopeIndex)
-                }
-
-                // Build O(1) per-subject count cache
-                var cache: [String: Int] = [:]
-                for card in filtered {
-                    if let subjectID = card.subject?.id.uuidString {
-                        cache[subjectID, default: 0] += 1
-                    }
-                }
-
-                await MainActor.run {
-                    self.dueCards = filtered
-                    self.totalDueCount = filtered.count
-                    self.dueCountCache = cache
-                    self.lock.lock()
-                    self.isRefreshing = false
-                    self.lock.unlock()
-                }
-            } catch {
-                await MainActor.run {
-                    self.dueCards = []
-                    self.totalDueCount = 0
-                    self.dueCountCache = [:]
-                    self.lock.lock()
-                    self.isRefreshing = false
-                    self.lock.unlock()
-                }
-            }
-        }
+        defer { isRefreshing = false }
+        refreshDueCardsSynchronously(context: context)
     }
 
     // Convenience alias
@@ -95,7 +44,6 @@ final class ReviewQueueManager: @unchecked Sendable {
         refreshDueCards(context: context)
     }
 
-    @MainActor
     func refreshDueCardsSynchronously(context: ModelContext) {
         let now = Date()
         let predicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }

@@ -82,7 +82,7 @@ struct ReviewSessionView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.background)
+            .background(IBColors.canvas)
             .navigationTitle(filterSubject?.name ?? activeScope?.subjectName ?? "Review Session")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -122,10 +122,15 @@ struct ReviewSessionView: View {
     private func activeSession(card: StudyCard) -> some View {
         VStack(spacing: 0) {
             // Progress header
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
                 HStack {
-                    Text("Card \(currentIndex + 1) of \(cards.count)")
-                        .font(.callout.weight(.medium))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("ACTIVE RECALL")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(IBColors.electricBlue)
+                        Text("Card \(currentIndex + 1) of \(cards.count)")
+                            .font(.callout.weight(.bold))
+                    }
                     Spacer()
                     HStack(spacing: 4) {
                         Image(systemName: "star.fill")
@@ -186,6 +191,15 @@ struct ReviewSessionView: View {
                                 .foregroundStyle(.yellow)
                             Text(card.topicName)
                                 .font(.headline)
+                            Text(card.difficulty.rawValue)
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(IBColors.electricBlue.opacity(0.1)))
+                                .foregroundStyle(IBColors.electricBlue)
+                            Text(card.cognitiveSkill.rawValue)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
                         }
 
                         Divider()
@@ -200,7 +214,8 @@ struct ReviewSessionView: View {
                                         .font(.caption.bold())
                                         .foregroundStyle(.secondary)
                                 }
-                                Text(card.front)
+                                FormattedMessageContent(text: card.front)
+                                    .font(.system(size: 20, weight: .medium, design: .serif))
                                     .textSelection(.enabled)
 
                                 Divider()
@@ -212,8 +227,36 @@ struct ReviewSessionView: View {
                                         .font(.caption.bold())
                                         .foregroundStyle(.secondary)
                                 }
-                                Text(card.back)
+                                FormattedMessageContent(text: card.back)
+                                    .font(.system(size: 19, weight: .regular, design: .serif))
                                     .textSelection(.enabled)
+
+                                if let hint = card.hint, !hint.isEmpty {
+                                    Label {
+                                        FormattedMessageContent(text: hint)
+                                    } icon: {
+                                        Image(systemName: "lightbulb")
+                                    }
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                }
+
+                                if let sourceTitle = card.sourceTitle, !sourceTitle.isEmpty {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "link")
+                                        if let sourceURL = card.sourceURL {
+                                            Link(sourceTitle, destination: sourceURL)
+                                        } else {
+                                            Text(sourceTitle)
+                                        }
+                                        if let reference = card.syllabusReference, !reference.isEmpty {
+                                            Text("· \(reference)")
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                }
                             }
                         } else {
                             // Front side
@@ -225,13 +268,14 @@ struct ReviewSessionView: View {
                                         .font(.caption.bold())
                                         .foregroundStyle(.secondary)
                                 }
-                                Text(card.front)
+                                FormattedMessageContent(text: card.front)
+                                    .font(.system(size: 28, weight: .medium, design: .serif))
                                     .textSelection(.enabled)
                             }
                         }
                     }
                     .padding(24)
-                    .frame(maxWidth: 600, alignment: .leading)
+                    .frame(maxWidth: 820, minHeight: 300, alignment: .leading)
                     .glassCard()
                     .animation(IBAnimation.smooth, value: isFlipped)
                 }
@@ -249,9 +293,13 @@ struct ReviewSessionView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     QualityButton(label: "Again", color: IBColors.danger) { rateCard(.again) }
+                        .keyboardShortcut("1", modifiers: [])
                     QualityButton(label: "Hard", color: IBColors.warning) { rateCard(.hard) }
+                        .keyboardShortcut("2", modifiers: [])
                     QualityButton(label: "Good", color: IBColors.electricBlue) { rateCard(.good) }
+                        .keyboardShortcut("3", modifiers: [])
                     QualityButton(label: "Easy", color: IBColors.success) { rateCard(.easy) }
+                        .keyboardShortcut("4", modifiers: [])
                 } else {
                     Spacer()
                     Button {
@@ -271,7 +319,7 @@ struct ReviewSessionView: View {
                 }
             }
             .padding(20)
-            .background(.ultraThinMaterial)
+            .background(IBColors.surface)
         }
     }
 
@@ -578,7 +626,7 @@ struct ReviewSessionView: View {
 
                 for topic in topics {
                     let validSubtopics = subtopics.filter {
-                        SyllabusSeeder.subtopics(for: subject.name, topicName: topic).contains($0)
+                        SyllabusSeeder.subtopics(for: subject.name, level: subject.level, topicName: topic).contains($0)
                     }
                     let generated = try await CardGeneratorService.generateCards(
                         subject: subject,

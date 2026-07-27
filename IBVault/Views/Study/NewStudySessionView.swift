@@ -25,7 +25,7 @@ struct NewStudySessionView: View {
 
     private var curriculum: [CurriculumUnit] {
         guard let subject = selectedSubject else { return [] }
-        return SyllabusSeeder.curriculum(for: subject.name)
+        return SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
     }
 
     private var selectedTopicList: [String] {
@@ -526,10 +526,6 @@ struct NewStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-                    throw GeminiError.noAPIKey
-                }
-
                 let unitPart = selectedUnitList.isEmpty ? "" : "\nUnits: \(selectedUnitList.joined(separator: ", "))"
                 let subtopicPart = selectedSubtopicList.isEmpty ? "" : "\nFocus subtopics: \(selectedSubtopicList.joined(separator: ", "))"
                 let prompt = """
@@ -553,10 +549,9 @@ struct NewStudySessionView: View {
                 You are ARIA, an IB study planner. Generate a structured, time-blocked study plan. Be specific about what to study and how. Reference IB exam requirements and mark schemes. Keep it practical and concise.
                 """
 
-                let response = try await GeminiService.generateContent(
+                let response = try await AIProviderService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: systemPrompt,
-                    apiKey: apiKey
+                    systemInstruction: systemPrompt
                 )
 
                 ARIAService.recordStudyPlanDraft(
@@ -590,10 +585,6 @@ struct NewStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-                    throw GeminiError.noAPIKey
-                }
-
                 let prompt = """
                 The current study plan is:
                 \(planMarkdown)
@@ -603,10 +594,9 @@ struct NewStudySessionView: View {
                 Update the study plan based on the user's request. Return the FULL updated plan.
                 """
 
-                let response = try await GeminiService.generateContent(
+                let response = try await AIProviderService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You are ARIA. Update the study plan based on user feedback. Return the complete updated plan. Be concise.",
-                    apiKey: apiKey
+                    systemInstruction: "You are ARIA. Update the study plan based on user feedback. Return the complete updated plan. Be concise."
                 )
 
                 ARIAService.recordStudyPlanRevision(

@@ -214,17 +214,14 @@ struct StudyGuideView: View {
 
     // MARK: - Generate
     private func generateGuide(mode: GuideMode) {
-        guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-            error = "No Gemini API key configured. Add one in Settings."; return
-        }
         isGenerating = true; error = nil; guideText = ""; IBHaptics.light()
         Task {
             do {
                 let prompt = buildGuidePrompt(mode: mode)
                 let systemPrompt = await ariaService.buildSystemPrompt(context: context, seedQuery: guideSeedQuery(for: mode))
-                let stream = GeminiService.streamContent(
+                let stream = AIProviderService.streamContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: systemPrompt, apiKey: apiKey
+                    systemInstruction: systemPrompt
                 )
                 var fullGuide = ""
                 for try await token in stream {

@@ -865,10 +865,6 @@ struct ActiveStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-                    throw GeminiError.noAPIKey
-                }
-
                 // Build full ARIA system prompt with context
                 let aria = ARIAService()
                 let systemPrompt = await aria.buildSystemPrompt(context: context, seedQuery: userMsg)
@@ -892,10 +888,9 @@ struct ActiveStudySessionView: View {
                     messages.append(GeminiMessage(role: msg.role, text: msg.text))
                 }
 
-                let response = try await GeminiService.generateContent(
+                let response = try await AIProviderService.generateContent(
                     messages: messages,
-                    systemInstruction: systemPrompt,
-                    apiKey: apiKey
+                    systemInstruction: systemPrompt
                 )
 
                 ARIAService.recordARIAChatExchange(
@@ -944,7 +939,7 @@ struct ActiveStudySessionView: View {
 
                 for topicName in selectedTopics {
                     let validSubtopics = plan.selectedSubtopicNames.filter {
-                        SyllabusSeeder.subtopics(for: plan.subjectName, topicName: topicName).contains($0)
+                        SyllabusSeeder.subtopics(for: plan.subjectName, level: subject.level, topicName: topicName).contains($0)
                     }
                     let generatedCardsForTopic = try await CardGeneratorService.generateCards(
                         subject: subject,
@@ -1000,10 +995,6 @@ struct ActiveStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-                    throw GeminiError.noAPIKey
-                }
-
                 let prompt = """
                 Generate a rigorous Practice Exam paper for:
                 Subject: \(plan.subjectName)
@@ -1021,10 +1012,9 @@ struct ActiveStudySessionView: View {
                 - Ensure layout uses Markdown effectively (Headers `###`, blockquotes for sources/figures).
                 """
 
-                let response = try await GeminiService.generateContent(
+                let response = try await AIProviderService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You are the ultimate IB examiner. You generate mercilessly accurate, rigorous practice exams tailored to the exact level of an IB Diploma student aiming for a 7/7.",
-                    apiKey: apiKey
+                    systemInstruction: "You are an exacting IB examiner. Generate rigorous practice exams tailored to the student's stated subject level, with valid LaTeX for equations and a concise mark scheme."
                 )
 
                 await MainActor.run {

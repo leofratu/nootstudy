@@ -14,7 +14,7 @@ struct ReviewScheduleConfig {
     static let `default` = ReviewScheduleConfig()
 }
 
-struct SubjectReviewSchedule: Identifiable, Sendable {
+struct SubjectReviewSchedule: Identifiable {
     let id = UUID()
     let subject: Subject
     let dueCards: Int

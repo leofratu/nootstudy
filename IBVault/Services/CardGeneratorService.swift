@@ -3,6 +3,21 @@ import SwiftData
 
 struct CardGeneratorService {
     private static let fallbackModels = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
+    static let promptVersion = 2
+
+    struct AdaptiveProfile: Equatable, Sendable {
+        let difficulty: CardDifficulty
+        let skillMix: [CardCognitiveSkill]
+        let reason: String
+    }
+
+    private struct GeneratedCardPayload: Decodable {
+        let front: String
+        let back: String
+        let hint: String?
+        let difficulty: String?
+        let skill: String?
+    }
 
     /// Generate flashcards for a specific topic using ARIA/Gemini
     static func generateCards(
@@ -12,15 +27,33 @@ struct CardGeneratorService {
         count: Int = 10,
         context: ModelContext
     ) async throws -> [StudyCard] {
-        guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-            throw GeminiError.noAPIKey
-        }
-
+        let profile = adaptiveProfile(
+            for: subject,
+            topicName: topicName,
+            subtopic: subtopic
+        )
+        let metadata = SyllabusSeeder.metadata(for: subject.name)
         let systemPrompt = """
-        You are an IB curriculum expert flashcard generator. Generate cards that precisely match the IB \(subject.level) \(subject.name) syllabus for the DP 2027 curriculum. Cards must be exam-relevant and test understanding, not just recall. Return ONLY valid JSON array.
+        Role: You create precise, adaptive International Baccalaureate flashcards.
+
+        Goal: Produce cards aligned to the supplied \(subject.level) curriculum scope and the learner's current performance.
+
+        Success criteria:
+        - every card tests one clear idea
+        - questions span the requested cognitive skills
+        - answers teach the reasoning needed for an IB response
+        - equations use valid LaTeX with $...$ inline and $$...$$ for display math
+        - no invented citations, syllabus codes, quotations, or statistics
+        - output only a valid JSON array matching the requested schema
         """
 
-        let modelsToTry = [GeminiService.selectedModel] + fallbackModels.filter { $0 != GeminiService.selectedModel }
+        let modelsToTry: [String?]
+        if AIConfiguration.provider == .gemini {
+            let selected = AIConfiguration.model(for: .gemini)
+            modelsToTry = ([selected] + fallbackModels.filter { $0 != selected }).map(Optional.some)
+        } else {
+            modelsToTry = [nil]
+        }
         var collectedCards: [StudyCard] = []
         var lastError: Error?
 
@@ -36,18 +69,25 @@ struct CardGeneratorService {
                     topicName: topicName,
                     subtopic: subtopic,
                     count: remaining,
-                    excludingFronts: collectedCards.map(\.front)
+                    excludingFronts: collectedCards.map(\.front),
+                    profile: profile,
+                    syllabusVersion: metadata.catalogVersion
                 )
 
                 do {
-                    let response = try await GeminiService.generateContent(
+                    let response = try await AIProviderService.generateContent(
                         messages: [GeminiMessage(role: "user", text: prompt)],
                         systemInstruction: systemPrompt,
-                        apiKey: apiKey,
                         modelOverride: model,
-                        timeout: model == GeminiService.selectedModel ? 120 : 90
+                        timeout: model == AIConfiguration.selectedModel ? 120 : 90
                     )
-                    let parsed = try parseFlashcards(from: response, subject: subject, topicName: topicName, subtopic: subtopic)
+                    let parsed = try parseFlashcards(
+                        from: response,
+                        subject: subject,
+                        topicName: topicName,
+                        subtopic: subtopic,
+                        profile: profile
+                    )
                     let merged = mergeUnique(existing: collectedCards, incoming: parsed)
                     let addedCount = merged.count - collectedCards.count
                     collectedCards = merged
@@ -77,7 +117,8 @@ struct CardGeneratorService {
         from response: String,
         subject: Subject,
         topicName: String,
-        subtopic: String
+        subtopic: String,
+        profile: AdaptiveProfile? = nil
     ) throws -> [StudyCard] {
         // Clean response — strip markdown code fences if present
         var cleaned = response
@@ -93,46 +134,76 @@ struct CardGeneratorService {
         cleaned = String(cleaned[startIdx...endIdx])
 
         if let data = cleaned.data(using: .utf8),
-           let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] {
-            let cards = cardsFromJSONArray(jsonArray, subject: subject, topicName: topicName, subtopic: subtopic)
+           let payloads = try? JSONDecoder().decode([GeneratedCardPayload].self, from: data) {
+            let cards = cardsFromPayloads(
+                payloads,
+                subject: subject,
+                topicName: topicName,
+                subtopic: subtopic,
+                profile: profile ?? adaptiveProfile(for: subject, topicName: topicName, subtopic: subtopic)
+            )
             if !cards.isEmpty {
                 return cards
             }
         }
 
         let textPairs = parseFrontBackBlocks(from: response)
-        let cards = cardsFromPairs(textPairs, subject: subject, topicName: topicName, subtopic: subtopic)
+        let cards = cardsFromPairs(
+            textPairs,
+            subject: subject,
+            topicName: topicName,
+            subtopic: subtopic,
+            profile: profile ?? adaptiveProfile(for: subject, topicName: topicName, subtopic: subtopic)
+        )
         guard !cards.isEmpty else { throw CardGeneratorError.invalidFormat }
         return cards
     }
 
-    private static func cardsFromJSONArray(
-        _ jsonArray: [[String: String]],
+    private static func cardsFromPayloads(
+        _ payloads: [GeneratedCardPayload],
         subject: Subject,
         topicName: String,
-        subtopic: String
+        subtopic: String,
+        profile: AdaptiveProfile
     ) -> [StudyCard] {
-        cardsFromPairs(
-            jsonArray.compactMap { item in
-                guard let front = item["front"], let back = item["back"] else { return nil }
-                return (front, back)
-            },
-            subject: subject,
-            topicName: topicName,
-            subtopic: subtopic
-        )
+        let metadata = SyllabusSeeder.metadata(for: subject.name)
+        return deduplicated(payloads.compactMap { payload in
+            let front = normalizedMath(payload.front).trimmingCharacters(in: .whitespacesAndNewlines)
+            let back = normalizedMath(payload.back).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !front.isEmpty, !back.isEmpty else { return nil }
+            return StudyCard(
+                topicName: topicName,
+                subtopic: subtopic,
+                front: front,
+                back: back,
+                subject: subject,
+                isCustom: false,
+                isAIGenerated: true,
+                generationSource: AIConfiguration.provider.displayName,
+                hint: payload.hint.map(normalizedMath),
+                difficulty: parsedDifficulty(payload.difficulty) ?? profile.difficulty,
+                cognitiveSkill: parsedSkill(payload.skill) ?? profile.skillMix.first ?? .explain,
+                sourceTitle: metadata.sourceTitle,
+                sourceURLString: metadata.sourceURL.absoluteString,
+                syllabusReference: syllabusReference(subject: subject, topicName: topicName, subtopic: subtopic),
+                adaptationReason: profile.reason,
+                generationPromptVersion: promptVersion
+            )
+        })
     }
 
     private static func cardsFromPairs(
         _ pairs: [(String, String)],
         subject: Subject,
         topicName: String,
-        subtopic: String
+        subtopic: String,
+        profile: AdaptiveProfile
     ) -> [StudyCard] {
+        let metadata = SyllabusSeeder.metadata(for: subject.name)
         var cards: [StudyCard] = []
         for (frontRaw, backRaw) in pairs {
-            let front = frontRaw.trimmingCharacters(in: .whitespacesAndNewlines)
-            let back = backRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let front = normalizedMath(frontRaw).trimmingCharacters(in: .whitespacesAndNewlines)
+            let back = normalizedMath(backRaw).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !front.isEmpty, !back.isEmpty else { continue }
             cards.append(StudyCard(
                 topicName: topicName,
@@ -142,7 +213,14 @@ struct CardGeneratorService {
                 subject: subject,
                 isCustom: false,
                 isAIGenerated: true,
-                generationSource: "ARIA" as String?
+                generationSource: AIConfiguration.provider.displayName,
+                difficulty: profile.difficulty,
+                cognitiveSkill: profile.skillMix.first ?? .explain,
+                sourceTitle: metadata.sourceTitle,
+                sourceURLString: metadata.sourceURL.absoluteString,
+                syllabusReference: syllabusReference(subject: subject, topicName: topicName, subtopic: subtopic),
+                adaptationReason: profile.reason,
+                generationPromptVersion: promptVersion
             ))
         }
         return deduplicated(cards)
@@ -153,10 +231,14 @@ struct CardGeneratorService {
         topicName: String,
         subtopic: String,
         count: Int,
-        excludingFronts: [String]
+        excludingFronts: [String],
+        profile: AdaptiveProfile,
+        syllabusVersion: String
     ) -> String {
-        let unitPart = SyllabusSeeder.unitName(for: subject.name, topicName: topicName).map { "\nUnit: \($0)" } ?? ""
+        let unitPart = SyllabusSeeder.unitName(for: subject.name, level: subject.level, topicName: topicName).map { "\nUnit: \($0)" } ?? ""
         let subtopicPart = subtopic.isEmpty ? "" : "\nSubtopic: \(subtopic)"
+        let validSubtopics = SyllabusSeeder.subtopics(for: subject.name, level: subject.level, topicName: topicName)
+        let scopeLine = validSubtopics.isEmpty ? "" : "\nValid syllabus subtopics: \(validSubtopics.joined(separator: "; "))"
         let exclusionLines = excludingFronts.isEmpty
             ? ""
             : "\nAlready generated question fronts to avoid repeating:\n" + excludingFronts.prefix(20).map { "- \($0)" }.joined(separator: "\n")
@@ -164,25 +246,99 @@ struct CardGeneratorService {
         return """
         Generate exactly \(count) high-quality IB flashcards for:
         Subject: \(subject.name) \(subject.level)
-        Topic: \(topicName)\(unitPart)\(subtopicPart)
+        Curriculum catalog: \(syllabusVersion)
+        Topic: \(topicName)\(unitPart)\(subtopicPart)\(scopeLine)
+        Adaptive target: \(profile.difficulty.rawValue)
+        Cognitive skills: \(profile.skillMix.map(\.rawValue).joined(separator: ", "))
+        Adaptation reason: \(profile.reason)
 
         REQUIREMENTS:
         - Each card must test a SPECIFIC concept, fact, definition, or application
         - Every card must stay anchored to the named IB unit/topic and avoid unrelated syllabus areas
         - Questions should match IB exam style and difficulty
-        - Answers should be concise but comprehensive (2-4 sentences)
-        - Include a mix of: definitions, explanations, applications, and analysis questions
-        - For science/math: include formulas, calculations, and diagram descriptions where relevant
-        - For humanities: include real-world examples and evaluation points
+        - Answers should be concise but must include the reasoning or marking point needed to self-correct
+        - Use the requested cognitive-skill mix instead of making every card simple recall
+        - Include a short useful hint that does not reveal the answer
+        - For science/math: include formulas, calculations, units, assumptions, and diagram interpretation where relevant
+        - For humanities: include precise concepts, application, counterarguments, and evaluation where relevant
+        - Do not include HL-only content for an SL subject
+        - Use $...$ for inline equations and $$...$$ for display equations; never use Unicode-only equation substitutes when LaTeX is clearer
         - Every card must be materially distinct from the others\(excludingFronts.isEmpty ? "" : " and must not repeat the excluded question fronts")
         \(exclusionLines)
 
         RESPOND IN EXACTLY THIS JSON FORMAT (no markdown, no code fences, just raw JSON):
         [
-          {"front": "question text here", "back": "answer text here"},
-          {"front": "question text here", "back": "answer text here"}
+          {"front": "question text here", "back": "answer text here", "hint": "small cue", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.first?.rawValue ?? CardCognitiveSkill.explain.rawValue)"},
+          {"front": "question text here", "back": "answer text here", "hint": "small cue", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.last?.rawValue ?? CardCognitiveSkill.apply.rawValue)"}
         ]
         """
+    }
+
+    static func adaptiveProfile(for subject: Subject, topicName: String, subtopic: String) -> AdaptiveProfile {
+        let scoped = subject.cards.filter { card in
+            card.topicName == topicName && (subtopic.isEmpty || card.subtopic == subtopic)
+        }
+        let reviewed = scoped.filter { $0.totalReviewCount > 0 }
+        guard !reviewed.isEmpty else {
+            return AdaptiveProfile(
+                difficulty: .standard,
+                skillMix: [.recall, .explain, .apply],
+                reason: "No recall history exists for this scope, so the set establishes a balanced baseline."
+            )
+        }
+
+        let totalReviews = reviewed.reduce(0) { $0 + $1.totalReviewCount }
+        let successful = reviewed.reduce(0) { $0 + $1.successfulReviewCount }
+        let successRate = totalReviews == 0 ? 0 : Double(successful) / Double(totalReviews)
+        let strugglingShare = Double(reviewed.filter(\.isStruggling).count) / Double(reviewed.count)
+
+        if successRate < 0.55 || strugglingShare >= 0.35 {
+            return AdaptiveProfile(
+                difficulty: .foundation,
+                skillMix: [.recall, .explain, .apply],
+                reason: "Recent recall is below target, so the set rebuilds prerequisite knowledge before exam transfer."
+            )
+        }
+        if successRate >= 0.82 && reviewed.allSatisfy({ $0.proficiency == .proficient || $0.proficiency == .mastered }) {
+            return AdaptiveProfile(
+                difficulty: .stretch,
+                skillMix: [.apply, .analyze, .evaluate],
+                reason: "Recall is strong in this scope, so the set increases transfer, synthesis, and evaluation demands."
+            )
+        }
+        return AdaptiveProfile(
+            difficulty: .exam,
+            skillMix: [.explain, .apply, .analyze],
+            reason: "Recall is developing, so the set targets exam-style explanation and application."
+        )
+    }
+
+    private static func parsedDifficulty(_ rawValue: String?) -> CardDifficulty? {
+        guard let rawValue else { return nil }
+        return CardDifficulty.allCases.first { $0.rawValue.caseInsensitiveCompare(rawValue) == .orderedSame }
+    }
+
+    private static func parsedSkill(_ rawValue: String?) -> CardCognitiveSkill? {
+        guard let rawValue else { return nil }
+        return CardCognitiveSkill.allCases.first { $0.rawValue.caseInsensitiveCompare(rawValue) == .orderedSame }
+    }
+
+    private static func normalizedMath(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\(", with: "$")
+            .replacingOccurrences(of: "\\)", with: "$")
+            .replacingOccurrences(of: "\\[", with: "$$")
+            .replacingOccurrences(of: "\\]", with: "$$")
+    }
+
+    private static func syllabusReference(subject: Subject, topicName: String, subtopic: String) -> String {
+        let parts = [
+            subject.name + " " + subject.level,
+            SyllabusSeeder.unitName(for: subject.name, level: subject.level, topicName: topicName),
+            topicName,
+            subtopic.isEmpty ? nil : subtopic
+        ].compactMap { $0 }
+        return parts.joined(separator: " > ")
     }
 
     private static func parseFrontBackBlocks(from response: String) -> [(String, String)] {
