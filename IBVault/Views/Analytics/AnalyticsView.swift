@@ -43,43 +43,39 @@ struct AnalyticsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Week overview stats
-                    statsHeader
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
+                VStack(alignment: .leading, spacing: 22) {
+                    StudioPageHeader(
+                        eyebrow: "Learning intelligence",
+                        title: "Analytics",
+                        subtitle: "Measure consistency, retrieval quality, and the subjects that need a different plan.",
+                        symbol: "chart.xyaxis.line",
+                        tint: IBColors.teal
+                    ) {
+                        StudioPill(title: "LAST 7 DAYS", tint: IBColors.teal)
+                    }
 
-                    // Daily activity
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+                        StudioMetricTile(value: "\(weeklyCards)", label: "Cards reviewed", symbol: "square.stack.fill", tint: IBColors.electricBlue, detail: "This week")
+                        StudioMetricTile(value: "\(weeklyXP)", label: "XP earned", symbol: "bolt.fill", tint: IBColors.gold, detail: "Learning momentum")
+                        StudioMetricTile(value: "\(weeklyMinutes)m", label: "Study time", symbol: "clock.fill", tint: IBColors.teal, detail: "Deliberate practice")
+                        StudioMetricTile(value: "\(weeklyRetention)%", label: "Retention", symbol: "brain.head.profile", tint: IBColors.englishColor, detail: "Across rated cards")
+                    }
+
                     activityCard
-                        .padding(.horizontal, 24)
 
-                    // Subject breakdown & Retention side by side
                     HStack(alignment: .top, spacing: 16) {
                         subjectBreakdownCard
                         retentionCard
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
                 }
+                .frame(maxWidth: 1240, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .background(.background)
+            .background(IBColors.canvas)
             .navigationTitle("Analytics")
         }
-    }
-
-    // MARK: - Stats Header
-    private var statsHeader: some View {
-        HStack(spacing: 0) {
-            StatCard(value: "\(weeklyCards)", label: "Cards Reviewed", color: IBColors.electricBlue, icon: "square.stack.fill")
-            Divider().frame(height: 50)
-            StatCard(value: "\(weeklyXP)", label: "XP Earned", color: .yellow, icon: "star.fill")
-            Divider().frame(height: 50)
-            StatCard(value: "\(weeklyMinutes)m", label: "Study Time", color: IBColors.success, icon: "clock.fill")
-            Divider().frame(height: 50)
-            StatCard(value: "\(weeklyRetention)%", label: "Retention", color: IBColors.englishColor, icon: "brain.head.profile")
-        }
-        .padding(.vertical, 16)
-        .glassCard()
     }
 
     // MARK: - Activity

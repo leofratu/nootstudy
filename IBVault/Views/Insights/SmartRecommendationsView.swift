@@ -24,70 +24,45 @@ struct SmartRecommendationsView: View {
             card.isDue && studiedScopes.contains { $0.matches(card) }
         }
     }
+
+    private var weakSubjectCount: Int {
+        subjects.filter { $0.masteryProgress < 0.5 }.count
+    }
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                headerCard
-                    .padding(.horizontal, 28)
-                    .padding(.top, 24)
-                
+            VStack(alignment: .leading, spacing: 22) {
+                StudioPageHeader(
+                    eyebrow: "Decision support",
+                    title: "What to study",
+                    subtitle: "A practical sequence based on due cards, current mastery, and the work most likely to move you forward.",
+                    symbol: "lightbulb.fill",
+                    tint: IBColors.gold
+                ) {
+                    StudioPill(title: "\(recommendations.count) ACTIONS", tint: IBColors.gold)
+                }
+
+                HStack(spacing: 12) {
+                    StudioMetricTile(value: "\(dueCardsCount)", label: "Due cards", symbol: "clock.badge.exclamationmark", tint: dueCardsCount > 0 ? IBColors.coral : IBColors.success, detail: dueCardsCount > 0 ? "Schedule first" : "Queue clear")
+                    StudioMetricTile(value: "\(weakSubjectCount)", label: "Focus areas", symbol: "scope", tint: IBColors.englishColor, detail: "Below 50% mastery")
+                    StudioMetricTile(value: profiles.first.map { "\($0.targetIBScore)" } ?? "-", label: "IB target", symbol: "target", tint: IBColors.electricBlue, detail: "Your current goal")
+                }
+
                 if recommendations.isEmpty {
                     emptyState
-                        .padding(.horizontal, 28)
                 } else {
                     recommendationsSection
-                        .padding(.horizontal, 28)
-                    
                     dueCardsSection
-                        .padding(.horizontal, 28)
-                    
                     weakTopicsSection
-                        .padding(.horizontal, 28)
-                        .padding(.bottom, 24)
                 }
             }
+            .frame(maxWidth: 1120, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .background(.background)
+        .background(IBColors.canvas)
         .navigationTitle("What to Study")
-    }
-    
-    // MARK: - Header
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(IBColors.electricBlue.opacity(0.12))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 18))
-                        .foregroundStyle(IBColors.electricBlue)
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Smart Recommendations")
-                        .font(.headline)
-                    Text("Based on your mastery, due cards, and exam timeline")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                
-                Spacer()
-            }
-            
-            if let profile = profiles.first {
-                HStack(spacing: 16) {
-                    Label("\(profile.targetIBScore) target", systemImage: "target")
-                    Label("\(dueCardsCount) cards due", systemImage: "clock.badge.exclamationmark")
-                        .foregroundStyle(dueCardsCount > 10 ? .orange : .secondary)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .padding(16)
-        .glassCard()
     }
     
     // MARK: - Empty State

@@ -11,31 +11,29 @@ struct ProfileView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Hero card with rank + stats
+                VStack(alignment: .leading, spacing: 22) {
+                    StudioPageHeader(
+                        eyebrow: "Learning identity",
+                        title: profile?.studentName.isEmpty == false ? profile?.studentName ?? "Profile" : "Your profile",
+                        subtitle: "Your earned rank, consistency, and the milestones behind your study practice.",
+                        symbol: profile?.achievedStep.rank.symbolName ?? "person.crop.circle.fill",
+                        tint: IBColors.electricBlue
+                    ) {
+                        StudioPill(title: profile?.achievedStep.displayName.uppercased() ?? "UNRANKED", tint: IBColors.electricBlue)
+                    }
+
                     profileHero
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-
-                    // Rank progress
                     rankProgressCard
-                        .padding(.horizontal, 24)
-
-                    // Stats grid
                     statsGrid
-                        .padding(.horizontal, 24)
-
-                    // Achievements
                     achievementsCard
-                        .padding(.horizontal, 24)
-
-                    // Recent Activity
                     activityCard
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 24)
                 }
+                .frame(maxWidth: 1080, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .background(.background)
+            .background(IBColors.canvas)
             .navigationTitle("Profile")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

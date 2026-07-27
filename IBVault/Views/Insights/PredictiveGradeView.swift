@@ -10,23 +10,27 @@ struct PredictiveGradeView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                headerCard
-                    .padding(.horizontal, 28)
-                    .padding(.top, 24)
-                
+            VStack(alignment: .leading, spacing: 22) {
+                StudioPageHeader(
+                    eyebrow: "Forecast",
+                    title: "Grade prediction",
+                    subtitle: "A transparent score projection built from your weighted assessments and current mastery trends.",
+                    symbol: "chart.line.uptrend.xyaxis",
+                    tint: IBColors.teal
+                ) {
+                    StudioPill(title: scoreGap >= 0 ? "ON TARGET" : "\(abs(scoreGap)) TO CLOSE", tint: scoreGap >= 0 ? IBColors.success : IBColors.coral)
+                }
+
                 predictedScoreCard
-                    .padding(.horizontal, 28)
-                
                 subjectPredictionsCard
-                    .padding(.horizontal, 28)
-                    
                 gradeGapCard
-                    .padding(.horizontal, 28)
-                    .padding(.bottom, 24)
             }
+            .frame(maxWidth: 1080, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .background(.background)
+        .background(IBColors.canvas)
         .navigationTitle("Grade Prediction")
     }
     

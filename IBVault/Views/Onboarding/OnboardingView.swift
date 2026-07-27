@@ -129,7 +129,7 @@ struct OnboardingView: View {
                       desc: "Reviews scheduled at optimal intervals for long-term memory")
             featureRow(icon: "brain.head.profile", color: .blue,
                       title: "Active Recall",
-                      desc: "Retrieval practice strengthens memory 1.7× vs re-reading")
+                      desc: "Retrieval practice makes you produce an answer instead of only re-reading it")
             featureRow(icon: "chart.line.uptrend.xyaxis", color: .purple,
                       title: "Adaptive Difficulty",
                       desc: "SM-2 algorithm adjusts card intervals based on your performance")
