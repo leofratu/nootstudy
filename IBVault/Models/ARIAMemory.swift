@@ -1,7 +1,93 @@
 import Foundation
 import SwiftData
 
-enum MemoryCategory: String, Codable, CaseIterable {
+/// Typed chat-message role. `ChatMessage.role` persists the `storedValue`
+/// string, so conversation/failure/cancellation/dismissed roles round-trip
+/// through the store while call sites switch on typed cases instead of string
+/// prefixes.
+indirect enum ChatMessageRole: Sendable, Equatable {
+    case user
+    case model
+    case failure(provider: AIProviderKind, needsAuthentication: Bool = false)
+    case cancelled(provider: AIProviderKind)
+    case dismissed(underlying: ChatMessageRole)
+
+    private static let failurePrefix = "error."
+    private static let cancelledPrefix = "cancelled."
+    private static let dismissedPrefix = "dismissed."
+    private static let authenticationSuffix = ".authentication"
+
+    /// The string persisted in `ChatMessage.role`.
+    var storedValue: String {
+        switch self {
+        case .user:
+            return "user"
+        case .model:
+            return "model"
+        case .failure(let provider, let needsAuthentication):
+            return ChatMessageRole.failurePrefix + provider.rawValue + (needsAuthentication ? ChatMessageRole.authenticationSuffix : "")
+        case .cancelled(let provider):
+            return ChatMessageRole.cancelledPrefix + provider.rawValue
+        case .dismissed(let underlying):
+            return ChatMessageRole.dismissedPrefix + underlying.storedValue
+        }
+    }
+
+    /// Parses a persisted role string back into a typed value.
+    init?(storedValue: String) {
+        switch storedValue {
+        case "user":
+            self = .user
+        case "model":
+            self = .model
+        default:
+            if storedValue.hasPrefix(ChatMessageRole.dismissedPrefix) {
+                let inner = String(storedValue.dropFirst(ChatMessageRole.dismissedPrefix.count))
+                guard let underlying = ChatMessageRole(storedValue: inner) else { return nil }
+                self = .dismissed(underlying: underlying)
+            } else if storedValue.hasPrefix(ChatMessageRole.failurePrefix) {
+                let rest = storedValue.dropFirst(ChatMessageRole.failurePrefix.count)
+                let needsAuthentication = rest.hasSuffix(ChatMessageRole.authenticationSuffix)
+                let providerRaw = needsAuthentication
+                    ? String(rest.dropLast(ChatMessageRole.authenticationSuffix.count))
+                    : String(rest)
+                guard let provider = AIProviderKind(rawValue: providerRaw) else { return nil }
+                self = .failure(provider: provider, needsAuthentication: needsAuthentication)
+            } else if storedValue.hasPrefix(ChatMessageRole.cancelledPrefix) {
+                let providerRaw = String(storedValue.dropFirst(ChatMessageRole.cancelledPrefix.count))
+                guard let provider = AIProviderKind(rawValue: providerRaw) else { return nil }
+                self = .cancelled(provider: provider)
+            } else {
+                return nil
+            }
+        }
+    }
+
+    var isConversation: Bool {
+        self == .user || self == .model
+    }
+
+    var isFailure: Bool {
+        if case .failure = self { return true }
+        if case .cancelled = self { return true }
+        return false
+    }
+
+    var failureProvider: AIProviderKind? {
+        switch self {
+        case .failure(let provider, _), .cancelled(let provider):
+            return provider
+        case .user, .model, .dismissed:
+            return nil
+        }
+    }
+
+    var needsCodexAuthentication: Bool {
+        self == .failure(provider: .codexCLI, needsAuthentication: true)
+    }
+}
+
+enum MemoryCategory: String, Codable, CaseIterable, Sendable {
     case grades = "Grades & Targets"
     case weakTopics = "Weak Topics"
     case studyHabits = "Study Habits"
@@ -56,7 +142,7 @@ enum MemoryCategory: String, Codable, CaseIterable {
     }
 }
 
-enum MemoryImportance: Int, Codable, Comparable {
+enum MemoryImportance: Int, Codable, Comparable, Sendable {
     case low = 1
     case medium = 2
     case high = 3
@@ -96,7 +182,7 @@ final class ARIAMemory {
 
     var effectiveAge: Double {
         let days = Calendar.current.dateComponents([.day], from: timestamp, to: Date()).day ?? 0
-        return Double(days) * category.decayRate
+        return Double(max(0, days)) * category.decayRate
     }
 
     var relevanceBoost: Double {
@@ -149,14 +235,25 @@ final class ARIAMemory {
 @Model
 final class ChatMessage {
     var id: UUID
-    var role: String // "user" or "model"
+    var role: String
     var content: String
     var timestamp: Date
     var sessionID: UUID?
 
-    init(role: String, content: String, sessionID: UUID? = nil) {
+    init(role: ChatMessageRole, content: String, sessionID: UUID? = nil) {
         self.id = UUID()
-        self.role = role
+        self.role = role.storedValue
+        self.content = content
+        self.timestamp = Date()
+        self.sessionID = sessionID
+    }
+
+    /// Restore path: preserves an arbitrary persisted role string byte-for-byte
+    /// (e.g. a role written by an older build), so a backup never re-tags a
+    /// message during restore.
+    init(restoredRole: String, content: String, sessionID: UUID? = nil) {
+        self.id = UUID()
+        self.role = restoredRole
         self.content = content
         self.timestamp = Date()
         self.sessionID = sessionID

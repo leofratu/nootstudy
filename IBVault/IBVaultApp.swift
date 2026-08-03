@@ -24,11 +24,15 @@ struct IBVaultApp: App {
             ChatMessage.self,
             StudyActivity.self,
             StudySession.self,
-            StudyPlan.self
+            StudyPlan.self,
+            SubjectTrack.self,
+            UnitState.self,
+            CurriculumNode.self,
+            WeeklyChallenge.self
         ], isAutosaveEnabled: true, isUndoEnabled: false)
         #if os(macOS)
         .defaultSize(width: 1100, height: 750)
-        .windowResizability(.contentMinSize)
+        .windowResizability(.automatic)
         .windowToolbarStyle(.unified)
         .commands {
             IBVaultCommands()
@@ -136,6 +140,10 @@ struct RootView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @State private var hasAttemptedAutomaticBackup = false
+    @State private var hasReconciledAchievements = false
+    @State private var hasRecomputedProgression = false
+    @State private var hasSynchronizedCurriculum = false
+    @State private var launchError: String?
 
     private var orderedProfiles: [UserProfile] {
         profiles.sorted { $0.id.uuidString < $1.id.uuidString }
@@ -162,10 +170,52 @@ struct RootView: View {
                     .onAppear {
                         let profile = UserProfile()
                         context.insert(profile)
-                        seedAchievements()
                     }
             }
         }
+        // Deliberately outside the branches above: an upgrading user already
+        // has a profile, so anything hung off the "no profile yet" path never
+        // runs for them.
+        .onAppear {
+            synchronizeCurriculumIfNeeded()
+            reconcileAchievementsIfNeeded()
+            recomputeProgressionIfNeeded()
+        }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { launchError != nil },
+                set: { if !$0 { launchError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { launchError = nil }
+        } message: {
+            Text(launchError ?? "")
+        }
+        .preferredColorScheme(.light)
+    }
+
+    private func synchronizeCurriculumIfNeeded() {
+        guard !hasSynchronizedCurriculum else { return }
+        hasSynchronizedCurriculum = true
+        SyllabusSeeder.seedIfNeeded(context: context)
+    }
+
+    private func reconcileAchievementsIfNeeded() {
+        guard !hasReconciledAchievements else { return }
+        hasReconciledAchievements = true
+        Achievement.reconcile(context: context)
+    }
+
+    /// Progression otherwise only recomputes when a session completes, so an
+    /// existing user would open the app at Electron III with their whole review
+    /// history ignored until they happened to finish another session. Events are
+    /// discarded here deliberately: launch is not a moment to fire a rank-up
+    /// celebration for work done days ago.
+    private func recomputeProgressionIfNeeded() {
+        guard !hasRecomputedProgression else { return }
+        hasRecomputedProgression = true
+        ProgressionService.recompute(context: context)
     }
 
     private func triggerAutomaticBackupIfNeeded() {
@@ -175,18 +225,10 @@ struct RootView: View {
         do {
             try BackupService.autoBackupIfNeeded(context: context)
         } catch {
-            assertionFailure("Automatic backup failed: \(error.localizedDescription)")
+            launchError = "Automatic backup failed: \(error.localizedDescription)"
         }
     }
 
-    private func seedAchievements() {
-        for def in Achievement.definitions {
-            let achievement = Achievement(id: def.id, title: def.title, desc: def.desc, icon: def.icon, category: def.category)
-            context.insert(achievement)
-        }
-
-        try? context.save()
-    }
 }
 
 #if os(macOS)

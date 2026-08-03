@@ -3,34 +3,137 @@ import SwiftData
 
 struct SubjectDetailView: View {
     let subject: Subject
+    @Environment(\.modelContext) private var context
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
+    @Query(sort: \CurriculumNode.topicName) private var curriculumNodes: [CurriculumNode]
     @State private var showAddGrade = false
     @State private var showReview = false
     @State private var showStudyGuide = false
     @State private var showTopicBrowser = false
+    @State private var masteryError: String?
 
     private var color: Color { Color(hex: subject.accentColorHex) }
-    private var sortedCards: [StudyCard] { subject.cards.sorted { $0.topicName < $1.topicName } }
     private var sortedGrades: [Grade] { subject.grades.sorted { $0.date > $1.date } }
+    private var curriculum: [CurriculumUnit] {
+        SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
+    }
+    private var curriculumTopicCount: Int { curriculum.flatMap(\.topics).count }
+    private var curriculumSubunitCount: Int { curriculum.flatMap(\.topics).flatMap(\.subtopics).count }
+    private var subjectCurriculumNodes: [CurriculumNode] {
+        curriculumNodes.filter {
+            $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame &&
+                $0.level.caseInsensitiveCompare(subject.level) == .orderedSame
+        }
+    }
+
+    // MARK: - Lookup indexes
+    // Built once per render (single pass over @Query/relationship data) so
+    // per-topic/per-subunit rows never re-scan the full card, node, or session
+    // collections (previously O(cards × subtopics) per render).
+
+    private static func nodeLookupKey(subject: Subject, topic: String, subtopic: String) -> String {
+        [subject.name, subject.level, topic, subtopic]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .joined(separator: "|")
+    }
+
+    private var cardIndex: SubjectCardIndex {
+        var index = SubjectCardIndex()
+        for card in subject.cards {
+            index.byTopic[card.topicName, default: []].append(card)
+            index.bySubtopic["\(card.topicName)|\(card.subtopic)", default: []].append(card)
+        }
+        return index
+    }
+
+    private var nodesByKey: [String: CurriculumNode] {
+        var index: [String: CurriculumNode] = [:]
+        for node in subjectCurriculumNodes {
+            index[Self.nodeLookupKey(subject: subject, topic: node.topicName, subtopic: node.subtopicName)] = node
+        }
+        return index
+    }
+
+    private var subjectWorkSessions: [StudySession] {
+        studySessions.filter { $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame }
+    }
+
+    /// Subject work sessions keyed by lowercased topic name so subunit rows do
+    /// not scan the session history once per row.
+    private var workSessionsByTopic: [String: [StudySession]] {
+        var index: [String: [StudySession]] = [:]
+        for session in subjectWorkSessions {
+            for topic in session.selectedTopicNames {
+                index[topic.lowercased(), default: []].append(session)
+            }
+        }
+        return index
+    }
+
+    private func workSessionsFor(topic: String, subtopic: String, in byTopic: [String: [StudySession]]) -> [StudySession] {
+        guard let candidates = byTopic[topic.lowercased()] else { return [] }
+        return candidates.filter { session in
+            let sessionSubtopics = StudyScope.parseList(session.subtopicsCovered ?? "")
+            return sessionSubtopics.isEmpty || sessionSubtopics.contains {
+                $0.caseInsensitiveCompare(subtopic) == .orderedSame
+            }
+        }
+    }
+
+    private func topicMastery(_ topic: CurriculumTopic, index: SubjectCardIndex, nodes: [String: CurriculumNode]) -> Double {
+        guard !topic.subtopics.isEmpty else { return 0 }
+        let score = topic.subtopics.reduce(0.0) { partial, subtopic in
+            partial + subtopicMastery(topic: topic.name, subtopic: subtopic, index: index, nodes: nodes)
+        }
+        return score / Double(topic.subtopics.count)
+    }
+
+    private func subtopicMastery(
+        topic: String,
+        subtopic: String,
+        index: SubjectCardIndex,
+        nodes: [String: CurriculumNode]
+    ) -> Double {
+        CurriculumProgressService.effectiveMastery(
+            cards: index.bySubtopic["\(topic)|\(subtopic)"] ?? [],
+            node: nodes[Self.nodeLookupKey(subject: subject, topic: topic, subtopic: subtopic)]
+        )
+    }
+
+    private func weightedCurriculumMastery(index: SubjectCardIndex, nodes: [String: CurriculumNode]) -> Double {
+        let topics = curriculum.flatMap(\.topics)
+        let subunitCount = topics.reduce(0) { $0 + $1.subtopics.count }
+        guard subunitCount > 0 else { return 0 }
+        let score = topics.reduce(0.0) { partial, topic in
+            partial + topicMastery(topic, index: index, nodes: nodes) * Double(topic.subtopics.count)
+        }
+        return score / Double(subunitCount)
+    }
+
     private var reviewableDueCount: Int {
         let studiedScopes = StudySession.uniqueStudyScopes(from: studySessions)
             .filter { $0.subjectName == subject.name }
         guard !studiedScopes.isEmpty else { return 0 }
-        return subject.cards.filter { card in
-            card.isDue && studiedScopes.contains { $0.matches(card) }
-        }.count
+        var count = 0
+        for card in subject.cards where card.isDue {
+            if studiedScopes.contains(where: { $0.matches(card) }) {
+                count += 1
+            }
+        }
+        return count
     }
 
     var body: some View {
-        ScrollView {
+        let dueCount = reviewableDueCount
+        return ScrollView {
             VStack(spacing: 16) {
                 // Hero with ring
-                heroCard
+                heroCard(dueCount: dueCount)
                     .padding(.horizontal, 24)
                     .padding(.top, 20)
 
                 // Actions
-                actionsBar
+                actionsBar(dueCount: dueCount)
                     .padding(.horizontal, 24)
 
                 // Proficiency breakdown
@@ -40,6 +143,12 @@ struct SubjectDetailView: View {
                 // Topics
                 topicsCard
                     .padding(.horizontal, 24)
+
+                // Exam-ready domain knowledge (curated per subject)
+                if let knowledge = SubjectKnowledge.knowledge(for: subject.name) {
+                    knowledgeCard(knowledge)
+                        .padding(.horizontal, 24)
+                }
 
                 // Grades
                 gradesCard
@@ -63,10 +172,18 @@ struct SubjectDetailView: View {
                 TopicBrowserView(subject: subject)
             }
         }
+        .alert("Could Not Save Mastery", isPresented: Binding(
+            get: { masteryError != nil },
+            set: { if !$0 { masteryError = nil } }
+        )) {
+            Button("OK") { masteryError = nil }
+        } message: {
+            Text(masteryError ?? "The mastery update could not be saved.")
+        }
     }
 
     // MARK: - Hero
-    private var heroCard: some View {
+    private func heroCard(dueCount: Int) -> some View {
         HStack(spacing: 20) {
             ProgressRing(
                 progress: subject.masteryProgress,
@@ -92,9 +209,10 @@ struct SubjectDetailView: View {
                 }
 
                 HStack(spacing: 16) {
-                    Label("\(subject.cards.count) topics", systemImage: "square.stack")
-                    if reviewableDueCount > 0 {
-                        Label("\(reviewableDueCount) due now", systemImage: "clock.badge.exclamationmark")
+                    Label("\(curriculumTopicCount) topics", systemImage: "square.stack")
+                    Label("\(curriculumSubunitCount) subunits", systemImage: "list.bullet.indent")
+                    if dueCount > 0 {
+                        Label("\(dueCount) due now", systemImage: "clock.badge.exclamationmark")
                             .foregroundStyle(.orange)
                     } else {
                         Label("All caught up", systemImage: "checkmark.circle")
@@ -104,7 +222,7 @@ struct SubjectDetailView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-                Text("\(Int(subject.masteryProgress * 100))% mastery")
+                Text("\(Int(subject.masteryProgress * 100))% review mastery")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -115,9 +233,9 @@ struct SubjectDetailView: View {
     }
 
     // MARK: - Actions
-    private var actionsBar: some View {
+    private func actionsBar(dueCount: Int) -> some View {
         HStack(spacing: 12) {
-            if reviewableDueCount > 0 {
+            if dueCount > 0 {
                 Button {
                     showReview = true
                     IBHaptics.medium()
@@ -205,146 +323,262 @@ struct SubjectDetailView: View {
 
     // MARK: - Topics
     private var topicsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let index = cardIndex
+        let nodes = nodesByKey
+        let sessionsByTopic = workSessionsByTopic
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "list.bullet")
                     .foregroundStyle(.tint)
                 Text("Curriculum Mastery")
                     .font(.headline)
                 Spacer()
-                Text("\(subject.cards.count) cards")
+                Text("\(Int(weightedCurriculumMastery(index: index, nodes: nodes) * 100))% curriculum · \(subjectWorkSessions.count) work sessions")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            if subject.cards.isEmpty {
-                HStack {
-                    Spacer()
-                    Text("No topics available yet. Browse curriculum to start.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 12)
-                    Spacer()
-                }
-            } else {
-                let topics = Dictionary(grouping: subject.cards, by: { $0.topicName })
-                    .sorted { 
-                        let mastery1 = ProficiencyTracker.masteryPercentage(for: subject, topicName: $0.key)
-                        let mastery2 = ProficiencyTracker.masteryPercentage(for: subject, topicName: $1.key)
-                        return mastery1 < mastery2
-                    }
+            ForEach(curriculum, id: \.name) { unit in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(unit.name)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(color)
+                        .textCase(.uppercase)
 
-                ForEach(topics, id: \.key) { topicName, topicCards in
-                    DisclosureGroup {
-                        let subtopics = Dictionary(grouping: topicCards, by: { $0.subtopic })
-                            .sorted { 
-                                let mastery1 = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: $0.key)
-                                let mastery2 = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: $1.key)
-                                return mastery1 < mastery2
-                            }
-
-                        VStack(spacing: 0) {
-                            ForEach(subtopics, id: \.key) { subtopicName, subCards in
-                                let subName = subtopicName.isEmpty ? "General" : subtopicName
-                                let subMastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName, subtopic: subtopicName)
-                                let dueCount = subCards.filter { $0.isDue }.count
-                                
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        HStack(spacing: 6) {
-                                            Text(subName)
-                                                .font(.callout)
-                                            if dueCount > 0 {
-                                                Text("\(dueCount) due")
-                                                    .font(.caption2)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(Capsule().fill(.orange.opacity(0.2)))
-                                                    .foregroundStyle(.orange)
-                                            }
-                                            if subMastery < 0.3 {
-                                                Text("Weak")
-                                                    .font(.caption2)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(Capsule().fill(.red.opacity(0.15)))
-                                                    .foregroundStyle(.red)
-                                            }
+                    ForEach(unit.topics, id: \.name) { topic in
+                        let topicCards = index.byTopic[topic.name] ?? []
+                        let mastery = topicMastery(topic, index: index, nodes: nodes)
+                        DisclosureGroup {
+                            VStack(spacing: 0) {
+                                ForEach(topic.subtopics, id: \.self) { subtopic in
+                                    let cards = index.bySubtopic["\(topic.name)|\(subtopic)"] ?? []
+                                    let node = nodes[Self.nodeLookupKey(subject: subject, topic: topic.name, subtopic: subtopic)]
+                                    let subMastery = CurriculumProgressService.effectiveMastery(cards: cards, node: node)
+                                    let workSessions = workSessionsFor(topic: topic.name, subtopic: subtopic, in: sessionsByTopic)
+                                    let hasProgress = !cards.isEmpty || node?.recordedProficiency != nil || !workSessions.isEmpty
+                                    HStack(spacing: 10) {
+                                        Image(systemName: hasProgress ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(hasProgress ? color : Color.secondary)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(subtopic).font(.callout)
+                                            Text(subunitActivitySummary(cards: cards, workSessions: workSessions))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
                                         }
-                                        Text("\(subCards.count) cards")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                        if let recorded = node?.recordedProficiency {
+                                            Text(recorded.rawValue)
+                                                .font(.caption2.weight(.semibold))
+                                                .foregroundStyle(proficiencyColor(recorded))
+                                                .padding(.horizontal, 7)
+                                                .frame(height: 22)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .fill(proficiencyColor(recorded).opacity(0.1))
+                                                )
+                                        }
+                                        if !cards.isEmpty || node?.recordedProficiency != nil {
+                                            Text("\(Int(subMastery * 100))%")
+                                                .font(.caption.weight(.bold))
+                                                .foregroundStyle(color)
+                                            MasteryBar(progress: subMastery, height: 4, color: color)
+                                                .frame(width: 54)
+                                        }
+                                        masteryMenu(
+                                            current: node?.recordedProficiency,
+                                            unitName: unit.name,
+                                            topicName: topic.name,
+                                            subtopicName: subtopic
+                                        )
                                     }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 4) {
-                                        Text("\(Int(subMastery * 100))%")
-                                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                                            .foregroundStyle(color)
-                                        MasteryBar(progress: subMastery, height: 4, color: color)
-                                            .frame(width: 60)
-                                    }
-                                }
-                                .padding(.vertical, 8)
-                                .padding(.leading, 12)
-                                
-                                if subtopicName != subtopics.last?.key {
-                                    Divider().padding(.leading, 12)
+                                    .padding(.vertical, 7)
+                                    .padding(.leading, 12)
                                 }
                             }
-                        }
-                        .padding(.top, 4)
-                        
-                    } label: {
-                        let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName)
-                        let dueCount = topicCards.filter { $0.isDue }.count
-                        
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
-                                    Text(topicName)
-                                        .font(.callout.weight(.medium))
+                        } label: {
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(topic.name)
+                                        .font(.callout.weight(.semibold))
                                         .foregroundStyle(.primary)
-                                    if mastery < 0.3 {
-                                        Circle()
-                                            .fill(.red)
-                                            .frame(width: 6, height: 6)
-                                    }
+                                    Text("\(topic.subtopics.count) subunits · \(topicCards.count) cards")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
-                                HStack(spacing: 8) {
-                                    Text("\(topicCards.count) cards")
-                                    Text("•")
-                                    Text("\(Int(mastery * 100))% mastered")
-                                    if dueCount > 0 {
-                                        Text("•")
-                                        Text("\(dueCount) due")
-                                            .foregroundStyle(.orange)
-                                    }
-                                }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(Int(mastery * 100))%")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(color)
+                                MasteryBar(progress: mastery, height: 5, color: color)
+                                    .frame(width: 76)
                             }
-                            Spacer()
-                            MasteryBar(progress: mastery, height: 5, color: color)
-                                .frame(width: 80)
+                            .padding(.vertical, 3)
                         }
-                        .padding(.vertical, 4)
-                    }
-                    .tint(color)
-
-                    if topicName != topics.last?.key {
-                        Divider()
+                        .tint(color)
                     }
                 }
+                if unit.name != curriculum.last?.name { Divider() }
             }
         }
         .padding(16)
         .glassCard()
     }
 
-    // MARK: - Grades
-    private var gradesCard: some View {
+    private func subunitActivitySummary(cards: [StudyCard], workSessions: [StudySession]) -> String {
+        var parts: [String] = []
+        parts.append(cards.isEmpty ? "No cards" : "\(cards.count) cards · \(cards.filter(\.isDue).count) due")
+        if !workSessions.isEmpty {
+            parts.append("\(workSessions.count) work session\(workSessions.count == 1 ? "" : "s")")
+            if let latest = workSessions.first {
+                parts.append("last \(latest.endDate.formatted(date: .abbreviated, time: .omitted))")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func masteryMenu(
+        current: ProficiencyLevel?,
+        unitName: String,
+        topicName: String,
+        subtopicName: String
+    ) -> some View {
+        Menu {
+            ForEach(ProficiencyLevel.allCases, id: \.self) { level in
+                Button {
+                    setMastery(level, unitName: unitName, topicName: topicName, subtopicName: subtopicName)
+                } label: {
+                    Label(level.rawValue, systemImage: current == level ? "checkmark" : "gauge")
+                }
+            }
+            if current != nil {
+                Divider()
+                Button("Clear Recorded Mastery", role: .destructive) {
+                    clearMastery(topicName: topicName, subtopicName: subtopicName)
+                }
+            }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .frame(width: 24, height: 24)
+        }
+        .menuStyle(.borderlessButton)
+        .help("Set recorded mastery for \(subtopicName)")
+    }
+
+    private func setMastery(
+        _ level: ProficiencyLevel,
+        unitName: String,
+        topicName: String,
+        subtopicName: String
+    ) {
+        do {
+            try CurriculumProgressService.setMastery(
+                level,
+                subject: subject,
+                unitName: unitName,
+                topicName: topicName,
+                subtopicName: subtopicName,
+                source: "Manual",
+                context: context
+            )
+        } catch {
+            masteryError = error.localizedDescription
+        }
+    }
+
+    private func clearMastery(topicName: String, subtopicName: String) {
+        do {
+            try CurriculumProgressService.clearMastery(
+                subject: subject,
+                topicName: topicName,
+                subtopicName: subtopicName,
+                context: context
+            )
+        } catch {
+            masteryError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Exam-ready knowledge
+
+    private func knowledgeCard(_ knowledge: SubjectKnowledge) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                Image(systemName: "brain.head.profile")
+                    .foregroundStyle(color)
+                Text("Exam-ready knowledge")
+                    .font(.headline)
+                Spacer()
+                Text("ARIA is tuned to these")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Key concepts")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(color)
+                ForEach(knowledge.keyConcepts, id: \.self) { item in
+                    Label(item, systemImage: "book.closed")
+                        .font(.callout)
+                        .foregroundStyle(IBColors.ink)
+                }
+            }
+            .padding(.vertical, 6)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("High-yield topics")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(color)
+                ForEach(knowledge.highYieldTopics, id: \.self) { item in
+                    Label(item, systemImage: "checkmark.seal")
+                        .font(.callout)
+                        .foregroundStyle(IBColors.ink)
+                }
+            }
+            .padding(.vertical, 6)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Common misconceptions")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(color)
+                ForEach(knowledge.commonMisconceptions, id: \.self) { item in
+                    Label(item, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(IBColors.ink)
+                }
+            }
+            .padding(.vertical, 6)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Exam technique")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(color)
+                ForEach(knowledge.examTechnique, id: \.self) { item in
+                    Label(item, systemImage: "lightbulb")
+                        .font(.callout)
+                        .foregroundStyle(IBColors.ink)
+                }
+            }
+            .padding(.vertical, 6)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(color.opacity(0.15), lineWidth: 0.5))
+        )
+    }
+
+    // MARK: - Grades
+    private var gradesCard: some View {
+        VStack(alignment: .leading, spacing: 12) {            HStack {
                 Image(systemName: "chart.bar.doc.horizontal.fill")
                     .foregroundStyle(.tint)
                 Text("Grades")
@@ -389,6 +623,13 @@ struct SubjectDetailView: View {
     }
 }
 
+// MARK: - Card Index
+/// Single-pass lookup table over a subject's cards, built once per render.
+private struct SubjectCardIndex {
+    var byTopic: [String: [StudyCard]] = [:]
+    var bySubtopic: [String: [StudyCard]] = [:]
+}
+
 // MARK: - Add Grade Sheet
 struct AddGradeView: View {
     let subject: Subject
@@ -404,6 +645,7 @@ struct AddGradeView: View {
     @State private var weightPercent = ""
     @State private var sourceName = "Manual"
     @State private var feedback = ""
+    @State private var saveError: String?
 
     let components = ["Paper 1", "Paper 2", "IA", "EE", "TOK", "Overall"]
 
@@ -468,46 +710,27 @@ struct AddGradeView: View {
                             subject: subject
                         )
                         context.insert(grade)
-                        try? context.save()
-                        IBHaptics.success()
-                        dismiss()
+                        do {
+                            try context.save()
+                            IBHaptics.success()
+                            dismiss()
+                        } catch {
+                            context.rollback()
+                            saveError = error.localizedDescription
+                        }
                     }
                 }
             }
+            .alert("Could Not Save Grade", isPresented: Binding(
+                get: { saveError != nil },
+                set: { if !$0 { saveError = nil } }
+            )) {
+                Button("OK", role: .cancel) { saveError = nil }
+            } message: {
+                Text(saveError ?? "The grade could not be saved.")
+            }
         }
         .frame(minWidth: 450, minHeight: 400)
-    }
-}
-
-// MARK: - Topic Row
-private struct SubjectTopicRow: View {
-    let card: StudyCard
-    var color: Color = IBColors.electricBlue
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(card.proficiency.emoji)
-                .font(.title3)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(card.topicName)
-                    .font(.callout)
-                HStack(spacing: 8) {
-                    Text(card.proficiency.rawValue)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(color.opacity(0.1)))
-                        .foregroundStyle(color)
-
-                    Text(card.isDue ? "Due now" : "Due in \(card.daysUntilDue)d")
-                        .font(.caption)
-                        .foregroundStyle(card.isDue ? .orange : .secondary)
-                }
-            }
-            Spacer()
-        }
-        .padding(.vertical, 4)
     }
 }
 

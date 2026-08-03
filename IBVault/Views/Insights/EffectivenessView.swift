@@ -9,31 +9,6 @@ struct EffectivenessView: View {
 
     private var profile: UserProfile? { profiles.first }
 
-    private let methods: [(name: String, multiplier: Double, icon: String, color: Color, desc: String)] = [
-        ("Re-reading notes", 1.0, "doc.text", Color.gray, "Passive review — lowest retention"),
-        ("Highlighting", 1.05, "highlighter", Color.yellow.opacity(0.8), "Minimal active processing"),
-        ("Summarising", 1.15, "list.bullet.rectangle", Color.orange, "Some elaboration benefit"),
-        ("Teaching others", 1.4, "person.2.fill", Color.blue.opacity(0.7), "Feynman technique effect"),
-        ("Practice testing", 1.5, "checkmark.circle", Color.green.opacity(0.8), "Active recall — strong yield"),
-        ("IB Vault (SR + AR)", 1.7, "sparkles", IBColors.electricBlue, "Spaced repetition × active recall")
-    ]
-
-    private var personalMultiplier: Double {
-        guard let p = profile else { return 1.7 }
-        let streakBonus = min(Double(p.currentStreak) * 0.02, 0.3)
-        let consistencyBonus = activity.count > 7 ? 0.1 : 0.0
-        return 1.7 + streakBonus + consistencyBonus
-    }
-
-    private var streakBonus: Double {
-        guard let p = profile else { return 0 }
-        return min(Double(p.currentStreak) * 0.02, 0.3)
-    }
-
-    private var consistencyBonus: Double {
-        activity.count > 7 ? 0.1 : 0.0
-    }
-
     private var momentumRows: [(date: Date, minutes: Double, cards: Int, xp: Int)] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -54,12 +29,10 @@ struct EffectivenessView: View {
     private var selectedMomentumRow: (date: Date, minutes: Double, cards: Int, xp: Int)? {
         if let selectedMomentumDate {
             let target = Calendar.current.startOfDay(for: selectedMomentumDate)
-            return momentumRows.min(by: {
+            return momentumRows.min {
                 abs($0.date.timeIntervalSince(target)) < abs($1.date.timeIntervalSince(target))
-            })
+            }
         }
-
-        guard !momentumRows.isEmpty else { return nil }
         return momentumRows.last(where: { $0.minutes > 0 || $0.cards > 0 || $0.xp > 0 }) ?? momentumRows.last
     }
 
@@ -67,92 +40,90 @@ struct EffectivenessView: View {
         momentumRows.filter { $0.minutes > 0 || $0.cards > 0 || $0.xp > 0 }.count
     }
 
-    private var projectedRereadingHours: Double {
-        personalMultiplier == 0 ? 0 : personalMultiplier
+    private var reviewDays: Int {
+        momentumRows.filter { $0.cards > 0 }.count
+    }
+
+    private var totalMinutes: Int {
+        Int(momentumRows.reduce(0.0) { $0 + $1.minutes }.rounded())
+    }
+
+    private var totalCards: Int {
+        momentumRows.reduce(0) { $0 + $1.cards }
+    }
+
+    private var totalXP: Int {
+        momentumRows.reduce(0) { $0 + $1.xp }
+    }
+
+    private var activeDayProgress: Double { Double(activeDays) / 14.0 }
+    private var reviewDayProgress: Double { Double(reviewDays) / 14.0 }
+
+    private var consistencyLabel: String {
+        switch activeDays {
+        case 0: return "No activity recorded yet"
+        case 1...3: return "A starting rhythm"
+        case 4...7: return "A developing routine"
+        case 8...11: return "A consistent routine"
+        default: return "A strong two-week rhythm"
+        }
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Hero multiplier
-                multiplierHero
+                recordHero
                     .padding(.horizontal, 24)
                     .padding(.top, 20)
 
                 momentumCard
                     .padding(.horizontal, 24)
 
-                // Method comparison
-                methodComparisonCard
+                recordedOutcomesCard
                     .padding(.horizontal, 24)
 
-                // Time equivalence
-                timeCard
-                    .padding(.horizontal, 24)
-
-                // Science section
                 scienceCard
                     .padding(.horizontal, 24)
                     .padding(.bottom, 24)
             }
         }
         .background(.background)
-        .navigationTitle("Effectiveness")
+        .navigationTitle("Learning Record")
     }
 
-    // MARK: - Multiplier Hero
-    private var multiplierHero: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 20) {
-                VStack(spacing: 4) {
-                    Text(String(format: "%.1f×", personalMultiplier))
-                        .font(.system(size: 48, weight: .heavy, design: .rounded))
-                        .foregroundStyle(IBColors.electricBlue)
-                    Text("Your Multiplier")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-
-                Divider().frame(height: 60)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "sparkles")
-                            .foregroundStyle(IBColors.electricBlue)
-                        Text("Base method")
-                        Spacer()
-                        Text("1.7×")
-                            .font(.callout.bold())
-                    }
-                    HStack(spacing: 8) {
-                        Image(systemName: "flame.fill")
-                            .foregroundStyle(.orange)
-                        Text("Streak bonus")
-                        Spacer()
-                        Text(String(format: "+%.2f×", streakBonus))
-                            .font(.callout.bold())
-                            .foregroundStyle(.orange)
-                    }
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(.green)
-                        Text("Consistency")
-                        Spacer()
-                        Text(String(format: "+%.2f×", consistencyBonus))
-                            .font(.callout.bold())
-                            .foregroundStyle(.green)
-                    }
-                }
-                .font(.callout)
+    private var recordHero: some View {
+        HStack(spacing: 20) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(IBColors.electricBlue.opacity(0.12))
+                    .frame(width: 58, height: 58)
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(IBColors.electricBlue)
             }
 
-            if let profile {
-                HStack(spacing: 6) {
-                    Text("🔥")
-                    Text("\(profile.currentStreak) day streak")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Your last 14 days")
+                    .font(.title2.bold())
+                Text(consistencyLabel)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if let profile, profile.currentStreak > 0 {
+                    Label("\(profile.currentStreak)-day current streak", systemImage: "flame.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
                 }
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(activeDays)")
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .foregroundStyle(IBColors.electricBlue)
+                Text("active days")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(20)
@@ -164,10 +135,10 @@ struct EffectivenessView: View {
             HStack {
                 Image(systemName: "chart.xyaxis.line")
                     .foregroundStyle(.tint)
-                Text("Focus Effect")
+                Text("Study Momentum")
                     .font(.headline)
                 Spacer()
-                Text("Last 14 days")
+                Text("Minutes and reviewed cards")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -179,7 +150,7 @@ struct EffectivenessView: View {
                         y: .value("Minutes", row.minutes)
                     )
                     .foregroundStyle(IBColors.electricBlue.opacity(0.28))
-                    .cornerRadius(6)
+                    .cornerRadius(5)
 
                     LineMark(
                         x: .value("Day", row.date),
@@ -194,7 +165,7 @@ struct EffectivenessView: View {
                         y: .value("Cards", Double(row.cards))
                     )
                     .foregroundStyle(IBColors.success)
-                    .symbolSize(selectedMomentumRow?.date == row.date ? 80 : 36)
+                    .symbolSize(selectedMomentumRow?.date == row.date ? 80 : 30)
                 }
 
                 if let selectedMomentumRow {
@@ -206,7 +177,7 @@ struct EffectivenessView: View {
             .frame(height: 220)
             .chartXSelection(value: $selectedMomentumDate)
             .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: 2)) { value in
+                AxisMarks(values: .stride(by: .day, count: 2)) {
                     AxisTick()
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
                         .foregroundStyle(Color.primary.opacity(0.08))
@@ -219,16 +190,16 @@ struct EffectivenessView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(selectedMomentumRow.date, format: .dateTime.weekday(.wide).day().month(.abbreviated))
                             .font(.headline)
-                        Text("\(activeDays) active days in the last 14")
+                        Text("Recorded study activity")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
-                    statPill(value: "\(Int(selectedMomentumRow.minutes))m", label: "Study", color: IBColors.electricBlue)
-                    statPill(value: "\(selectedMomentumRow.cards)", label: "Cards", color: IBColors.success)
-                    statPill(value: "+\(selectedMomentumRow.xp)", label: "XP", color: .yellow)
+                    metric(value: "\(Int(selectedMomentumRow.minutes))m", label: "Study", color: IBColors.electricBlue)
+                    metric(value: "\(selectedMomentumRow.cards)", label: "Cards", color: IBColors.success)
+                    metric(value: "+\(selectedMomentumRow.xp)", label: "XP", color: .yellow)
                 }
             }
         }
@@ -236,112 +207,48 @@ struct EffectivenessView: View {
         .glassCard()
     }
 
-    // MARK: - Method Comparison
-    private var methodComparisonCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var recordedOutcomesCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Image(systemName: "chart.bar.fill")
+                Image(systemName: "checkmark.seal.fill")
                     .foregroundStyle(.tint)
-                Text("Method Comparison")
+                Text("Recorded Outcomes")
                     .font(.headline)
+                Spacer()
+                Text("No estimated multipliers")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
-            Chart(methods, id: \.name) { method in
-                BarMark(
-                    x: .value("Multiplier", method.multiplier),
-                    y: .value("Method", method.name)
-                )
-                .foregroundStyle(method.color.gradient)
-                .cornerRadius(6)
+            progressRow(
+                icon: "calendar.badge.checkmark",
+                title: "Active study days",
+                value: "\(activeDays) of 14",
+                progress: activeDayProgress,
+                color: IBColors.electricBlue
+            )
+            progressRow(
+                icon: "rectangle.stack.badge.play.fill",
+                title: "Days with active recall",
+                value: "\(reviewDays) of 14",
+                progress: reviewDayProgress,
+                color: IBColors.success
+            )
 
-                RuleMark(x: .value("Your multiplier", personalMultiplier))
-                    .foregroundStyle(IBColors.electricBlue.opacity(0.35))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-            }
-            .frame(height: 220)
-            .chartXAxis {
-                AxisMarks(position: .bottom, values: .stride(by: 0.25)) { value in
-                    AxisTick()
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
-                        .foregroundStyle(Color.primary.opacity(0.08))
-                    AxisValueLabel()
-                }
-            }
+            Divider()
 
-            ForEach(methods, id: \.name) { method in
-                HStack(spacing: 10) {
-                    Image(systemName: method.icon)
-                        .foregroundStyle(method.color)
-                        .frame(width: 20)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(method.name)
-                                .font(.callout.weight(.medium))
-                            Spacer()
-                            Text(String(format: "%.1f×", method.multiplier))
-                                .font(.callout.bold())
-                                .foregroundStyle(method.color)
-                        }
-                        MasteryBar(
-                            progress: method.multiplier / 2.0,
-                            height: 6,
-                            color: method.color
-                        )
-                        Text(method.desc)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 4)
-                if method.name != methods.last?.name {
-                    Divider()
-                }
+            HStack(spacing: 0) {
+                summaryMetric(value: "\(totalMinutes)m", label: "Study time")
+                Divider().frame(height: 42)
+                summaryMetric(value: "\(totalCards)", label: "Cards reviewed")
+                Divider().frame(height: 42)
+                summaryMetric(value: "\(totalXP)", label: "Learning XP")
             }
         }
         .padding(16)
         .glassCard()
     }
 
-    // MARK: - Time Equivalence
-    private var timeCard: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Image(systemName: "clock.fill")
-                    .font(.title2)
-                    .foregroundStyle(IBColors.electricBlue)
-                Text("1 hour")
-                    .font(.title3.bold())
-                Text("with IB Vault")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-
-            VStack(spacing: 4) {
-                Text("≈")
-                    .font(.title.bold())
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 40)
-
-            VStack(spacing: 8) {
-                Image(systemName: "clock")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                Text("\(Int((projectedRereadingHours * 60).rounded()))m")
-                    .font(.title3.bold())
-                Text("of re-reading")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .padding(20)
-        .glassCard()
-    }
-
-    // MARK: - Science
     private var scienceCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
@@ -351,27 +258,62 @@ struct EffectivenessView: View {
                     .font(.headline)
             }
 
-            Text("Practice testing and distributed practice are consistently high-utility learning strategies. IB Vault combines both by scheduling review and requiring retrieval instead of passive re-reading.")
+            Text("Practice testing and distributed practice are well-supported learning strategies. IBVault records your use of both without converting them into an invented performance multiplier.")
                 .foregroundStyle(.secondary)
+
+            if let researchURL = URL(string: "https://doi.org/10.1177/1529100612453266") {
+                Link(destination: researchURL) {
+                    Label("Dunlosky et al. research review", systemImage: "arrow.up.right.square")
+                        .font(.callout.weight(.semibold))
+                }
+            }
         }
         .padding(16)
         .glassCard()
     }
 
-    private func statPill(value: String, label: String, color: Color) -> some View {
+    private func progressRow(
+        icon: String,
+        title: String,
+        value: String,
+        progress: Double,
+        color: Color
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(title).font(.callout.weight(.semibold))
+                    Spacer()
+                    Text(value).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                MasteryBar(progress: progress, height: 7, color: color)
+            }
+        }
+    }
+
+    private func summaryMetric(value: String, label: String) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.callout.bold())
+                .font(.title3.bold().monospacedDigit())
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func metric(value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.callout.bold().monospacedDigit())
                 .foregroundStyle(color)
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(color.opacity(0.08))
-        )
+        .frame(minWidth: 48)
     }
 }

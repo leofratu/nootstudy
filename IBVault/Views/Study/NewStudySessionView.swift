@@ -15,6 +15,8 @@ struct NewStudySessionView: View {
     @State private var revisitCount = 3
     @State private var planMarkdown = ""
     @State private var isGeneratingPlan = false
+    @State private var planGenerationFailed = false
+    @State private var saveError: String?
     @State private var chatMessages: [(role: String, text: String)] = []
     @State private var chatInput = ""
     @State private var isChatting = false
@@ -22,10 +24,18 @@ struct NewStudySessionView: View {
     private let durations = [30, 45, 60, 90, 120]
     private let revisitOptions = [0, 1, 2, 3, 4, 5]
     private let defaultReviewOffsets = [1, 3, 7, 14, 21]
+    private static let stepNames = ["Subject", "Topic", "Schedule", "Plan"]
+
+    // Static so the schedule step does not allocate a DateFormatter per render.
+    private static let endTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 
     private var curriculum: [CurriculumUnit] {
         guard let subject = selectedSubject else { return [] }
-        return SyllabusSeeder.curriculum(for: subject.name)
+        return SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
     }
 
     private var selectedTopicList: [String] {
@@ -49,7 +59,7 @@ struct NewStudySessionView: View {
             return "No topics selected"
         }
         if selectedTopicList.count == 1 {
-            return selectedTopicList[0]
+            return selectedTopicList.first ?? ""
         }
         return "\(selectedTopicList.count) topics selected"
     }
@@ -61,9 +71,9 @@ struct NewStudySessionView: View {
         let hour = cal.component(.hour, from: now)
         var target = cal.startOfDay(for: now)
         if hour >= 16 {
-            target = cal.date(byAdding: .day, value: 1, to: target)!
+            target = cal.date(byAdding: .day, value: 1, to: target) ?? target
         }
-        return cal.date(bySettingHour: 16, minute: 0, second: 0, of: target)!
+        return cal.date(bySettingHour: 16, minute: 0, second: 0, of: target) ?? target
     }
 
     var body: some View {
@@ -107,6 +117,14 @@ struct NewStudySessionView: View {
             .onAppear {
                 scheduledDate = defaultSchedule
             }
+            .alert("Could Not Save Plan", isPresented: Binding(
+                get: { saveError != nil },
+                set: { if !$0 { saveError = nil } }
+            )) {
+                Button("OK") { saveError = nil }
+            } message: {
+                Text(saveError ?? "Your study plan could not be saved.")
+            }
         }
         .frame(minWidth: 600, minHeight: 550)
     }
@@ -114,18 +132,18 @@ struct NewStudySessionView: View {
     // MARK: - Step Indicator
     private var stepIndicator: some View {
         HStack(spacing: 0) {
-            ForEach(0..<4, id: \.self) { i in
+            ForEach(Array(Self.stepNames.enumerated()), id: \.offset) { index, name in
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(i <= step ? IBColors.electricBlue : Color.secondary.opacity(0.3))
+                        .fill(index <= step ? IBColors.electricBlue : Color.secondary.opacity(0.3))
                         .frame(width: 8, height: 8)
-                    Text(["Subject", "Topic", "Schedule", "Plan"][i])
+                    Text(name)
                         .font(.caption)
-                        .foregroundStyle(i <= step ? .primary : .secondary)
+                        .foregroundStyle(index <= step ? .primary : .secondary)
                 }
-                if i < 3 {
+                if index < Self.stepNames.count - 1 {
                     Rectangle()
-                        .fill(i < step ? IBColors.electricBlue : Color.secondary.opacity(0.2))
+                        .fill(index < step ? IBColors.electricBlue : Color.secondary.opacity(0.2))
                         .frame(height: 1)
                         .frame(maxWidth: .infinity)
                 }
@@ -363,9 +381,7 @@ struct NewStudySessionView: View {
 
     private var endTimeFormatted: String {
         let end = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: scheduledDate) ?? scheduledDate
-        let fmt = DateFormatter()
-        fmt.dateFormat = "HH:mm"
-        return fmt.string(from: end)
+        return Self.endTimeFormatter.string(from: end)
     }
 
     private var selectedReviewOffsets: [Int] {
@@ -492,6 +508,10 @@ struct NewStudySessionView: View {
 
             if step < 3 {
                 Button {
+                    // "Generate Plan" on the Schedule step kicks off ARIA and
+                    // moves to the Plan step, which shows the spinner while the
+                    // plan streams in — instead of advancing to an empty plan.
+                    if step == 2 { generatePlan() }
                     withAnimation(.easeInOut(duration: 0.2)) { step += 1 }
                 } label: {
                     HStack {
@@ -514,7 +534,7 @@ struct NewStudySessionView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(planMarkdown.isEmpty)
+                .disabled(planMarkdown.isEmpty || planGenerationFailed)
             }
         }
     }
@@ -522,14 +542,11 @@ struct NewStudySessionView: View {
     // MARK: - Logic
     private func generatePlan() {
         guard let subject = selectedSubject else { return }
+        guard !isGeneratingPlan else { return }
         isGeneratingPlan = true
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-                    throw GeminiError.noAPIKey
-                }
-
                 let unitPart = selectedUnitList.isEmpty ? "" : "\nUnits: \(selectedUnitList.joined(separator: ", "))"
                 let subtopicPart = selectedSubtopicList.isEmpty ? "" : "\nFocus subtopics: \(selectedSubtopicList.joined(separator: ", "))"
                 let prompt = """
@@ -553,10 +570,9 @@ struct NewStudySessionView: View {
                 You are ARIA, an IB study planner. Generate a structured, time-blocked study plan. Be specific about what to study and how. Reference IB exam requirements and mark schemes. Keep it practical and concise.
                 """
 
-                let response = try await GeminiService.generateContent(
+                let response = try await AIProviderService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: systemPrompt,
-                    apiKey: apiKey
+                    systemInstruction: systemPrompt
                 )
 
                 ARIAService.recordStudyPlanDraft(
@@ -570,11 +586,13 @@ struct NewStudySessionView: View {
 
                 await MainActor.run {
                     planMarkdown = response
+                    planGenerationFailed = false
                     isGeneratingPlan = false
                 }
             } catch {
                 await MainActor.run {
                     planMarkdown = "Failed to generate plan: \(error.localizedDescription)\n\nTry again or write your own plan."
+                    planGenerationFailed = true
                     isGeneratingPlan = false
                 }
             }
@@ -590,10 +608,6 @@ struct NewStudySessionView: View {
 
         Task {
             do {
-                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-                    throw GeminiError.noAPIKey
-                }
-
                 let prompt = """
                 The current study plan is:
                 \(planMarkdown)
@@ -603,10 +617,9 @@ struct NewStudySessionView: View {
                 Update the study plan based on the user's request. Return the FULL updated plan.
                 """
 
-                let response = try await GeminiService.generateContent(
+                let response = try await AIProviderService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You are ARIA. Update the study plan based on user feedback. Return the complete updated plan. Be concise.",
-                    apiKey: apiKey
+                    systemInstruction: "You are ARIA. Update the study plan based on user feedback. Return the complete updated plan. Be concise."
                 )
 
                 ARIAService.recordStudyPlanRevision(
@@ -621,6 +634,9 @@ struct NewStudySessionView: View {
                 await MainActor.run {
                     chatMessages.append((role: "model", text: "Plan updated! ✅"))
                     planMarkdown = response
+                    // A successful refine replaces the failed-draft text with a
+                    // real plan, so the schedule button must unlock again.
+                    planGenerationFailed = false
                     isChatting = false
                 }
             } catch {
@@ -656,7 +672,15 @@ struct NewStudySessionView: View {
             planMarkdown: planMarkdown
         )
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // A failed save must not silently drop the freshly built plan.
+            // Roll back the pending insert so a retry cannot duplicate it.
+            saveError = "Could not save your study plan: \(error.localizedDescription)"
+            context.rollback()
+            return
+        }
         IBHaptics.success()
         dismiss()
     }

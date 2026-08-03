@@ -11,7 +11,7 @@ struct StudySessionLogView: View {
     }
 
     private var weeklyStats: (sessions: Int, cards: Int, minutes: Int) {
-        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
         let recent = sessions.filter { $0.startDate >= weekAgo }
         let totalCards = recent.reduce(0) { $0 + $1.cardsReviewed }
         let totalMinutes = Int(recent.reduce(0.0) { $0 + $1.duration } / 60)
@@ -20,7 +20,7 @@ struct StudySessionLogView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            LazyVStack(spacing: 16) {
                 // Stats
                 statsHeader
                     .padding(.horizontal, 24)
@@ -59,7 +59,7 @@ struct StudySessionLogView: View {
 
     // MARK: - Day Section
     private func daySection(_ date: Date, sessions: [StudySession]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        LazyVStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(date, format: .dateTime.weekday(.wide).month().day())
                     .font(.headline)

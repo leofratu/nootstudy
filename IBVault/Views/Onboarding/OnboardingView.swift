@@ -3,12 +3,13 @@ import SwiftData
 
 struct OnboardingView: View {
     @Environment(\.modelContext) private var context
-    @Query private var profiles: [UserProfile]
+    @Query(sort: \Subject.name) private var seededSubjects: [Subject]
     @State private var currentPage = 0
     @State private var isCompleting = false
+    @State private var onboardingError: String?
 
-    private var orderedProfiles: [UserProfile] {
-        profiles.sorted { $0.id.uuidString < $1.id.uuidString }
+    private var safePageIndex: Int {
+        min(max(currentPage, 0), pages.count - 1)
     }
 
     private let pages = [
@@ -26,7 +27,7 @@ struct OnboardingView: View {
                 Circle()
                     .fill(IBColors.electricBlue.opacity(0.08))
                     .frame(width: 120, height: 120)
-                Image(systemName: pages[currentPage].icon)
+                Image(systemName: pages[safePageIndex].icon)
                     .font(.system(size: 48, weight: .light))
                     .foregroundStyle(IBColors.electricBlue)
             }
@@ -42,11 +43,11 @@ struct OnboardingView: View {
                     .textCase(.uppercase)
                     .tracking(2)
 
-                Text(pages[currentPage].title)
+                Text(pages[safePageIndex].title)
                     .font(.system(size: 32, weight: .bold))
                     .animation(IBAnimation.smooth, value: currentPage)
 
-                Text(pages[currentPage].subtitle)
+                Text(pages[safePageIndex].subtitle)
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .animation(IBAnimation.smooth, value: currentPage)
@@ -105,6 +106,14 @@ struct OnboardingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
+        .alert("Onboarding Incomplete", isPresented: Binding(
+            get: { onboardingError != nil },
+            set: { if !$0 { onboardingError = nil } }
+        )) {
+            Button("OK", role: .cancel) { onboardingError = nil }
+        } message: {
+            Text(onboardingError ?? "Your progress could not be saved. Please try again.")
+        }
     }
 
     // MARK: - Welcome Content
@@ -129,7 +138,7 @@ struct OnboardingView: View {
                       desc: "Reviews scheduled at optimal intervals for long-term memory")
             featureRow(icon: "brain.head.profile", color: .blue,
                       title: "Active Recall",
-                      desc: "Retrieval practice strengthens memory 1.7× vs re-reading")
+                      desc: "Retrieval practice makes you produce an answer instead of only re-reading it")
             featureRow(icon: "chart.line.uptrend.xyaxis", color: .purple,
                       title: "Adaptive Difficulty",
                       desc: "SM-2 algorithm adjusts card intervals based on your performance")
@@ -138,12 +147,19 @@ struct OnboardingView: View {
 
     private var subjectContent: some View {
         VStack(spacing: 8) {
-            subjectRow("English B", "HL", IBColors.englishColor)
-            subjectRow("Russian A Literature", "SL", IBColors.russianColor)
-            subjectRow("Biology", "SL", IBColors.biologyColor)
-            subjectRow("Mathematics AA", "SL", IBColors.mathColor)
-            subjectRow("Economics", "HL", IBColors.economicsColor)
-            subjectRow("Business Management", "HL", IBColors.businessColor)
+            if seededSubjects.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Preparing your subjects…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 8)
+            } else {
+                ForEach(seededSubjects, id: \.id) { subject in
+                    subjectRow(subject.name, subject.level, IBColors.subjectColor(for: subject.name))
+                }
+            }
         }
     }
 
@@ -196,12 +212,23 @@ struct OnboardingView: View {
         SyllabusSeeder.seedIfNeeded(context: context)
         NotificationService.requestPermission()
 
-        if orderedProfiles.isEmpty {
+        // Fetch directly instead of relying on the @Query snapshot so a profile
+        // inserted by the app launch path is always seen (avoids duplicates).
+        let existingProfiles: [UserProfile]
+        do {
+            existingProfiles = try context.fetch(FetchDescriptor<UserProfile>())
+        } catch {
+            onboardingError = error.localizedDescription
+            isCompleting = false
+            return
+        }
+
+        if existingProfiles.isEmpty {
             let profile = UserProfile()
             profile.onboardingCompleted = true
             context.insert(profile)
         } else {
-            for profile in orderedProfiles {
+            for profile in existingProfiles {
                 profile.onboardingCompleted = true
             }
         }
@@ -209,11 +236,9 @@ struct OnboardingView: View {
         do {
             try context.save()
         } catch {
-            assertionFailure("Failed to complete onboarding: \(error.localizedDescription)")
+            context.rollback()
+            onboardingError = error.localizedDescription
         }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            isCompleting = false
-        }
+        isCompleting = false
     }
 }

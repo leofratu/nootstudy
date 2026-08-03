@@ -1,8 +1,9 @@
 import Foundation
 import SwiftData
 
+@MainActor
 @Observable
-final class ReviewQueueManager: @unchecked Sendable {
+final class ReviewQueueManager {
     // MARK: - Published State
     private(set) var dueCards: [StudyCard] = []
     private(set) var totalDueCount: Int = 0
@@ -10,10 +11,16 @@ final class ReviewQueueManager: @unchecked Sendable {
     // O(1) per-subject due count cache: keyed by subject UUID string
     private(set) var dueCountCache: [String: Int] = [:]
 
-    private let lock = NSLock()
+    // O(1) eligible-card count refreshed alongside the due snapshot
+    private(set) var eligibleCardCount: Int = 0
+
+    // Set when a store refresh fails. Keeps a broken store from being reported
+    // as "0 due": the last good snapshot stays in place instead of being cleared.
+    private(set) var lastRefreshError: String?
+
     private var isRefreshing = false
 
-    private struct ScopeIndex {
+    private struct ScopeIndex: Sendable {
         let scopesBySubject: [String: [StudyScope]]
 
         init(scopes: [StudyScope]) {
@@ -31,63 +38,12 @@ final class ReviewQueueManager: @unchecked Sendable {
         }
     }
 
-    // MARK: - Refresh (off-main-thread fetch)
+    // MARK: - Refresh
     func refreshDueCards(context: ModelContext) {
-        // Prevent concurrent redundant refreshes
-        lock.lock()
-        guard !isRefreshing else { lock.unlock(); return }
+        guard !isRefreshing else { return }
         isRefreshing = true
-        lock.unlock()
-
-        // Capture the persistent container so we can create a background context
-        let container = context.container
-
-        Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self else { return }
-
-            let backgroundContext = ModelContext(container)
-            let now = Date()
-            let predicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
-            var descriptor = FetchDescriptor<StudyCard>(predicate: predicate)
-            descriptor.sortBy = [SortDescriptor(\.nextReviewDate, order: .forward)]
-
-            do {
-                let scopeIndex = ScopeIndex(scopes: self.fetchStudiedScopes(in: backgroundContext))
-                let fetched = try backgroundContext.fetch(descriptor)
-                let filtered: [StudyCard]
-                if scopeIndex.isEmpty {
-                    filtered = fetched
-                } else {
-                    filtered = self.filterCardsToScopes(fetched, matching: scopeIndex)
-                }
-
-                // Build O(1) per-subject count cache
-                var cache: [String: Int] = [:]
-                for card in filtered {
-                    if let subjectID = card.subject?.id.uuidString {
-                        cache[subjectID, default: 0] += 1
-                    }
-                }
-
-                await MainActor.run {
-                    self.dueCards = filtered
-                    self.totalDueCount = filtered.count
-                    self.dueCountCache = cache
-                    self.lock.lock()
-                    self.isRefreshing = false
-                    self.lock.unlock()
-                }
-            } catch {
-                await MainActor.run {
-                    self.dueCards = []
-                    self.totalDueCount = 0
-                    self.dueCountCache = [:]
-                    self.lock.lock()
-                    self.isRefreshing = false
-                    self.lock.unlock()
-                }
-            }
-        }
+        defer { isRefreshing = false }
+        refreshDueCardsSynchronously(context: context)
     }
 
     // Convenience alias
@@ -95,7 +51,6 @@ final class ReviewQueueManager: @unchecked Sendable {
         refreshDueCards(context: context)
     }
 
-    @MainActor
     func refreshDueCardsSynchronously(context: ModelContext) {
         let now = Date()
         let predicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
@@ -107,9 +62,22 @@ final class ReviewQueueManager: @unchecked Sendable {
             let fetched = try context.fetch(descriptor)
             let scopeIndex = ScopeIndex(scopes: studiedScopes)
             let filtered = scopeIndex.isEmpty ? fetched : filterCardsToScopes(fetched, matching: scopeIndex)
+            lastRefreshError = nil
             applyDueCardsSnapshot(filtered)
+
+            // Cache the eligible pool count here (once per refresh) instead of
+            // letting views run a full unfiltered fetch inside their body.
+            if studiedScopes.isEmpty {
+                eligibleCardCount = (try? context.fetchCount(FetchDescriptor<StudyCard>())) ?? 0
+            } else {
+                let all = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
+                eligibleCardCount = filterCardsToScopes(all, matching: scopeIndex).count
+            }
         } catch {
-            applyDueCardsSnapshot([])
+            // Do not clear the queue: the previous snapshot is a better answer
+            // than a fabricated "0 due". Views may ignore the error, but the
+            // reported counts stay honest.
+            lastRefreshError = "Review queue refresh failed: \(error.localizedDescription)"
         }
     }
 
@@ -135,40 +103,14 @@ final class ReviewQueueManager: @unchecked Sendable {
             .sorted { $0.nextReviewDate < $1.nextReviewDate }
     }
 
-    func overdueCards(context: ModelContext) -> [StudyCard] {
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
-        return dueCards.filter { $0.nextReviewDate < yesterday }
-    }
-
     func dueCountPerSubject() -> [String: Int] {
         dueCountCache
     }
 
-    func upcomingCards(context: ModelContext, days: Int = 7) -> [StudyCard] {
-        let now = Date()
-        let future = Calendar.current.date(byAdding: .day, value: days, to: now) ?? now
-        let predicate = #Predicate<StudyCard> {
-            $0.nextReviewDate > now && $0.nextReviewDate <= future
-        }
-        var descriptor = FetchDescriptor<StudyCard>(predicate: predicate)
-        descriptor.sortBy = [SortDescriptor(\.nextReviewDate)]
-
-        do {
-            let scopeIndex = ScopeIndex(scopes: fetchStudiedScopes(in: context))
-            let fetched = try context.fetch(descriptor)
-            if scopeIndex.isEmpty { return fetched }
-            return filterCardsToScopes(fetched, matching: scopeIndex)
-        } catch {
-            return []
-        }
-    }
-
-    func eligibleCardsCount(context: ModelContext) -> Int {
-        let studied = fetchStudiedScopes(in: context)
-        if studied.isEmpty {
-            return (try? context.fetchCount(FetchDescriptor<StudyCard>())) ?? 0
-        }
-        return eligibleCards(context: context).count
+    /// O(1) eligible-card count computed during `refreshDueCardsSynchronously`,
+    /// so views never run a full unfiltered fetch inside their body.
+    func eligibleCardsCount() -> Int {
+        eligibleCardCount
     }
 
     func eligibleCards(context: ModelContext) -> [StudyCard] {
@@ -184,7 +126,6 @@ final class ReviewQueueManager: @unchecked Sendable {
         return StudySession.uniqueStudyScopes(from: sessions)
     }
 
-    @MainActor
     private func applyDueCardsSnapshot(_ cards: [StudyCard]) {
         var cache: [String: Int] = [:]
         for card in cards {
@@ -198,18 +139,8 @@ final class ReviewQueueManager: @unchecked Sendable {
         dueCountCache = cache
     }
 
-    private func filterCardsToScopes(_ cards: [StudyCard], matching scopes: [StudyScope]) -> [StudyCard] {
-        guard !scopes.isEmpty else { return [] }
-        return filterCardsToScopes(cards, matching: ScopeIndex(scopes: scopes))
-    }
-
     private func filterCardsToScopes(_ cards: [StudyCard], matching scopeIndex: ScopeIndex) -> [StudyCard] {
         guard !scopeIndex.isEmpty else { return [] }
         return cards.filter { scopeIndex.matches($0) }
-    }
-
-    // Keep old name so callers continue to compile
-    private func studiedScopes(in context: ModelContext) -> [StudyScope] {
-        fetchStudiedScopes(in: context)
     }
 }

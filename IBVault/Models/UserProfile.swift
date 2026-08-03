@@ -146,75 +146,6 @@ enum IBYear: String, Codable, CaseIterable, Sendable {
     }
 }
 
-enum UserRank: String, Codable, CaseIterable, Sendable {
-    case electron = "Electron"
-    case atom = "Atom"
-    case molecule = "Molecule"
-    case catalyst = "Catalyst"
-    case cell = "Cell"
-    case nucleus = "Nucleus"
-    case organism = "Organism"
-    case ecosystem = "Ecosystem"
-    case universe = "Universe"
-    case supernova = "Supernova"
-    
-    var emoji: String {
-        switch self {
-        case .electron: return "⚡"
-        case .atom: return "⚛️"
-        case .molecule: return "🧬"
-        case .catalyst: return "🔥"
-        case .cell: return "🔬"
-        case .nucleus: return "💫"
-        case .organism: return "🌱"
-        case .ecosystem: return "🌍"
-        case .universe: return "🌌"
-        case .supernova: return "✨"
-        }
-    }
-    
-    var xpRequired: Int {
-        switch self {
-        case .electron: return 0
-        case .atom: return 100
-        case .molecule: return 300
-        case .catalyst: return 500
-        case .cell: return 800
-        case .nucleus: return 1200
-        case .organism: return 1800
-        case .ecosystem: return 2800
-        case .universe: return 4500
-        case .supernova: return 7000
-        }
-    }
-    
-    var title: String {
-        switch self {
-        case .electron: return "Just getting started"
-        case .atom: return "Building foundations"
-        case .molecule: return "Connecting concepts"
-        case .catalyst: return "Accelerating learning"
-        case .cell: return "Deep understanding"
-        case .nucleus: return "Core mastery"
-        case .organism: return "Growing expertise"
-        case .ecosystem: return "System thinker"
-        case .universe: return "Knowledge master"
-        case .supernova: return "IB Legend"
-        }
-    }
-    
-    var next: UserRank? {
-        let all = UserRank.allCases
-        guard let idx = all.firstIndex(of: self), idx + 1 < all.count else { return nil }
-        return all[idx + 1]
-    }
-
-    static func rank(forXP xp: Int) -> UserRank {
-        let normalizedXP = max(0, xp)
-        return allCases.last { normalizedXP >= $0.xpRequired } ?? .electron
-    }
-}
-
 @Model
 final class UserProfile {
     var id: UUID
@@ -223,21 +154,19 @@ final class UserProfile {
     var longestStreak: Int
     var lastStudyDate: Date?
     var streakFreezes: Int
-    var rankRaw: String
     var onboardingCompleted: Bool
     var dailyGoal: Int
     var notificationHour: Int
     var notificationMinute: Int
-    var weeklyChallenge: String?
-    var weeklyChallengeProgress: Int
-    var weeklyChallengeTarget: Int
-    
+
+    var achievedRankRaw: Int = 0
+    var achievedTierRaw: Int = 0
+
     var studentName: String
     var studyIntensityRaw: String
     var ibYearRaw: String
     var targetIBScore: Int
     var reportLastUploaded: Date?
-    var totalCardsReviewed: Int?
     var rankUpDate: Date?
     
     var studyIntensity: StudyIntensity {
@@ -250,39 +179,41 @@ final class UserProfile {
         set { ibYearRaw = newValue.rawValue }
     }
     
-    var rank: UserRank {
-        get { UserRank(rawValue: rankRaw) ?? .electron }
-        set { rankRaw = newValue.rawValue }
-    }
-    
-    var progressToNextRank: Double {
-        guard let next = rank.next else { return 1.0 }
-        let currentMin = rank.xpRequired
-        let nextMin = next.xpRequired
-        let progress = Double(totalXP - currentMin) / Double(nextMin - currentMin)
-        return min(max(progress, 0.0), 1.0)
-    }
-    
-    /// Adds XP, auto-promotes rank, and records the rank-up date.
-    func addXP(_ amount: Int) {
-        guard amount > 0 else { return }
-        totalXP += amount
-        let previousRank = rank
-        rank = UserRank.rank(forXP: totalXP)
-        if rank != previousRank {
-            rankUpDate = Date()
+    var achievedStep: RankStep {
+        get {
+            RankStep(
+                rank: Rank(rawValue: achievedRankRaw) ?? .electron,
+                tier: RankTier(rawValue: achievedTierRaw) ?? .three
+            )
+        }
+        set {
+            achievedRankRaw = newValue.rank.rawValue
+            achievedTierRaw = newValue.tier.rawValue
         }
     }
 
-    /// Increments totalCardsReviewed by count.
-    func recordCardsReviewed(_ count: Int) {
-        totalCardsReviewed = (totalCardsReviewed ?? 0) + count
+    /// Accumulates momentum. Deliberately has no effect on rank.
+    func recordXP(_ amount: Int) {
+        guard amount > 0 else { return }
+        totalXP += amount
     }
-    
+
+    /// Raises the high-water mark if live mastery has reached a new step.
+    /// Returns the new step when it changed, so callers can emit a rank-up event.
+    @discardableResult
+    func advanceRank(liveMastery: Double) -> RankStep? {
+        let advanced = RankProgress.advanced(mark: achievedStep, liveMastery: liveMastery)
+        guard advanced > achievedStep else { return nil }
+        achievedStep = advanced
+        rankUpDate = Date()
+        return advanced
+    }
+
     func checkAndUpdateStreak() {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        
+        let previousStreak = currentStreak
+
         if let last = lastStudyDate {
             let lastDay = calendar.startOfDay(for: last)
             let diff = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
@@ -304,42 +235,13 @@ final class UserProfile {
         longestStreak = max(longestStreak, currentStreak)
         lastStudyDate = Date()
         
-        if currentStreak > 0 && currentStreak % 7 == 0 {
+        // Award a freeze only when this call actually crosses a 7-day milestone.
+        // Checking currentStreak % 7 alone would mint an unlimited number of
+        // freezes from repeated same-day calls (diff == 0 leaves the streak
+        // unchanged at 7, 14, …).
+        if currentStreak > previousStreak && currentStreak % 7 == 0 {
             streakFreezes += 1
         }
-    }
-    
-    func applyPreset() {
-        dailyGoal = studyIntensity.dailyCardSuggestion
-        
-        let scoreRatio = Double(targetIBScore) / 45.0
-        if scoreRatio >= 0.9 { rank = .molecule; totalXP = 300 }
-        else if scoreRatio >= 0.75 { rank = .atom; totalXP = 150 }
-        else { rank = .electron; totalXP = 50 }
-        
-        if ibYear == .dp2 {
-            totalXP += 100
-            rank = UserRank.rank(forXP: totalXP)
-        }
-    }
-    
-    func autoUpdateFromGrades(averageGrade: Double, totalReviews: Int) {
-        let gradeScore = min(max(averageGrade / 7.0, 0.0), 1.0)
-        let consistencyScore = min(max(Double(totalReviews) / 200.0, 0.0), 1.0)
-        let combined = (gradeScore * 0.6 + consistencyScore * 0.4)
-
-        let targetRank: UserRank?
-        if combined >= 0.9 { targetRank = .universe }
-        else if combined >= 0.8 { targetRank = .ecosystem }
-        else if combined >= 0.7 { targetRank = .organism }
-        else if combined >= 0.6 { targetRank = .nucleus }
-        else if combined >= 0.5 { targetRank = .cell }
-        else if combined >= 0.4 { targetRank = .catalyst }
-        else { targetRank = nil }
-
-        guard let targetRank, rank.xpRequired < targetRank.xpRequired else { return }
-        rank = targetRank
-        totalXP = max(totalXP, targetRank.xpRequired)
     }
     
     init() {
@@ -348,18 +250,16 @@ final class UserProfile {
         self.currentStreak = 0
         self.longestStreak = 0
         self.streakFreezes = 0
-        self.rankRaw = UserRank.electron.rawValue
         self.onboardingCompleted = false
         self.dailyGoal = 20
         self.notificationHour = 9
         self.notificationMinute = 0
-        self.weeklyChallengeProgress = 0
-        self.weeklyChallengeTarget = 20
+        self.achievedRankRaw = Rank.electron.rawValue
+        self.achievedTierRaw = RankTier.three.rawValue
         self.studentName = ""
         self.studyIntensityRaw = StudyIntensity.average.rawValue
         self.ibYearRaw = IBYear.dp1.rawValue
         self.targetIBScore = 30
-        self.totalCardsReviewed = nil
         self.rankUpDate = nil
     }
 }
@@ -432,9 +332,7 @@ enum ADHDMedicationTracker {
             guard hoursSinceDose <= duration else { continue }
             
             let peakLevel = Double(settings.doseMg) * 0.43
-            let normalizedTime = hoursSinceDose / duration
-            let peakNormalized = peakHours / duration
-            
+
             var relativeLevel: Double
             if hoursSinceDose <= peakHours {
                 let t = hoursSinceDose / peakHours
@@ -485,11 +383,7 @@ enum ADHDMedicationTracker {
             
             let peakMinutes = doseMinutes + Int(settings.medicationType.peakHoursAfterDose * 60)
             let endMinutes = doseMinutes + Int(settings.medicationType.durationHours * 60)
-            
-            let startComponents = DateComponents(hour: doseHour, minute: doseMinute)
-            let peakComponents = DateComponents(hour: peakMinutes / 60, minute: peakMinutes % 60)
-            let endComponents = DateComponents(hour: min(endMinutes / 60, 23), minute: endMinutes % 60)
-            
+
             if let startDate = calendar.date(bySettingHour: doseHour, minute: doseMinute, second: 0, of: today),
                let peakDate = calendar.date(bySettingHour: peakMinutes / 60, minute: peakMinutes % 60, second: 0, of: today),
                let endDate = calendar.date(bySettingHour: min(endMinutes / 60, 23), minute: endMinutes % 60, second: 0, of: today) {

@@ -11,6 +11,10 @@ struct StudyGuideView: View {
     @State private var guideText = ""
     @State private var isGenerating = false
     @State private var error: String?
+    // Cached on appear: s.cards.count / s.dueCardsCount re-scan the subject's
+    // card store on every body evaluation, including each streamed guide token.
+    @State private var subjectCardCount = 0
+    @State private var subjectDueCount = 0
 
     enum GuideMode: String {
         case preSession = "Pre-Session Brief"
@@ -43,7 +47,7 @@ struct StudyGuideView: View {
                             .padding(.horizontal, 24)
                     }
 
-                    if !isGenerating && guideText.isEmpty && error == nil {
+                    if !isGenerating && guideText.isEmpty {
                         modeSelector
                             .padding(.horizontal, 24)
                     }
@@ -54,6 +58,12 @@ struct StudyGuideView: View {
             .navigationTitle("Study Guide")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+            }
+            .onAppear {
+                if let s = subject {
+                    subjectCardCount = s.cards.count
+                    subjectDueCount = s.dueCardsCount
+                }
             }
         }
         .frame(minWidth: 600, minHeight: 500)
@@ -83,8 +93,8 @@ struct StudyGuideView: View {
                             .foregroundStyle(Color(hex: s.accentColorHex))
                     }
                     HStack(spacing: 12) {
-                        Label("\(s.cards.count) topics", systemImage: "square.stack")
-                        Label("\(s.dueCardsCount) due", systemImage: "clock")
+                        Label("\(subjectCardCount) topics", systemImage: "square.stack")
+                        Label("\(subjectDueCount) due", systemImage: "clock")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -117,7 +127,7 @@ struct StudyGuideView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("ARIA is building your \(mode.rawValue)…")
                     .font(.callout.weight(.medium))
-                Text("Analysing \(subject?.cards.count ?? 0) cards, session history, and IB difficulty data.")
+                Text("Analysing \(subjectCardCount) cards, session history, and IB difficulty data.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -214,17 +224,14 @@ struct StudyGuideView: View {
 
     // MARK: - Generate
     private func generateGuide(mode: GuideMode) {
-        guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-            error = "No Gemini API key configured. Add one in Settings."; return
-        }
         isGenerating = true; error = nil; guideText = ""; IBHaptics.light()
         Task {
             do {
                 let prompt = buildGuidePrompt(mode: mode)
                 let systemPrompt = await ariaService.buildSystemPrompt(context: context, seedQuery: guideSeedQuery(for: mode))
-                let stream = GeminiService.streamContent(
+                let stream = AIProviderService.streamContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: systemPrompt, apiKey: apiKey
+                    systemInstruction: systemPrompt
                 )
                 var fullGuide = ""
                 for try await token in stream {
@@ -242,7 +249,12 @@ struct StudyGuideView: View {
                 }
 
                 await MainActor.run {
-                    guideText = normalizedGuide
+                    if normalizedGuide.isEmpty {
+                        error = "ARIA returned an empty guide. Pick another guide type to try again."
+                        guideText = ""
+                    } else {
+                        guideText = normalizedGuide
+                    }
                     isGenerating = false
                 }
             } catch {

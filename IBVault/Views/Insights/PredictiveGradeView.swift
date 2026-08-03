@@ -7,27 +7,40 @@ struct PredictiveGradeView: View {
     @Query private var subjects: [Subject]
     @Query private var profiles: [UserProfile]
     @Query(sort: \Grade.date, order: .reverse) private var allGrades: [Grade]
+
+    /// Per-subject predictions and their sum, refreshed only when the queried
+    /// subjects or grades change. `predictSubjectGrade` used to re-scan every
+    /// subject's cards and sort grades ~6 times per render.
+    @State private var cachedPredictions: [UUID: SubjectPrediction] = [:]
+    @State private var cachedTotalScore = 0
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                headerCard
-                    .padding(.horizontal, 28)
-                    .padding(.top, 24)
-                
+            VStack(alignment: .leading, spacing: 22) {
+                StudioPageHeader(
+                    eyebrow: "Forecast",
+                    title: "Grade prediction",
+                    subtitle: "A transparent score projection built from your weighted assessments and current mastery trends.",
+                    symbol: "chart.line.uptrend.xyaxis",
+                    tint: IBColors.teal
+                ) {
+                    StudioPill(title: scoreGap >= 0 ? "ON TARGET" : "\(abs(scoreGap)) TO CLOSE", tint: scoreGap >= 0 ? IBColors.success : IBColors.coral)
+                }
+
                 predictedScoreCard
-                    .padding(.horizontal, 28)
-                
                 subjectPredictionsCard
-                    .padding(.horizontal, 28)
-                    
                 gradeGapCard
-                    .padding(.horizontal, 28)
-                    .padding(.bottom, 24)
             }
+            .frame(maxWidth: 1080, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .background(.background)
+        .background(IBColors.canvas)
         .navigationTitle("Grade Prediction")
+        .onAppear(perform: refreshPredictions)
+        .onChange(of: subjects) { _, _ in refreshPredictions() }
+        .onChange(of: allGrades) { _, _ in refreshPredictions() }
     }
     
     // MARK: - Header
@@ -285,19 +298,43 @@ struct PredictiveGradeView: View {
     
     // MARK: - Helpers
     private var predictedTotalScore: Int {
-        subjects.reduce(0) { $0 + predictSubjectGrade($1).predicted }
+        guard cachedPredictions.count == subjects.count, !subjects.isEmpty else { return computeTotalScore() }
+        return cachedTotalScore
     }
-    
+
     private var scoreGap: Int {
         guard let profile = profiles.first else { return 0 }
         return predictedTotalScore - profile.targetIBScore
     }
-    
+
     private var masteryImpactFactor: Double {
         0.7
     }
-    
+
     private func predictSubjectGrade(_ subject: Subject) -> SubjectPrediction {
+        if let cached = cachedPredictions[subject.id] {
+            return cached
+        }
+        return computePrediction(for: subject)
+    }
+
+    private func computeTotalScore() -> Int {
+        subjects.reduce(0) { $0 + computePrediction(for: $1).predicted }
+    }
+
+    private func refreshPredictions() {
+        var predictions: [UUID: SubjectPrediction] = [:]
+        var total = 0
+        for subject in subjects {
+            let prediction = computePrediction(for: subject)
+            predictions[subject.id] = prediction
+            total += prediction.predicted
+        }
+        cachedPredictions = predictions
+        cachedTotalScore = total
+    }
+
+    private func computePrediction(for subject: Subject) -> SubjectPrediction {
         let mastery = subject.masteryProgress
         let grades = subject.grades.sorted { $0.date > $1.date }
         let weightedAverage = subject.weightedGradeAverage

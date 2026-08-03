@@ -1,0 +1,69 @@
+{
+ "task_id": "20260803-hardening-tools-20260803T111157Z",
+ "mode": "rpg",
+ "rpg_used": true,
+ "localization": {
+  "nodes": [
+   "iface.backup_restore_safety",
+   "iface.aria_action_scratch_context",
+   "iface.aria_app_tools",
+   "iface.gemini_key_transport",
+   "iface.provider_https_enforcement",
+   "iface.syllabus_curriculum_cache",
+   "test.backup_restore_safety"
+  ],
+  "files": [
+   "IBVault/Services/AIProviderService.swift",
+   "IBVault/Services/ARIAService.swift",
+   "IBVault/Services/BackupService.swift",
+   "IBVault/Services/GeminiService.swift",
+   "IBVault/Services/SyllabusSeeder.swift",
+   "IBVaultTests/BackupServiceTests.swift",
+   "repo_plan/file_index.json",
+   "repo_plan/rpg.json"
+  ],
+  "evidence": [
+   "Backup restore now decodes+validates before wiping; corrupt backups abort and preserve live data (tests: BackupServiceTests).",
+   "ARIA app actions run on a scratch ModelContext; rollback-on-failure removed from shared context.",
+   "New ARIA tools: create/edit/delete flashcards, add/edit/delete grades, set/clear mastery (nodes + cards), update unit state, create/update/delete subjects, full profile update, edit/delete memory, delete study plans; destructive tools gated on explicit user confirmation.",
+   "Gemini key moved from URL query to x-goog-api-key header; provider base URLs require HTTPS (loopback excepted); error bodies truncated.",
+   "ARIA spec store and backup folders excluded from iCloud/Time Machine; spec cache bounded.",
+   "SyllabusSeeder curriculum memoized; sync only rewrites changed nodes; dead code and force-unwraps removed."
+  ]
+ },
+ "tests": [
+  {
+   "cmd": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS'",
+   "ok": true,
+   "interfaces": [
+    "iface.aria_action_scratch_context",
+    "iface.aria_app_tools",
+    "iface.backup_restore_safety",
+    "iface.gemini_key_transport",
+    "iface.provider_https_enforcement",
+    "iface.syllabus_curriculum_cache",
+    "test.backup_restore_safety"
+   ]
+  }
+ ],
+ "implemented_interfaces": [
+  "iface.aria_action_scratch_context",
+  "iface.aria_app_tools",
+  "iface.backup_restore_safety",
+  "iface.gemini_key_transport",
+  "iface.provider_https_enforcement",
+  "iface.syllabus_curriculum_cache",
+  "test.backup_restore_safety"
+ ],
+ "tested_interfaces": [
+  "iface.aria_action_scratch_context",
+  "iface.aria_app_tools",
+  "iface.backup_restore_safety",
+  "iface.gemini_key_transport",
+  "iface.provider_https_enforcement",
+  "iface.syllabus_curriculum_cache",
+  "test.backup_restore_safety"
+ ],
+ "elapsed_s": null,
+ "tool_calls_count": null
+}

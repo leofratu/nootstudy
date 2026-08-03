@@ -7,6 +7,11 @@ struct ARIAMemoryView: View {
     @Query(sort: \ARIAMemory.timestamp, order: .reverse) private var memories: [ARIAMemory]
     @State private var newNote = ""
     @State private var selectedCategory: MemoryCategory = .userNotes
+    @State private var persistenceError: String?
+
+    private var memoriesByCategory: [MemoryCategory: [ARIAMemory]] {
+        Dictionary(grouping: memories, by: \.category)
+    }
 
     var body: some View {
         NavigationStack {
@@ -14,7 +19,7 @@ struct ARIAMemoryView: View {
                 addNoteSection
 
                 ForEach(MemoryCategory.allCases, id: \.self) { category in
-                    let items = memories.filter { $0.category == category }
+                    let items = memoriesByCategory[category] ?? []
                     if !items.isEmpty {
                         categorySection(category, items: items)
                     }
@@ -27,6 +32,14 @@ struct ARIAMemoryView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .alert("Memory Update Failed", isPresented: Binding(
+                get: { persistenceError != nil },
+                set: { if !$0 { persistenceError = nil } }
+            )) {
+                Button("OK", role: .cancel) { persistenceError = nil }
+            } message: {
+                Text(persistenceError ?? "The memory change could not be saved.")
             }
         }
     }
@@ -45,9 +58,14 @@ struct ARIAMemoryView: View {
                 guard !newNote.isEmpty else { return }
                 let memory = ARIAMemory(category: selectedCategory, content: newNote)
                 context.insert(memory)
-                try? context.save()
-                newNote = ""
-                IBHaptics.success()
+                do {
+                    try context.save()
+                    newNote = ""
+                    IBHaptics.success()
+                } catch {
+                    context.rollback()
+                    persistenceError = error.localizedDescription
+                }
             }
             .buttonStyle(.borderedProminent)
             .disabled(newNote.isEmpty)
@@ -68,7 +86,12 @@ struct ARIAMemoryView: View {
 
                     Button(role: .destructive) {
                         context.delete(item)
-                        try? context.save()
+                        do {
+                            try context.save()
+                        } catch {
+                            context.rollback()
+                            persistenceError = error.localizedDescription
+                        }
                     } label: {
                         Image(systemName: "trash")
                             .font(.caption)

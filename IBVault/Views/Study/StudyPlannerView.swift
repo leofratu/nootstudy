@@ -11,12 +11,16 @@ struct StudyPlannerView: View {
     @State private var selectedReviewSession: StudySession?
 
     private var upcomingPlans: [StudyPlan] {
-        allPlans.filter { $0.isUpcoming || $0.isActive }
+        // Today's plans are shown in their own section; excluding them here
+        // prevents a same-day plan appearing in both "Today" and "Upcoming".
+        allPlans.filter {
+            ($0.isUpcoming || $0.isActive) && !Calendar.current.isDateInToday($0.scheduledDate)
+        }
     }
 
     private var todayPlans: [StudyPlan] {
         let today = Calendar.current.startOfDay(for: Date())
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today
         return allPlans.filter { $0.scheduledDate >= today && $0.scheduledDate < tomorrow && !$0.isCompleted }
     }
 
@@ -24,63 +28,74 @@ struct StudyPlannerView: View {
         allPlans.filter { $0.isCompleted }.suffix(10).reversed()
     }
 
+    private var weekSessionsCount: Int {
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast
+        return recentSessions.filter { $0.startDate >= weekAgo }.count
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    // Hero
-                    heroCard
-                        .padding(.horizontal, 28)
-                        .padding(.top, 24)
+                VStack(alignment: .leading, spacing: 22) {
+                    StudioPageHeader(
+                        eyebrow: "Study cadence",
+                        title: "Study sessions",
+                        subtitle: todayPlans.isEmpty ? "Plan a focused block, then turn the work into a review path you can trust." : "\(todayPlans.count) sessions are lined up for today.",
+                        symbol: "calendar.badge.clock",
+                        tint: IBColors.electricBlue
+                    ) {
+                        Button {
+                            showNewSession = true
+                            IBHaptics.medium()
+                        } label: {
+                            Label("New session", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .tint(IBColors.electricBlue)
+                        .keyboardShortcut("n", modifiers: .command)
+                    }
+
+                    HStack(spacing: 12) {
+                        StudioMetricTile(value: "\(todayPlans.count)", label: "Today", symbol: "calendar", tint: IBColors.coral, detail: todayPlans.isEmpty ? "Open space" : "Scheduled blocks")
+                        StudioMetricTile(value: "\(upcomingPlans.count)", label: "Upcoming", symbol: "clock.arrow.circlepath", tint: IBColors.electricBlue, detail: "On your horizon")
+                        StudioMetricTile(value: "\(weekSessionsCount)", label: "This week", symbol: "checkmark.seal.fill", tint: IBColors.teal, detail: "Completed sessions")
+                    }
 
                     // Today's Sessions
                     if !todayPlans.isEmpty {
                         todaySection
-                            .padding(.horizontal, 28)
                     }
 
                     // Calendar
                     StudyCalendarView(plans: allPlans) { plan in
                         openPlan(plan)
-                    } onDeletePlan: { plan in
-                        deletePlan(plan)
+                    } onDeletePlan: { plan, scheduleReviews in
+                        deletePlan(plan, scheduleReviews: scheduleReviews)
                     }
-                    .padding(.horizontal, 28)
 
                     // Upcoming
                     if !upcomingPlans.isEmpty {
                         upcomingSection
-                            .padding(.horizontal, 28)
                     }
 
                     // Recent Sessions
                     if !recentSessions.isEmpty {
                         recentSessionsSection
-                            .padding(.horizontal, 28)
                     }
 
                     // Empty state
                     if allPlans.isEmpty && recentSessions.isEmpty {
                         emptyState
-                            .padding(.horizontal, 28)
                     }
-
-                    Spacer().frame(height: 24)
                 }
+                .frame(maxWidth: 1240, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .background(.background)
+            .background(IBColors.canvas)
             .navigationTitle("Study Planner")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showNewSession = true
-                        IBHaptics.medium()
-                    } label: {
-                        Label("New Session", systemImage: "plus.circle.fill")
-                    }
-                    .keyboardShortcut("n", modifiers: .command)
-                }
-            }
             .sheet(isPresented: $showNewSession) {
                 NewStudySessionView()
             }
@@ -90,9 +105,12 @@ struct StudyPlannerView: View {
                 if plan.isFollowUpReview {
                     ReviewSessionView(filterSubject: subject(for: plan), filterPlan: plan)
                 } else {
-                    ActiveStudySessionView(plan: plan) {
-                        selectedPlan = nil
-                    }
+                    // Do NOT dismiss the sheet on completion: ActiveStudySessionView
+                    // flips into its own completion screen (stats, scheduled
+                    // reviews, rank), which the user closes with "Done". Dismissing
+                    // here would tear the sheet down the moment the session
+                    // finished, before that screen could ever appear.
+                    ActiveStudySessionView(plan: plan)
                 }
             }
             .sheet(item: $selectedReviewSession, onDismiss: {
@@ -134,7 +152,7 @@ struct StudyPlannerView: View {
                 // Stats ring
                 if !recentSessions.isEmpty {
                     let weekSessions = recentSessions.filter {
-                        $0.startDate > Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+                        $0.startDate > (Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast)
                     }.count
                     VStack(spacing: 4) {
                         ProgressRing(
@@ -413,6 +431,9 @@ struct StudyPlannerView: View {
         case "Mathematics AA": return IBColors.mathColor
         case "Economics": return IBColors.economicsColor
         case "Business Management": return IBColors.businessColor
+        case "Advanced Mathematics": return Color(hex: "8B5CF6")
+        case "Fundamentals of the Universe": return Color(hex: "6366F1")
+        case "Startups & Venture Capital": return Color(hex: "0EA5E9")
         default: return .gray
         }
     }
@@ -422,14 +443,23 @@ struct StudyPlannerView: View {
         IBHaptics.light()
     }
 
-    private func deletePlan(_ plan: StudyPlan) {
-        // Schedule spaced repetition reviews before deleting
-        if !plan.isFollowUpReview {
+    private func deletePlan(_ plan: StudyPlan, scheduleReviews: Bool) {
+        // "Delete & Add Review" schedules follow-up reviews first; plain
+        // "Delete Session" removes the plan (and its review chain) without them.
+        if scheduleReviews && !plan.isFollowUpReview {
             scheduleSpacedReviews(for: plan)
         }
-        
+
         context.delete(plan)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Undo the deletion (and any review plans scheduled above) so the
+            // plan is not lost to a half-persisted state; the delete dialog can
+            // simply be reopened to retry.
+            context.rollback()
+            return
+        }
         IBHaptics.medium()
     }
 

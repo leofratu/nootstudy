@@ -90,7 +90,9 @@ enum SM2Engine {
         case 1:
             return config.secondIntervalSuccess
         default:
-            return Int(round(Double(currentInterval) * easeFactor))
+            // Floor at one day so a degenerate stored ease factor can never
+            // schedule a successful card for immediate re-review (interval 0).
+            return max(1, Int(round(Double(currentInterval) * easeFactor)))
         }
     }
     

@@ -31,10 +31,18 @@ targets:
       properties:
         LSMinimumSystemVersion: "14.0"
         NSUserNotificationAlertStyle: "alert"
+        # XcodeGen regenerates Info.plist from this block, so the version must
+        # live here. Editing Info.plist directly is silently reverted by the
+        # next `xcodegen generate`.
+        CFBundleShortVersionString: "1.2.0"
+        CFBundleVersion: "3"
     entitlements:
       path: IBVault/IBVault.entitlements
       properties:
-        com.apple.security.app-sandbox: true
+        # Local Codex provider launches the user's authenticated Codex CLI.
+        # Re-enable App Sandbox for a store build and ship that provider through
+        # a separately signed helper/XPC service instead.
+        com.apple.security.app-sandbox: false
         com.apple.security.network.client: true
     settings:
       CODE_SIGN_IDENTITY: "-"
@@ -42,7 +50,8 @@ targets:
       ENABLE_PREVIEWS: YES
       SDKROOT: macosx
       SUPPORTED_PLATFORMS: macosx
-      SWIFT_VERSION: 5.0
+      SWIFT_VERSION: 6.0
+      SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.app
       INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 NootStudy. All rights reserved."
@@ -61,7 +70,8 @@ targets:
       DEVELOPMENT_TEAM: ""
       SDKROOT: macosx
       SUPPORTED_PLATFORMS: macosx
-      SWIFT_VERSION: 5.0
+      SWIFT_VERSION: 6.0
+      SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.tests
       ENABLE_TESTING_SEARCH_PATHS: YES
       GENERATE_INFOPLIST_FILE: YES

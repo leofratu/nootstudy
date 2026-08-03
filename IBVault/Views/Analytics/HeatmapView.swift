@@ -8,7 +8,10 @@ struct HeatmapView: View {
     private let spacing: CGFloat = 3
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        // Hoisted once per render: the index is a computed property, so without
+        // this the per-cell `intensityFor` lookup would rebuild it 52×7 times.
+        let index = activityByDay
+        return ScrollView(.horizontal, showsIndicators: false) {
             VStack(alignment: .leading, spacing: spacing) {
                 // Day labels
                 HStack(spacing: spacing) {
@@ -23,7 +26,7 @@ struct HeatmapView: View {
                         Text(dayLabel(day)).font(.system(size: 8)).foregroundColor(IBColors.mutedGray).frame(width: 24)
                         ForEach(0..<columns, id: \.self) { week in
                             let date = dateFor(week: week, day: day)
-                            let intensity = intensityFor(date: date)
+                            let intensity = intensityFor(date: date, in: index)
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(colorForIntensity(intensity))
                                 .frame(width: cellSize, height: cellSize)
@@ -49,23 +52,42 @@ struct HeatmapView: View {
 
     private func monthLabel(for week: Int) -> some View {
         let date = dateFor(week: week, day: 0)
-        let fmt = DateFormatter(); fmt.dateFormat = "MMM"
-        return Text(fmt.string(from: date)).font(.system(size: 8)).foregroundColor(IBColors.mutedGray).frame(width: cellSize)
+        return Text(Self.monthFormatter.string(from: date))
+            .font(.system(size: 8))
+            .foregroundColor(IBColors.mutedGray)
+            .frame(width: cellSize, alignment: .leading)
+            // Allow "Dec"/"Mar" to overflow their 12pt cell instead of clipping
+            // while keeping the grid column alignment intact.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
+
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        return formatter
+    }()
 
     private func dateFor(week: Int, day: Int) -> Date {
         let today = Date()
         let cal = Calendar.current
         let weekday = cal.component(.weekday, from: today)
-        let startOfWeek = cal.date(byAdding: .day, value: -(weekday - 1), to: today)!
-        let startDate = cal.date(byAdding: .weekOfYear, value: -(columns - 1 - week), to: startOfWeek)!
+        let startOfWeek = cal.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
+        let startDate = cal.date(byAdding: .weekOfYear, value: -(columns - 1 - week), to: startOfWeek) ?? today
         return cal.date(byAdding: .day, value: day, to: startDate) ?? today
     }
 
-    private func intensityFor(date: Date) -> Int {
+    private var activityByDay: [Date: Int] {
         let cal = Calendar.current
-        let target = cal.startOfDay(for: date)
-        return activities.first { cal.startOfDay(for: $0.date) == target }?.intensity ?? 0
+        var index: [Date: Int] = [:]
+        for activity in activities {
+            index[cal.startOfDay(for: activity.date)] = activity.intensity
+        }
+        return index
+    }
+
+    private func intensityFor(date: Date, in index: [Date: Int]) -> Int {
+        index[Calendar.current.startOfDay(for: date)] ?? 0
     }
 
     private func colorForIntensity(_ level: Int) -> Color {

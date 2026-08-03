@@ -26,6 +26,9 @@ final class Grade {
     }
 
     var resolvedIBScore: Int {
+        if achievedPoints != nil, let maxPoints, maxPoints > 0 {
+            return Self.ibScore(fromNormalized: normalizedScore)
+        }
         if (1...7).contains(score) {
             return score
         }

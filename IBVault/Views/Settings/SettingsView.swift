@@ -5,18 +5,15 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
-    @Query private var studyCards: [StudyCard]
-    @Query private var reviewSessions: [ReviewSession]
-    @Query private var studySessions: [StudySession]
-    @Query private var studyActivities: [StudyActivity]
-    @Query private var achievements: [Achievement]
-    @Query private var grades: [Grade]
-    @Query private var studyPlans: [StudyPlan]
-    @Query private var ariaMemories: [ARIAMemory]
     @State private var apiKey = ""
+    @State private var junaliAPIKey = ""
     @State private var showAPIKey = false
+    @State private var showJunaliAPIKey = false
     @State private var hasKey = false
+    @State private var hasJunaliKey = false
     @State private var savedConfirmation = false
+    @State private var providerStatus: AIProviderStatus?
+    @State private var isTestingProvider = false
     @State private var showReportUpload = false
     @State private var presetApplied = false
     @State private var backupStatus = ""
@@ -30,8 +27,15 @@ struct SettingsView: View {
 
     // ARIA Settings
     @AppStorage("geminiModel") private var selectedModel = "gemini-2.0-flash"
+    @AppStorage("junaliModel") private var junaliModel = "gpt-5.6-sol"
+    @AppStorage("codexModel") private var codexModel = "gpt-5.6-sol"
+    @AppStorage("ariaProvider") private var selectedProviderRaw = AIProviderKind.gemini.rawValue
+    @AppStorage("ariaReasoningEffort") private var reasoningEffortRaw = AIReasoningEffort.medium.rawValue
+    @AppStorage("ariaVerbosity") private var verbosityRaw = AIResponseVerbosity.medium.rawValue
+    @AppStorage("ariaWebSearchMode") private var webSearchModeRaw = AIWebSearchMode.cached.rawValue
+    @AppStorage("junaliBaseURL") private var junaliBaseURL = AIConfiguration.junaliDefaultBaseURL
+    @AppStorage("codexCLIPath") private var codexCLIPath = ""
     @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
-    @AppStorage("ariaMaxTokens") private var ariaMaxTokens = 4096
     @AppStorage("ariaAutoCompact") private var ariaAutoCompact = true
     @AppStorage("ariaContextWindow") private var ariaContextWindow = 20
 
@@ -47,21 +51,82 @@ struct SettingsView: View {
 
     private var profile: UserProfile? { profiles.first }
 
+    private var selectedProvider: AIProviderKind {
+        AIProviderKind(rawValue: selectedProviderRaw) ?? .gemini
+    }
+
+    private var selectedReasoningEffort: Binding<AIReasoningEffort> {
+        Binding(
+            get: { AIReasoningEffort(rawValue: reasoningEffortRaw) ?? .medium },
+            set: { reasoningEffortRaw = $0.rawValue }
+        )
+    }
+
+    private var selectedVerbosity: Binding<AIResponseVerbosity> {
+        Binding(
+            get: { AIResponseVerbosity(rawValue: verbosityRaw) ?? .medium },
+            set: { verbosityRaw = $0.rawValue }
+        )
+    }
+
+    private var selectedWebSearchMode: Binding<AIWebSearchMode> {
+        Binding(
+            get: { AIWebSearchMode(rawValue: webSearchModeRaw) ?? .cached },
+            set: { webSearchModeRaw = $0.rawValue }
+        )
+    }
+
+    private var activeModel: Binding<String> {
+        Binding(
+            get: {
+                switch selectedProvider {
+                case .gemini: return selectedModel
+                case .junali: return junaliModel
+                case .codexCLI: return codexModel
+                }
+            },
+            set: { value in
+                switch selectedProvider {
+                case .gemini: selectedModel = value
+                case .junali: junaliModel = value
+                case .codexCLI: codexModel = value
+                }
+            }
+        )
+    }
+
     var body: some View {
-        Form {
-            presetSection
-            reportSection
-            ariaSection
-            geminiModelSection
-            studySection
-            adhdSection
-            backupSection
-            notificationSection
-            appearanceSection
-            dataSection
-            aboutSection
+        VStack(spacing: 0) {
+            StudioPageHeader(
+                eyebrow: "Workspace controls",
+                title: "Settings",
+                subtitle: "Configure your study plan, assistant, notifications, and local data without losing the thread of your work.",
+                symbol: "slider.horizontal.3",
+                tint: IBColors.electricBlue
+            ) {
+                StudioPill(title: "STUDY STUDIO", tint: IBColors.electricBlue)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 24)
+            .padding(.bottom, 18)
+
+            Form {
+                presetSection
+                reportSection
+                aiProviderSection
+                modelConfigurationSection
+                curriculumSection
+                studySection
+                adhdSection
+                backupSection
+                notificationSection
+                appearanceSection
+                dataSection
+                aboutSection
+            }
+            .formStyle(.grouped)
         }
-        .formStyle(.grouped)
+        .background(IBColors.canvas)
         .navigationTitle("Settings")
         .sheet(isPresented: $showReportUpload) { ReportUploadView() }
         .sheet(isPresented: $showModelPicker) { GeminiModelPickerView(selectedModel: $selectedModel) }
@@ -79,7 +144,7 @@ struct SettingsView: View {
                     Image(systemName: "person.fill")
                         .foregroundStyle(.tint)
                     TextField("Your Name", text: Binding(
-                        get: { p.studentName }, set: { p.studentName = $0; try? context.save() }
+                        get: { p.studentName }, set: { p.studentName = $0; persistChanges() }
                     ))
                 }
 
@@ -87,7 +152,7 @@ struct SettingsView: View {
                     Image(systemName: "calendar")
                         .foregroundStyle(.tint)
                     Picker("IB Year", selection: Binding(
-                        get: { p.ibYear }, set: { p.ibYear = $0; try? context.save() }
+                        get: { p.ibYear }, set: { p.ibYear = $0; persistChanges() }
                     )) {
                         ForEach(IBYear.allCases, id: \.self) { year in
                             Text(year.rawValue).tag(year)
@@ -102,7 +167,7 @@ struct SettingsView: View {
                         Text("Study Intensity")
                     }
                     Picker("Intensity", selection: Binding(
-                        get: { p.studyIntensity }, set: { p.studyIntensity = $0; try? context.save() }
+                        get: { p.studyIntensity }, set: { p.studyIntensity = $0; persistChanges() }
                     )) {
                         ForEach(StudyIntensity.allCases, id: \.self) { intensity in
                             HStack { Text(intensity.emoji); Text(intensity.rawValue) }.tag(intensity)
@@ -117,12 +182,13 @@ struct SettingsView: View {
                     Image(systemName: "target")
                         .foregroundStyle(.tint)
                     Stepper("Target Score: \(p.targetIBScore)/45", value: Binding(
-                        get: { p.targetIBScore }, set: { p.targetIBScore = $0; try? context.save() }
+                        get: { p.targetIBScore }, set: { p.targetIBScore = $0; persistChanges() }
                     ), in: 12...45)
                 }
 
                 Button {
-                    p.applyPreset(); try? context.save()
+                    p.dailyGoal = p.studyIntensity.dailyCardSuggestion
+                    persistChanges()
                     presetApplied = true; IBHaptics.success()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { presetApplied = false }
                 } label: {
@@ -136,7 +202,7 @@ struct SettingsView: View {
         } header: {
             Label("Student Profile", systemImage: "graduationcap.fill")
         } footer: {
-            Text("Presets auto-adjust your daily goal, starting rank, and XP based on your study intensity and IB year. ARIA uses this data for personalised recommendations.")
+            Text("Presets auto-adjust your daily goal based on your study intensity. ARIA uses this data for personalised recommendations. Rank is earned from your review history.")
         }
     }
 
@@ -164,77 +230,58 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-
-            Button { autoRankFromGrades() } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("AI Auto-Update Rank")
-                        Text("ARIA analyses your grades & reviews to set your rank")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
         } header: {
             Label("Report & Grades", systemImage: "chart.bar.doc.horizontal.fill")
         }
     }
 
-    // MARK: - ARIA Configuration
-    private var ariaSection: some View {
+    // MARK: - AI Provider
+    private var aiProviderSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Gemini API Key")
-                    .font(.headline)
-                HStack {
-                    if showAPIKey {
-                        TextField("Enter API Key", text: $apiKey)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.body, design: .monospaced))
-                    } else {
-                        SecureField("Enter API Key", text: $apiKey)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Button { showAPIKey.toggle() } label: {
-                        Image(systemName: showAPIKey ? "eye.slash" : "eye")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
+            Picker("Provider", selection: $selectedProviderRaw) {
+                ForEach(AIProviderKind.allCases) { provider in
+                    Label(provider.displayName, systemImage: provider.symbolName)
+                        .tag(provider.rawValue)
                 }
-                HStack {
-                    Button("Save to Keychain") {
-                        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmedKey.isEmpty else { return }
-                        if KeychainService.saveAPIKey(trimmedKey) {
-                            hasKey = true; savedConfirmation = true; IBHaptics.success()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { savedConfirmation = false }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: selectedProviderRaw) { _, _ in
+                providerStatus = nil
+                reasoningEffortRaw = AIConfiguration.normalizedReasoningEffort(
+                    selectedReasoningEffort.wrappedValue,
+                    for: selectedProvider
+                ).rawValue
+            }
 
-                    if savedConfirmation {
-                        Text("✓ Saved")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
-                    Spacer()
-                    if hasKey {
-                        Button("Delete Key", role: .destructive) {
-                            _ = KeychainService.deleteAPIKey(); hasKey = false; apiKey = ""; IBHaptics.warning()
+            Text(selectedProvider.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            providerCredentialEditor
+
+            HStack(spacing: 10) {
+                Button {
+                    testSelectedProvider()
+                } label: {
+                    HStack(spacing: 6) {
+                        if isTestingProvider {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "bolt.horizontal.circle")
                         }
-                        .controlSize(.small)
+                        Text(isTestingProvider ? "Checking" : "Check Provider")
                     }
                 }
-                HStack(spacing: 6) {
-                    Image(systemName: hasKey ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(hasKey ? .green : .orange)
-                        .font(.caption)
-                    Text(hasKey ? "API key stored in Keychain" : "No API key configured — ARIA requires a Gemini API key")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                .disabled(isTestingProvider)
+
+                if let providerStatus {
+                    Label(
+                        providerStatus.message,
+                        systemImage: providerStatus.isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(providerStatus.isReady ? .green : .orange)
+                    .lineLimit(3)
                 }
             }
 
@@ -242,70 +289,234 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Stepper("Context Window: \(ariaContextWindow) messages", value: $ariaContextWindow, in: 5...50, step: 5)
-                Text("How many past messages ARIA remembers per conversation. More = better context, higher token usage.")
+                Text("Past messages kept in each conversation before compacted memory is used.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Toggle(isOn: $ariaAutoCompact) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto-Compact Memory")
-                    Text("Automatically summarise old conversations to save tokens")
+            Toggle("Auto-Compact Older Conversation Context", isOn: $ariaAutoCompact)
+        } header: {
+            Label("AI Provider", systemImage: "brain.head.profile")
+        } footer: {
+            Text("Credentials stay in macOS Keychain. Local Codex reuses the Codex CLI sign-in and does not expose its token to IBVault.")
+        }
+    }
+
+    @ViewBuilder
+    private var providerCredentialEditor: some View {
+        switch selectedProvider {
+        case .gemini:
+            credentialEditor(
+                title: "Gemini API key",
+                text: $apiKey,
+                isVisible: $showAPIKey,
+                hasCredential: hasKey,
+                save: {
+                    hasKey = KeychainService.saveAPIKey(apiKey)
+                    return hasKey
+                },
+                delete: {
+                    _ = KeychainService.deleteAPIKey()
+                    hasKey = false
+                    apiKey = ""
+                }
+            )
+        case .junali:
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("Base URL", text: $junaliBaseURL)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.callout, design: .monospaced))
+                credentialEditor(
+                    title: "Junali API key",
+                    text: $junaliAPIKey,
+                    isVisible: $showJunaliAPIKey,
+                    hasCredential: hasJunaliKey,
+                    save: {
+                        hasJunaliKey = KeychainService.saveJunaliAPIKey(junaliAPIKey)
+                        return hasJunaliKey
+                    },
+                    delete: {
+                        _ = KeychainService.deleteJunaliAPIKey()
+                        hasJunaliKey = false
+                        junaliAPIKey = ""
+                    }
+                )
+            }
+        case .codexCLI:
+            VStack(alignment: .leading, spacing: 5) {
+                TextField("Codex executable path (auto-detect when empty)", text: $codexCLIPath)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.callout, design: .monospaced))
+                Text("Codex runs ephemerally in a read-only temporary workspace. The local development build is intentionally not App-Sandboxed so it can launch the CLI.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func credentialEditor(
+        title: String,
+        text: Binding<String>,
+        isVisible: Binding<Bool>,
+        hasCredential: Bool,
+        save: @escaping () -> Bool,
+        delete: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.callout.weight(.semibold))
+            HStack {
+                if isVisible.wrappedValue {
+                    TextField("Enter key", text: text)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                } else {
+                    SecureField("Enter key", text: text)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Button {
+                    isVisible.wrappedValue.toggle()
+                } label: {
+                    Image(systemName: isVisible.wrappedValue ? "eye.slash" : "eye")
+                }
+                .buttonStyle(.borderless)
+            }
+            HStack {
+                Button("Save to Keychain") {
+                    guard !text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                    if save() {
+                        savedConfirmation = true
+                        IBHaptics.success()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { savedConfirmation = false }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                if savedConfirmation {
+                    Text("Saved").font(.caption).foregroundStyle(.green)
+                }
+                Spacer()
+                if hasCredential {
+                    Button("Delete Key", role: .destructive) { delete() }
+                        .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    // MARK: - Model Configuration
+    private var modelConfigurationSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Model")
+                    Spacer()
+                    Text(selectedProvider.shortName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                if selectedProvider == .gemini {
+                    Button { showModelPicker = true } label: {
+                        HStack {
+                            Text(selectedModel).font(.system(.callout, design: .monospaced))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                    }
+                } else {
+                    Picker("Preset", selection: activeModel) {
+                        ForEach(AIConfiguration.knownModels[selectedProvider] ?? []) { option in
+                            Text("\(option.name) · \(option.role)").tag(option.id)
+                        }
+                    }
+                    TextField("Custom model ID", text: activeModel)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.callout, design: .monospaced))
+                }
+            }
+
+            if selectedProvider != .gemini {
+                Picker("Reasoning effort", selection: selectedReasoningEffort) {
+                    ForEach(AIConfiguration.supportedReasoningEfforts(for: selectedProvider)) { effort in
+                        Text(effort.displayName).tag(effort)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Text(selectedReasoningEffort.wrappedValue.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Answer detail", selection: selectedVerbosity) {
+                    ForEach(AIResponseVerbosity.allCases) { verbosity in
+                        Text(verbosity.displayName).tag(verbosity)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            if selectedProvider == .codexCLI {
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker("Web search", selection: selectedWebSearchMode) {
+                        ForEach(AIWebSearchMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(selectedWebSearchMode.wrappedValue.detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
+
+            if selectedProvider == .gemini {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Temperature: \(String(format: "%.1f", ariaTemperature))")
+                    Slider(value: $ariaTemperature, in: 0...1.5, step: 0.1)
+                    Text(temperatureDescription).font(.caption).foregroundStyle(.secondary)
+                }
+            }
         } header: {
-            Label("ARIA Configuration", systemImage: "brain.head.profile")
+            Label("Model & Reasoning", systemImage: "cpu")
+        } footer: {
+            Text("Medium is the balanced default. Increase effort for difficult synthesis or exam analysis; lower it for faster routine tutoring.")
         }
     }
 
-    // MARK: - Gemini Model Picker
-    private var geminiModelSection: some View {
+    private var curriculumSection: some View {
         Section {
-            Button { showModelPicker = true } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "cpu.fill")
-                        .foregroundStyle(.tint)
+            ForEach(subjects.sorted { $0.name < $1.name }, id: \.id) { subject in
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(Color(hex: subject.accentColorHex))
+                        .frame(width: 8, height: 8)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("AI Model")
-                        Text(selectedModel)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.tint)
+                        Text(subject.name)
+                        let curriculum = SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
+                        Text("\(curriculum.count) units · \(curriculum.flatMap(\.topics).count) topics · \(curriculum.flatMap(\.topics).flatMap(\.subtopics).count) subunits")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Temperature: \(String(format: "%.1f", ariaTemperature))")
-                    Spacer()
-                    Button("Reset") {
-                        ariaTemperature = 0.7
+                    Picker("Level", selection: Binding(
+                        get: { subject.level },
+                        set: { newLevel in
+                            subject.level = newLevel
+                            SyllabusSeeder.synchronizeCurriculum(context: context)
+                        }
+                    )) {
+                        Text("SL").tag("SL")
+                        Text("HL").tag("HL")
                     }
-                    .font(.caption)
-                    .buttonStyle(.borderless)
+                    .labelsHidden()
+                    .frame(width: 72)
                 }
-                Slider(value: $ariaTemperature, in: 0...2, step: 0.1)
-                    .tint(.accentColor)
-                Text(temperatureDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Stepper("Max Output: \(ariaMaxTokens) tokens", value: $ariaMaxTokens, in: 1024...65536, step: 1024)
-                Text("Maximum length of ARIA's responses. More tokens = longer answers.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         } header: {
-            Label("Gemini Provider", systemImage: "sparkle")
+            Label("Subjects & Curriculum", systemImage: "books.vertical")
         } footer: {
-            Text("Select your preferred Gemini model. Flash models are faster; Pro models are more capable. Temperature controls creativity (0 = focused, 2 = creative).")
+            Text("Changing a level refreshes the saved curriculum tree immediately. Existing personal flashcards are preserved.")
         }
     }
 
@@ -324,7 +535,7 @@ struct SettingsView: View {
         Section {
             if let p = profile {
                 Stepper("Daily Goal: \(p.dailyGoal) cards", value: Binding(
-                    get: { p.dailyGoal }, set: { p.dailyGoal = $0 }
+                    get: { p.dailyGoal }, set: { p.dailyGoal = $0; persistChanges() }
                 ), in: 5...100, step: 5)
 
                 HStack {
@@ -473,9 +684,12 @@ struct SettingsView: View {
 
     private func createBackup() {
         isBackingUp = true; backupStatus = ""
+        // The container is Sendable; export creates its own scratch context on
+        // the background queue, so no main-actor context crosses the boundary.
+        let container = context.container
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let url = try BackupService.exportBackup(context: context)
+                let url = try BackupService.exportBackup(container: container)
                 DispatchQueue.main.async {
                     refreshViewState()
                     isBackingUp = false; backupStatus = "✓ Saved to \(url.lastPathComponent)"; IBHaptics.success()
@@ -494,17 +708,59 @@ struct SettingsView: View {
             refreshViewState()
             backupStatus = "✓ Restored successfully!"; IBHaptics.success()
         } catch {
+            // A failed restore can leave the context holding pending deletes
+            // and inserts from the aborted import. Discard them so the data
+            // that was live before the restore attempt survives intact.
+            context.rollback()
             backupStatus = "✗ Restore failed: \(error.localizedDescription)"; IBHaptics.error()
         }
     }
 
     private func refreshViewState() {
+        refreshKeychainState()
+        refreshBackupState()
+    }
+
+    private func refreshKeychainState() {
         hasKey = KeychainService.hasAPIKey
         if hasKey, let loadedKey = KeychainService.loadAPIKey() {
             apiKey = loadedKey
         }
-        latestBackupDate = BackupService.latestBackupDate
-        backupCount = BackupService.listBackups().count
+        hasJunaliKey = KeychainService.hasJunaliAPIKey
+        if hasJunaliKey, let loadedKey = KeychainService.loadJunaliAPIKey() {
+            junaliAPIKey = loadedKey
+        }
+    }
+
+    private func refreshBackupState() {
+        DispatchQueue.global(qos: .utility).async {
+            let date = BackupService.latestBackupDate
+            let count = BackupService.listBackups().count
+            DispatchQueue.main.async {
+                latestBackupDate = date
+                backupCount = count
+            }
+        }
+    }
+
+    private func testSelectedProvider() {
+        providerStatus = nil
+        isTestingProvider = true
+        AIConfiguration.provider = selectedProvider
+        AIConfiguration.reasoningEffort = selectedReasoningEffort.wrappedValue
+        AIConfiguration.verbosity = selectedVerbosity.wrappedValue
+        AIConfiguration.webSearchMode = selectedWebSearchMode.wrappedValue
+        AIConfiguration.junaliBaseURL = junaliBaseURL
+        AIConfiguration.codexCLIPath = codexCLIPath
+        AIConfiguration.setModel(activeModel.wrappedValue, for: selectedProvider)
+
+        Task {
+            let status = await AIProviderService.status(for: selectedProvider)
+            await MainActor.run {
+                providerStatus = status
+                isTestingProvider = false
+            }
+        }
     }
 
     // MARK: - Notifications
@@ -519,7 +775,7 @@ struct SettingsView: View {
                     set: { date in
                         p.notificationHour = Calendar.current.component(.hour, from: date)
                         p.notificationMinute = Calendar.current.component(.minute, from: date)
-                        try? context.save()
+                        persistChanges()
                         NotificationService.scheduleDailyReminder(hour: p.notificationHour, minute: p.notificationMinute, dueCount: 0)
                     }
                 ), displayedComponents: .hourAndMinute)
@@ -560,7 +816,7 @@ struct SettingsView: View {
                     resetAllData()
                 }
             } message: {
-                Text("This will delete all your study data including subjects, cards, and progress. This action cannot be undone.")
+                Text("A fresh backup will be saved to Documents first so a mistaken reset can be undone. This will delete all your study data including subjects, cards, and progress.")
             }
         } header: {
             Label("Data", systemImage: "trash")
@@ -568,27 +824,68 @@ struct SettingsView: View {
     }
     
     private func resetAllData() {
+        guard !isResetting else { return }
         isResetting = true
-        
-        // Clear all SwiftData
-        for profile in profiles { context.delete(profile) }
-        for subject in subjects { context.delete(subject) }
-        for card in studyCards { context.delete(card) }
-        for session in reviewSessions { context.delete(session) }
-        for session in studySessions { context.delete(session) }
-        for activity in studyActivities { context.delete(activity) }
-        for achievement in achievements { context.delete(achievement) }
-        for grade in grades { context.delete(grade) }
-        for plan in studyPlans { context.delete(plan) }
-        for memory in ariaMemories { context.delete(memory) }
-        
-        // Clear UserDefaults
-        let domain = Bundle.main.bundleIdentifier!
-        UserDefaults.standard.removePersistentDomain(forName: domain)
-        
-        try? context.save()
-        
+        do {
+            // Never wipe the only copy of data we can still back up. Write a
+            // fresh backup first and abort if it cannot be saved, otherwise a
+            // mistaken reset would permanently destroy chat history and ADHD
+            // settings with no recovery path.
+            _ = try BackupService.exportBackup(context: context)
+
+            try deleteAll(UserProfile.self)
+            try deleteAll(Subject.self)
+            try deleteAll(StudyCard.self)
+            try deleteAll(ReviewSession.self)
+            try deleteAll(StudySession.self)
+            try deleteAll(StudyActivity.self)
+            try deleteAll(Achievement.self)
+            try deleteAll(Grade.self)
+            try deleteAll(StudyPlan.self)
+            try deleteAll(ARIAMemory.self)
+            try deleteAll(ARIAChatSession.self)
+            try deleteAll(ChatMessage.self)
+            try deleteAll(SubjectTrack.self)
+            try deleteAll(UnitState.self)
+            try deleteAll(CurriculumNode.self)
+            try deleteAll(WeeklyChallenge.self)
+
+            // Clear UserDefaults
+            if let domain = Bundle.main.bundleIdentifier {
+                UserDefaults.standard.removePersistentDomain(forName: domain)
+            }
+            _ = KeychainService.deleteAPIKey()
+            _ = KeychainService.deleteJunaliAPIKey()
+
+            try context.save()
+            // The @State copy is not backed by UserDefaults, so re-read it now
+            // that the domain (and the "adhdMedicationSettings" key) is gone.
+            adhdMedSettings = .default
+            refreshViewState()
+            backupStatus = "✓ All data reset (a backup was saved first)"
+            IBHaptics.success()
+        } catch {
+            context.rollback()
+            backupStatus = "✗ Reset failed: \(error.localizedDescription)"
+            IBHaptics.error()
+        }
         isResetting = false
+    }
+
+    private func deleteAll<T: PersistentModel>(_ type: T.Type) throws {
+        let all = try context.fetch(FetchDescriptor<T>())
+        for model in all {
+            context.delete(model)
+        }
+    }
+
+    private func persistChanges() {
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            backupStatus = "✗ Could not save changes: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - About
@@ -596,28 +893,22 @@ struct SettingsView: View {
         Section {
             LabeledContent("Version", value: "1.0.0")
             LabeledContent("Platform", value: "macOS 14.0+")
+            LabeledContent("AI Provider") {
+                Text(selectedProvider.displayName)
+                    .foregroundStyle(.tint)
+            }
             LabeledContent("AI Model") {
-                Text(selectedModel)
+                Text(activeModel.wrappedValue)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.tint)
             }
-            LabeledContent("Temperature", value: String(format: "%.1f", ariaTemperature))
-            LabeledContent("Max Tokens", value: "\(ariaMaxTokens)")
+            LabeledContent("Reasoning", value: selectedReasoningEffort.wrappedValue.displayName)
+            LabeledContent("Answer Detail", value: selectedVerbosity.wrappedValue.displayName)
         } header: {
             Label("About", systemImage: "info.circle")
         }
     }
 
-    // MARK: - AI Auto-Rank
-    private func autoRankFromGrades() {
-        guard let p = profile else { return }
-        let allGrades = subjects.flatMap { $0.grades }
-        guard !allGrades.isEmpty else { IBHaptics.warning(); return }
-        guard let avg = Subject.overallGradeAverage(for: subjects) else { return }
-        let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
-        p.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)
-        try? context.save(); IBHaptics.success()
-    }
 }
 
 // MARK: - Gemini Model Picker View
@@ -758,6 +1049,7 @@ struct ReportUploadView: View {
     @Query private var profiles: [UserProfile]
 
     @State private var grades: [String: [String: Int]] = [:]
+    @State private var saveError: String?
     let components = ["Paper 1", "Paper 2", "IA", "Overall"]
 
     var body: some View {
@@ -794,6 +1086,14 @@ struct ReportUploadView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
             .onAppear { initGrades() }
+            .alert("Could Not Save Report", isPresented: Binding(
+                get: { saveError != nil },
+                set: { if !$0 { saveError = nil } }
+            )) {
+                Button("OK", role: .cancel) { saveError = nil }
+            } message: {
+                Text(saveError ?? "Your grades could not be saved.")
+            }
         }
         .frame(minWidth: 600, minHeight: 500)
     }
@@ -858,14 +1158,14 @@ struct ReportUploadView: View {
         }
         if let p = profiles.first {
             p.reportLastUploaded = Date()
-            let allGrades = subjects.flatMap { $0.grades }
-            if !allGrades.isEmpty {
-                if let avg = Subject.overallGradeAverage(for: subjects) {
-                    let totalReviews = (try? context.fetchCount(FetchDescriptor<ReviewSession>())) ?? 0
-                    p.autoUpdateFromGrades(averageGrade: avg, totalReviews: totalReviews)
-                }
-            }
         }
-        try? context.save(); IBHaptics.success(); dismiss()
+        do {
+            try context.save()
+            IBHaptics.success()
+            dismiss()
+        } catch {
+            context.rollback()
+            saveError = error.localizedDescription
+        }
     }
 }

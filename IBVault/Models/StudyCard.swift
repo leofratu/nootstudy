@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum ProficiencyLevel: String, Codable, CaseIterable {
+enum ProficiencyLevel: String, Codable, CaseIterable, Sendable {
     case novice = "Novice"
     case developing = "Developing"
     case proficient = "Proficient"
@@ -26,7 +26,7 @@ enum ProficiencyLevel: String, Codable, CaseIterable {
     }
 }
 
-enum RecallQuality: Int, Codable, CaseIterable {
+enum RecallQuality: Int, Codable, CaseIterable, Sendable {
     case again = 0
     case hard = 2
     case good = 3
@@ -40,6 +40,25 @@ enum RecallQuality: Int, Codable, CaseIterable {
         case .easy: return "Easy"
         }
     }
+}
+
+enum CardDifficulty: String, Codable, CaseIterable, Identifiable, Sendable {
+    case foundation = "Foundation"
+    case standard = "Standard"
+    case exam = "Exam"
+    case stretch = "Stretch"
+
+    var id: String { rawValue }
+}
+
+enum CardCognitiveSkill: String, Codable, CaseIterable, Identifiable, Sendable {
+    case recall = "Recall"
+    case explain = "Explain"
+    case apply = "Apply"
+    case analyze = "Analyze"
+    case evaluate = "Evaluate"
+
+    var id: String { rawValue }
 }
 
 @Model
@@ -68,6 +87,14 @@ final class StudyCard {
     var generationSource: String?
     var totalReviewCount: Int
     var successfulReviewCount: Int
+    var hint: String?
+    var difficultyRaw: String?
+    var cognitiveSkillRaw: String?
+    var sourceTitle: String?
+    var sourceURLString: String?
+    var syllabusReference: String?
+    var adaptationReason: String?
+    var generationPromptVersion: Int?
 
     // Relationship
     var subject: Subject?
@@ -94,8 +121,27 @@ final class StudyCard {
         nextReviewDate <= Date()
     }
 
+    var difficulty: CardDifficulty {
+        get { difficultyRaw.flatMap(CardDifficulty.init(rawValue:)) ?? .standard }
+        set { difficultyRaw = newValue.rawValue }
+    }
+
+    var cognitiveSkill: CardCognitiveSkill {
+        get { cognitiveSkillRaw.flatMap(CardCognitiveSkill.init(rawValue:)) ?? .recall }
+        set { cognitiveSkillRaw = newValue.rawValue }
+    }
+
+    var sourceURL: URL? {
+        guard let sourceURLString, !sourceURLString.isEmpty else { return nil }
+        return URL(string: sourceURLString)
+    }
+
     var daysUntilDue: Int {
-        Calendar.current.dateComponents([.day], from: Date(), to: nextReviewDate).day ?? 0
+        let calendar = Calendar.current
+        let fromDay = calendar.startOfDay(for: Date())
+        let toDay = calendar.startOfDay(for: nextReviewDate)
+        let days = calendar.dateComponents([.day], from: fromDay, to: toDay).day ?? 0
+        return max(0, days)
     }
 
     init(
@@ -106,7 +152,15 @@ final class StudyCard {
         subject: Subject? = nil,
         isCustom: Bool = false,
         isAIGenerated: Bool? = true,
-        generationSource: String? = "ARIA"
+        generationSource: String? = "ARIA",
+        hint: String? = nil,
+        difficulty: CardDifficulty = .standard,
+        cognitiveSkill: CardCognitiveSkill = .recall,
+        sourceTitle: String? = nil,
+        sourceURLString: String? = nil,
+        syllabusReference: String? = nil,
+        adaptationReason: String? = nil,
+        generationPromptVersion: Int? = nil
     ) {
         self.id = UUID()
         self.topicName = topicName
@@ -126,5 +180,13 @@ final class StudyCard {
         self.generationSource = generationSource
         self.totalReviewCount = 0
         self.successfulReviewCount = 0
+        self.hint = hint
+        self.difficultyRaw = difficulty.rawValue
+        self.cognitiveSkillRaw = cognitiveSkill.rawValue
+        self.sourceTitle = sourceTitle
+        self.sourceURLString = sourceURLString
+        self.syllabusReference = syllabusReference
+        self.adaptationReason = adaptationReason
+        self.generationPromptVersion = generationPromptVersion
     }
 }

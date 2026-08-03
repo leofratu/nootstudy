@@ -1,0 +1,50 @@
+{
+ "task_id": "20260803-swift6-typesafety-20260803T151131Z",
+ "mode": "rpg",
+ "rpg_used": true,
+ "localization": {
+  "nodes": [
+   "iface.swift6_strict_concurrency",
+   "iface.typed_aria_actions",
+   "iface.typed_chat_roles"
+  ],
+  "files": [
+   "project.yml",
+   "IBVault/Services/ARIAService.swift",
+   "IBVault/Models/ARIAMemory.swift",
+   "IBVault/Models/Subject.swift",
+   "IBVault/Services/BackupService.swift",
+   "IBVault/Views/Settings/SettingsView.swift",
+   "IBVault/Views/Study/ActiveStudySessionView.swift",
+   "IBVault/Services/NotificationService.swift"
+  ],
+  "evidence": [
+   "Tier 1: AppActionType enum (25 tools + unknown) makes executor dispatch exhaustive; ChatMessageRole converted from string namespace to an indirect enum that round-trips through the stored role string (restore path preserves exact strings); Subject gains typed courseLevel accessor.",
+   "Tier 2+3: SWIFT_VERSION 6.0. Only 9 strict-concurrency errors surfaced (all nonisolated static caches) -> annotated nonisolated(unsafe) where NSLock-guarded/set-once; backup export rethreaded through Sendable ModelContainer; NotificationService permission completion made @Sendable; SessionTimerView Timer replaced with a MainActor .task loop (no @Sendable closure mutating @State).",
+   "Zero-warning build under Swift 6 + warnings-as-errors; 32 suites incl. 107-case ARIA E2E matrix green across 4 consecutive runs."
+  ]
+ },
+ "tests": [
+  {
+   "cmd": "xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' (x4)",
+   "ok": true,
+   "interfaces": [
+    "iface.swift6_strict_concurrency",
+    "iface.typed_aria_actions",
+    "iface.typed_chat_roles"
+   ]
+  }
+ ],
+ "implemented_interfaces": [
+  "iface.swift6_strict_concurrency",
+  "iface.typed_aria_actions",
+  "iface.typed_chat_roles"
+ ],
+ "tested_interfaces": [
+  "iface.swift6_strict_concurrency",
+  "iface.typed_aria_actions",
+  "iface.typed_chat_roles"
+ ],
+ "elapsed_s": null,
+ "tool_calls_count": null
+}

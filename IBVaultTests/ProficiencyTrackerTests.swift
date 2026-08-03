@@ -55,7 +55,7 @@ struct ProficiencyTrackerTests {
     
     @Test("Card with necessary repetitions and interval should become mastered")
     func testMasteredProficiency() {
-        var card = createTestCard(proficiency: .developing)
+        let card = createTestCard(proficiency: .developing)
         card.repetitions = 6
         card.interval = 21
         card.totalReviewCount = 10
@@ -68,7 +68,7 @@ struct ProficiencyTrackerTests {
     
     @Test("Card with moderate stats should become proficient")
     func testProficientProficiency() {
-        var card = createTestCard(proficiency: .novice)
+        let card = createTestCard(proficiency: .novice)
         card.repetitions = 3
         card.interval = 7
         card.totalReviewCount = 5
@@ -81,7 +81,7 @@ struct ProficiencyTrackerTests {
     
     @Test("Card with consecutive correct should become developing")
     func testDevelopingProficiency() {
-        var card = createTestCard(proficiency: .novice)
+        let card = createTestCard(proficiency: .novice)
         card.consecutiveCorrect = 2
         card.totalReviewCount = 2
         
@@ -101,7 +101,7 @@ struct ProficiencyTrackerTests {
     
     @Test("Effective AI card should have high success rate")
     func testEffectiveAICard() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.isAIGenerated = true
         card.totalReviewCount = 5
         card.successfulReviewCount = 4
@@ -112,7 +112,7 @@ struct ProficiencyTrackerTests {
     
     @Test("Struggling AI card should have low success rate")
     func testStrugglingAICard() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.isAIGenerated = true
         card.totalReviewCount = 5
         card.successfulReviewCount = 1
@@ -123,7 +123,7 @@ struct ProficiencyTrackerTests {
     
     @Test("Card with insufficient reviews should not be effective or struggling")
     func testCardWithFewReviews() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.isAIGenerated = true
         card.totalReviewCount = 2
         card.successfulReviewCount = 0
@@ -151,6 +151,51 @@ struct ProficiencyTrackerTests {
         let rate = ProficiencyTracker.retentionRate(from: [])
         
         #expect(rate == 0.0)
+    }
+
+    // MARK: - Division-by-zero guards on the real engine
+
+    @Test("Real engine returns zero mastery for an empty card array, not NaN")
+    func realEngineEmptyCardsMasteryIsZero() {
+        #expect(ProficiencyTracker.masteryPercentage(for: []) == 0.0)
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")
+        #expect(ProficiencyTracker.masteryPercentage(for: subject) == 0.0)
+        #expect(subject.masteryProgress == 0.0)
+    }
+
+    @Test("AI effectiveness with no qualifying AI cards is zero, not NaN")
+    func aiEffectivenessWithNoQualifyingCardsIsZero() {
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")
+        let card = StudyCard(topicName: "Cells", subtopic: "Prokaryotic structure", front: "Q", back: "A", subject: subject)
+        card.isAIGenerated = true
+        card.totalReviewCount = 2
+        card.successfulReviewCount = 2
+        subject.cards.append(card)
+
+        // Only 2 reviews: below the >= 3 gate, so the divisor pool is empty.
+        #expect(ProficiencyTracker.overallAIEffectiveness(for: subject) == 0.0)
+        #expect(ProficiencyTracker.strugglingAICards(for: subject).isEmpty)
+    }
+
+    @Test("Topic mastery for a topic with no cards is zero, not NaN")
+    func topicMasteryEmptyIsZero() {
+        let subject = Subject(name: "Economics", level: "HL", accentColorHex: "F59E0B")
+        let card = StudyCard(topicName: "Demand", front: "Q", back: "A", subject: subject)
+        card.proficiency = .mastered
+        subject.cards.append(card)
+
+        #expect(ProficiencyTracker.masteryPercentage(for: subject, topicName: "Macro") == 0.0)
+        #expect(ProficiencyTracker.masteryPercentage(for: subject, topicName: "Demand") > 0.0)
+    }
+
+    @Test("Weighted grade average with a zero-weight grade is still finite")
+    func zeroWeightGradeAverageIsFinite() {
+        let subject = Subject(name: "Chemistry", level: "HL", accentColorHex: "EF4444")
+        let grade = Grade(component: "Paper 1", score: 5, weightPercent: 0, subject: subject)
+        subject.grades.append(grade)
+
+        #expect(subject.weightedGradeAverage != nil)
+        #expect(subject.weightedGradeAverage?.isFinite == true)
     }
     
     private func createTestCard(proficiency: ProficiencyLevel = .novice) -> StudyCard {

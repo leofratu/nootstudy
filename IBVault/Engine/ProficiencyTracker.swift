@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct ProficiencyConfig {
+struct ProficiencyConfig: Sendable {
     var masteryRepetitionsThreshold: Int = 6
     var masteryIntervalThreshold: Int = 21
     var masterySuccessRateThreshold: Double = 0.85
@@ -56,11 +56,32 @@ enum ProficiencyTracker {
         }
         return calculateMastery(for: subtopicCards)
     }
+
+    static func masteryPercentage(for cards: [StudyCard]) -> Double {
+        calculateMastery(for: cards)
+    }
+
+    static func masteryValue(for level: ProficiencyLevel) -> Double {
+        switch level {
+        case .novice: return 0
+        case .developing: return 0.33
+        case .proficient: return 0.66
+        case .mastered: return 1
+        }
+    }
     
     static func weakTopics(for subject: Subject) -> [StudyCard] {
         subject.cards
             .filter { $0.proficiency == .novice || $0.proficiency == .developing }
-            .sorted { $0.consecutiveCorrect < $1.consecutiveCorrect }
+            .sorted {
+                if $0.consecutiveCorrect != $1.consecutiveCorrect {
+                    return $0.consecutiveCorrect < $1.consecutiveCorrect
+                }
+                if $0.topicName != $1.topicName {
+                    return $0.topicName < $1.topicName
+                }
+                return $0.id.uuidString < $1.id.uuidString
+            }
     }
     
     static func effectiveAICards(for subject: Subject) -> [StudyCard] {
@@ -101,15 +122,8 @@ enum ProficiencyTracker {
     private static func calculateMastery(for cards: [StudyCard]) -> Double {
         guard !cards.isEmpty else { return 0 }
         
-        let weights: [ProficiencyLevel: Double] = [
-            .novice: 0,
-            .developing: 0.33,
-            .proficient: 0.66,
-            .mastered: 1.0
-        ]
-        
         let score = cards.reduce(0.0) { sum, card in
-            sum + (weights[card.proficiency] ?? 0)
+            sum + masteryValue(for: card.proficiency)
         }
         
         return score / Double(cards.count)

@@ -1,5 +1,10 @@
 import SwiftUI
 
+// NOTE: Unused. `RecallMode` and `RecallModeSelector` are referenced only
+// within this file — the review session hard-codes its flashcard/typing flow
+// and never presents this selector. Kept (file removal is out of scope for a
+// strict-pass edit) but should not be treated as live UI.
+
 // MARK: - Recall Mode
 enum RecallMode: String, CaseIterable {
     case flashcard = "Flashcard"

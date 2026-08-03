@@ -7,7 +7,20 @@ struct LearningAnalyticsView: View {
     @Query private var subjects: [Subject]
     @Query(sort: \StudySession.startDate, order: .reverse) private var sessions: [StudySession]
     @Query private var activities: [StudyActivity]
-    
+
+    /// Renders a 0-23 hour in 12-hour clock form ("1 PM", "12 AM", …).
+    static func hourLabel(_ hour: Int) -> String {
+        let normalized = ((hour % 24) + 24) % 24
+        let displayHour = normalized % 12 == 0 ? 12 : normalized % 12
+        return "\(displayHour) \(normalized < 12 ? "AM" : "PM")"
+    }
+
+    private static let weekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        return formatter
+    }()
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -139,7 +152,7 @@ struct LearningAnalyticsView: View {
                 .frame(maxWidth: .infinity)
                 
                 VStack(spacing: 4) {
-                    Text("\(peakHour == 0 ? "12" : "\(peakHour)")\(peakHour >= 12 ? "PM" : "AM")")
+                    Text(Self.hourLabel(peakHour))
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(IBColors.success)
                     Text("peak hour")
@@ -275,20 +288,14 @@ struct LearningAnalyticsView: View {
     private var weeklyData: [DayData] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        
+
+        let minutesByDay = Dictionary(grouping: sessions, by: { calendar.startOfDay(for: $0.startDate) })
+            .mapValues { $0.reduce(0) { $0 + Int($1.duration / 60) } }
+
         return (0..<7).reversed().map { daysAgo in
             let day = calendar.date(byAdding: .day, value: -daysAgo, to: today) ?? today
             let dayStart = calendar.startOfDay(for: day)
-            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? day
-            
-            let minutes = sessions
-                .filter { $0.startDate >= dayStart && $0.startDate < dayEnd }
-                .reduce(0) { $0 + Int($1.duration / 60) }
-            
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEE"
-            
-            return DayData(day: formatter.string(from: day), minutes: minutes)
+            return DayData(day: Self.weekdayFormatter.string(from: day), minutes: minutesByDay[dayStart] ?? 0)
         }
     }
     
@@ -330,14 +337,15 @@ struct LearningAnalyticsView: View {
     
     private var subjectTimeData: [SubjectTimeData] {
         let totalMinutes = Double(max(1, sessions.reduce(0) { $0 + Int($1.duration / 60) }))
-        
+
+        var minutesByName: [String: Int] = [:]
+        for session in sessions {
+            minutesByName[session.subjectName, default: 0] += Int(session.duration / 60)
+        }
+
         return subjects.compactMap { subject in
-            let minutes = sessions
-                .filter { $0.subjectName == subject.name }
-                .reduce(0) { $0 + Int($1.duration / 60) }
-            
-            guard minutes > 0 else { return nil }
-            
+            guard let minutes = minutesByName[subject.name], minutes > 0 else { return nil }
+
             return SubjectTimeData(
                 subjectName: subject.name,
                 colorHex: subject.accentColorHex,
@@ -349,13 +357,13 @@ struct LearningAnalyticsView: View {
 }
 
 struct DayData: Identifiable {
-    let id = UUID()
+    var id: String { day }
     let day: String
     let minutes: Int
 }
 
 struct SubjectTimeData: Identifiable {
-    let id = UUID()
+    var id: String { subjectName }
     let subjectName: String
     let colorHex: String
     let minutes: Int

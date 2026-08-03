@@ -82,8 +82,53 @@ struct ReviewQueueManagerTests {
         context.insert(card2)
         
         let manager = ReviewQueueManager()
-        let eligibleCount = manager.eligibleCardsCount(context: context)
+        manager.refreshDueCardsSynchronously(context: context)
+        let eligibleCount = manager.eligibleCardsCount()
         
         #expect(eligibleCount == 2)
+    }
+
+    @MainActor
+    @Test("A successful refresh clears the error flag and caches all due counts")
+    func testSuccessfulRefreshCachesCounts() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let context = container.mainContext
+
+        let subject1 = Subject(name: "Biology", level: "SL", accentColorHex: "#10B981")
+        let subject2 = Subject(name: "Physics", level: "HL", accentColorHex: "#3B82F6")
+        context.insert(subject1)
+        context.insert(subject2)
+
+        let now = Date()
+        let past = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+        let future = Calendar.current.date(byAdding: .day, value: 1, to: now)!
+
+        let due1 = StudyCard(topicName: "Cells", front: "F", back: "B", subject: subject1)
+        due1.nextReviewDate = past
+        let due2a = StudyCard(topicName: "Mechanics", front: "F", back: "B", subject: subject2)
+        due2a.nextReviewDate = past
+        let due2b = StudyCard(topicName: "Waves", front: "F", back: "B", subject: subject2)
+        due2b.nextReviewDate = past
+        let notDue = StudyCard(topicName: "Optics", front: "F", back: "B", subject: subject2)
+        notDue.nextReviewDate = future
+        context.insert(due1)
+        context.insert(due2a)
+        context.insert(due2b)
+        context.insert(notDue)
+        try context.save()
+
+        let manager = ReviewQueueManager()
+        manager.refreshDueCardsSynchronously(context: context)
+
+        // A successful refresh never leaves a stale error flag.
+        #expect(manager.lastRefreshError == nil)
+        #expect(manager.dueCards.count == 3)
+        #expect(manager.totalDueCount == 3)
+        // The eligible-card cache counts the whole pool, including not-yet-due.
+        #expect(manager.eligibleCardCount == 4)
+        #expect(manager.dueCount(for: subject1) == 1)
+        #expect(manager.dueCount(for: subject2) == 2)
+        #expect(manager.dueCountPerSubject()[subject2.id.uuidString] == 2)
     }
 }

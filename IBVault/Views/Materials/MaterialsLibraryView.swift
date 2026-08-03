@@ -267,7 +267,14 @@ struct MaterialFolderView: View {
             }
         }
         .navigationTitle(category.name)
-        .onAppear { loadContents() }
+        .task {
+            let url = getMaterialsURL(for: category.subfolder)
+            let contents = await Task.detached(priority: .utility) {
+                loadDirectory(url)
+            }.value
+            files = contents.files
+            subfolders = contents.subfolders
+        }
     }
 
     private var filteredFiles: [MaterialFile] {
@@ -298,12 +305,6 @@ struct MaterialFolderView: View {
                 Spacer()
             }
         }
-    }
-
-    private func loadContents() {
-        let contents = loadDirectory(getMaterialsURL(for: category.subfolder))
-        files = contents.files
-        subfolders = contents.subfolders
     }
 }
 
@@ -356,8 +357,10 @@ struct SubfolderView: View {
             }
         }
         .navigationTitle(name)
-        .onAppear {
-            let contents = loadDirectory(url)
+        .task {
+            let contents = await Task.detached(priority: .utility) {
+                loadDirectory(url)
+            }.value
             files = contents.files
             subfolders = contents.subfolders
         }
@@ -383,8 +386,8 @@ private func buildMaterialLibraryStats(for subfolders: [String]) -> MaterialLibr
 
 private enum MaterialsLibraryCache {
     private static let cacheLock = NSLock()
-    private static var directoryCache: [String: MaterialDirectoryContents] = [:]
-    private static var recursiveFilesCache: [String: [MaterialFile]] = [:]
+    nonisolated(unsafe) private static var directoryCache: [String: MaterialDirectoryContents] = [:]
+    nonisolated(unsafe) private static var recursiveFilesCache: [String: [MaterialFile]] = [:]
 
     static func directoryContents(for url: URL) -> MaterialDirectoryContents {
         let key = url.path
