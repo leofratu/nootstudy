@@ -190,10 +190,12 @@ struct TopicBrowserView: View {
             Divider()
 
             if let unit = selectedUnit {
+                let index = cardsBySubtopicKey
+                let nodes = subjectCurriculumNodes
                 ScrollView {
                     LazyVStack(spacing: 6) {
                         ForEach(unit.topics, id: \.name) { topic in
-                            topicSelectionRow(topic)
+                            topicSelectionRow(topic, index: index, nodes: nodes)
                         }
                     }
                     .padding(10)
@@ -205,14 +207,9 @@ struct TopicBrowserView: View {
         .background(IBColors.canvas)
     }
 
-    private func topicSelectionRow(_ topic: CurriculumTopic) -> some View {
-        let count = cardCount(for: topic.name)
-        let mastery = CurriculumProgressService.topicMastery(
-            subject: subject,
-            topicName: topic.name,
-            subtopics: topic.subtopics,
-            nodes: subjectCurriculumNodes
-        )
+    private func topicSelectionRow(_ topic: CurriculumTopic, index: [String: [StudyCard]], nodes: [CurriculumNode]) -> some View {
+        let count = cardCount(for: topic.name, in: index)
+        let mastery = topicMastery(topic: topic, index: index, nodes: nodes)
         let isSelected = selectedTopic?.name == topic.name
 
         return Button {
@@ -262,8 +259,11 @@ struct TopicBrowserView: View {
     @ViewBuilder
     private var topicDetailPane: some View {
         if let topic = selectedTopic {
+            let index = cardsBySubtopicKey
+            let nodes = subjectCurriculumNodes
+            let sessionsByTopic = workSessionsByTopic(studySessions)
             VStack(spacing: 0) {
-                topicHeader(topic)
+                topicHeader(topic, index: index)
                 Divider()
                 coverageToolbar(topic)
                 generationStatus
@@ -271,9 +271,9 @@ struct TopicBrowserView: View {
 
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(topic.subtopics.enumerated()), id: \.element) { index, subtopic in
-                            subtopicRow(index: index, topic: topic.name, subtopic: subtopic)
-                            if index < topic.subtopics.count - 1 {
+                        ForEach(Array(topic.subtopics.enumerated()), id: \.element) { rowIndex, subtopic in
+                            subtopicRow(index: rowIndex, topic: topic.name, subtopic: subtopic, cardsIndex: index, nodes: nodes, sessionsByTopic: sessionsByTopic)
+                            if rowIndex < topic.subtopics.count - 1 {
                                 Divider().padding(.leading, 48)
                             }
                         }
@@ -289,7 +289,7 @@ struct TopicBrowserView: View {
         }
     }
 
-    private func topicHeader(_ topic: CurriculumTopic) -> some View {
+    private func topicHeader(_ topic: CurriculumTopic, index: [String: [StudyCard]]) -> some View {
         HStack(alignment: .top, spacing: 12) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(accent)
@@ -301,7 +301,7 @@ struct TopicBrowserView: View {
                     .foregroundStyle(IBColors.ink)
                 HStack(spacing: 10) {
                     Label("\(topic.subtopics.count) subunits", systemImage: "list.bullet")
-                    Label("\(cardCount(for: topic.name)) cards", systemImage: "rectangle.stack.fill")
+                    Label("\(cardCount(for: topic.name, in: index)) cards", systemImage: "rectangle.stack.fill")
                 }
                 .font(.caption)
                 .foregroundStyle(IBColors.secondaryText)
@@ -400,23 +400,25 @@ struct TopicBrowserView: View {
         }
     }
 
-    private func subtopicRow(index: Int, topic: String, subtopic: String) -> some View {
-        let count = subtopicCardCount(topic: topic, subtopic: subtopic)
-        let cards = subject.cards.filter { $0.topicName == topic && $0.subtopic == subtopic }
+    private func subtopicRow(
+        index: Int,
+        topic: String,
+        subtopic: String,
+        cardsIndex: [String: [StudyCard]],
+        nodes: [CurriculumNode],
+        sessionsByTopic: [String: [StudySession]]
+    ) -> some View {
+        let cards = cards(for: topic, subtopic: subtopic, in: cardsIndex)
+        let count = cards.count
         let node = CurriculumProgressService.node(
-            in: subjectCurriculumNodes,
+            in: nodes,
             subjectName: subject.name,
             level: subject.level,
             topicName: topic,
             subtopicName: subtopic
         )
         let mastery = CurriculumProgressService.effectiveMastery(cards: cards, node: node)
-        let workSessions = CurriculumProgressService.matchingWorkSessions(
-            in: studySessions,
-            subjectName: subject.name,
-            topicName: topic,
-            subtopicName: subtopic
-        )
+        let workSessions = workSessionsFor(topic: topic, subtopic: subtopic, in: sessionsByTopic)
         let hasProgress = count > 0 || node?.recordedProficiency != nil || !workSessions.isEmpty
         let isHovered = hoveredSubtopic == subtopic
 
@@ -620,12 +622,64 @@ struct TopicBrowserView: View {
         generationProgress = nil
     }
 
-    private func cardCount(for topicName: String) -> Int {
-        subject.cards.filter { $0.topicName == topicName }.count
+    /// Index of subject cards keyed by "topic|subtopic" so rows and counts do
+    /// not rescan the whole card set on every render.
+    private var cardsBySubtopicKey: [String: [StudyCard]] {
+        var index: [String: [StudyCard]] = [:]
+        for card in subject.cards {
+            index["\(card.topicName)|\(card.subtopic)", default: []].append(card)
+        }
+        return index
     }
 
-    private func subtopicCardCount(topic: String, subtopic: String) -> Int {
-        subject.cards.filter { $0.topicName == topic && $0.subtopic == subtopic }.count
+    private func cards(for topic: String, subtopic: String, in index: [String: [StudyCard]]) -> [StudyCard] {
+        index["\(topic)|\(subtopic)"] ?? []
+    }
+
+    private func cardCount(for topicName: String, in index: [String: [StudyCard]]) -> Int {
+        index.reduce(0) { partial, entry in
+            entry.key.hasPrefix(topicName + "|") ? partial + entry.value.count : partial
+        }
+    }
+
+    /// Single-pass topic mastery built from the card index so topic rows do not
+    /// re-scan the whole card set through the curriculum service per row.
+    private func topicMastery(topic: CurriculumTopic, index: [String: [StudyCard]], nodes: [CurriculumNode]) -> Double {
+        guard !topic.subtopics.isEmpty else { return 0 }
+        let score = topic.subtopics.reduce(0.0) { partial, subtopic in
+            let cards = index["\(topic.name)|\(subtopic)"] ?? []
+            let node = CurriculumProgressService.node(
+                in: nodes,
+                subjectName: subject.name,
+                level: subject.level,
+                topicName: topic.name,
+                subtopicName: subtopic
+            )
+            return partial + CurriculumProgressService.effectiveMastery(cards: cards, node: node)
+        }
+        return score / Double(topic.subtopics.count)
+    }
+
+    /// Subject work sessions grouped by lowercased topic so subunit rows do not
+    /// scan the session history once per row.
+    private func workSessionsByTopic(_ sessions: [StudySession]) -> [String: [StudySession]] {
+        var index: [String: [StudySession]] = [:]
+        for session in sessions where session.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame {
+            for topic in session.selectedTopicNames {
+                index[topic.lowercased(), default: []].append(session)
+            }
+        }
+        return index
+    }
+
+    private func workSessionsFor(topic: String, subtopic: String, in byTopic: [String: [StudySession]]) -> [StudySession] {
+        guard let candidates = byTopic[topic.lowercased()] else { return [] }
+        return candidates.filter { session in
+            let sessionSubtopics = StudyScope.parseList(session.subtopicsCovered ?? "")
+            return sessionSubtopics.isEmpty || sessionSubtopics.contains {
+                $0.caseInsensitiveCompare(subtopic) == .orderedSame
+            }
+        }
     }
 
     private func generateCards(topic: String, subtopic: String) {

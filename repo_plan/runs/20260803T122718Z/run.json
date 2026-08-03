@@ -1,0 +1,44 @@
+{
+ "task_id": "20260803-final-five-agent-20260803T122718Z",
+ "mode": "rpg",
+ "rpg_used": true,
+ "localization": {
+  "nodes": [
+   "test.regression_guardrail_expansion",
+   "iface.ui_visual_perf_pass"
+  ],
+  "files": [
+   "IBVault/Engine/SubjectKnowledge.swift",
+   "IBVaultTests/JSONLineBufferTests.swift",
+   "IBVaultTests/ReviewSchedulerTests.swift",
+   "IBVaultTests/StudyPlanFormatterTests.swift",
+   "IBVaultTests/SubjectKnowledgeTests.swift"
+  ],
+  "evidence": [
+   "5 parallel agents fixed non-overlapping file scopes: Review/Study views, Subjects/Materials/Analytics/Insights, ARIA/Profile/Onboarding/Settings, Engine/Models/Design/root, Services+tests.",
+   "Highlights: O(n²) Codex line buffer -> O(n); destructive-consent gate now rejects negations ('do not delete'); Settings drops 13 eager @Query loads; Settings/Backup keychain+backup scans off main thread; PredictiveGradeView/SubjectDetailView cached; ReviewSession resume-from-completion resets per-session state; Onboarding duplicate-profile race fixed; confirmations added to backup deletion.",
+   "One integration fix after agents: Gemini makeGenerateContentRequest now rejects scheme-less base URLs (regression test demands a throw).",
+   "Suite stable: 30 suites, 166 test rows (incl. 104 ARIA E2E scenarios) pass across 4 consecutive full runs."
+  ]
+ },
+ "tests": [
+  {
+   "cmd": "xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' (x4)",
+   "ok": true,
+   "interfaces": [
+    "iface.ui_visual_perf_pass",
+    "test.regression_guardrail_expansion"
+   ]
+  }
+ ],
+ "implemented_interfaces": [
+  "iface.ui_visual_perf_pass",
+  "test.regression_guardrail_expansion"
+ ],
+ "tested_interfaces": [
+  "iface.ui_visual_perf_pass",
+  "test.regression_guardrail_expansion"
+ ],
+ "elapsed_s": null,
+ "tool_calls_count": null
+}

@@ -261,9 +261,11 @@ struct EffectivenessView: View {
             Text("Practice testing and distributed practice are well-supported learning strategies. IBVault records your use of both without converting them into an invented performance multiplier.")
                 .foregroundStyle(.secondary)
 
-            Link(destination: URL(string: "https://doi.org/10.1177/1529100612453266")!) {
-                Label("Dunlosky et al. research review", systemImage: "arrow.up.right.square")
-                    .font(.callout.weight(.semibold))
+            if let researchURL = URL(string: "https://doi.org/10.1177/1529100612453266") {
+                Link(destination: researchURL) {
+                    Label("Dunlosky et al. research review", systemImage: "arrow.up.right.square")
+                        .font(.callout.weight(.semibold))
+                }
             }
         }
         .padding(16)

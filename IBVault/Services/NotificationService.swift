@@ -25,7 +25,7 @@ struct NotificationConfig {
 }
 
 enum NotificationService {
-    static func requestPermission(completion: ((Bool, Error?) -> Void)? = nil) {
+    static func requestPermission(completion: (@Sendable (Bool, Error?) -> Void)? = nil) {
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .badge, .sound]
         ) { granted, error in
@@ -116,6 +116,10 @@ enum NotificationService {
         UNUserNotificationCenter.current().add(request)
     }
     
+    /// Touches the shared `ModelContext`, so it is main-actor isolated. Callers
+    /// (ReviewSessionView) run on the main actor; the fetch and badge count are
+    /// only safe against the app-wide context from there.
+    @MainActor
     static func scheduleDueCardReminders(
         context: ModelContext,
         config: NotificationConfig = .default

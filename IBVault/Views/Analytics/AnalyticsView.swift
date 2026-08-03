@@ -7,12 +7,12 @@ struct AnalyticsView: View {
     @Query(sort: \ReviewSession.timestamp, order: .reverse) private var sessions: [ReviewSession]
 
     private var weeklyActivities: [StudyActivity] {
-        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
         return activities.filter { $0.date >= weekAgo }
     }
 
     private var weeklySessions: [ReviewSession] {
-        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
         return sessions.filter { $0.timestamp >= weekAgo }
     }
 
@@ -40,6 +40,19 @@ struct AnalyticsView: View {
     private var weeklyMinutes: Int { Int(weeklyActivities.reduce(0.0) { $0 + $1.minutesStudied }) }
     private var weeklyRetention: Int { Int(ProficiencyTracker.retentionRate(from: weeklySessions) * 100) }
 
+    /// Sorted once per render with mastery/weak topics computed a single time
+    /// per subject, instead of re-sorting subjects and re-scanning every card
+    /// set for each tile.
+    private var subjectBreakdownRows: [SubjectBreakdownRow] {
+        subjects
+            .sorted { $0.name < $1.name }
+            .map { SubjectBreakdownRow(
+                subject: $0,
+                mastery: ProficiencyTracker.masteryPercentage(for: $0),
+                weakTopics: ProficiencyTracker.weakTopics(for: $0)
+            ) }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -63,7 +76,11 @@ struct AnalyticsView: View {
 
                     activityCard
 
-                    HStack(alignment: .top, spacing: 16) {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 320), spacing: 16, alignment: .top)],
+                        alignment: .leading,
+                        spacing: 16
+                    ) {
                         subjectBreakdownCard
                         retentionCard
                     }
@@ -138,7 +155,8 @@ struct AnalyticsView: View {
 
     // MARK: - Subject Breakdown
     private var subjectBreakdownCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let rows = subjectBreakdownRows
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "books.vertical.fill")
                     .foregroundStyle(.tint)
@@ -146,32 +164,31 @@ struct AnalyticsView: View {
                     .font(.headline)
             }
 
-            if subjects.isEmpty {
+            if rows.isEmpty {
                 Text("No subjects yet.")
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
-                ForEach(subjects.sorted(by: { $0.name < $1.name }), id: \.id) { subject in
-                    let mastery = ProficiencyTracker.masteryPercentage(for: subject)
-                    let weak = ProficiencyTracker.weakTopics(for: subject)
-                    let color = Color(hex: subject.accentColorHex)
+                ForEach(rows, id: \.subject.id) { row in
+                    let color = Color(hex: row.subject.accentColorHex)
+                    let weak = row.weakTopics
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(color)
                                 .frame(width: 3, height: 16)
-                            Text(subject.name)
+                            Text(row.subject.name)
                                 .font(.callout.weight(.medium))
-                            Text(subject.level)
+                            Text(row.subject.level)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text("\(Int(mastery * 100))%")
+                            Text("\(Int(row.mastery * 100))%")
                                 .font(.callout.bold())
                                 .foregroundStyle(color)
                         }
-                        MasteryBar(progress: mastery, height: 5, color: color)
+                        MasteryBar(progress: row.mastery, height: 5, color: color)
 
                         if !weak.isEmpty {
                             Text("Focus: \(weak.prefix(2).map(\.topicName).joined(separator: ", "))")
@@ -181,7 +198,7 @@ struct AnalyticsView: View {
                         }
                     }
                     .padding(.vertical, 2)
-                    if subject.id != subjects.sorted(by: { $0.name < $1.name }).last?.id {
+                    if row.subject.id != rows.last?.subject.id {
                         Divider()
                     }
                 }
@@ -241,4 +258,12 @@ struct AnalyticsView: View {
         if rate >= 0.5 { return IBColors.warning }
         return IBColors.danger
     }
+}
+
+// MARK: - Breakdown Row
+/// Subject + per-render mastery/weak-topic snapshot used by the breakdown card.
+private struct SubjectBreakdownRow {
+    let subject: Subject
+    let mastery: Double
+    let weakTopics: [StudyCard]
 }

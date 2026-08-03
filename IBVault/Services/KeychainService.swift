@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-enum KeychainError: Error, LocalizedError {
+enum KeychainError: Error, LocalizedError, Sendable {
     case encodingFailed
     case saveFailed(status: OSStatus)
     case loadFailed(status: OSStatus)

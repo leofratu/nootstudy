@@ -35,6 +35,16 @@ struct AchievementEvaluatorTests {
         #expect(!AchievementRule.streakDays(30).isSatisfied(by: context(streak: 29)))
     }
 
+    @Test("XP, mastery, and same-day-subject rules unlock at their thresholds")
+    func xpMasteryAndSubjectRulesUnlock() {
+        #expect(AchievementRule.totalXP(1000).isSatisfied(by: context(xp: 1000)))
+        #expect(!AchievementRule.totalXP(1000).isSatisfied(by: context(xp: 999)))
+        #expect(AchievementRule.globalMastery(0.5).isSatisfied(by: context(mastery: 0.5)))
+        #expect(!AchievementRule.globalMastery(0.5).isSatisfied(by: context(mastery: 0.499)))
+        #expect(AchievementRule.subjectsInOneDay(6).isSatisfied(by: context(subjectsToday: 6)))
+        #expect(!AchievementRule.subjectsInOneDay(6).isSatisfied(by: context(subjectsToday: 5)))
+    }
+
     @Test("Time-of-day rules respect their windows")
     func timeOfDayRules() {
         #expect(AchievementRule.studiedAfterHour(22).isSatisfied(by: context(hour: 23)))

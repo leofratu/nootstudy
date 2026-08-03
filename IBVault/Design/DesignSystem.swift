@@ -4,8 +4,6 @@ import AppKit
 // MARK: - Color Palette
 struct IBColors {
     // Neutral workspace surfaces
-    static let navy = Color(hex: "F4F6FA")
-    static let deepNavy = Color(hex: "E9EDF5")
     static let surface = Color.white
     static let surfaceHover = Color(hex: "EEF3FB")
     static let overlay = Color.white
@@ -45,6 +43,9 @@ struct IBColors {
     static let mathColor = Color(hex: "4F94FF")
     static let economicsColor = Color(hex: "FBB940")
     static let businessColor = Color(hex: "F06060")
+    static let advancedMathColor = Color(hex: "8B5CF6")
+    static let universeColor = Color(hex: "6366F1")
+    static let startupsColor = Color(hex: "0EA5E9")
 
     // Kept for the handful of data visualizations that benefit from a range.
     static let blueGradient = LinearGradient(
@@ -56,7 +57,10 @@ struct IBColors {
         startPoint: .top, endPoint: .bottom
     )
     static func subjectColor(for name: String) -> Color {
-        switch name.lowercased() {
+        switch name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "advanced mathematics": return advancedMathColor
+        case "fundamentals of the universe": return universeColor
+        case "startups & venture capital": return startupsColor
         case let n where n.contains("english"): return englishColor
         case let n where n.contains("russian"): return russianColor
         case let n where n.contains("biology"): return biologyColor
@@ -149,28 +153,6 @@ struct GlowModifier: ViewModifier {
     }
 }
 
-// MARK: - Shimmer Effect
-struct ShimmerModifier: ViewModifier {
-    @State private var phase: CGFloat = 0
-    func body(content: Content) -> some View {
-        content
-            .overlay(
-                LinearGradient(
-                    colors: [.clear, .white.opacity(0.15), .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .offset(x: phase)
-                .onAppear {
-                    withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                        phase = 300
-                    }
-                }
-            )
-            .clipped()
-    }
-}
-
 extension View {
     func glassCard(cornerRadius: CGFloat = IBRadius.card) -> some View {
         modifier(GlassCardModifier(cornerRadius: cornerRadius))
@@ -178,10 +160,6 @@ extension View {
 
     func glow(color: Color = IBColors.electricBlue, radius: CGFloat = 12) -> some View {
         modifier(GlowModifier(color: color, radius: radius))
-    }
-
-    func shimmer() -> some View {
-        modifier(ShimmerModifier())
     }
 
     func premiumShadow() -> some View {

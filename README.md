@@ -9,7 +9,9 @@ The app is intentionally Mac-first: it builds as a sandboxed AppKit-backed Swift
 - Spaced retrieval queue using SM-2 scheduling, overdue prioritization, per-subject filtering, and proficiency tracking.
 - Native macOS navigation with sidebar tabs, top-menu commands, keyboard shortcuts, unified toolbar styling, and local notification support.
 - ARIA assistant with streaming Gemini responses, bounded context construction, persistent memory, conversation compaction, and app-action planning for study sessions, grades, flashcards, and progress updates.
+- ARIA tool catalog that makes every saved data point malleable on explicit request: flashcards (generate/create/edit/delete), grades and predicted grades (import/add/edit/delete), mastery (set/clear on curriculum subunits or individual cards), unit taught state, subjects (create/update/delete), the user profile (target score, daily goal, intensity, notifications, name), durable memories (save/edit/delete), and study/review sessions and plans (create/reschedule/complete/cancel/delete). Destructive tools require the learner's explicit in-message confirmation.
 - IB study data for subjects, topics, cards, review sessions, grades, study sessions, study plans, achievements, activity history, and user profile/rank state.
+- Nine study tracks: the six IB subjects plus three self-authored personal courses — Advanced Mathematics (proof-first foundations beyond IB AA), Fundamentals of the Universe (cosmology, stellar evolution, relativity), and Startups & Venture Capital (product-market fit, term sheets, cap tables, runway) — each with per-subject ARIA domain knowledge.
 - Local-first security posture: app data stays in SwiftData, API keys are stored in Keychain, and Gemini requests are made with `URLSession`.
 
 ## Repository Layout
@@ -61,6 +63,9 @@ xcodebuild test \
   -scheme IBVault \
   -destination 'platform=macOS'
 ```
+
+Both targets build with `SWIFT_TREAT_WARNINGS_AS_ERRORS = YES`, so tests and app
+code must compile warning-free.
 
 Validate RPG JSON artifacts when changing `repo_plan/`:
 

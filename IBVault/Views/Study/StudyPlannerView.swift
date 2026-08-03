@@ -11,12 +11,16 @@ struct StudyPlannerView: View {
     @State private var selectedReviewSession: StudySession?
 
     private var upcomingPlans: [StudyPlan] {
-        allPlans.filter { $0.isUpcoming || $0.isActive }
+        // Today's plans are shown in their own section; excluding them here
+        // prevents a same-day plan appearing in both "Today" and "Upcoming".
+        allPlans.filter {
+            ($0.isUpcoming || $0.isActive) && !Calendar.current.isDateInToday($0.scheduledDate)
+        }
     }
 
     private var todayPlans: [StudyPlan] {
         let today = Calendar.current.startOfDay(for: Date())
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today
         return allPlans.filter { $0.scheduledDate >= today && $0.scheduledDate < tomorrow && !$0.isCompleted }
     }
 
@@ -66,8 +70,8 @@ struct StudyPlannerView: View {
                     // Calendar
                     StudyCalendarView(plans: allPlans) { plan in
                         openPlan(plan)
-                    } onDeletePlan: { plan in
-                        deletePlan(plan)
+                    } onDeletePlan: { plan, scheduleReviews in
+                        deletePlan(plan, scheduleReviews: scheduleReviews)
                     }
 
                     // Upcoming
@@ -101,9 +105,12 @@ struct StudyPlannerView: View {
                 if plan.isFollowUpReview {
                     ReviewSessionView(filterSubject: subject(for: plan), filterPlan: plan)
                 } else {
-                    ActiveStudySessionView(plan: plan) {
-                        selectedPlan = nil
-                    }
+                    // Do NOT dismiss the sheet on completion: ActiveStudySessionView
+                    // flips into its own completion screen (stats, scheduled
+                    // reviews, rank), which the user closes with "Done". Dismissing
+                    // here would tear the sheet down the moment the session
+                    // finished, before that screen could ever appear.
+                    ActiveStudySessionView(plan: plan)
                 }
             }
             .sheet(item: $selectedReviewSession, onDismiss: {
@@ -145,7 +152,7 @@ struct StudyPlannerView: View {
                 // Stats ring
                 if !recentSessions.isEmpty {
                     let weekSessions = recentSessions.filter {
-                        $0.startDate > Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+                        $0.startDate > (Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast)
                     }.count
                     VStack(spacing: 4) {
                         ProgressRing(
@@ -424,6 +431,9 @@ struct StudyPlannerView: View {
         case "Mathematics AA": return IBColors.mathColor
         case "Economics": return IBColors.economicsColor
         case "Business Management": return IBColors.businessColor
+        case "Advanced Mathematics": return Color(hex: "8B5CF6")
+        case "Fundamentals of the Universe": return Color(hex: "6366F1")
+        case "Startups & Venture Capital": return Color(hex: "0EA5E9")
         default: return .gray
         }
     }
@@ -433,14 +443,23 @@ struct StudyPlannerView: View {
         IBHaptics.light()
     }
 
-    private func deletePlan(_ plan: StudyPlan) {
-        // Schedule spaced repetition reviews before deleting
-        if !plan.isFollowUpReview {
+    private func deletePlan(_ plan: StudyPlan, scheduleReviews: Bool) {
+        // "Delete & Add Review" schedules follow-up reviews first; plain
+        // "Delete Session" removes the plan (and its review chain) without them.
+        if scheduleReviews && !plan.isFollowUpReview {
             scheduleSpacedReviews(for: plan)
         }
-        
+
         context.delete(plan)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Undo the deletion (and any review plans scheduled above) so the
+            // plan is not lost to a half-persisted state; the delete dialog can
+            // simply be reopened to retry.
+            context.rollback()
+            return
+        }
         IBHaptics.medium()
     }
 

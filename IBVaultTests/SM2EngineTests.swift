@@ -19,7 +19,7 @@ struct SM2EngineTests {
     
     @Test("Again quality should reset repetitions")
     func testAgainResetsRepetitions() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.repetitions = 5
         card.interval = 10
         
@@ -31,7 +31,7 @@ struct SM2EngineTests {
     
     @Test("Hard quality should reset repetitions")
     func testHardResetsRepetitions() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.repetitions = 5
         card.interval = 10
         
@@ -53,7 +53,7 @@ struct SM2EngineTests {
     
     @Test("Second successful recall should set interval to 6")
     func testSecondSuccessInterval() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.repetitions = 1
         
         let result = SM2Engine.calculateNextReview(card: card, quality: .good)
@@ -64,7 +64,7 @@ struct SM2EngineTests {
     
     @Test("Third successful recall should use ease factor")
     func testThirdSuccessInterval() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.repetitions = 2
         card.interval = 6
         card.easeFactor = 2.5
@@ -87,7 +87,7 @@ struct SM2EngineTests {
     
     @Test("Again quality should decrease ease factor")
     func testAgainDecreasesEaseFactor() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.easeFactor = 2.5
         
         let result = SM2Engine.calculateNextReview(card: card, quality: .again)
@@ -97,7 +97,7 @@ struct SM2EngineTests {
     
     @Test("Ease factor should not go below minimum")
     func testMinimumEaseFactor() {
-        var card = createTestCard()
+        let card = createTestCard()
         card.easeFactor = 1.4
         
         let result = SM2Engine.calculateNextReview(card: card, quality: .again)
@@ -134,6 +134,92 @@ struct SM2EngineTests {
         
         #expect(card.consecutiveCorrect == 0)
         #expect(card.successfulReviewCount == 0)
+    }
+
+    @Test("Apply review handles every recall quality and its counters")
+    func testApplyReviewAllQualities() {
+        let again = createTestCard()
+        SM2Engine.applyReview(to: again, quality: .again)
+        #expect(again.interval == 1)
+        #expect(again.repetitions == 0)
+        #expect(again.consecutiveCorrect == 0)
+        #expect(again.successfulReviewCount == 0)
+        #expect(again.totalReviewCount == 1)
+        #expect(again.proficiency == .novice)
+
+        let hard = createTestCard()
+        SM2Engine.applyReview(to: hard, quality: .hard)
+        #expect(hard.interval == 1)
+        #expect(hard.repetitions == 0)
+        #expect(hard.consecutiveCorrect == 0)
+        #expect(hard.successfulReviewCount == 0)
+        #expect(hard.totalReviewCount == 1)
+
+        let good = createTestCard()
+        SM2Engine.applyReview(to: good, quality: .good)
+        #expect(good.interval == 1)
+        #expect(good.repetitions == 1)
+        #expect(good.consecutiveCorrect == 1)
+        #expect(good.successfulReviewCount == 1)
+        #expect(good.totalReviewCount == 1)
+
+        let easy = createTestCard()
+        SM2Engine.applyReview(to: easy, quality: .easy)
+        #expect(easy.interval == 1)
+        #expect(easy.repetitions == 1)
+        #expect(easy.consecutiveCorrect == 1)
+        #expect(easy.successfulReviewCount == 1)
+        #expect(easy.totalReviewCount == 1)
+        #expect(easy.easeFactor > 2.5)
+    }
+
+    @Test("Hard quality should reset consecutive correct like again")
+    func testHardResetsConsecutiveCorrect() {
+        let card = createTestCard()
+        card.consecutiveCorrect = 5
+        card.repetitions = 4
+        card.interval = 12
+
+        SM2Engine.applyReview(to: card, quality: .hard)
+
+        #expect(card.consecutiveCorrect == 0)
+        #expect(card.repetitions == 0)
+        #expect(card.interval == 1)
+    }
+
+    @Test("Apply review schedules the next review on the SM2 interval")
+    func testApplyReviewSchedulesNextDate() {
+        let card = createTestCard()
+        let before = Date()
+
+        SM2Engine.applyReview(to: card, quality: .good)
+
+        // interval == 1 day, so the next review lands one calendar day out
+        // (tolerance 1...2 absorbs a midnight boundary crossing).
+        let days = Calendar.current.dateComponents([.day], from: before, to: card.nextReviewDate).day ?? 0
+        #expect(card.nextReviewDate > Date())
+        #expect((1...2).contains(days))
+    }
+
+    @Test("Repeated good reviews climb to mastered, a failure drops proficiency")
+    func testApplyReviewMovesProficiencyBothDirections() {
+        let card = createTestCard()
+        for _ in 0..<6 {
+            SM2Engine.applyReview(to: card, quality: .good)
+        }
+
+        #expect(card.repetitions == 6)
+        #expect(card.interval >= 21)
+        #expect(card.effectivenessRate == 1.0)
+        #expect(card.proficiency == .mastered)
+
+        SM2Engine.applyReview(to: card, quality: .again)
+
+        #expect(card.repetitions == 0)
+        #expect(card.interval == 1)
+        #expect(card.consecutiveCorrect == 0)
+        // 7 reviews logged but the last one failed: falls back to developing.
+        #expect(card.proficiency == .developing)
     }
     
     private func createTestCard() -> StudyCard {

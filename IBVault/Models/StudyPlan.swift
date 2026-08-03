@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct StudyScope: Equatable {
+struct StudyScope: Equatable, Sendable {
     let subjectName: String
     let unitNames: [String]
     let topicNames: [String]
@@ -61,7 +61,7 @@ struct StudyScope: Equatable {
     }
 }
 
-enum StudyPlanKind: String, Codable {
+enum StudyPlanKind: String, Codable, Sendable {
     case studySession
     case followUpReview
 }
@@ -102,16 +102,24 @@ final class StudyPlan {
         return topicName
     }
 
+    private static let scheduledTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "E d MMM, HH:mm"
+        return formatter
+    }()
+
+    private static let scheduledEndTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
     var scheduledTimeFormatted: String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "E d MMM, HH:mm"
-        return fmt.string(from: scheduledDate)
+        Self.scheduledTimeFormatter.string(from: scheduledDate)
     }
 
     var scheduledEndTimeFormatted: String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "HH:mm"
-        return fmt.string(from: scheduledEndDate)
+        Self.scheduledEndTimeFormatter.string(from: scheduledEndDate)
     }
 
     var isUpcoming: Bool {

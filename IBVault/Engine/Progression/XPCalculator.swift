@@ -2,7 +2,7 @@ import Foundation
 
 /// The single source of XP. Views and services record work; only this type
 /// decides what that work is worth.
-enum XPCalculator {
+enum XPCalculator: Sendable {
 
     static let xpPerStudyMinute = 1.0
 

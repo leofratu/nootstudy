@@ -340,13 +340,24 @@ enum AIProviderService {
     }
 
     private static func providerErrorMessage(from data: Data, fallbackStatus: Int) -> String {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return String(data: data, encoding: .utf8) ?? "AI request failed (HTTP \(fallbackStatus))."
+        let decodedMessage: String?
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
+                decodedMessage = message
+            } else {
+                decodedMessage = json["message"] as? String
+            }
+        } else {
+            decodedMessage = nil
         }
-        if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
-            return message
-        }
-        return json["message"] as? String ?? "AI request failed (HTTP \(fallbackStatus))."
+        let message = decodedMessage ?? String(data: data, encoding: .utf8) ?? "AI request failed (HTTP \(fallbackStatus))."
+        // Error bodies can be large and may echo request payloads; truncate and
+        // flatten so they are safe to surface and persist in chat history.
+        let flattened = message
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard flattened.count > 300 else { return flattened }
+        return String(flattened.prefix(297)) + "…"
     }
 
     private static func generateCodex(
@@ -673,9 +684,6 @@ enum AIProviderService {
         if timedOut {
             return .processFailed("Local Codex timed out before completing the answer.")
         }
-        let detail = [stderr, eventDetail]
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
         let lowercasedEventDetail = eventDetail.lowercased()
         let lowercasedStderr = stderr.lowercased()
         let authenticationFailure = [
@@ -747,6 +755,9 @@ enum AIProviderService {
         return "\(quotedPath) logout && \(quotedPath) login"
     }
 
+    /// Normalizes a provider base URL. Cleartext HTTP is rejected except for
+    /// loopback hosts, where a locally-running provider (e.g. a local model
+    /// server) is legitimate and never leaves the machine.
     private static func normalizedBaseURL(_ rawValue: String) -> URL? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -754,6 +765,11 @@ enum AIProviderService {
               let scheme = url.scheme?.lowercased(),
               scheme == "https" || scheme == "http" else {
             return nil
+        }
+        if scheme == "http" {
+            let host = url.host?.lowercased() ?? ""
+            let isLoopback = host == "localhost" || host == "127.0.0.1" || host == "::1"
+            guard isLoopback else { return nil }
         }
         return url
     }
@@ -783,7 +799,7 @@ enum AIProviderService {
         }
     }
 
-    private final class JSONLineBuffer: @unchecked Sendable {
+    final class JSONLineBuffer: @unchecked Sendable {
         private let lock = NSLock()
         private var data = Data()
 
@@ -813,15 +829,22 @@ enum AIProviderService {
 
         private func extractCompleteLines() -> [String] {
             var lines: [String] = []
-            while let newlineIndex = data.firstIndex(of: 0x0A) {
-                let lineData = data[..<newlineIndex]
-                data.removeSubrange(...newlineIndex)
-                guard let line = String(data: lineData, encoding: .utf8)?
+            // Advance a cursor instead of slicing the prefix off `data` per line;
+            // removeSubrange(..<newlineIndex) is O(n) for every line, which turns
+            // large transcript chunks into O(n²) work. The prefix is dropped once
+            // after the scan.
+            var searchStart = data.startIndex
+            while let newlineIndex = data[searchStart...].firstIndex(of: 0x0A) {
+                let lineData = data[searchStart..<newlineIndex]
+                if let line = String(data: lineData, encoding: .utf8)?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
-                      !line.isEmpty else {
-                    continue
+                   !line.isEmpty {
+                    lines.append(line)
                 }
-                lines.append(line)
+                searchStart = data.index(after: newlineIndex)
+            }
+            if searchStart > data.startIndex {
+                data.removeSubrange(..<searchStart)
             }
             return lines
         }

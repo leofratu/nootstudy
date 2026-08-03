@@ -34,8 +34,8 @@ targets:
         # XcodeGen regenerates Info.plist from this block, so the version must
         # live here. Editing Info.plist directly is silently reverted by the
         # next `xcodegen generate`.
-        CFBundleShortVersionString: "1.1"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "1.2.0"
+        CFBundleVersion: "3"
     entitlements:
       path: IBVault/IBVault.entitlements
       properties:
@@ -50,7 +50,8 @@ targets:
       ENABLE_PREVIEWS: YES
       SDKROOT: macosx
       SUPPORTED_PLATFORMS: macosx
-      SWIFT_VERSION: 5.0
+      SWIFT_VERSION: 6.0
+      SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.app
       INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 NootStudy. All rights reserved."
@@ -69,7 +70,8 @@ targets:
       DEVELOPMENT_TEAM: ""
       SDKROOT: macosx
       SUPPORTED_PLATFORMS: macosx
-      SWIFT_VERSION: 5.0
+      SWIFT_VERSION: 6.0
+      SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.tests
       ENABLE_TESTING_SEARCH_PATHS: YES
       GENERATE_INFOPLIST_FILE: YES

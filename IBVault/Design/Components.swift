@@ -187,16 +187,18 @@ struct ProgressRing: View {
     var size: CGFloat = 60
     var color: Color = IBColors.electricBlue
 
+    private var clampedProgress: Double { min(max(progress, 0.0), 1.0) }
+
     var body: some View {
         ZStack {
             Circle()
                 .stroke(IBColors.cardBorder.opacity(0.4), lineWidth: lineWidth)
             Circle()
-                .trim(from: 0, to: min(progress, 1.0))
+                .trim(from: 0, to: clampedProgress)
                 .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(IBAnimation.smooth, value: progress)
-            Text("\(Int(min(progress, 1.0) * 100))")
+            Text("\(Int(clampedProgress * 100))")
                 .font(.system(size: size * 0.28, weight: .bold, design: .default))
                 .foregroundColor(IBColors.softWhite)
         }
@@ -375,6 +377,8 @@ struct QualityButton: View {
         } label: {
             Text(label)
                 .font(IBTypography.captionBold)
+                // White text over each button's colored fill; deliberately kept
+                // hardcoded since every tint is a saturated accent color.
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)

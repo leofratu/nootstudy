@@ -5,12 +5,23 @@ import SwiftData
 final class Subject {
     var id: UUID
     var name: String
+    /// Persisted as "HL"/"SL" for migration safety; prefer the typed `courseLevel`
+    /// accessor so a misspelled level cannot be written.
     var level: String  // "HL" or "SL"
     var accentColorHex: String
     var examDate: Date?
     @Relationship(deleteRule: .cascade, inverse: \StudyCard.subject) var cards: [StudyCard]
     @Relationship(deleteRule: .cascade, inverse: \Grade.subject) var grades: [Grade]
 
+    /// Typed view of `level`, backed by the persisted string.
+    var courseLevel: IBCourseLevel {
+        get { IBCourseLevel(level) }
+        set { level = newValue.rawValue }
+    }
+
+    /// O(n) in-memory scan over the already-loaded `cards` relationship.
+    /// Deliberately not cached: a cached counter on this @Model would need a
+    /// schema field to stay consistent, which is out of scope.
     var dueCardsCount: Int {
         let now = Date()
         return cards.filter { $0.nextReviewDate <= now }.count

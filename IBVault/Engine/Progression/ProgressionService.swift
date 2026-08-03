@@ -3,21 +3,42 @@ import SwiftData
 
 /// Recomputes progression from recorded work and reports what changed.
 /// Call after any session completes. Safe to call repeatedly.
-enum ProgressionService {
+///
+/// Contract: `context` must be the main-actor `ModelContext` (the app's
+/// `container.mainContext`). Every read and the final save run against it, so
+/// this must be called from the main actor. It is deliberately not annotated
+/// `@MainActor` — that would force every test and view to await it — but a
+/// background context must never be passed in.
+enum ProgressionService: Sendable {
 
     @discardableResult
     static func recompute(context: ModelContext, now: Date = Date()) -> [ProgressionEvent] {
-        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
-        let reviews = (try? context.fetch(FetchDescriptor<ReviewSession>())) ?? []
-        let profiles = (try? context.fetch(FetchDescriptor<UserProfile>())) ?? []
-        let achievements = (try? context.fetch(FetchDescriptor<Achievement>())) ?? []
+        let subjects: [Subject]
+        let reviews: [ReviewSession]
+        let profiles: [UserProfile]
+        let achievements: [Achievement]
+        let tracks: [SubjectTrack]
+        do {
+            subjects = try context.fetch(FetchDescriptor<Subject>())
+            reviews = try context.fetch(FetchDescriptor<ReviewSession>())
+            profiles = try context.fetch(FetchDescriptor<UserProfile>())
+            achievements = try context.fetch(FetchDescriptor<Achievement>())
+            tracks = try context.fetch(FetchDescriptor<SubjectTrack>())
+        } catch {
+            // A partial read must not recompute from half a store: that could
+            // overwrite good cached mastery with zeroes. Abort the pass so a
+            // later call retries against the full picture.
+            #if DEBUG
+            assertionFailure("Progression recompute read failed: \(error.localizedDescription)")
+            #endif
+            return []
+        }
         guard let profile = profiles.first else { return [] }
 
         var events: [ProgressionEvent] = []
         let snapshots = SnapshotBuilder.snapshots(for: subjects, reviews: reviews)
 
         // Per-subject tracks.
-        let tracks = (try? context.fetch(FetchDescriptor<SubjectTrack>())) ?? []
         for snapshot in snapshots {
             let mastery = MasteryCalculator.mastery(for: snapshot, now: now)
             let track = tracks.first { $0.subjectName == snapshot.name }
@@ -66,10 +87,13 @@ enum ProgressionService {
         do {
             try context.save()
         } catch {
-            // The events above have already been handed to the caller to
-            // present. Losing this save would silently undo a rank-up the user
-            // has been congratulated on.
+            // Never present a rank-up/tier-up that did not persist: the caller
+            // uses the returned events to congratulate the user, and a fake
+            // celebration for a reverted write is worse than a quiet skip.
+            #if DEBUG
             assertionFailure("Progression save failed: \(error.localizedDescription)")
+            #endif
+            return []
         }
         return events
     }

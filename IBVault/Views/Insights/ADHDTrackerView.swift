@@ -5,65 +5,75 @@ struct ADHDTrackerView: View {
     @State private var settings: ADHDMedicationSettings = .default
     @State private var selectedHour: Double?
     @State private var showMedicationPicker = false
-    
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
+
+    /// Hours since the first daily dose, the single x-axis domain used by both
+    /// the timeline chart and the focus-window chart.
+    private func hoursSinceFirstDose(_ date: Date) -> Double {
+        let calendar = Calendar.current
+        let minutes = calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
+        let doseStart = settings.firstDoseHour * 60 + settings.firstDoseMinute
+        let adjusted = minutes < doseStart ? minutes + 24 * 60 : minutes
+        return Double(adjusted - doseStart) / 60.0
+    }
+
     private var pkData: [(time: String, hour: Double, level: Double)] {
         guard settings.isEnabled && settings.medicationType != .none else {
             return []
         }
-        
+
         var data: [(time: String, hour: Double, level: Double)] = []
         let calendar = Calendar.current
         let now = Date()
-        
-        for hourOffset in stride(from: 0, through: 16, by: 0.5) {
-            if let time = calendar.date(byAdding: .hour, value: Int(hourOffset), to: calendar.startOfDay(for: now)) {
-                let level = ADHDMedicationTracker.estimatePlasmaLevel(at: time, settings: settings)
-                let formatter = DateFormatter()
-                formatter.dateFormat = "h:mm a"
-                data.append((formatter.string(from: time), hourOffset, level))
-            }
+        let startOfDay = calendar.startOfDay(for: now)
+
+        for hourOffset in stride(from: 0, through: 23.5, by: 0.5) {
+            let minutes = Int(hourOffset * 60)
+            guard let time = calendar.date(byAdding: .minute, value: minutes, to: startOfDay) else { continue }
+            let hour = hoursSinceFirstDose(time)
+            guard (0...16).contains(hour) else { continue }
+            let level = ADHDMedicationTracker.estimatePlasmaLevel(at: time, settings: settings)
+            data.append((Self.timeFormatter.string(from: time), hour, level))
         }
-        
+
         return data
     }
-    
+
     private var doseSchedule: [(label: String, time: String, peak: String)] {
         let windows = ADHDMedicationTracker.focusWindows(settings: settings)
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        
+
         return windows.map { window in
             (
                 label: window.label,
-                time: formatter.string(from: window.start),
-                peak: formatter.string(from: window.peak)
+                time: Self.timeFormatter.string(from: window.start),
+                peak: Self.timeFormatter.string(from: window.peak)
             )
         }
     }
-    
+
     private var maxLevel: Double {
-        pkData.map(\.level).max() ?? 10
+        // Guard against an all-zero (or empty) profile so the status hero's
+        // `level / maxLevel` can never divide by zero.
+        max(pkData.map(\.level).max() ?? 1, 1)
     }
-    
+
     private var therapeuticMin: Double {
         Double(settings.doseMg) * 0.25
     }
-    
+
     private var currentStatus: (level: Double, status: String, colorName: String) {
         ADHDMedicationTracker.currentFocusStatus(at: Date(), settings: settings)
     }
-    
+
     private var currentHourOffset: Double? {
-        let now = Date()
-        let calendar = Calendar.current
-        let currentMinutes = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
-        let doseStart = settings.firstDoseHour * 60 + settings.firstDoseMinute
-        
-        let adjustedCurrent = currentMinutes < doseStart ? currentMinutes + 24 * 60 : currentMinutes
-        let hoursSinceFirstDose = Double(adjustedCurrent - doseStart) / 60.0
-        
-        guard (0...16).contains(hoursSinceFirstDose) else { return nil }
-        return hoursSinceFirstDose
+        let hours = hoursSinceFirstDose(Date())
+        guard (0...16).contains(hours) else { return nil }
+        return hours
     }
     
     private var statusColor: Color {
@@ -325,15 +335,15 @@ struct ADHDTrackerView: View {
                 Chart {
                     ForEach(Array(windows.enumerated()), id: \.offset) { index, window in
                         BarMark(
-                            xStart: .value("Start", Double(Calendar.current.component(.hour, from: window.start))),
-                            xEnd: .value("End", Double(Calendar.current.component(.hour, from: window.end))),
+                            xStart: .value("Start", hoursSinceFirstDose(window.start)),
+                            xEnd: .value("End", hoursSinceFirstDose(window.end)),
                             y: .value("Dose", "Dose \(index + 1)"),
                             height: .fixed(18)
                         )
                         .clipShape(Capsule())
                         .foregroundStyle(Color.blue.opacity(0.75))
                     }
-                    
+
                     if let currentHourOffset {
                         RuleMark(x: .value("Current", currentHourOffset))
                             .foregroundStyle(Color.primary.opacity(0.22))
@@ -437,6 +447,14 @@ struct MedicationPickerView: View {
                             }
                         }
                     }
+                }
+            }
+            .onChange(of: settings.medicationType) { _, newType in
+                if !newType.typicalDosesMg.contains(settings.doseMg) {
+                    settings.doseMg = newType.typicalDosesMg.first ?? settings.doseMg
+                }
+                if !newType.typicalDailyDoses.contains(settings.dailyDoses) {
+                    settings.dailyDoses = newType.typicalDailyDoses.upperBound
                 }
             }
             .navigationTitle("Medication Settings")

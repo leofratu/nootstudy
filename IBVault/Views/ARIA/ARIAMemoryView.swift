@@ -9,13 +9,17 @@ struct ARIAMemoryView: View {
     @State private var selectedCategory: MemoryCategory = .userNotes
     @State private var persistenceError: String?
 
+    private var memoriesByCategory: [MemoryCategory: [ARIAMemory]] {
+        Dictionary(grouping: memories, by: \.category)
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 addNoteSection
 
                 ForEach(MemoryCategory.allCases, id: \.self) { category in
-                    let items = memories.filter { $0.category == category }
+                    let items = memoriesByCategory[category] ?? []
                     if !items.isEmpty {
                         categorySection(category, items: items)
                     }

@@ -1,0 +1,48 @@
+{
+ "task_id": "20260803-ui-hardening-20260803T120621Z",
+ "mode": "rpg",
+ "rpg_used": true,
+ "localization": {
+  "nodes": [
+   "iface.subject_domain_knowledge",
+   "test.subject_domain_knowledge",
+   "iface.ui_hardening_pass"
+  ],
+  "files": [
+   "IBVault/Engine/SubjectKnowledge.swift",
+   "IBVault/Views",
+   "IBVaultTests/SubjectKnowledgeTests.swift"
+  ],
+  "evidence": [
+   "Crash fixes: chat-session deletion now cancels in-flight requests and ARIAService guards session.isDeleted; compaction runs on a scratch context (no shared rollback).",
+   "ReviewSessionView completion screen shows real card/retention snapshots, progress bar reaches 100%, session timer no longer resets, abandoned sessions commit card+ReviewSession together; ActiveStudySessionView completion screen now actually appears and save failures roll back atomically.",
+   "UI fixes: same-day plans no longer duplicated, dashboard 'Plan a session' CTA is clickable, ADHD focus-window chart uses one x-axis, sidebar shows no spurious 0 badges, focus-area thresholds agree, calendar delete options actually differ, failed AI plans cannot be scheduled, 12-hour clock label fixed.",
+   "Performance: dashboard due queue + greeting cached, eligible-card count O(1), subject/topic card indexing, static DateFormatters, calendar plan bucketing.",
+   "Engine: streak-freeze exploit fixed + regression test; ReviewScheduler @MainActor with valid comparator; progression save-first.",
+   "Subject-specific knowledge catalog added (6 subjects) and wired into ARIA system prompts and the subject detail UI."
+  ]
+ },
+ "tests": [
+  {
+   "cmd": "xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' (x3)",
+   "ok": true,
+   "interfaces": [
+    "iface.subject_domain_knowledge",
+    "iface.ui_hardening_pass",
+    "test.subject_domain_knowledge"
+   ]
+  }
+ ],
+ "implemented_interfaces": [
+  "iface.subject_domain_knowledge",
+  "iface.ui_hardening_pass",
+  "test.subject_domain_knowledge"
+ ],
+ "tested_interfaces": [
+  "iface.subject_domain_knowledge",
+  "iface.ui_hardening_pass",
+  "test.subject_domain_knowledge"
+ ],
+ "elapsed_s": null,
+ "tool_calls_count": null
+}

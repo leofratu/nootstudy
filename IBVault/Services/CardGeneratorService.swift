@@ -26,7 +26,16 @@ struct CardGeneratorService {
         let skill: String?
     }
 
-    /// Generate flashcards for a specific topic using ARIA/Gemini
+    /// Generate flashcards for a specific topic using ARIA/Gemini.
+    ///
+    /// Isolation contract: the generator reads/writes `Subject`/`StudyCard`
+    /// model objects and must run on the main actor, where every current caller
+    /// already executes (ARIAService, TopicBrowserView, ReviewSessionView,
+    /// ActiveStudySessionView). The pure parsing/scoring helpers
+    /// (`parseFlashcards`, `adaptiveProfile`) stay nonisolated because the test
+    /// suite exercises them from non-isolated contexts; they only construct or
+    /// read detached models and never touch a `ModelContext`.
+    @MainActor
     static func generateCards(
         subject: Subject,
         topicName: String,
@@ -61,14 +70,17 @@ struct CardGeneratorService {
         } else {
             modelsToTry = [nil]
         }
+        // Bounded regardless of what the caller passes, so a rogue or stale
+        // cardCount can never trigger an unbounded generation loop.
+        let targetCount = min(max(count, 1), 50)
         var collectedCards: [StudyCard] = []
         var lastError: Error?
 
         for model in modelsToTry {
             for _ in 0..<2 {
-                let remaining = count - collectedCards.count
+                let remaining = targetCount - collectedCards.count
                 guard remaining > 0 else {
-                    return Array(collectedCards.prefix(count))
+                    return Array(collectedCards.prefix(targetCount))
                 }
 
                 let prompt = generationPrompt(
@@ -99,8 +111,8 @@ struct CardGeneratorService {
                     let addedCount = merged.count - collectedCards.count
                     collectedCards = merged
 
-                    if collectedCards.count >= count {
-                        return Array(collectedCards.prefix(count))
+                    if collectedCards.count >= targetCount {
+                        return Array(collectedCards.prefix(targetCount))
                     }
 
                     if addedCount == 0 {
@@ -433,7 +445,7 @@ struct CardGeneratorService {
     }
 }
 
-enum CardGeneratorError: Error, LocalizedError {
+enum CardGeneratorError: Error, LocalizedError, Sendable {
     case invalidFormat
     case noCardsGenerated
 

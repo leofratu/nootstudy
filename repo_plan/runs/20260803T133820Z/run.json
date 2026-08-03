@@ -1,0 +1,47 @@
+{
+ "task_id": "20260803-six-agent-courses-20260803T133820Z",
+ "mode": "rpg",
+ "rpg_used": true,
+ "localization": {
+  "nodes": [
+   "iface.personal_dev_courses",
+   "iface.ai_subject_knowledge_powerup",
+   "test.personal_dev_courses"
+  ],
+  "files": [
+   "IBVault/Services/SyllabusSeeder.swift",
+   "IBVault/Engine/SubjectKnowledge.swift",
+   "IBVaultTests/SyllabusSeederTests.swift"
+  ],
+  "evidence": [
+   "Six parallel bug-fix agents covered disjoint scopes (views A/B/C, services+engine, models+design, tests).",
+   "Key agent fixes: ReviewSession reload-signature no longer resets the round on every rating; ActiveStudySession timer isolated into SessionTimerView so panels stop re-parsing per tick; Planner completion sheet no longer dismisses instantly; Settings reset writes a backup first; restore rolls back on failure; Onboarding previews use real seeded subjects; StudyPlan/cal/clock force-unwrap removals; TopicBrowser & SubjectDetail single-pass indexes; PredictiveGrade/Recommendations cached; BackupService empty-backup-dir guard; Gemini stream cancellable + temperature-0 reachable; add_grade requires numeric evidence.",
+   "New regression suites: GradeMapping, SM2 applyReview matrix, streak diff matrix, StudyPlan states, CurriculumProgress set/clear/effective, achievement XP/mastery/subject rules, E2E negation + non-destructive gate scenarios.",
+   "Fixed a critical test-host hang: BackupService/ARIA excludeFromBackupIfNeeded read resourceValues (getxattr) synchronously on the main thread and blocked indefinitely under the test host; both now set the exclusion once on a background queue without the blocking read.",
+   "Added 3 self-authored courses with full units/topics/subtopics + subject knowledge, plus a non-overlap regression test."
+  ]
+ },
+ "tests": [
+  {
+   "cmd": "xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' (x3 + final)",
+   "ok": true,
+   "interfaces": [
+    "iface.ai_subject_knowledge_powerup",
+    "iface.personal_dev_courses",
+    "test.personal_dev_courses"
+   ]
+  }
+ ],
+ "implemented_interfaces": [
+  "iface.ai_subject_knowledge_powerup",
+  "iface.personal_dev_courses",
+  "test.personal_dev_courses"
+ ],
+ "tested_interfaces": [
+  "iface.ai_subject_knowledge_powerup",
+  "iface.personal_dev_courses",
+  "test.personal_dev_courses"
+ ],
+ "elapsed_s": null,
+ "tool_calls_count": null
+}

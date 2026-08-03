@@ -1,0 +1,58 @@
+{
+ "task_id": "20260803-content-quality-regression-20260803T144453Z",
+ "mode": "rpg",
+ "rpg_used": true,
+ "localization": {
+  "nodes": [
+   "iface.personal_dev_courses",
+   "iface.ai_subject_knowledge_powerup",
+   "iface.subject_domain_knowledge",
+   "iface.syllabus_curriculum_cache",
+   "iface.macos_design_system",
+   "test.personal_dev_courses",
+   "test.subject_domain_knowledge"
+  ],
+  "files": [
+   "IBVault/Services/SyllabusSeeder.swift",
+   "IBVault/Engine/SubjectKnowledge.swift",
+   "IBVault/Design/DesignSystem.swift",
+   "IBVaultTests/SyllabusSeederTests.swift",
+   "IBVaultTests/SubjectKnowledgeTests.swift",
+   "README.md",
+   "repo_plan/file_index.json"
+  ],
+  "evidence": [
+   "English B assessment labels corrected: Paper 1 is writing (productive skills), Paper 2 is reading + listening (receptive skills); topic names and the knowledge block no longer reversed, and Paper 2 gained a listening subtopic.",
+   "Biology physiology coverage now includes homeostasis (real 2025 IB Biology content), grounding the SubjectKnowledge high-yield claim.",
+   "Comment/metadata year drift fixed: Economics first assessment 2022, Business Management 2024, Mathematics AA 2021.",
+   "Startups & Venture Capital financial tools verified startup-specific (cap table, runway, financial modeling, term sheet) with no reuse of Business Management topic names.",
+   "DesignSystem.subjectColor(for:) maps the three personal courses to explicit distinct colors.",
+   "New regression tests: structural curriculum invariants for all 9 courses (full + level-filtered), startup-vs-BM non-overlap, English B paper labels, Biology homeostasis, curriculum memoization stability, in-memory seedIfNeeded round-trip (9 subjects + 1 node per subtopic), knowledge-catalog/seed-set parity, and soft curriculum-correspondence checks for high-yield topics and key concepts.",
+   "Resolved a concurrent DesignSystem edit conflict: removed duplicate universeColor/startupColor declarations and a stray brace that would have failed the warnings-as-errors build."
+  ]
+ },
+ "tests": [
+  {
+   "cmd": "xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS'",
+   "ok": null,
+   "interfaces": [
+    "iface.personal_dev_courses",
+    "iface.ai_subject_knowledge_powerup",
+    "test.personal_dev_courses",
+    "test.subject_domain_knowledge"
+   ]
+  }
+ ],
+ "implemented_interfaces": [
+  "iface.personal_dev_courses",
+  "iface.ai_subject_knowledge_powerup",
+  "test.personal_dev_courses",
+  "test.subject_domain_knowledge"
+ ],
+ "tested_interfaces": [
+  "test.personal_dev_courses",
+  "test.subject_domain_knowledge"
+ ],
+ "elapsed_s": null,
+ "tool_calls_count": null
+}

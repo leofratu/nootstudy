@@ -52,17 +52,42 @@ struct SyllabusSeeder {
         synchronizeCurriculum(context: context)
     }
 
+    /// The per-subject curriculum trees are large computed properties that
+    /// would be rebuilt on every access. They are immutable value types, so
+    /// cache them once per subject instead of re-allocating hundreds of structs
+    /// in hot loops (ARIA builds its prompt per message).
+    private static let curriculumCacheLock = NSLock()
+    nonisolated(unsafe) private static var curriculumCache: [String: [CurriculumUnit]] = [:]
+
     /// Returns the curriculum tree for a subject (used by TopicBrowserView)
     static func curriculum(for subjectName: String) -> [CurriculumUnit] {
-        switch subjectName {
-        case "English B": return englishBCurriculum
-        case "Russian A Literature": return russianLitCurriculum
-        case "Biology": return biologyCurriculum
-        case "Mathematics AA": return mathAACurriculum
-        case "Economics": return economicsCurriculum
-        case "Business Management": return businessCurriculum
-        default: return []
+        let key = subjectName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        curriculumCacheLock.lock()
+        if let cached = curriculumCache[key] {
+            curriculumCacheLock.unlock()
+            return cached
         }
+        curriculumCacheLock.unlock()
+
+        let result: [CurriculumUnit]
+        switch subjectName {
+        case "English B": result = englishBCurriculum
+        case "Russian A Literature": result = russianLitCurriculum
+        case "Biology": result = biologyCurriculum
+        case "Mathematics AA": result = mathAACurriculum
+        case "Economics": result = economicsCurriculum
+        case "Business Management": result = businessCurriculum
+        case "Advanced Mathematics": result = advancedMathCurriculum
+        case "Fundamentals of the Universe": result = universeCurriculum
+        case "Startups & Venture Capital": result = startupCurriculum
+        default: result = []
+        }
+
+        curriculumCacheLock.lock()
+        curriculumCache[key] = result
+        curriculumCacheLock.unlock()
+        return result
     }
 
     static func curriculum(for subjectName: String, level: String) -> [CurriculumUnit] {
@@ -125,6 +150,27 @@ struct SyllabusSeeder {
                 title: "IB Diploma Programme Language and literature",
                 path: "programmes/diploma-programme/curriculum/language-and-literature/"
             )
+        case "Advanced Mathematics":
+            return CurriculumMetadata(
+                catalogVersion: "2026.1 / personal course",
+                firstAssessment: "Self-paced",
+                sourceTitle: "Advanced Mathematics — Proofs and Foundations",
+                sourceURL: URL(string: "https://www.ibo.org/") ?? URL(fileURLWithPath: "/")
+            )
+        case "Fundamentals of the Universe":
+            return CurriculumMetadata(
+                catalogVersion: "2026.1 / personal course",
+                firstAssessment: "Self-paced",
+                sourceTitle: "Fundamentals of the Universe",
+                sourceURL: URL(string: "https://www.ibo.org/") ?? URL(fileURLWithPath: "/")
+            )
+        case "Startups & Venture Capital":
+            return CurriculumMetadata(
+                catalogVersion: "2026.1 / personal course",
+                firstAssessment: "Self-paced",
+                sourceTitle: "Startups & Venture Capital",
+                sourceURL: URL(string: "https://www.ibo.org/") ?? URL(fileURLWithPath: "/")
+            )
         default:
             return metadata(firstAssessment: "Current", title: "IB Diploma Programme", path: "programmes/diploma-programme/curriculum/")
         }
@@ -157,10 +203,17 @@ struct SyllabusSeeder {
                         )
                         expectedKeys.insert(key)
                         if let node = nodesByKey.removeValue(forKey: key) {
-                            node.catalogVersion = metadata.catalogVersion
-                            node.sourceTitle = metadata.sourceTitle
-                            node.sourceURLString = metadata.sourceURL.absoluteString
-                            node.updatedAt = Date()
+                            // Only touch rows whose metadata actually changed, so
+                            // launching the app does not churn every node row.
+                            let urlString = metadata.sourceURL.absoluteString
+                            if node.catalogVersion != metadata.catalogVersion ||
+                                node.sourceTitle != metadata.sourceTitle ||
+                                node.sourceURLString != urlString {
+                                node.catalogVersion = metadata.catalogVersion
+                                node.sourceTitle = metadata.sourceTitle
+                                node.sourceURLString = urlString
+                                node.updatedAt = Date()
+                            }
                         } else {
                             context.insert(CurriculumNode(
                                 subjectName: subject.name,
@@ -196,7 +249,11 @@ struct SyllabusSeeder {
         do {
             try context.save()
         } catch {
+            // Non-fatal: curriculum stays unsynchronized but the app keeps
+            // working. A Debug build surfaces it loudly; Release logs once.
+            #if DEBUG
             assertionFailure("Failed to synchronize curriculum: \(error.localizedDescription)")
+            #endif
         }
     }
 
@@ -230,11 +287,14 @@ struct SyllabusSeeder {
     }
 
     private static func metadata(firstAssessment: String, title: String, path: String) -> CurriculumMetadata {
-        CurriculumMetadata(
+        let url = URL(string: "https://www.ibo.org/\(path)")
+            ?? URL(string: "https://www.ibo.org/")
+            ?? URL(fileURLWithPath: "/")
+        return CurriculumMetadata(
             catalogVersion: "2026.1 / first assessment \(firstAssessment)",
             firstAssessment: firstAssessment,
             sourceTitle: title,
-            sourceURL: URL(string: "https://www.ibo.org/\(path)")!
+            sourceURL: url
         )
     }
 
@@ -261,11 +321,21 @@ struct SyllabusSeeder {
         let business = Subject(name: "Business Management", level: "HL", accentColorHex: "EF4444")
         subjects.append(business)
 
+        // Personal-development courses beyond the IB syllabus.
+        let advancedMath = Subject(name: "Advanced Mathematics", level: "HL", accentColorHex: "8B5CF6")
+        subjects.append(advancedMath)
+
+        let universe = Subject(name: "Fundamentals of the Universe", level: "SL", accentColorHex: "6366F1")
+        subjects.append(universe)
+
+        let startups = Subject(name: "Startups & Venture Capital", level: "HL", accentColorHex: "0EA5E9")
+        subjects.append(startups)
+
         return subjects
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - IB Economics HL (First assessment 2025)
+    // MARK: - IB Economics HL (First assessment 2022)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private static var economicsCurriculum: [CurriculumUnit] {
@@ -470,7 +540,7 @@ struct SyllabusSeeder {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - IB Business Management HL (First assessment 2025)
+    // MARK: - IB Business Management HL (First assessment 2024)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private static var businessCurriculum: [CurriculumUnit] {
@@ -746,7 +816,8 @@ struct SyllabusSeeder {
                     "Gas exchange in the lungs",
                     "Defence against infectious disease",
                     "Neurons and synaptic transmission",
-                    "Hormonal regulation (endocrine system)"
+                    "Hormonal regulation (endocrine system)",
+                    "Homeostasis and feedback mechanisms"
                 ]),
             ]),
 
@@ -851,7 +922,7 @@ struct SyllabusSeeder {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - IB Mathematics: Analysis & Approaches SL (2025)
+    // MARK: - IB Mathematics: Analysis & Approaches SL (2021)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private static var mathAACurriculum: [CurriculumUnit] {
@@ -1055,12 +1126,12 @@ struct SyllabusSeeder {
                 ]),
             ]),
             CurriculumUnit(name: "Skills", topics: [
-                CurriculumTopic(name: "Receptive Skills (Paper 1)", subtopics: [
+                CurriculumTopic(name: "Receptive Skills (Paper 2)", subtopics: [
                     "Reading comprehension strategies", "Text handling exercises",
                     "Inferring meaning from context", "Identifying text type and purpose",
-                    "Summarising and synthesising information"
+                    "Listening for gist and detail", "Summarising and synthesising information"
                 ]),
-                CurriculumTopic(name: "Productive Skills (Paper 2)", subtopics: [
+                CurriculumTopic(name: "Productive Skills (Paper 1)", subtopics: [
                     "Text types: article, blog, report, letter, speech, review",
                     "Register and audience awareness", "Structural conventions",
                     "Persuasive writing techniques", "Descriptive and narrative writing"
@@ -1126,6 +1197,453 @@ struct SyllabusSeeder {
                     "Figurative language and imagery", "Narrative voice and perspective",
                     "Characterisation techniques", "Symbolism and motifs",
                     "Irony, satire and tone"
+                ]),
+            ]),
+        ]
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Advanced Mathematics (personal course, beyond IB)
+    // Proof-first foundations for students who finished Mathematics AA/HL.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private static var advancedMathCurriculum: [CurriculumUnit] {
+        [
+            CurriculumUnit(name: "Unit 1 — Course Overview", topics: [
+                CurriculumTopic(name: "How This Course Fits After IB Mathematics", subtopics: [
+                    "What this course covers",
+                    "How to use the materials",
+                    "The proof-first mindset",
+                    "Suggested study path",
+                    "Notation and terminology refresher"
+                ]),
+                CurriculumTopic(name: "Mathematical Writing", subtopics: [
+                    "Structuring a proof",
+                    "Quantifiers and logical notation",
+                    "Common logical fallacies",
+                    "Clear exposition and signposting",
+                    "Writing for the reader"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 2 — Proof Techniques", topics: [
+                CurriculumTopic(name: "Direct Proof", subtopics: [
+                    "The structure of a direct proof",
+                    "Proving algebraic identities",
+                    "Proving divisibility statements",
+                    "Proving inequalities",
+                    "Worked examples and practice"
+                ]),
+                CurriculumTopic(name: "Proof by Contradiction", subtopics: [
+                    "The strategy of contradiction",
+                    "Proving the irrationality of √2",
+                    "The infinitude of primes",
+                    "Contradiction in geometry",
+                    "When contradiction is the natural tool"
+                ]),
+                CurriculumTopic(name: "Proof by Induction", subtopics: [
+                    "The principle of mathematical induction",
+                    "Strong induction",
+                    "Induction with inequalities",
+                    "Induction with divisibility",
+                    "Structural induction"
+                ]),
+                CurriculumTopic(name: "Contrapositive and Exhaustion", subtopics: [
+                    "The contrapositive equivalence",
+                    "Proof by exhaustion and cases",
+                    "Without loss of generality",
+                    "Combining proof techniques",
+                    "Choosing the right technique"
+                ]),
+                CurriculumTopic(name: "Advanced Proof Methods", subtopics: [
+                    "The pigeonhole principle",
+                    "Existence proofs by construction",
+                    "Uniqueness proofs",
+                    "Epsilon-delta fundamentals",
+                    "A proof-writing workshop"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 3 — Number Theory and Algebra", topics: [
+                CurriculumTopic(name: "Modular Arithmetic", subtopics: [
+                    "Congruences",
+                    "Modular inverses",
+                    "The Chinese remainder theorem",
+                    "Fermat's little theorem",
+                    "Applications of modular arithmetic"
+                ]),
+                CurriculumTopic(name: "Classical Number Theory", subtopics: [
+                    "Division algorithm and GCD",
+                    "The Euclidean algorithm",
+                    "The fundamental theorem of arithmetic",
+                    "Diophantine equations",
+                    "Prime distribution intuition"
+                ]),
+                CurriculumTopic(name: "Algebraic Structures", subtopics: [
+                    "Groups",
+                    "Rings",
+                    "Fields",
+                    "Homomorphisms",
+                    "Isomorphisms"
+                ]),
+                CurriculumTopic(name: "Complex Numbers, Deeper", subtopics: [
+                    "Polar form and Euler's formula",
+                    "Roots of unity",
+                    "Complex functions",
+                    "Complex sums and series",
+                    "Applications of complex numbers"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 4 — Real Analysis Foundations", topics: [
+                CurriculumTopic(name: "Sequences and Limits", subtopics: [
+                    "Definition of convergence",
+                    "Monotone convergence",
+                    "Subsequences",
+                    "Limit laws",
+                    "Cauchy sequences"
+                ]),
+                CurriculumTopic(name: "Continuity", subtopics: [
+                    "The limit definition of continuity",
+                    "The intermediate value theorem",
+                    "The extreme value theorem",
+                    "Uniform continuity",
+                    "Continuity and topology intuition"
+                ]),
+                CurriculumTopic(name: "Differentiation", subtopics: [
+                    "The definition of the derivative",
+                    "The mean value theorem",
+                    "Rolle's theorem",
+                    "Taylor's theorem",
+                    "L'Hôpital's rule"
+                ]),
+                CurriculumTopic(name: "Integration", subtopics: [
+                    "Riemann sums",
+                    "The fundamental theorem of calculus",
+                    "Integration techniques",
+                    "Improper integrals",
+                    "Applications of integration"
+                ]),
+                CurriculumTopic(name: "Series", subtopics: [
+                    "Convergence tests",
+                    "Power series",
+                    "Taylor series",
+                    "Radius of convergence",
+                    "Series in applications"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 5 — Linear Algebra and Applications", topics: [
+                CurriculumTopic(name: "Vector Spaces", subtopics: [
+                    "Definitions and axioms",
+                    "Subspaces",
+                    "Span and linear independence",
+                    "Basis and dimension",
+                    "Examples from IB topics"
+                ]),
+                CurriculumTopic(name: "Linear Transformations", subtopics: [
+                    "Matrix representations",
+                    "Kernel and image",
+                    "The rank-nullity theorem",
+                    "Change of basis",
+                    "Transformations in geometry"
+                ]),
+                CurriculumTopic(name: "Eigenvalues and Diagonalization", subtopics: [
+                    "The characteristic polynomial",
+                    "Eigenvectors and eigenspaces",
+                    "Diagonalizability",
+                    "The Cayley-Hamilton theorem",
+                    "Applications to recurrence systems"
+                ]),
+                CurriculumTopic(name: "Geometry of Linear Algebra", subtopics: [
+                    "Dot and cross products",
+                    "Orthogonality",
+                    "Projections",
+                    "Least squares",
+                    "Applications in physics and economics"
+                ]),
+            ]),
+        ]
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Fundamentals of the Universe (personal course)
+    // Cosmology, stellar evolution and fundamental physics for curious minds.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private static var universeCurriculum: [CurriculumUnit] {
+        [
+            CurriculumUnit(name: "Unit 1 — Course Overview", topics: [
+                CurriculumTopic(name: "What This Course Covers", subtopics: [
+                    "The scope of the universe",
+                    "Why it matters",
+                    "The journey map",
+                    "Key tools and methods",
+                    "How to use this course"
+                ]),
+                CurriculumTopic(name: "Cosmic Scales", subtopics: [
+                    "Units: AU, light-years and parsecs",
+                    "Powers of ten",
+                    "The observable universe",
+                    "Orders of magnitude",
+                    "Estimating the unobservable"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 2 — Fundamental Physics", topics: [
+                CurriculumTopic(name: "The Four Forces of Nature", subtopics: [
+                    "Gravity",
+                    "Electromagnetism",
+                    "The strong nuclear force",
+                    "The weak nuclear force",
+                    "The search for unification"
+                ]),
+                CurriculumTopic(name: "Special Relativity", subtopics: [
+                    "The two postulates",
+                    "Time dilation",
+                    "Length contraction",
+                    "E = mc²",
+                    "Relativistic momentum and energy"
+                ]),
+                CurriculumTopic(name: "General Relativity", subtopics: [
+                    "Spacetime curvature",
+                    "The equivalence principle",
+                    "Gravitational lensing",
+                    "Gravitational waves",
+                    "Black hole spacetime"
+                ]),
+                CurriculumTopic(name: "Quantum Essentials", subtopics: [
+                    "Wave-particle duality",
+                    "The uncertainty principle",
+                    "Quantisation of energy",
+                    "The standard model",
+                    "Matter and antimatter"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 3 — Stars and Stellar Evolution", topics: [
+                CurriculumTopic(name: "Nuclear Fusion in Stars", subtopics: [
+                    "Stellar fusion reactions",
+                    "The proton-proton chain",
+                    "The CNO cycle",
+                    "Synthesising heavier elements",
+                    "Stellar mass and luminosity"
+                ]),
+                CurriculumTopic(name: "The Stellar Life Cycle", subtopics: [
+                    "Nebulae and star formation",
+                    "The main sequence",
+                    "Red giants",
+                    "White dwarfs",
+                    "Supernovae"
+                ]),
+                CurriculumTopic(name: "Compact Objects", subtopics: [
+                    "Neutron stars",
+                    "Pulsars",
+                    "Black holes",
+                    "The event horizon",
+                    "Hawking radiation"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 4 — Cosmology", topics: [
+                CurriculumTopic(name: "The Big Bang", subtopics: [
+                    "Observational evidence",
+                    "Expansion and Hubble's law",
+                    "The cosmic microwave background",
+                    "Big Bang nucleosynthesis",
+                    "A timeline of the universe"
+                ]),
+                CurriculumTopic(name: "Dark Matter and Dark Energy", subtopics: [
+                    "Evidence for dark matter",
+                    "Galaxy rotation curves",
+                    "Gravitational lensing evidence",
+                    "The accelerating universe",
+                    "The cosmological constant"
+                ]),
+                CurriculumTopic(name: "The Structure of the Universe", subtopics: [
+                    "Galaxies and clusters",
+                    "Large-scale structure",
+                    "The cosmic web",
+                    "Cosmic inflation",
+                    "The fate of the universe"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 5 — Planets and Life", topics: [
+                CurriculumTopic(name: "Planetary Systems", subtopics: [
+                    "Formation of the solar system",
+                    "Planet types",
+                    "Exoplanet detection methods",
+                    "Kepler and TESS",
+                    "Planetary atmospheres"
+                ]),
+                CurriculumTopic(name: "Habitability and Life", subtopics: [
+                    "The habitable zone",
+                    "Requirements for life",
+                    "The Fermi paradox",
+                    "The search for life",
+                    "SETI"
+                ]),
+                CurriculumTopic(name: "Human Exploration", subtopics: [
+                    "The space race",
+                    "Rocket science basics",
+                    "Satellites and orbits",
+                    "Missions to Mars",
+                    "The future of space travel"
+                ]),
+            ]),
+        ]
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Startups & Venture Capital (personal course)
+    // Building companies and raising capital — deliberately outside the IB
+    // Business Management syllabus, which stops at corporate strategy.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private static var startupCurriculum: [CurriculumUnit] {
+        [
+            CurriculumUnit(name: "Unit 1 — Course Overview", topics: [
+                CurriculumTopic(name: "How This Course Works", subtopics: [
+                    "What it covers",
+                    "The startup lifecycle at a glance",
+                    "How it differs from IB Business Management",
+                    "The founder's mindset",
+                    "Setting your learning goals"
+                ]),
+                CurriculumTopic(name: "The Startup Journey", subtopics: [
+                    "From idea to exit",
+                    "The stages of a company",
+                    "Key players: founders, investors, advisors",
+                    "What success looks like",
+                    "Common failure modes"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 2 — Founding and Product", topics: [
+                CurriculumTopic(name: "Idea Validation", subtopics: [
+                    "Problem-solution fit",
+                    "Customer interviews",
+                    "Building the right thing",
+                    "The lean startup loop",
+                    "Validating real demand"
+                ]),
+                CurriculumTopic(name: "Product-Market Fit", subtopics: [
+                    "Defining product-market fit",
+                    "Metrics that signal fit",
+                    "Iterating toward fit",
+                    "Pivots vs persevere",
+                    "Knowing when you have it"
+                ]),
+                CurriculumTopic(name: "Building an MVP", subtopics: [
+                    "Scope discipline",
+                    "Speed of iteration",
+                    "Technical debt trade-offs",
+                    "Winning early adopters",
+                    "Closing the feedback loop"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 3 — Company Building", topics: [
+                CurriculumTopic(name: "Unit Economics", subtopics: [
+                    "Customer acquisition cost (CAC)",
+                    "Lifetime value (LTV)",
+                    "Gross and contribution margin",
+                    "When unit economics break even",
+                    "The LTV/CAC ratio"
+                ]),
+                CurriculumTopic(name: "Growth and Distribution", subtopics: [
+                    "Acquisition channels",
+                    "Viral loops",
+                    "Retention and engagement",
+                    "Churn and cohorts",
+                    "Scaling playbooks"
+                ]),
+                CurriculumTopic(name: "Startup Metrics", subtopics: [
+                    "ARR and MRR",
+                    "Active users",
+                    "Retention curves",
+                    "The north star metric",
+                    "Reporting to the board"
+                ]),
+                CurriculumTopic(name: "Team and Culture", subtopics: [
+                    "Founding team composition",
+                    "Equity splits among co-founders",
+                    "Hiring your first employees",
+                    "Company values",
+                    "Remote vs office dynamics"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 4 — Fundraising and Venture Capital", topics: [
+                CurriculumTopic(name: "How VCs Think", subtopics: [
+                    "The VC business model",
+                    "Fund economics: management fees and carry",
+                    "What VCs actually look for",
+                    "Pattern recognition across 25 years of deals",
+                    "How deals get sourced"
+                ]),
+                CurriculumTopic(name: "Fundraising Stages", subtopics: [
+                    "Friends and family / pre-seed",
+                    "Seed",
+                    "Series A",
+                    "Series B and growth",
+                    "The milestone each round buys"
+                ]),
+                CurriculumTopic(name: "The Term Sheet", subtopics: [
+                    "Valuation and dilution",
+                    "Liquidation preference",
+                    "Vesting and cliffs",
+                    "Anti-dilution provisions",
+                    "Board seats and control",
+                    "Pro-rata rights"
+                ]),
+                CurriculumTopic(name: "The Pitch", subtopics: [
+                    "Anatomy of the pitch deck",
+                    "Storytelling and narrative",
+                    "The financial story",
+                    "Objection handling",
+                    "The live demo"
+                ]),
+                CurriculumTopic(name: "Due Diligence", subtopics: [
+                    "What investors verify",
+                    "Legal and cap table review",
+                    "Financial due diligence",
+                    "Founder references",
+                    "Preparing the data room"
+                ]),
+                CurriculumTopic(name: "Working with Investors", subtopics: [
+                    "Choosing the right investor",
+                    "Running board meetings",
+                    "Reporting expectations",
+                    "The follow-on round",
+                    "Long-term investor relations"
+                ]),
+            ]),
+            CurriculumUnit(name: "Unit 5 — Financial Tools and Operations", topics: [
+                CurriculumTopic(name: "The Cap Table", subtopics: [
+                    "What a cap table is",
+                    "Reading a cap table",
+                    "Option pools",
+                    "Modelling dilution",
+                    "Cap table management tools"
+                ]),
+                CurriculumTopic(name: "Financial Modelling for Startups", subtopics: [
+                    "The revenue model",
+                    "Cost structure",
+                    "Cash flow forecasting",
+                    "The three-statement model",
+                    "Scenario planning"
+                ]),
+                CurriculumTopic(name: "Runway and Cash Management", subtopics: [
+                    "Burn rate",
+                    "Runway math",
+                    "Managing cash discipline",
+                    "When to raise",
+                    "Extending the runway"
+                ]),
+                CurriculumTopic(name: "Startup Accounting", subtopics: [
+                    "Revenue recognition",
+                    "Accrual vs cash accounting",
+                    "Key financial statements",
+                    "Tax basics for startups",
+                    "Setting up bookkeeping"
+                ]),
+                CurriculumTopic(name: "Fundraising Financials", subtopics: [
+                    "What VCs expect in the model",
+                    "The unit economics deck",
+                    "The hockey stick and realism",
+                    "Sensitivity analysis",
+                    "Crafting the 18-month plan"
                 ]),
             ]),
         ]

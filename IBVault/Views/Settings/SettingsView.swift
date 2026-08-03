@@ -5,20 +5,6 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
-    @Query private var studyCards: [StudyCard]
-    @Query private var reviewSessions: [ReviewSession]
-    @Query private var studySessions: [StudySession]
-    @Query private var studyActivities: [StudyActivity]
-    @Query private var achievements: [Achievement]
-    @Query private var grades: [Grade]
-    @Query private var studyPlans: [StudyPlan]
-    @Query private var ariaMemories: [ARIAMemory]
-    @Query private var ariaChatSessions: [ARIAChatSession]
-    @Query private var chatMessages: [ChatMessage]
-    @Query private var subjectTracks: [SubjectTrack]
-    @Query private var unitStates: [UnitState]
-    @Query private var curriculumNodes: [CurriculumNode]
-    @Query private var weeklyChallenges: [WeeklyChallenge]
     @State private var apiKey = ""
     @State private var junaliAPIKey = ""
     @State private var showAPIKey = false
@@ -158,7 +144,7 @@ struct SettingsView: View {
                     Image(systemName: "person.fill")
                         .foregroundStyle(.tint)
                     TextField("Your Name", text: Binding(
-                        get: { p.studentName }, set: { p.studentName = $0; try? context.save() }
+                        get: { p.studentName }, set: { p.studentName = $0; persistChanges() }
                     ))
                 }
 
@@ -166,7 +152,7 @@ struct SettingsView: View {
                     Image(systemName: "calendar")
                         .foregroundStyle(.tint)
                     Picker("IB Year", selection: Binding(
-                        get: { p.ibYear }, set: { p.ibYear = $0; try? context.save() }
+                        get: { p.ibYear }, set: { p.ibYear = $0; persistChanges() }
                     )) {
                         ForEach(IBYear.allCases, id: \.self) { year in
                             Text(year.rawValue).tag(year)
@@ -181,7 +167,7 @@ struct SettingsView: View {
                         Text("Study Intensity")
                     }
                     Picker("Intensity", selection: Binding(
-                        get: { p.studyIntensity }, set: { p.studyIntensity = $0; try? context.save() }
+                        get: { p.studyIntensity }, set: { p.studyIntensity = $0; persistChanges() }
                     )) {
                         ForEach(StudyIntensity.allCases, id: \.self) { intensity in
                             HStack { Text(intensity.emoji); Text(intensity.rawValue) }.tag(intensity)
@@ -196,13 +182,13 @@ struct SettingsView: View {
                     Image(systemName: "target")
                         .foregroundStyle(.tint)
                     Stepper("Target Score: \(p.targetIBScore)/45", value: Binding(
-                        get: { p.targetIBScore }, set: { p.targetIBScore = $0; try? context.save() }
+                        get: { p.targetIBScore }, set: { p.targetIBScore = $0; persistChanges() }
                     ), in: 12...45)
                 }
 
                 Button {
                     p.dailyGoal = p.studyIntensity.dailyCardSuggestion
-                    try? context.save()
+                    persistChanges()
                     presetApplied = true; IBHaptics.success()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { presetApplied = false }
                 } label: {
@@ -549,7 +535,7 @@ struct SettingsView: View {
         Section {
             if let p = profile {
                 Stepper("Daily Goal: \(p.dailyGoal) cards", value: Binding(
-                    get: { p.dailyGoal }, set: { p.dailyGoal = $0; try? context.save() }
+                    get: { p.dailyGoal }, set: { p.dailyGoal = $0; persistChanges() }
                 ), in: 5...100, step: 5)
 
                 HStack {
@@ -698,9 +684,12 @@ struct SettingsView: View {
 
     private func createBackup() {
         isBackingUp = true; backupStatus = ""
+        // The container is Sendable; export creates its own scratch context on
+        // the background queue, so no main-actor context crosses the boundary.
+        let container = context.container
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let url = try BackupService.exportBackup(context: context)
+                let url = try BackupService.exportBackup(container: container)
                 DispatchQueue.main.async {
                     refreshViewState()
                     isBackingUp = false; backupStatus = "✓ Saved to \(url.lastPathComponent)"; IBHaptics.success()
@@ -719,11 +708,20 @@ struct SettingsView: View {
             refreshViewState()
             backupStatus = "✓ Restored successfully!"; IBHaptics.success()
         } catch {
+            // A failed restore can leave the context holding pending deletes
+            // and inserts from the aborted import. Discard them so the data
+            // that was live before the restore attempt survives intact.
+            context.rollback()
             backupStatus = "✗ Restore failed: \(error.localizedDescription)"; IBHaptics.error()
         }
     }
 
     private func refreshViewState() {
+        refreshKeychainState()
+        refreshBackupState()
+    }
+
+    private func refreshKeychainState() {
         hasKey = KeychainService.hasAPIKey
         if hasKey, let loadedKey = KeychainService.loadAPIKey() {
             apiKey = loadedKey
@@ -732,8 +730,17 @@ struct SettingsView: View {
         if hasJunaliKey, let loadedKey = KeychainService.loadJunaliAPIKey() {
             junaliAPIKey = loadedKey
         }
-        latestBackupDate = BackupService.latestBackupDate
-        backupCount = BackupService.listBackups().count
+    }
+
+    private func refreshBackupState() {
+        DispatchQueue.global(qos: .utility).async {
+            let date = BackupService.latestBackupDate
+            let count = BackupService.listBackups().count
+            DispatchQueue.main.async {
+                latestBackupDate = date
+                backupCount = count
+            }
+        }
     }
 
     private func testSelectedProvider() {
@@ -768,7 +775,7 @@ struct SettingsView: View {
                     set: { date in
                         p.notificationHour = Calendar.current.component(.hour, from: date)
                         p.notificationMinute = Calendar.current.component(.minute, from: date)
-                        try? context.save()
+                        persistChanges()
                         NotificationService.scheduleDailyReminder(hour: p.notificationHour, minute: p.notificationMinute, dueCount: 0)
                     }
                 ), displayedComponents: .hourAndMinute)
@@ -809,7 +816,7 @@ struct SettingsView: View {
                     resetAllData()
                 }
             } message: {
-                Text("This will delete all your study data including subjects, cards, and progress. This action cannot be undone.")
+                Text("A fresh backup will be saved to Documents first so a mistaken reset can be undone. This will delete all your study data including subjects, cards, and progress.")
             }
         } header: {
             Label("Data", systemImage: "trash")
@@ -817,35 +824,68 @@ struct SettingsView: View {
     }
     
     private func resetAllData() {
+        guard !isResetting else { return }
         isResetting = true
-        
-        // Clear all SwiftData
-        for profile in profiles { context.delete(profile) }
-        for subject in subjects { context.delete(subject) }
-        for card in studyCards { context.delete(card) }
-        for session in reviewSessions { context.delete(session) }
-        for session in studySessions { context.delete(session) }
-        for activity in studyActivities { context.delete(activity) }
-        for achievement in achievements { context.delete(achievement) }
-        for grade in grades { context.delete(grade) }
-        for plan in studyPlans { context.delete(plan) }
-        for memory in ariaMemories { context.delete(memory) }
-        for session in ariaChatSessions { context.delete(session) }
-        for message in chatMessages { context.delete(message) }
-        for track in subjectTracks { context.delete(track) }
-        for state in unitStates { context.delete(state) }
-        for node in curriculumNodes { context.delete(node) }
-        for challenge in weeklyChallenges { context.delete(challenge) }
-        
-        // Clear UserDefaults
-        let domain = Bundle.main.bundleIdentifier!
-        UserDefaults.standard.removePersistentDomain(forName: domain)
-        _ = KeychainService.deleteAPIKey()
-        _ = KeychainService.deleteJunaliAPIKey()
-        
-        try? context.save()
-        
+        do {
+            // Never wipe the only copy of data we can still back up. Write a
+            // fresh backup first and abort if it cannot be saved, otherwise a
+            // mistaken reset would permanently destroy chat history and ADHD
+            // settings with no recovery path.
+            _ = try BackupService.exportBackup(context: context)
+
+            try deleteAll(UserProfile.self)
+            try deleteAll(Subject.self)
+            try deleteAll(StudyCard.self)
+            try deleteAll(ReviewSession.self)
+            try deleteAll(StudySession.self)
+            try deleteAll(StudyActivity.self)
+            try deleteAll(Achievement.self)
+            try deleteAll(Grade.self)
+            try deleteAll(StudyPlan.self)
+            try deleteAll(ARIAMemory.self)
+            try deleteAll(ARIAChatSession.self)
+            try deleteAll(ChatMessage.self)
+            try deleteAll(SubjectTrack.self)
+            try deleteAll(UnitState.self)
+            try deleteAll(CurriculumNode.self)
+            try deleteAll(WeeklyChallenge.self)
+
+            // Clear UserDefaults
+            if let domain = Bundle.main.bundleIdentifier {
+                UserDefaults.standard.removePersistentDomain(forName: domain)
+            }
+            _ = KeychainService.deleteAPIKey()
+            _ = KeychainService.deleteJunaliAPIKey()
+
+            try context.save()
+            // The @State copy is not backed by UserDefaults, so re-read it now
+            // that the domain (and the "adhdMedicationSettings" key) is gone.
+            adhdMedSettings = .default
+            refreshViewState()
+            backupStatus = "✓ All data reset (a backup was saved first)"
+            IBHaptics.success()
+        } catch {
+            context.rollback()
+            backupStatus = "✗ Reset failed: \(error.localizedDescription)"
+            IBHaptics.error()
+        }
         isResetting = false
+    }
+
+    private func deleteAll<T: PersistentModel>(_ type: T.Type) throws {
+        let all = try context.fetch(FetchDescriptor<T>())
+        for model in all {
+            context.delete(model)
+        }
+    }
+
+    private func persistChanges() {
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            backupStatus = "✗ Could not save changes: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - About
@@ -1009,6 +1049,7 @@ struct ReportUploadView: View {
     @Query private var profiles: [UserProfile]
 
     @State private var grades: [String: [String: Int]] = [:]
+    @State private var saveError: String?
     let components = ["Paper 1", "Paper 2", "IA", "Overall"]
 
     var body: some View {
@@ -1045,6 +1086,14 @@ struct ReportUploadView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
             .onAppear { initGrades() }
+            .alert("Could Not Save Report", isPresented: Binding(
+                get: { saveError != nil },
+                set: { if !$0 { saveError = nil } }
+            )) {
+                Button("OK", role: .cancel) { saveError = nil }
+            } message: {
+                Text(saveError ?? "Your grades could not be saved.")
+            }
         }
         .frame(minWidth: 600, minHeight: 500)
     }
@@ -1110,6 +1159,13 @@ struct ReportUploadView: View {
         if let p = profiles.first {
             p.reportLastUploaded = Date()
         }
-        try? context.save(); IBHaptics.success(); dismiss()
+        do {
+            try context.save()
+            IBHaptics.success()
+            dismiss()
+        } catch {
+            context.rollback()
+            saveError = error.localizedDescription
+        }
     }
 }

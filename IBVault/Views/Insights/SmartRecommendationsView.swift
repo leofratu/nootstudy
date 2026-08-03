@@ -9,10 +9,6 @@ struct SmartRecommendationsView: View {
     @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
     
     @State private var selectedRecommendation: StudyRecommendation?
-    
-    private var recommendations: [StudyRecommendation] {
-        generateRecommendations()
-    }
 
     private var studiedScopes: [StudyScope] {
         StudySession.uniqueStudyScopes(from: sessions)
@@ -25,12 +21,18 @@ struct SmartRecommendationsView: View {
         }
     }
 
+    private func recommendations(from dueCards: [StudyCard]) -> [StudyRecommendation] {
+        generateRecommendations(dueCards: dueCards)
+    }
+
     private var weakSubjectCount: Int {
-        subjects.filter { $0.masteryProgress < 0.5 }.count
+        subjects.filter { $0.masteryProgress < 0.4 }.count
     }
     
     var body: some View {
-        ScrollView {
+        let dueCards = reviewableDueCards
+        let recs = recommendations(from: dueCards)
+        return ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 StudioPageHeader(
                     eyebrow: "Decision support",
@@ -39,20 +41,24 @@ struct SmartRecommendationsView: View {
                     symbol: "lightbulb.fill",
                     tint: IBColors.gold
                 ) {
-                    StudioPill(title: "\(recommendations.count) ACTIONS", tint: IBColors.gold)
+                    StudioPill(title: "\(recs.count) ACTIONS", tint: IBColors.gold)
                 }
 
-                HStack(spacing: 12) {
-                    StudioMetricTile(value: "\(dueCardsCount)", label: "Due cards", symbol: "clock.badge.exclamationmark", tint: dueCardsCount > 0 ? IBColors.coral : IBColors.success, detail: dueCardsCount > 0 ? "Schedule first" : "Queue clear")
-                    StudioMetricTile(value: "\(weakSubjectCount)", label: "Focus areas", symbol: "scope", tint: IBColors.englishColor, detail: "Below 50% mastery")
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 220), spacing: 12)],
+                    alignment: .leading,
+                    spacing: 12
+                ) {
+                    StudioMetricTile(value: "\(dueCards.count)", label: "Due cards", symbol: "clock.badge.exclamationmark", tint: dueCards.count > 0 ? IBColors.coral : IBColors.success, detail: dueCards.count > 0 ? "Schedule first" : "Queue clear")
+                    StudioMetricTile(value: "\(weakSubjectCount)", label: "Focus areas", symbol: "scope", tint: IBColors.englishColor, detail: "Below 40% mastery")
                     StudioMetricTile(value: profiles.first.map { "\($0.targetIBScore)" } ?? "-", label: "IB target", symbol: "target", tint: IBColors.electricBlue, detail: "Your current goal")
                 }
 
-                if recommendations.isEmpty {
+                if recs.isEmpty {
                     emptyState
                 } else {
-                    recommendationsSection
-                    dueCardsSection
+                    recommendationsSection(recs)
+                    dueCardsSection(dueCards: dueCards)
                     weakTopicsSection
                 }
             }
@@ -85,7 +91,7 @@ struct SmartRecommendationsView: View {
     }
     
     // MARK: - Recommendations
-    private var recommendationsSection: some View {
+    private func recommendationsSection(_ recs: [StudyRecommendation]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "lightbulb.fill")
@@ -94,7 +100,7 @@ struct SmartRecommendationsView: View {
                     .font(.headline)
             }
             
-            ForEach(recommendations) { rec in
+            ForEach(recs) { rec in
                 recommendationCard(rec)
             }
         }
@@ -149,7 +155,7 @@ struct SmartRecommendationsView: View {
     }
     
     // MARK: - Due Cards
-    private var dueCardsSection: some View {
+    private func dueCardsSection(dueCards: [StudyCard]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "clock.badge.exclamationmark")
@@ -157,13 +163,13 @@ struct SmartRecommendationsView: View {
                 Text("Due for Review")
                     .font(.headline)
                 Spacer()
-                Text("\(dueCardsCount) cards")
+                Text("\(dueCards.count) cards")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             
-            if dueCardsCount > 0 {
-                let bySubject = Dictionary(grouping: reviewableDueCards, by: { $0.subject?.name ?? "Unknown" })
+            if dueCards.count > 0 {
+                let bySubject = Dictionary(grouping: dueCards, by: { $0.subject?.name ?? "Unknown" })
                 
                 ForEach(bySubject.keys.sorted(), id: \.self) { subjectName in
                     let cards = bySubject[subjectName] ?? []
@@ -277,17 +283,12 @@ struct SmartRecommendationsView: View {
     }
     
     // MARK: - Helpers
-    private var dueCardsCount: Int {
-        reviewableDueCards.count
-    }
-    
-    private func generateRecommendations() -> [StudyRecommendation] {
+    private func generateRecommendations(dueCards: [StudyCard]) -> [StudyRecommendation] {
         var recs: [StudyRecommendation] = []
         
-        let dueCards = reviewableDueCards
         if dueCards.count > 20 {
             recs.append(StudyRecommendation(
-                id: UUID(),
+                id: "review.urgent",
                 title: "Urgent: \(dueCards.count) cards overdue",
                 description: "Your review pile is growing. Start a review session now to prevent knowledge decay.",
                 priority: .critical,
@@ -298,7 +299,7 @@ struct SmartRecommendationsView: View {
             ))
         } else if dueCards.count > 0 {
             recs.append(StudyRecommendation(
-                id: UUID(),
+                id: "review.due",
                 title: "\(dueCards.count) cards due now",
                 description: "Regular reviews strengthen memory. Start a quick review session.",
                 priority: .high,
@@ -316,7 +317,7 @@ struct SmartRecommendationsView: View {
         
         if let weakest = weakSubjects.first {
             recs.append(StudyRecommendation(
-                id: UUID(),
+                id: "weak.\(weakest.0.name)",
                 title: "Focus on \(weakest.0.name)",
                 description: "This is your weakest subject at \(Int(weakest.1 * 100))% mastery. Prioritize this for biggest score gains.",
                 priority: .high,
@@ -332,7 +333,7 @@ struct SmartRecommendationsView: View {
             let monthsToExam = 2
             if monthsToExam < 3 {
                 recs.append(StudyRecommendation(
-                    id: UUID(),
+                    id: "exam.prep",
                     title: "DP2: Exam prep mode",
                     description: "Focus on highest-yield topics. Target your weakest areas that appear frequently in exams.",
                     priority: .critical,
@@ -346,7 +347,7 @@ struct SmartRecommendationsView: View {
         
         if let profile = profile, profile.currentStreak < 3 {
             recs.append(StudyRecommendation(
-                id: UUID(),
+                id: "streak.build",
                 title: "Build your streak",
                 description: "You're on a \(profile.currentStreak)-day streak. Keep it going for bonus XP and better retention!",
                 priority: .medium,
@@ -362,23 +363,29 @@ struct SmartRecommendationsView: View {
     
     private func findWeakestTopic(for subject: Subject) -> (name: String, mastery: Double)? {
         let byTopic = Dictionary(grouping: subject.cards, by: { $0.topicName })
-        
+
         var weakest: (name: String, mastery: Double)?
-        
-        for (topicName, _) in byTopic {
-            let mastery = ProficiencyTracker.masteryPercentage(for: subject, topicName: topicName)
-            if weakest == nil || mastery < weakest!.mastery {
+
+        for (topicName, cards) in byTopic {
+            let mastery = ProficiencyTracker.masteryPercentage(for: cards)
+            if let existing = weakest {
+                if mastery < existing.mastery {
+                    weakest = (topicName, mastery)
+                }
+            } else {
                 weakest = (topicName, mastery)
             }
         }
-        
+
         return weakest
     }
 }
 
 // MARK: - Model
 struct StudyRecommendation: Identifiable {
-    let id: UUID
+    /// Stable, render-independent identity derived from the recommendation's
+    /// kind (and subject) so `ForEach` identity never changes between renders.
+    let id: String
     let title: String
     let description: String
     let priority: RecommendationPriority

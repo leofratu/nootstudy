@@ -12,30 +12,21 @@ struct DashboardView: View {
     @State private var reviewScheduler = ReviewScheduler()
     @State private var showReview = false
     @State private var selectedSubjectForReview: Subject?
+    // Cached so the body does not re-derive scopes and re-scan every card on
+    // each of the ~8 places that read the due queue.
+    @State private var dueCards: [StudyCard] = []
+    @State private var greetingText = ""
+    // Queue-health ratio cached alongside the due snapshot; computing it here
+    // would re-scan every card in the store on every body evaluation.
+    @State private var reviewProgress = 0.0
 
     private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
     private let subjectColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
 
     private var profile: UserProfile? { profiles.first }
 
-    private var studiedScopes: [StudyScope] {
-        StudySession.uniqueStudyScopes(from: studySessions)
-    }
-
-    private var dueCards: [StudyCard] {
-        guard !studiedScopes.isEmpty else { return [] }
-        return allCards.filter { card in
-            card.isDue && studiedScopes.contains { $0.matches(card) }
-        }
-    }
-
     private var sortedSubjects: [Subject] {
         subjects.sorted { $0.name < $1.name }
-    }
-
-    private var reviewProgress: Double {
-        guard !allCards.isEmpty else { return 0 }
-        return Double(allCards.filter { !$0.isDue }.count) / Double(allCards.count)
     }
 
     private var greeting: String {
@@ -61,13 +52,45 @@ struct DashboardView: View {
             }
             .background(IBColors.canvas)
             .navigationTitle("Dashboard")
-            .sheet(isPresented: $showReview) {
+            .sheet(isPresented: $showReview, onDismiss: {
+                reviewScheduler.analyze(context: context)
+            }) {
                 ReviewSessionView(filterSubject: selectedSubjectForReview)
             }
             .task {
                 reviewScheduler.analyze(context: context)
+                recomputeDueCards()
+                greetingText = ariaService.generateGreeting(context: context)
+            }
+            .onChange(of: allCards) { _, _ in
+                recomputeDueCards()
+                greetingText = ariaService.generateGreeting(context: context)
+            }
+            .onChange(of: studySessions) { _, _ in
+                recomputeDueCards()
             }
         }
+    }
+
+    private func recomputeDueCards() {
+        let scopes = StudySession.uniqueStudyScopes(from: studySessions)
+        if scopes.isEmpty {
+            dueCards = []
+        } else {
+            dueCards = allCards.filter { card in
+                card.isDue && scopes.contains { $0.matches(card) }
+            }
+        }
+        recomputeReviewProgress()
+    }
+
+    private func recomputeReviewProgress() {
+        guard !allCards.isEmpty else {
+            reviewProgress = 0
+            return
+        }
+        let readyCount = allCards.filter { !$0.isDue }.count
+        reviewProgress = min(1.0, max(0.0, Double(readyCount) / Double(allCards.count)))
     }
 
     private var dashboardHeader: some View {
@@ -77,17 +100,28 @@ struct DashboardView: View {
             subtitle: headerSubtitle,
             symbol: "rectangle.3.group.fill"
         ) {
-            Button {
-                selectedSubjectForReview = nil
-                showReview = true
-            } label: {
-                Label(dueCards.isEmpty ? "Plan a session" : "Start review", systemImage: dueCards.isEmpty ? "calendar.badge.plus" : "play.fill")
-                    .frame(minWidth: 132)
+            if dueCards.isEmpty {
+                NavigationLink {
+                    StudyPlannerView()
+                } label: {
+                    Label("Plan a session", systemImage: "calendar.badge.plus")
+                        .frame(minWidth: 132)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(IBColors.electricBlue)
+            } else {
+                Button {
+                    selectedSubjectForReview = nil
+                    showReview = true
+                } label: {
+                    Label("Start review", systemImage: "play.fill")
+                        .frame(minWidth: 132)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(IBColors.electricBlue)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(IBColors.electricBlue)
-            .disabled(dueCards.isEmpty)
         }
     }
 
@@ -215,7 +249,7 @@ struct DashboardView: View {
                 EmptyView()
             }
 
-            Text(ariaService.generateGreeting(context: context))
+            Text(greetingText)
                 .font(.callout)
                 .foregroundStyle(IBColors.ink)
                 .lineSpacing(2)

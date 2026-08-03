@@ -212,7 +212,8 @@ final class UserProfile {
     func checkAndUpdateStreak() {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        
+        let previousStreak = currentStreak
+
         if let last = lastStudyDate {
             let lastDay = calendar.startOfDay(for: last)
             let diff = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
@@ -234,7 +235,11 @@ final class UserProfile {
         longestStreak = max(longestStreak, currentStreak)
         lastStudyDate = Date()
         
-        if currentStreak > 0 && currentStreak % 7 == 0 {
+        // Award a freeze only when this call actually crosses a 7-day milestone.
+        // Checking currentStreak % 7 alone would mint an unlimited number of
+        // freezes from repeated same-day calls (diff == 0 leaves the streak
+        // unchanged at 7, 14, …).
+        if currentStreak > previousStreak && currentStreak % 7 == 0 {
             streakFreezes += 1
         }
     }
@@ -327,9 +332,7 @@ enum ADHDMedicationTracker {
             guard hoursSinceDose <= duration else { continue }
             
             let peakLevel = Double(settings.doseMg) * 0.43
-            let normalizedTime = hoursSinceDose / duration
-            let peakNormalized = peakHours / duration
-            
+
             var relativeLevel: Double
             if hoursSinceDose <= peakHours {
                 let t = hoursSinceDose / peakHours
@@ -380,11 +383,7 @@ enum ADHDMedicationTracker {
             
             let peakMinutes = doseMinutes + Int(settings.medicationType.peakHoursAfterDose * 60)
             let endMinutes = doseMinutes + Int(settings.medicationType.durationHours * 60)
-            
-            let startComponents = DateComponents(hour: doseHour, minute: doseMinute)
-            let peakComponents = DateComponents(hour: peakMinutes / 60, minute: peakMinutes % 60)
-            let endComponents = DateComponents(hour: min(endMinutes / 60, 23), minute: endMinutes % 60)
-            
+
             if let startDate = calendar.date(bySettingHour: doseHour, minute: doseMinute, second: 0, of: today),
                let peakDate = calendar.date(bySettingHour: peakMinutes / 60, minute: peakMinutes % 60, second: 0, of: today),
                let endDate = calendar.date(bySettingHour: min(endMinutes / 60, 23), minute: endMinutes % 60, second: 0, of: today) {

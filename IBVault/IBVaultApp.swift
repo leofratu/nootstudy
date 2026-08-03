@@ -143,6 +143,7 @@ struct RootView: View {
     @State private var hasReconciledAchievements = false
     @State private var hasRecomputedProgression = false
     @State private var hasSynchronizedCurriculum = false
+    @State private var launchError: String?
 
     private var orderedProfiles: [UserProfile] {
         profiles.sorted { $0.id.uuidString < $1.id.uuidString }
@@ -180,6 +181,17 @@ struct RootView: View {
             reconcileAchievementsIfNeeded()
             recomputeProgressionIfNeeded()
         }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { launchError != nil },
+                set: { if !$0 { launchError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { launchError = nil }
+        } message: {
+            Text(launchError ?? "")
+        }
         .preferredColorScheme(.light)
     }
 
@@ -213,7 +225,7 @@ struct RootView: View {
         do {
             try BackupService.autoBackupIfNeeded(context: context)
         } catch {
-            assertionFailure("Automatic backup failed: \(error.localizedDescription)")
+            launchError = "Automatic backup failed: \(error.localizedDescription)"
         }
     }
 

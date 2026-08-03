@@ -3,15 +3,17 @@ import SwiftData
 
 struct ActiveStudySessionView: View {
     let plan: StudyPlan
-    var onComplete: (() -> Void)? = nil
+    let onComplete: (() -> Void)? = nil
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ProgressionEventCenter.self) private var progressionEvents
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
 
-    @State private var elapsed: TimeInterval = 0
-    @State private var timer: Timer?
+    @State private var sessionStartDate = Date()
+    // Frozen at completion so the completion screen shows a stable duration
+    // instead of a timer that keeps counting while the user reads the results.
+    @State private var completedElapsed: TimeInterval = 0
     @State private var chatMessages: [(role: String, text: String)] = []
     @State private var chatInput = ""
     @State private var isChatting = false
@@ -20,11 +22,11 @@ struct ActiveStudySessionView: View {
     @State private var generatedCards: [GeneratedFlashcard] = []
     @State private var isGeneratingCards = false
     @State private var flashcardError: String?
-    @State private var showFlashcardPreview = false
     @State private var revealedCards: Set<Int> = []
     @State private var examMarkdown = ""
     @State private var isGeneratingExam = false
     @State private var isCompletingSession = false
+    @State private var isSessionComplete = false
 
     private struct ScheduledReviewEntry: Identifiable {
         let day: Int
@@ -39,6 +41,14 @@ struct ActiveStudySessionView: View {
         let subtopic: String
         let front: String
         let back: String
+    }
+
+    private var liveElapsed: TimeInterval {
+        max(0, Date().timeIntervalSince(sessionStartDate))
+    }
+
+    private var elapsed: TimeInterval {
+        completedElapsed > 0 ? completedElapsed : liveElapsed
     }
 
     private var dedicatedMinutes: Int {
@@ -73,39 +83,46 @@ struct ActiveStudySessionView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Top bar
-                sessionHeader
-                    .padding(16)
-
-                Divider()
-
-                // Tab bar
-                sessionTabBar
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-
-                // Content
-                TabView(selection: $selectedTab) {
-                    planPanel.tag(SessionTab.plan)
-                    chatPanel.tag(SessionTab.chat)
-                    flashcardsPanel.tag(SessionTab.flashcards)
-                    examPanel.tag(SessionTab.exam)
-                    notesPanel.tag(SessionTab.notes)
-                }
-                .tabViewStyle(.automatic)
-
-                Divider()
-
-                // Bottom bar
-                bottomBar
-                    .padding(14)
-                    .background(.ultraThinMaterial)
+            if isSessionComplete {
+                completionView
+            } else {
+                sessionWorkspace
             }
         }
         .frame(minWidth: 780, minHeight: 580)
         .onAppear { startTimer() }
-        .onDisappear { timer?.invalidate() }
+    }
+
+    private var sessionWorkspace: some View {
+        VStack(spacing: 0) {
+            // Top bar
+            sessionHeader
+                .padding(16)
+
+            Divider()
+
+            // Tab bar
+            sessionTabBar
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+            // Content
+            TabView(selection: $selectedTab) {
+                planPanel.tag(SessionTab.plan)
+                chatPanel.tag(SessionTab.chat)
+                flashcardsPanel.tag(SessionTab.flashcards)
+                examPanel.tag(SessionTab.exam)
+                notesPanel.tag(SessionTab.notes)
+            }
+            .tabViewStyle(.automatic)
+
+            Divider()
+
+            // Bottom bar
+            bottomBar
+                .padding(14)
+                .background(.ultraThinMaterial)
+        }
     }
 
     // MARK: - Header
@@ -133,42 +150,14 @@ struct ActiveStudySessionView: View {
 
             Spacer()
 
-            // Timer
-            timerView
-
-            // Progress ring
-            ProgressRing(
-                progress: min(elapsed / Double(plan.durationMinutes * 60), 1.0),
-                lineWidth: 4,
-                size: 38,
-                color: timerColor
-            )
+            // Timer + progress ring live in their own subview so the parent
+            // body is not re-evaluated every second.
+            SessionTimerView(startDate: sessionStartDate, durationMinutes: plan.durationMinutes)
 
             Button("Close") { dismiss() }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
         }
-    }
-
-    private var timerView: some View {
-        HStack(spacing: 5) {
-            Image(systemName: elapsed > Double(plan.durationMinutes * 60) ? "exclamationmark.triangle.fill" : "timer")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(timerColor)
-            Text(timeFormatted)
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                .foregroundStyle(timerColor)
-            Text("/ \(plan.durationMinutes)m")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(
-            Capsule()
-                .fill(timerColor.opacity(0.06))
-                .overlay(Capsule().strokeBorder(timerColor.opacity(0.15), lineWidth: 0.5))
-        )
     }
 
     // MARK: - Tab Bar
@@ -215,38 +204,9 @@ struct ActiveStudySessionView: View {
     // MARK: - Plan Panel
 
     private var planPanel: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if plan.planMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Session Ready")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
-                        Text("This session does not have a generated plan yet. You can still use ARIA, take notes, and generate flashcards for \(plan.selectionSummary).")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(3)
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.ultraThinMaterial)
-                            .shadow(color: .black.opacity(0.03), radius: 6, y: 2)
-                    )
-                } else {
-                    FormattedMessageContent(text: plan.planMarkdown)
-                        .textSelection(.enabled)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(.ultraThinMaterial)
-                                .shadow(color: .black.opacity(0.03), radius: 6, y: 2)
-                        )
-                }
-            }
-            .padding(20)
-        }
+        // Kept in its own subview so the heavy markdown parse is isolated from
+        // this parent body's re-evaluations (tab switches, chat updates, etc.).
+        PlanPanelView(plan: plan)
     }
 
     // MARK: - Chat Panel (Full ARIA Context)
@@ -835,23 +795,8 @@ struct ActiveStudySessionView: View {
 
     // MARK: - Timer
 
-    private var timeFormatted: String {
-        let mins = Int(elapsed) / 60
-        let secs = Int(elapsed) % 60
-        return String(format: "%02d:%02d", mins, secs)
-    }
-
-    private var timerColor: Color {
-        let target = Double(plan.durationMinutes * 60)
-        if elapsed > target { return .red }
-        if elapsed > target * 0.8 { return .orange }
-        return IBColors.electricBlue
-    }
-
     private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            elapsed += 1
-        }
+        sessionStartDate = Date()
     }
 
     // MARK: - Chat (Full ARIA Context)
@@ -1053,7 +998,14 @@ struct ActiveStudySessionView: View {
             subject: subject
         )
         subject.cards.append(card)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Do not leave a card that was never persisted: drop the pending
+            // insert so the UI cannot claim a save that did not happen.
+            context.rollback()
+            return
+        }
         IBHaptics.success()
     }
 
@@ -1069,7 +1021,14 @@ struct ActiveStudySessionView: View {
             )
             subject.cards.append(studyCard)
         }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Same reasoning as `saveCardToSubject`: a failed save must not be
+            // presented as a completed batch.
+            context.rollback()
+            return
+        }
         IBHaptics.success()
     }
 
@@ -1134,6 +1093,10 @@ struct ActiveStudySessionView: View {
             return
         }
         isCompletingSession = true
+        // Freeze the elapsed time first: every XP / duration / startDate read
+        // below (and on the completion screen) must use this single snapshot,
+        // not a still-running clock.
+        completedElapsed = max(0, Date().timeIntervalSince(sessionStartDate))
         plan.isCompleted = true
         plan.notes = sessionNotes
 
@@ -1143,7 +1106,7 @@ struct ActiveStudySessionView: View {
             subjectName: plan.subjectName,
             topicsCovered: topics.joined(separator: ", "),
             subtopicsCovered: plan.selectedSubtopicNames.joined(separator: ", "),
-            startDate: Date().addingTimeInterval(-elapsed),
+            startDate: sessionStartDate,
             endDate: Date(),
             cardsReviewed: generatedCards.count,
             correctCount: generatedCards.count,
@@ -1188,8 +1151,15 @@ struct ActiveStudySessionView: View {
 
             IBHaptics.success()
             onComplete?()
-            dismiss()
+            isCompletingSession = false
+            withAnimation(IBAnimation.smooth) { isSessionComplete = true }
         } catch {
+            // Discard this session's pending inserts (StudySession, StudyActivity,
+            // XP) and the completion flag together so a retry cannot double-log.
+            // This is safe on the shared context only because the sheet is modal
+            // (no other UI is writing) and async work uses its own scratch
+            // contexts, so there is no unrelated pending change to lose.
+            context.rollback()
             isCompletingSession = false
         }
     }
@@ -1204,6 +1174,9 @@ struct ActiveStudySessionView: View {
         case "Mathematics AA": return IBColors.mathColor
         case "Economics": return IBColors.economicsColor
         case "Business Management": return IBColors.businessColor
+        case "Advanced Mathematics": return Color(hex: "8B5CF6")
+        case "Fundamentals of the Universe": return Color(hex: "6366F1")
+        case "Startups & Venture Capital": return Color(hex: "0EA5E9")
         default: return .gray
         }
     }
@@ -1216,7 +1189,117 @@ struct ActiveStudySessionView: View {
         case "Mathematics AA": return "function"
         case "Economics": return "chart.line.uptrend.xyaxis"
         case "Business Management": return "briefcase.fill"
+        case "Advanced Mathematics": return "function"
+        case "Fundamentals of the Universe": return "moon.stars.fill"
+        case "Startups & Venture Capital": return "rocket.fill"
         default: return "book.fill"
+        }
+    }
+}
+
+// The session header's ticking clock. It owns its own Timer + elapsed state so
+// the parent body is NOT re-evaluated every second. If `elapsed` lived in the
+// parent, the whole workspace (including the chat / flashcard / exam panels)
+// would reconstruct once per tick and FormattedMessageContent would re-parse
+// every message, card and exam block every second.
+private struct SessionTimerView: View {
+    let startDate: Date
+    let durationMinutes: Int
+
+    @State private var elapsed: TimeInterval = 0
+
+    private var timeFormatted: String {
+        let mins = Int(elapsed) / 60
+        let secs = Int(elapsed) % 60
+        return String(format: "%02d:%02d", mins, secs)
+    }
+
+    private var timerColor: Color {
+        let target = Double(durationMinutes * 60)
+        if elapsed > target { return .red }
+        if elapsed > target * 0.8 { return .orange }
+        return IBColors.electricBlue
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 5) {
+                Image(systemName: elapsed > Double(durationMinutes * 60) ? "exclamationmark.triangle.fill" : "timer")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(timerColor)
+                Text(timeFormatted)
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(timerColor)
+                Text("/ \(durationMinutes)m")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(timerColor.opacity(0.06))
+                    .overlay(Capsule().strokeBorder(timerColor.opacity(0.15), lineWidth: 0.5))
+            )
+
+            ProgressRing(
+                progress: min(elapsed / Double(durationMinutes * 60), 1.0),
+                lineWidth: 4,
+                size: 38,
+                color: timerColor
+            )
+        }
+        // Async loop is MainActor-isolated and cancels on disappear, so it is
+        // Swift-6-safe (no Timer @Sendable closure mutating @State) and keeps
+        // the ticking clock out of the parent body.
+        .task {
+            elapsed = max(0, Date().timeIntervalSince(startDate))
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                elapsed = max(0, Date().timeIntervalSince(startDate))
+            }
+        }
+    }
+}
+
+// Rendered from ActiveStudySessionView.planPanel; kept as a separate struct so
+// the markdown is isolated from this parent body's re-evaluations (tab
+// switches, chat updates, etc.).
+private struct PlanPanelView: View {
+    let plan: StudyPlan
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if plan.planMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Session Ready")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                        Text("This session does not have a generated plan yet. You can still use ARIA, take notes, and generate flashcards for \(plan.selectionSummary).")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(3)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.ultraThinMaterial)
+                            .shadow(color: .black.opacity(0.03), radius: 6, y: 2)
+                    )
+                } else {
+                    FormattedMessageContent(text: plan.planMarkdown)
+                        .textSelection(.enabled)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.ultraThinMaterial)
+                                .shadow(color: .black.opacity(0.03), radius: 6, y: 2)
+                        )
+                }
+            }
+            .padding(20)
         }
     }
 }

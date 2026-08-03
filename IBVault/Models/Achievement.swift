@@ -111,7 +111,9 @@ final class Achievement {
         do {
             try context.save()
         } catch {
+            #if DEBUG
             assertionFailure("Achievement reconcile failed: \(error.localizedDescription)")
+            #endif
         }
     }
 }

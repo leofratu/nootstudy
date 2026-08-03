@@ -127,6 +127,107 @@ struct CurriculumProgressTests {
         #expect(CurriculumProgressService.effectiveMastery(cards: [], node: node) == 0.66)
     }
 
+    @MainActor
+    @Test("Setting mastery again updates the existing node instead of duplicating it")
+    func setMasteryUpdatesInPlace() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Subject.self,
+            StudyCard.self,
+            CurriculumNode.self,
+            configurations: configuration
+        )
+        let context = container.mainContext
+        let subject = Subject(name: "Biology", level: "HL", accentColorHex: "10B981")
+        context.insert(subject)
+
+        _ = try CurriculumProgressService.setMastery(
+            .developing,
+            subject: subject,
+            unitName: "Cell biology",
+            topicName: "Cells and Cell Structure",
+            subtopicName: "Prokaryotic cell structure",
+            source: "Review",
+            context: context
+        )
+        _ = try CurriculumProgressService.setMastery(
+            .mastered,
+            subject: subject,
+            unitName: "Cell biology",
+            topicName: "Cells and Cell Structure",
+            subtopicName: "Prokaryotic cell structure",
+            source: "Follow-up",
+            context: context
+        )
+
+        let nodes = try context.fetch(FetchDescriptor<CurriculumNode>())
+        #expect(nodes.count == 1)
+        #expect(nodes.first?.recordedProficiency == .mastered)
+        #expect(nodes.first?.masterySource == "Follow-up")
+        #expect(nodes.first?.masteryNote == nil)
+    }
+
+    @MainActor
+    @Test("Clearing mastery clears the recording and falls back to card-based mastery")
+    func clearMasteryClearsRecordingAndFallsBack() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Subject.self,
+            StudyCard.self,
+            CurriculumNode.self,
+            configurations: configuration
+        )
+        let context = container.mainContext
+        let subject = Subject(name: "Biology", level: "HL", accentColorHex: "10B981")
+        context.insert(subject)
+
+        _ = try CurriculumProgressService.setMastery(
+            .mastered,
+            subject: subject,
+            unitName: "Cell biology",
+            topicName: "Cells and Cell Structure",
+            subtopicName: "Prokaryotic cell structure",
+            source: "Review",
+            context: context
+        )
+
+        try CurriculumProgressService.clearMastery(
+            subject: subject,
+            topicName: "Cells and Cell Structure",
+            subtopicName: "Prokaryotic cell structure",
+            context: context
+        )
+
+        let nodes = try context.fetch(FetchDescriptor<CurriculumNode>())
+        #expect(nodes.count == 1)
+        #expect(nodes.first?.recordedProficiency == nil)
+        #expect(nodes.first?.masterySource == nil)
+
+        // With the recording cleared, mastery falls back to the cards.
+        let card = StudyCard(topicName: "Cells and Cell Structure", subtopic: "Prokaryotic cell structure", front: "Q", back: "A")
+        card.proficiency = .mastered
+        #expect(CurriculumProgressService.effectiveMastery(cards: [card], node: nodes.first) == 1.0)
+    }
+
+    @Test("effectiveMastery prefers recorded mastery over card-based estimation")
+    func effectiveMasteryPrefersRecorded() {
+        let node = CurriculumNode(
+            subjectName: "Biology", level: "HL", unitName: "Cell biology",
+            topicName: "Cells and Cell Structure", subtopicName: "Prokaryotic cell structure",
+            catalogVersion: "2026.1", sourceTitle: "IB Biology", sourceURLString: "https://www.ibo.org/"
+        )
+        node.recordedProficiency = .developing
+
+        let card = StudyCard(topicName: "Cells and Cell Structure", subtopic: "Prokaryotic cell structure", front: "Q", back: "A")
+        card.proficiency = .mastered
+
+        // Cards alone would say 1.0; the recorded .developing wins.
+        #expect(CurriculumProgressService.effectiveMastery(cards: [card], node: node) == 0.33)
+        // With no node, card-based mastery is used.
+        #expect(CurriculumProgressService.effectiveMastery(cards: [card], node: nil) == 1.0)
+        #expect(CurriculumProgressService.effectiveMastery(cards: [], node: nil) == 0.0)
+    }
+
     @Test("Scoped work only appears on matching curriculum subunits")
     func scopedWorkMatchesSubunit() {
         let matching = StudySession(
@@ -284,22 +385,27 @@ struct AIConfigurationTests {
 struct ARIAChatPersistenceTests {
     @Test("Failure roles preserve provider and recovery intent")
     func failureRolesRoundTrip() {
-        let authFailure = ChatMessageRole.failure(for: .codexCLI, needsAuthentication: true)
-        let cancellation = ChatMessageRole.cancellation(for: .junali)
+        let authFailure = ChatMessageRole.failure(provider: .codexCLI, needsAuthentication: true)
+        let cancellation = ChatMessageRole.cancelled(provider: .junali)
 
-        #expect(ChatMessageRole.isFailure(authFailure))
-        #expect(ChatMessageRole.failureProvider(for: authFailure) == .codexCLI)
-        #expect(ChatMessageRole.needsCodexAuthentication(authFailure))
-        #expect(ChatMessageRole.isFailure(cancellation))
-        #expect(ChatMessageRole.failureProvider(for: cancellation) == .junali)
+        #expect(ChatMessageRole(storedValue: authFailure.storedValue)?.isFailure == true)
+        #expect(ChatMessageRole(storedValue: authFailure.storedValue)?.failureProvider == .codexCLI)
+        #expect(ChatMessageRole(storedValue: authFailure.storedValue)?.needsCodexAuthentication == true)
+        #expect(ChatMessageRole(storedValue: cancellation.storedValue)?.isFailure == true)
+        #expect(ChatMessageRole(storedValue: cancellation.storedValue)?.failureProvider == .junali)
     }
 
     @Test("Recovery records never enter provider conversation history")
     func recoveryRolesAreNotConversationTurns() {
-        #expect(ChatMessageRole.isConversationRole(ChatMessageRole.user))
-        #expect(ChatMessageRole.isConversationRole(ChatMessageRole.model))
-        #expect(!ChatMessageRole.isConversationRole(ChatMessageRole.failure(for: .gemini)))
-        #expect(!ChatMessageRole.isFailure(ChatMessageRole.dismissed(ChatMessageRole.failure(for: .gemini))))
+        let userRole = ChatMessageRole.user
+        let modelRole = ChatMessageRole.model
+        let failureRole = ChatMessageRole.failure(provider: .gemini)
+        let dismissedFailure = ChatMessageRole.dismissed(underlying: failureRole)
+
+        #expect(ChatMessageRole(storedValue: userRole.storedValue)?.isConversation == true)
+        #expect(ChatMessageRole(storedValue: modelRole.storedValue)?.isConversation == true)
+        #expect(ChatMessageRole(storedValue: failureRole.storedValue)?.isConversation == false)
+        #expect(ChatMessageRole(storedValue: dismissedFailure.storedValue)?.isFailure == false)
     }
 
     @MainActor
@@ -326,7 +432,7 @@ struct ARIAChatPersistenceTests {
 
         #expect(failureID != nil)
         #expect(messages.count == 1)
-        #expect(messages.first?.role == ChatMessageRole.cancellation(for: .junali))
+        #expect(messages.first?.role == ChatMessageRole.cancelled(provider: .junali).storedValue)
         #expect(messages.first?.content.contains("retried") == true)
     }
 }

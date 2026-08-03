@@ -22,7 +22,11 @@ struct SubjectsGridView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        // Hoisted so the index is built once per render instead of re-derived
+        // once per subject tile / metric (computed properties re-run on every
+        // access).
+        let dueCounts = dueCountBySubject
+        return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     StudioPageHeader(
@@ -38,7 +42,7 @@ struct SubjectsGridView: View {
                     HStack(spacing: 12) {
                         StudioMetricTile(value: "\(subjects.count)", label: "Enrolled", symbol: "books.vertical.fill", tint: IBColors.englishColor, detail: "Your IB syllabus")
                         StudioMetricTile(value: "\(averageMastery)%", label: "Average mastery", symbol: "chart.bar.fill", tint: IBColors.teal, detail: "Across active subjects")
-                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + scopedDueCount(for: $1) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.coral, detail: "Within studied scopes")
+                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + (dueCounts[$1.id] ?? 0) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.coral, detail: "Within studied scopes")
                     }
 
                     StudioSectionHeader(
@@ -63,7 +67,7 @@ struct SubjectsGridView: View {
                                 NavigationLink {
                                     SubjectDetailView(subject: subject)
                                 } label: {
-                                    SubjectGridCard(subject: subject, dueCount: scopedDueCount(for: subject))
+                                    SubjectGridCard(subject: subject, dueCount: dueCounts[subject.id] ?? 0)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -81,13 +85,26 @@ struct SubjectsGridView: View {
         }
     }
 
-    private func scopedDueCount(for subject: Subject) -> Int {
-        let studiedScopes = StudySession.uniqueStudyScopes(from: studySessions)
-            .filter { $0.subjectName == subject.name }
-        guard !studiedScopes.isEmpty else { return 0 }
-        return subject.cards.filter { card in
-            card.isDue && studiedScopes.contains { $0.matches(card) }
-        }.count
+    /// Subject due-card counts keyed by subject id. Built once per render and
+    /// hoisted into `body`, so per-tile lookups stay O(1) instead of re-deriving
+    /// studied scopes and re-scanning every card set once per tile (and again in
+    /// the metric row).
+    private var dueCountBySubject: [UUID: Int] {
+        let scopes = StudySession.uniqueStudyScopes(from: studySessions)
+        guard !scopes.isEmpty else { return [:] }
+        let scopesBySubject = Dictionary(grouping: scopes, by: \.subjectName)
+        var counts: [UUID: Int] = [:]
+        for subject in subjects {
+            guard let subjectScopes = scopesBySubject[subject.name], !subjectScopes.isEmpty else { continue }
+            var count = 0
+            for card in subject.cards where card.isDue {
+                if subjectScopes.contains(where: { $0.matches(card) }) {
+                    count += 1
+                }
+            }
+            counts[subject.id] = count
+        }
+        return counts
     }
 }
 

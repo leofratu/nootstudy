@@ -287,13 +287,6 @@ struct ARIAChatView: View {
                                 Label("Delete Chat", systemImage: "trash")
                             }
                         }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                deleteChat(session)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
                     }
                 }
                 .padding(9)
@@ -536,8 +529,14 @@ struct ARIAChatView: View {
     private func sendMessage(_ text: String) {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty else { return }
+        // Guard before clearing inputText or persisting anything so a send
+        // attempted while a response is streaming is never silently dropped.
+        guard !ariaService.isLoading else { return }
         guard let selectedSession else {
-            bootstrapSessionsIfNeeded()
+            guard let bootstrappedSession = bootstrapSessionsIfNeeded() else { return }
+            persistSelectedConfiguration()
+            inputText = ""
+            beginMessage(message, in: bootstrappedSession, persistUserMessage: true)
             return
         }
         persistSelectedConfiguration()
@@ -639,8 +638,8 @@ struct ARIAChatView: View {
         }
 
         guard let message = persistedMessage(id: failure.id),
-              ChatMessageRole.isFailure(message.role) else { return }
-        message.role = ChatMessageRole.dismissed(message.role)
+              ChatMessageRole(storedValue: message.role)?.isFailure == true else { return }
+        if let parsedRole = ChatMessageRole(storedValue: message.role) { message.role = ChatMessageRole.dismissed(underlying: parsedRole).storedValue }
         do {
             try context.save()
         } catch {
@@ -656,7 +655,7 @@ struct ARIAChatView: View {
 
     private func removePersistedFailure(id: UUID) -> Bool {
         guard let message = persistedMessage(id: id) else { return true }
-        guard ChatMessageRole.isFailure(message.role) else { return true }
+        guard ChatMessageRole(storedValue: message.role)?.isFailure == true else { return true }
         context.delete(message)
         do {
             try context.save()
@@ -666,7 +665,7 @@ struct ARIAChatView: View {
             chatFailure = ARIAChatFailure(
                 message: "The saved response could not be prepared for retry: \(error.localizedDescription)",
                 sessionID: message.sessionID,
-                provider: ChatMessageRole.failureProvider(for: message.role) ?? selectedProvider
+                provider: ChatMessageRole(storedValue: message.role)?.failureProvider ?? selectedProvider
             )
             return false
         }
@@ -719,7 +718,7 @@ struct ARIAChatView: View {
 
     private func updatePersistedFailure(_ failure: ARIAChatFailure, content: String) -> Bool {
         guard let message = persistedMessage(id: failure.id),
-              ChatMessageRole.isFailure(message.role) else { return false }
+              ChatMessageRole(storedValue: message.role)?.isFailure == true else { return false }
         message.content = content
         do {
             try context.save()
@@ -731,10 +730,17 @@ struct ARIAChatView: View {
         }
     }
 
+    /// Ensures at least one usable chat session exists and returns the session
+    /// that should be treated as selected. Returning it (instead of making the
+    /// caller re-read the @Query snapshot) matters right after an insert, when
+    /// the observed `sessions` array has not caught up yet and would otherwise
+    /// report nil, silently dropping a freshly-sent message.
     @MainActor
-    private func bootstrapSessionsIfNeeded() {
+    @discardableResult
+    private func bootstrapSessionsIfNeeded() -> ARIAChatSession? {
         var didMutate = false
         var preferredSelection = selectedSessionID
+        var bootstrappedSession: ARIAChatSession?
 
         let orphanDescriptor = FetchDescriptor<ChatMessage>(
             predicate: #Predicate<ChatMessage> { $0.sessionID == nil },
@@ -752,6 +758,7 @@ struct ARIAChatView: View {
                 message.sessionID = legacySession.id
             }
             preferredSelection = preferredSelection ?? legacySession.id
+            bootstrappedSession = bootstrappedSession ?? legacySession
             didMutate = true
         }
 
@@ -759,6 +766,7 @@ struct ARIAChatView: View {
             let session = ARIAChatSession()
             context.insert(session)
             preferredSelection = session.id
+            bootstrappedSession = bootstrappedSession ?? session
             didMutate = true
         }
 
@@ -772,13 +780,15 @@ struct ARIAChatView: View {
                     sessionID: selectedSessionID,
                     provider: selectedProvider
                 )
-                return
+                return nil
             }
         }
 
         if selectedSessionID == nil {
             selectedSessionID = preferredSelection ?? visibleSessions.first?.id
         }
+        if let bootstrappedSession { return bootstrappedSession }
+        return visibleSessions.first(where: { $0.id == selectedSessionID }) ?? visibleSessions.first
     }
 
     @MainActor
@@ -809,6 +819,20 @@ struct ARIAChatView: View {
 
     @MainActor
     private func deleteChat(_ session: ARIAChatSession) {
+        // If a request is streaming into this session, stop it first. Writing to
+        // a deleted SwiftData model raises an uncatchable exception, so we must
+        // never delete a session that an in-flight task may still touch.
+        if ariaService.isLoading && session.id == activeSessionID {
+            ariaService.cancelCurrentRequest(context: context, session: session, provider: selectedProvider)
+        }
+        // The cancelled request no longer owns any active streaming state; keep
+        // it from leaking into the next selected session.
+        if session.id == activeSessionID {
+            activeSessionID = nil
+            activePrompt = nil
+            streamingText = ""
+        }
+
         let sessionID = session.id
         let messageDescriptor = FetchDescriptor<ChatMessage>(
             predicate: #Predicate<ChatMessage> { $0.sessionID == sessionID }
@@ -878,10 +902,15 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
 
     private var displayedFailure: ARIAChatFailure? {
         if let failure { return failure }
+        // Only synthesize a recovery banner for a genuinely abandoned exchange:
+        // the last saved message is a user message, nothing is in flight, it
+        // hasn't already been dismissed, and it is recent enough to still be a
+        // relaunch artifact rather than a stale, deliberately-abandoned prompt.
         guard !isLoading,
               let lastMessage = messages.last,
-              lastMessage.role == ChatMessageRole.user,
-              dismissedRecoveredFailureID != lastMessage.id else {
+              lastMessage.role == ChatMessageRole.user.storedValue,
+              dismissedRecoveredFailureID != lastMessage.id,
+              Date().timeIntervalSince(lastMessage.timestamp) < Self.recoveryBannerRecencyWindow else {
             return nil
         }
         return ARIAChatFailure(
@@ -892,6 +921,8 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
             id: lastMessage.id
         )
     }
+
+    private static var recoveryBannerRecencyWindow: TimeInterval { 60 * 60 * 48 }
 
     init(
         sessionID: UUID,
@@ -920,7 +951,8 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
+        let failureMap = failuresByID
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 10) {
                     if messages.isEmpty && !isLoading {
@@ -928,7 +960,7 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
                     }
 
                     ForEach(messages, id: \.id) { message in
-                        if let persistedFailure = persistedFailure(for: message) {
+                        if let persistedFailure = failureMap[message.id] {
                             ARIAChatFailureRow(
                                 failure: persistedFailure,
                                 onRetry: { onRetry(persistedFailure) },
@@ -936,7 +968,7 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
                                 onDismiss: { onDismissFailure(persistedFailure) }
                             )
                             .id(message.id)
-                        } else if ChatMessageRole.isConversationRole(message.role) {
+                        } else if ChatMessageRole(storedValue: message.role)?.isConversation == true {
                             MessageRow(message: message)
                                 .id(message.id)
                         }
@@ -1006,24 +1038,28 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func persistedFailure(for message: ChatMessage) -> ARIAChatFailure? {
-        guard ChatMessageRole.isFailure(message.role),
-              let provider = ChatMessageRole.failureProvider(for: message.role),
-              let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else {
-            return nil
+    private var failuresByID: [UUID: ARIAChatFailure] {
+        // Single pass over the transcript: track the last user prompt so each
+        // persisted failure can attach the prompt that triggered it. Rebuilding
+        // this per render is O(n) instead of the previous O(n·failures) scan.
+        var map: [UUID: ARIAChatFailure] = [:]
+        var lastUserPrompt: String?
+        for message in messages {
+            if message.role == ChatMessageRole.user.storedValue {
+                lastUserPrompt = message.content
+            } else if ChatMessageRole(storedValue: message.role)?.isFailure == true,
+                      let provider = ChatMessageRole(storedValue: message.role)?.failureProvider {
+                map[message.id] = ARIAChatFailure(
+                    message: message.content,
+                    sessionID: message.sessionID,
+                    prompt: lastUserPrompt,
+                    provider: provider,
+                    needsCodexSignIn: ChatMessageRole(storedValue: message.role)?.needsCodexAuthentication == true,
+                    id: message.id
+                )
+            }
         }
-
-        let prompt = messages[..<messageIndex]
-            .last(where: { $0.role == ChatMessageRole.user })?
-            .content
-        return ARIAChatFailure(
-            message: message.content,
-            sessionID: message.sessionID,
-            prompt: prompt,
-            provider: provider,
-            needsCodexSignIn: ChatMessageRole.needsCodexAuthentication(message.role),
-            id: message.id
-        )
+        return map
     }
 }
 
@@ -1207,7 +1243,7 @@ private struct ARIAChatSessionRow: View {
 struct MessageRow: View {
     let message: ChatMessage
 
-    private var isUser: Bool { message.role == ChatMessageRole.user }
+    private var isUser: Bool { message.role == ChatMessageRole.user.storedValue }
 
     var body: some View {
         Group {

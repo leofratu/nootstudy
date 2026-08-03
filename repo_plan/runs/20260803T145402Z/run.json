@@ -1,0 +1,46 @@
+{
+ "task_id": "20260803-strict-quality-20260803T145402Z",
+ "mode": "rpg",
+ "rpg_used": true,
+ "localization": {
+  "nodes": [
+   "iface.strict_quality_pass",
+   "iface.content_corrections"
+  ],
+  "files": [
+   "project.yml",
+   "IBVault/Models",
+   "IBVault/Engine",
+   "IBVault/Services",
+   "IBVault/Views",
+   "IBVault/Design",
+   "IBVaultTests"
+  ],
+  "evidence": [
+   "Enabled SWIFT_TREAT_WARNINGS_AS_ERRORS=YES (both targets) and fixed every latent warning it surfaced (unused vars in Grade/UserProfile/StudyCalendarView/AIProviderService, never-mutated test vars, non-Sendable seed closures, dead lock/helpers).",
+   "6 strict-quality agents: Engine (Sendable configs, div-by-zero guards, removed NSLock dead weight, progression read-failure abort), Models+Design (Sendable value types, removed dead navy/shimmer, subjectColor cases for 3 new subjects), Services (per-call JSON encoder/decoder, no shared rollback, CardGeneratorService @MainActor contract, backup fetch failures now surface), Views A (cached generation context, once-per-render plan buckets, reviewProgress cached, try?->do/catch), Views B (hoisted indexes, single-pass grouping, stable ids, AddGrade error surfacing), Content (English B paper fix, Biology homeostasis, structural audit + new tests).",
+   "New regression tests: curriculum structural invariants, startup financial-tools non-overlap, English B paper labels, biology homeostasis, memoization stability, seed round-trip, knowledge catalog correspondence.",
+   "31 suites incl. 107-case ARIA E2E matrix, all green across 4 consecutive full runs."
+  ]
+ },
+ "tests": [
+  {
+   "cmd": "xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' (x4)",
+   "ok": true,
+   "interfaces": [
+    "iface.content_corrections",
+    "iface.strict_quality_pass"
+   ]
+  }
+ ],
+ "implemented_interfaces": [
+  "iface.content_corrections",
+  "iface.strict_quality_pass"
+ ],
+ "tested_interfaces": [
+  "iface.content_corrections",
+  "iface.strict_quality_pass"
+ ],
+ "elapsed_s": null,
+ "tool_calls_count": null
+}

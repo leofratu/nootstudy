@@ -163,8 +163,6 @@ enum GeminiError: Error, LocalizedError, Sendable {
 }
 
 enum GeminiService {
-    private static let encoder = JSONEncoder()
-    private static let decoder = JSONDecoder()
     private static let defaultSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = GeminiConfig.default.defaultRequestTimeout
@@ -189,15 +187,20 @@ enum GeminiService {
     }
     
     private static var temperature: Double {
-        let temp = UserDefaults.standard.double(forKey: "ariaTemperature")
-        return temp > 0 ? temp : 0.7
+        // `object(forKey:)` distinguishes "never set" (default 0.7) from an
+        // explicit 0.0, which the Settings slider and ARIA presets both allow.
+        guard UserDefaults.standard.object(forKey: "ariaTemperature") != nil else { return 0.7 }
+        return UserDefaults.standard.double(forKey: "ariaTemperature")
     }
     
     static func listModels(apiKey: String, config: GeminiConfig = .default) async throws -> [GeminiModel] {
-        let url = URL(string: "\(config.apiBase)/models?key=\(apiKey)")!
+        guard let url = URL(string: "\(config.apiBase)/models") else {
+            throw GeminiError.invalidResponse
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 15
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         
         let (data, response) = try await shortSession.data(for: request)
         
@@ -205,7 +208,7 @@ enum GeminiService {
             throw GeminiError.invalidResponse
         }
         
-        guard let list = try? decoder.decode(GeminiListModelsResponse.self, from: data) else {
+        guard let list = try? JSONDecoder().decode(GeminiListModelsResponse.self, from: data) else {
             throw GeminiError.parseError
         }
         
@@ -235,22 +238,15 @@ enum GeminiService {
         timeout: TimeInterval = 90,
         config: GeminiConfig = .default
     ) async throws -> String {
-        let model = modelOverride ?? selectedModel
-        let url = URL(string: "\(config.apiBase)/models/\(model):generateContent?key=\(apiKey)")!
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = timeout
-        
-        let body = buildRequestBody(
+        let request = try makeGenerateContentRequest(
             messages: messages,
             systemInstruction: systemInstruction,
-            temperature: temperature,
-            topP: config.defaultTopP
+            apiKey: apiKey,
+            modelOverride: modelOverride,
+            timeout: timeout,
+            config: config
         )
-        request.httpBody = try encoder.encode(body)
-        
+
         let (data, response) = try await retryRequest(
             request: request,
             maxRetries: config.maxRetries,
@@ -268,6 +264,42 @@ enum GeminiService {
         
         return try parseResponse(data: data)
     }
+
+    /// Builds the exact URLRequest used by `generateContent`. Kept internal as a
+    /// test seam so wire-level details (x-goog-api-key header placement, body
+    /// encoding) can be asserted without a live API key.
+    static func makeGenerateContentRequest(
+        messages: [GeminiMessage],
+        systemInstruction: String,
+        apiKey: String,
+        modelOverride: String? = nil,
+        timeout: TimeInterval = 90,
+        config: GeminiConfig = .default
+    ) throws -> URLRequest {
+        let model = modelOverride ?? selectedModel
+        // Reject a malformed/relative base (e.g. a scheme-less string) rather
+        // than building a URL that silently resolves to a relative path. A
+        // host is also required: `https://` alone would construct a request
+        // that can only fail at the network layer.
+        guard let url = URL(string: "\(config.apiBase)/models/\(model):generateContent"),
+              let scheme = url.scheme, !scheme.isEmpty,
+              let host = url.host, !host.isEmpty else {
+            throw GeminiError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        request.timeoutInterval = timeout
+        request.httpBody = try JSONEncoder().encode(buildRequestBody(
+            messages: messages,
+            systemInstruction: systemInstruction,
+            temperature: temperature,
+            topP: config.defaultTopP
+        ))
+        return request
+    }
     
     static func streamContent(
         messages: [GeminiMessage],
@@ -276,13 +308,16 @@ enum GeminiService {
         config: GeminiConfig = .default
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
-                    let url = URL(string: "\(config.apiBase)/models/\(selectedModel):streamGenerateContent?alt=sse&key=\(apiKey)")!
-                    
+                    guard let url = URL(string: "\(config.apiBase)/models/\(selectedModel):streamGenerateContent?alt=sse") else {
+                        throw GeminiError.invalidResponse
+                    }
+
                     var request = URLRequest(url: url)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
                     request.timeoutInterval = 60
                     
                     let body = buildRequestBody(
@@ -291,7 +326,7 @@ enum GeminiService {
                         temperature: temperature,
                         topP: config.defaultTopP
                     )
-                    request.httpBody = try encoder.encode(body)
+                    request.httpBody = try JSONEncoder().encode(body)
                     
                     let (bytes, response) = try await defaultSession.bytes(for: request)
                     
@@ -338,6 +373,9 @@ enum GeminiService {
                     }
                 }
             }
+            // A consumer that stops listening (e.g. the stop button) must not
+            // leave the URLSession task running for the rest of its 60s budget.
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
     
@@ -369,7 +407,7 @@ enum GeminiService {
         temperature: Double,
         topP: Double
     ) throws -> Data {
-        try encoder.encode(buildRequestBody(
+        try JSONEncoder().encode(buildRequestBody(
             messages: messages,
             systemInstruction: systemInstruction,
             temperature: temperature,
@@ -378,7 +416,7 @@ enum GeminiService {
     }
     
     private static func parseResponse(data: Data) throws -> String {
-        guard let response = try? decoder.decode(GeminiGenerateResponse.self, from: data),
+        guard let response = try? JSONDecoder().decode(GeminiGenerateResponse.self, from: data),
               let text = response.candidates?.first?.content?.parts?.first?.text else {
             throw GeminiError.parseError
         }
@@ -386,7 +424,7 @@ enum GeminiService {
     }
     
     private static func parseStreamChunk(data: Data) throws -> String? {
-        try decoder.decode(GeminiGenerateResponse.self, from: data)
+        try JSONDecoder().decode(GeminiGenerateResponse.self, from: data)
             .candidates?
             .first?
             .content?
@@ -397,7 +435,7 @@ enum GeminiService {
     
     private static func parseAPIError(statusCode: Int, body: String) -> GeminiError {
         if let data = body.data(using: .utf8),
-           let payload = try? decoder.decode(GeminiAPIErrorResponse.self, from: data),
+           let payload = try? JSONDecoder().decode(GeminiAPIErrorResponse.self, from: data),
            let error = payload.error {
             let message = error.message ?? body
             let status = error.status ?? ""

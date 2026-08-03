@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum ProficiencyLevel: String, Codable, CaseIterable {
+enum ProficiencyLevel: String, Codable, CaseIterable, Sendable {
     case novice = "Novice"
     case developing = "Developing"
     case proficient = "Proficient"
@@ -26,7 +26,7 @@ enum ProficiencyLevel: String, Codable, CaseIterable {
     }
 }
 
-enum RecallQuality: Int, Codable, CaseIterable {
+enum RecallQuality: Int, Codable, CaseIterable, Sendable {
     case again = 0
     case hard = 2
     case good = 3
@@ -137,7 +137,11 @@ final class StudyCard {
     }
 
     var daysUntilDue: Int {
-        Calendar.current.dateComponents([.day], from: Date(), to: nextReviewDate).day ?? 0
+        let calendar = Calendar.current
+        let fromDay = calendar.startOfDay(for: Date())
+        let toDay = calendar.startOfDay(for: nextReviewDate)
+        let days = calendar.dateComponents([.day], from: fromDay, to: toDay).day ?? 0
+        return max(0, days)
     }
 
     init(

@@ -72,7 +72,7 @@ final class CurriculumNode {
     }
 }
 
-enum CurriculumProgressService {
+enum CurriculumProgressService: Sendable {
     static func node(
         in nodes: [CurriculumNode],
         subjectName: String,

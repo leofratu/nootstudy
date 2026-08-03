@@ -8,6 +8,9 @@ struct ReviewSessionView: View {
     @Query private var profiles: [UserProfile]
     @Query(sort: \StudyCard.nextReviewDate) private var allReviewCards: [StudyCard]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
+    // `var` + defaults so the memberwise initializer keeps its arguments —
+    // callers pass `filterSubject:`/`filterPlan:`/`reviewScopeSession:` — and
+    // never mutates them after init.
     var filterSubject: Subject? = nil
     var filterPlan: StudyPlan? = nil
     var reviewScopeSession: StudySession? = nil
@@ -23,6 +26,15 @@ struct ReviewSessionView: View {
     @State private var showStudyGuide = false
     @State private var isGeneratingMoreCards = false
     @State private var generationError: String?
+    // Snapshot captured at completion: the reviewed cards are rescheduled on
+    // save, so reading cards.count live would show 0 on the completion screen.
+    @State private var completedCardCount = 0
+    @State private var completedRetentionPercent = 0
+    // Cached when the queue loads so the toolbar's "Generate Cards" affordance
+    // does not fetch the whole Subject store or re-scan every card on each body
+    // evaluation (the empty-state toolbar alone would pay that cost every render).
+    @State private var cachedGenerationSubject: Subject?
+    @State private var cachedGenerationTopics: [String] = []
 
     private var currentCard: StudyCard? {
         currentIndex < cards.count ? cards[currentIndex] : nil
@@ -38,7 +50,8 @@ struct ReviewSessionView: View {
         return summary.isEmpty ? nil : summary
     }
     private var progress: Double {
-        cards.isEmpty ? 0 : Double(currentIndex) / Double(cards.count)
+        guard !cards.isEmpty else { return 0 }
+        return Double(min(currentIndex + 1, cards.count)) / Double(cards.count)
     }
     private var dedicatedMinutesDouble: Double {
         Double(ARIAService.normalizedDurationMinutes(Date().timeIntervalSince(sessionStartTime) / 60))
@@ -49,34 +62,32 @@ struct ReviewSessionView: View {
         XPCalculator.xp(forQualities: sessionQualities, intensity: profiles.first?.studyIntensity ?? .average)
     }
     private var reloadSignature: String {
-        let sessionIDs = studySessions.map { $0.id.uuidString }.joined(separator: "|")
-        let cardIDs = allReviewCards.map { $0.id.uuidString }.joined(separator: "|")
+        // Cheap change fingerprint. Uses counts rather than boundary ids: a
+        // rated card jumps to the end of the nextReviewDate sort, so a boundary
+        // id flips on EVERY rating and would trigger a full queue rebuild
+        // (resetting the progress header to "Card 1 of N" and re-filtering the
+        // whole store per rating). Counts only change on card add/remove —
+        // exactly the cases that need a rebuild (generate-more, external edits).
+        let latestSessionID = studySessions.first?.id.uuidString ?? ""
         let planID = filterPlan?.id.uuidString ?? ""
         let scopeSessionID = reviewScopeSession?.id.uuidString ?? ""
         let subjectName = filterSubject?.name ?? ""
-        return [sessionIDs, cardIDs, planID, scopeSessionID, subjectName].joined(separator: "::")
+        return "\(allReviewCards.count)|\(studySessions.count)|\(latestSessionID)|\(planID)|\(scopeSessionID)|\(subjectName)"
     }
     private var generationSubject: Subject? {
-        if let filterSubject {
-            return filterSubject
-        }
-        return cards.first?.subject ?? studySessionsSubject()
+        cachedGenerationSubject
     }
     private var generationTopics: [String] {
-        if let activeScope, !activeScope.topicNames.isEmpty {
-            return activeScope.topicNames
-        }
-        let cardTopics = Array(Set(cards.map(\.topicName))).sorted()
-        return cardTopics
+        cachedGenerationTopics
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if cards.isEmpty {
-                    emptyState
-                } else if sessionComplete {
+                if sessionComplete {
                     completionView
+                } else if cards.isEmpty {
+                    emptyState
                 } else if let card = currentCard {
                     activeSession(card: card)
                 }
@@ -111,6 +122,21 @@ struct ReviewSessionView: View {
         .onAppear { loadCards() }
         .onChange(of: reloadSignature) { _, _ in
             loadCards()
+        }
+        .onDisappear {
+            // Closing the sheet mid-session must commit the reviewed cards'
+            // SM-2 reschedule together with their ReviewSession logs, or the
+            // cards would be pushed into the future while the analytics engine
+            // (which reads ReviewSession) never saw the reviews.
+            if !sessionComplete && !sessionQualities.isEmpty {
+                do {
+                    try context.save()
+                } catch {
+                    // The sheet is already dismissing, so there is nowhere to
+                    // surface the error. The pending reschedules stay in the
+                    // context and are flushed by a later save or autosave.
+                }
+            }
         }
         .sheet(isPresented: $showStudyGuide) {
             StudyGuideView(subject: filterSubject, mode: sessionComplete ? .weakTopics : .preSession)
@@ -325,10 +351,22 @@ struct ReviewSessionView: View {
 
     // MARK: - Logic
     private func loadCards() {
+        // Once a session is complete the queue has been consumed; ignore the
+        // post-save @Query reload so the completion screen keeps its snapshot
+        // instead of being replaced by an empty state.
+        guard !sessionComplete else { return }
+        // Every load rebuilds the queue from scratch (appear, generate-more,
+        // post-save @Query reload), so park the cursor on the first card.
+        // Keeping the old index can point past the end of a shorter rebuilt
+        // queue, which blanked the session instead of showing the next card.
+        currentIndex = 0
+        isFlipped = false
         let now = Date()
+        let startingEmpty = cards.isEmpty
         guard activeScope != nil || !studiedScopes.isEmpty else {
             cards = []
-            sessionStartTime = Date()
+            if startingEmpty { sessionStartTime = Date() }
+            refreshGenerationContext()
             return
         }
 
@@ -359,7 +397,21 @@ struct ReviewSessionView: View {
             cards = []
         }
 
-        sessionStartTime = Date()
+        // The session timer starts with the first load; generating more cards
+        // mid-session must not truncate the logged study time.
+        if startingEmpty { sessionStartTime = Date() }
+        refreshGenerationContext()
+    }
+
+    /// Mirrors the previous `generationSubject`/`generationTopics` derivation
+    /// but runs once per queue load instead of once per body evaluation.
+    private func refreshGenerationContext() {
+        cachedGenerationSubject = filterSubject ?? cards.first?.subject ?? studySessionsSubject()
+        if let activeScope, !activeScope.topicNames.isEmpty {
+            cachedGenerationTopics = activeScope.topicNames
+        } else {
+            cachedGenerationTopics = Array(Set(cards.map(\.topicName))).sorted()
+        }
     }
 
     private func filteredCards(from candidates: [StudyCard]) -> [StudyCard] {
@@ -409,6 +461,10 @@ struct ReviewSessionView: View {
             p.recordXP(sessionXP)
             p.checkAndUpdateStreak()
         }
+        // Snapshot before the cards are rescheduled on save so the completion
+        // screen shows the real numbers, not the emptied due queue.
+        completedCardCount = cards.count
+        completedRetentionPercent = cards.isEmpty ? 0 : sessionCorrect * 100 / cards.count
         filterPlan?.isCompleted = true
         let today = Calendar.current.startOfDay(for: Date())
         let pred = #Predicate<StudyActivity> { $0.date == today }
@@ -446,7 +502,18 @@ struct ReviewSessionView: View {
             durationMinutes: dedicatedMinutesDouble
         )
 
-        try? context.save()
+        do {
+            try context.save()
+            generationError = nil
+        } catch {
+            // A failed save must not be swallowed: roll back the pending
+            // reschedules/logs so a retry cannot double-log, and stop short of
+            // the completion screen (the reviewed card stays on the last card
+            // and can be re-rated to retry).
+            context.rollback()
+            generationError = "Could not save your review session: \(error.localizedDescription)"
+            return
+        }
 
         // Must run after the ReviewSession, StudyActivity and StudySession records
         // are in the context, or this session's work is invisible to the engine.
@@ -467,13 +534,13 @@ struct ReviewSessionView: View {
                 Spacer()
                 ZStack {
                 Circle()
-                    .fill(Color.green.opacity(0.08))
+                    .fill(emptyStateTint.opacity(0.08))
                     .frame(width: 100, height: 100)
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: emptyStateSymbol)
                     .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(emptyStateTint)
             }
-            Text("All Caught Up")
+            Text(emptyStateTitle)
                 .font(.title2.bold())
             Text(emptyStateMessage)
                 .foregroundStyle(.secondary)
@@ -484,6 +551,18 @@ struct ReviewSessionView: View {
                 .controlSize(.large)
             Spacer()
         }
+    }
+
+    private var emptyStateTitle: String {
+        studySessions.isEmpty ? "No Revision Yet" : "All Caught Up"
+    }
+
+    private var emptyStateSymbol: String {
+        studySessions.isEmpty ? "book.closed.fill" : "checkmark.circle.fill"
+    }
+
+    private var emptyStateTint: Color {
+        studySessions.isEmpty ? IBColors.electricBlue : .green
     }
 
     // MARK: - Completion View
@@ -511,11 +590,11 @@ struct ReviewSessionView: View {
 
             // Stats
             HStack(spacing: 0) {
-                StatCard(value: "\(cards.count)", label: "Cards", color: IBColors.electricBlue, icon: "square.stack.fill")
+                StatCard(value: "\(completedCardCount)", label: "Cards", color: IBColors.electricBlue, icon: "square.stack.fill")
                 Divider().frame(height: 50)
                 StatCard(value: "+\(sessionXP)", label: "XP Earned", color: .yellow, icon: "star.fill")
                 Divider().frame(height: 50)
-                StatCard(value: "\(cards.isEmpty ? 0 : sessionCorrect * 100 / cards.count)%", label: "Retention", color: IBColors.success, icon: "brain.head.profile")
+                StatCard(value: "\(completedRetentionPercent)%", label: "Retention", color: IBColors.success, icon: "brain.head.profile")
             }
             .padding(.vertical, 16)
             .glassCard()
@@ -615,6 +694,12 @@ struct ReviewSessionView: View {
             return
         }
 
+        // When resumed from the completion screen this is a brand-new session:
+        // clear the previous session's stats so its time and XP are not folded
+        // into the next completion's logs (and double-awarded). Mid-session
+        // generation must NOT reset these — the in-progress round is still
+        // accumulating.
+        let resumingFromCompletion = sessionComplete
         isGeneratingMoreCards = true
         generationError = nil
 
@@ -647,6 +732,15 @@ struct ReviewSessionView: View {
                 await MainActor.run {
                     isGeneratingMoreCards = false
                     if insertedAny {
+                        if resumingFromCompletion {
+                            sessionQualities = []
+                            sessionCorrect = 0
+                            sessionXP = 0
+                            completedCardCount = 0
+                            completedRetentionPercent = 0
+                            sessionStartTime = Date()
+                        }
+                        sessionComplete = false
                         loadCards()
                         IBHaptics.success()
                     } else {

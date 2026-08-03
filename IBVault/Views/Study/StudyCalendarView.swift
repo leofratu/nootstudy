@@ -4,19 +4,19 @@ import SwiftData
 struct StudyCalendarView: View {
     let plans: [StudyPlan]
     let onTapPlan: (StudyPlan) -> Void
-    var onDeletePlan: ((StudyPlan) -> Void)?
+    let onDeletePlan: ((StudyPlan, Bool) -> Void)?
 
     @State private var selectedWeekOffset = 0
-    @State private var hoveredSlot: String?
     @State private var showDeleteConfirmation = false
     @State private var planToDelete: StudyPlan?
+    @State private var scheduleReviewsOnDelete = false
 
     private var currentWeekStart: Date {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         let weekday = cal.component(.weekday, from: today)
         let mondayOffset = (weekday == 1) ? -6 : (2 - weekday)
-        let monday = cal.date(byAdding: .day, value: mondayOffset + (selectedWeekOffset * 7), to: today)!
+        let monday = cal.date(byAdding: .day, value: mondayOffset + (selectedWeekOffset * 7), to: today) ?? today
         return monday
     }
 
@@ -27,6 +27,45 @@ struct StudyCalendarView: View {
     // After-school study slots: 4pm to 10pm
     private let timeSlots = Array(16...21)
 
+    private static let dayAbbrevFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "E"
+        return formatter
+    }()
+
+    private static let dayNumFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter
+    }()
+
+    private static let weekRangeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM"
+        return formatter
+    }()
+
+    /// Plans bucketed once per render by "dayStart|hour" so the 42 calendar
+    /// cells don't each rescan the full plan list.
+    private var planBuckets: [String: [StudyPlan]] {
+        guard let firstSlot = timeSlots.first, let lastSlot = timeSlots.last else { return [:] }
+        let cal = Calendar.current
+        var buckets: [String: [StudyPlan]] = [:]
+        for plan in visiblePlans {
+            let planHour = cal.component(.hour, from: plan.scheduledDate)
+            let endHour = max(cal.component(.hour, from: plan.scheduledEndDate), planHour + 1)
+            guard planHour <= lastSlot else { continue }
+            let dayStart = cal.startOfDay(for: plan.scheduledDate).timeIntervalSinceReferenceDate
+            let startHour = max(firstSlot, planHour)
+            let finalHour = min(lastSlot, endHour - 1)
+            guard startHour <= finalHour else { continue }
+            for hour in startHour...finalHour {
+                buckets["\(dayStart)|\(hour)", default: []].append(plan)
+            }
+        }
+        return buckets
+    }
+
     private var visiblePlans: [StudyPlan] {
         plans.filter { !$0.isCompleted }
     }
@@ -34,13 +73,17 @@ struct StudyCalendarView: View {
     private var weekPlansCount: Int {
         visiblePlans.filter { plan in
             let start = Calendar.current.startOfDay(for: currentWeekStart)
-            let end = Calendar.current.date(byAdding: .day, value: 7, to: start)!
+            let end = Calendar.current.date(byAdding: .day, value: 7, to: start) ?? start
             return plan.scheduledDate >= start && plan.scheduledDate < end
         }.count
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // Bucket the plans exactly once per body evaluation and thread the map
+        // through the 42 day/hour cells below; the computed `planBuckets` is
+        // otherwise re-derived from every plan on every `plansForSlot` call.
+        let buckets = planBuckets
+        return VStack(alignment: .leading, spacing: 0) {
             // Header
             headerBar
                 .padding(16)
@@ -75,12 +118,31 @@ struct StudyCalendarView: View {
                             .fill(Color.primary.opacity(0.03))
                             .frame(width: 0.5)
                     }
-                    dayColumn(day)
+                    dayColumn(day, buckets: buckets)
                 }
             }
             .padding(.bottom, 12)
         }
         .background(calendarBackground)
+        // Single alert anchored to the whole calendar rather than inside the
+        // day/slot loops, where multiple alerts shared one Bool across rendered
+        // rows and fought over presenting.
+        .alert("Delete Session?", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                if let plan = planToDelete {
+                    onDeletePlan?(plan, scheduleReviewsOnDelete)
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                planToDelete = nil
+            }
+        } message: {
+            if planToDelete != nil {
+                Text(scheduleReviewsOnDelete
+                    ? "This will also schedule spaced repetition reviews for this session."
+                    : "This session and its scheduled reviews will be removed.")
+            }
+        }
     }
 
     // Liquid glass background
@@ -190,9 +252,7 @@ struct StudyCalendarView: View {
 
             // Week range
             let weekLabel: String = {
-                let fmt = DateFormatter()
-                fmt.dateFormat = "d MMM"
-                return "\(fmt.string(from: currentWeekStart)) – \(fmt.string(from: weekDays.last ?? currentWeekStart))"
+                "\(Self.weekRangeFormatter.string(from: currentWeekStart)) – \(Self.weekRangeFormatter.string(from: weekDays.last ?? currentWeekStart))"
             }()
             Text(weekLabel)
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -200,7 +260,7 @@ struct StudyCalendarView: View {
         }
     }
 
-    private func dayColumn(_ day: Date) -> some View {
+    private func dayColumn(_ day: Date, buckets: [String: [StudyPlan]]) -> some View {
         let cal = Calendar.current
         let isToday = cal.isDateInToday(day)
         let isPast = cal.startOfDay(for: day) < cal.startOfDay(for: Date())
@@ -247,8 +307,7 @@ struct StudyCalendarView: View {
 
             // Time slots
             ForEach(timeSlots, id: \.self) { hour in
-                let slotPlans = plansForSlot(day: day, hour: hour)
-                let slotId = "\(dayNum(day))-\(hour)"
+                let slotPlans = plansForSlot(day: day, hour: hour, buckets: buckets)
                 ZStack {
                     // Base slot
                     Rectangle()
@@ -286,42 +345,27 @@ struct StudyCalendarView: View {
                             sessionBlock(plan: plan)
                         }
                         .buttonStyle(.plain)
-                        .onHover { hovering in
-                            hoveredSlot = hovering ? slotId : nil
-                        }
                         .contextMenu {
                             if onDeletePlan != nil {
                                 Button(role: .destructive) {
                                     planToDelete = plan
+                                    scheduleReviewsOnDelete = false
                                     showDeleteConfirmation = true
                                 } label: {
                                     Label("Delete Session", systemImage: "trash")
                                 }
-                                
+
                                 if !plan.isFollowUpReview {
                                     Divider()
-                                    
+
                                     Button {
                                         planToDelete = plan
+                                        scheduleReviewsOnDelete = true
                                         showDeleteConfirmation = true
                                     } label: {
                                         Label("Delete & Add Review", systemImage: "arrow.triangle.2.circlepath")
                                     }
                                 }
-                            }
-                        }
-                        .alert("Delete Session?", isPresented: $showDeleteConfirmation) {
-                            Button("Delete", role: .destructive) {
-                                if let plan = planToDelete {
-                                    onDeletePlan?(plan)
-                                }
-                            }
-                            Button("Cancel", role: .cancel) {
-                                planToDelete = nil
-                            }
-                        } message: {
-                            if let plan = planToDelete, !plan.isFollowUpReview {
-                                Text("This will also schedule spaced repetition reviews for this session.")
                             }
                         }
                     }
@@ -334,7 +378,7 @@ struct StudyCalendarView: View {
 
     private func sessionBlock(plan: StudyPlan) -> some View {
         let color = subjectColor(plan.subjectName)
-        let isReview = plan.planMarkdown.contains("Spaced Repetition Review")
+        let isReview = plan.isFollowUpReview
 
         return VStack(spacing: 1) {
             ZStack {
@@ -377,11 +421,11 @@ struct StudyCalendarView: View {
     }
 
     private func dayAbbrev(_ date: Date) -> String {
-        let f = DateFormatter(); f.dateFormat = "E"; return f.string(from: date)
+        Self.dayAbbrevFormatter.string(from: date)
     }
 
     private func dayNum(_ date: Date) -> String {
-        let f = DateFormatter(); f.dateFormat = "d"; return f.string(from: date)
+        Self.dayNumFormatter.string(from: date)
     }
 
     private func subjectAbbrev(_ name: String) -> String {
@@ -392,20 +436,16 @@ struct StudyCalendarView: View {
         case "Mathematics AA": return "MAT"
         case "Economics": return "ECO"
         case "Business Management": return "BM"
+        case "Advanced Mathematics": return "ADV"
+        case "Fundamentals of the Universe": return "FOU"
+        case "Startups & Venture Capital": return "SV"
         default: return String(name.prefix(3)).uppercased()
         }
     }
 
-    private func plansForSlot(day: Date, hour: Int) -> [StudyPlan] {
-        let cal = Calendar.current
-        return visiblePlans.filter { plan in
-            let planDay = cal.startOfDay(for: plan.scheduledDate)
-            let slotDay = cal.startOfDay(for: day)
-            guard planDay == slotDay else { return false }
-            let planHour = cal.component(.hour, from: plan.scheduledDate)
-            let planEndHour = cal.component(.hour, from: plan.scheduledEndDate)
-            return hour >= planHour && hour < max(planEndHour, planHour + 1)
-        }
+    private func plansForSlot(day: Date, hour: Int, buckets: [String: [StudyPlan]]) -> [StudyPlan] {
+        let dayStart = Calendar.current.startOfDay(for: day).timeIntervalSinceReferenceDate
+        return buckets["\(dayStart)|\(hour)"] ?? []
     }
 
     private func subjectColor(_ name: String) -> Color {
@@ -416,6 +456,9 @@ struct StudyCalendarView: View {
         case "Mathematics AA": return IBColors.mathColor
         case "Economics": return IBColors.economicsColor
         case "Business Management": return IBColors.businessColor
+        case "Advanced Mathematics": return Color(hex: "8B5CF6")
+        case "Fundamentals of the Universe": return Color(hex: "6366F1")
+        case "Startups & Venture Capital": return Color(hex: "0EA5E9")
         default: return .gray
         }
     }

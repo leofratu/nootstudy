@@ -42,98 +42,16 @@ struct ContentView: View {
         reviewQueueManager.totalDueCount
     }
 
+    private func sidebarBadge(for tab: NavigationTab) -> Text? {
+        guard tab == .review, dueCount > 0 else { return nil }
+        return Text("\(dueCount)")
+    }
+
     var body: some View {
         NavigationSplitView {
-            List(selection: $selectedTab) {
-                Section {
-                    HStack(spacing: 10) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(IBColors.electricBlue)
-                                .frame(width: 32, height: 32)
-                            Image(systemName: "books.vertical.fill")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("IB Vault")
-                                .font(.system(size: 14, weight: .bold))
-                            Text("Study studio")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 5)
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-
-                Section("WORKSPACE") {
-                    ForEach([NavigationTab.dashboard, .subjects, .studySessions, .review], id: \.self) { tab in
-                        Label(tab.rawValue, systemImage: tab.icon)
-                            .tag(tab)
-                            .badge(tab == .review && dueCount > 0 ? dueCount : 0)
-                    }
-                }
-
-                Section("ASSISTANT") {
-                    Label(NavigationTab.aria.rawValue, systemImage: NavigationTab.aria.icon)
-                        .tag(NavigationTab.aria)
-                }
-
-                Section("INSIGHTS") {
-                    Label(NavigationTab.analytics.rawValue, systemImage: NavigationTab.analytics.icon)
-                        .tag(NavigationTab.analytics)
-                    Label(NavigationTab.recommendations.rawValue, systemImage: NavigationTab.recommendations.icon)
-                        .tag(NavigationTab.recommendations)
-                    Label(NavigationTab.predictions.rawValue, systemImage: NavigationTab.predictions.icon)
-                        .tag(NavigationTab.predictions)
-                }
-
-                Section("ACCOUNT") {
-                    Label(NavigationTab.profile.rawValue, systemImage: NavigationTab.profile.icon)
-                        .tag(NavigationTab.profile)
-                    Label(NavigationTab.settings.rawValue, systemImage: NavigationTab.settings.icon)
-                        .tag(NavigationTab.settings)
-                }
-            }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-            .background(IBColors.canvas)
-            .navigationTitle("IB Vault")
-            #if os(macOS)
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
-            #endif
-            .toolbar {
-                #if os(macOS)
-                ToolbarItem(placement: .navigation) {
-                    Button(action: toggleSidebar) {
-                        Image(systemName: "sidebar.left")
-                    }
-                }
-                #endif
-            }
+            sidebarList
         } detail: {
-            Group {
-                switch selectedTab {
-                case .dashboard: DashboardView()
-                case .subjects: SubjectsGridView()
-                case .studySessions: StudyPlannerView()
-                case .review: ReviewLaunchView()
-                case .aria: ARIAChatView()
-                case .analytics: AnalyticsView()
-                case .recommendations: SmartRecommendationsView()
-                case .predictions: PredictiveGradeView()
-                case .profile: ProfileView()
-                case .settings:
-                    NavigationStack {
-                        SettingsView()
-                    }
-                case .none:
-                    ContentUnavailableView("Select a Section", systemImage: "sidebar.left", description: Text("Choose a section from the sidebar to get started."))
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            detailPane
         }
         #if os(macOS)
         .frame(minWidth: 820, minHeight: 560)
@@ -151,6 +69,131 @@ struct ContentView: View {
             handleAppCommand(notification.object)
         }
         #endif
+    }
+
+    private var sidebarList: some View {
+        List(selection: $selectedTab) {
+            Section {
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(IBColors.electricBlue)
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "books.vertical.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("IB Vault")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("Study studio")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 5)
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
+            Section("WORKSPACE") {
+                ForEach([NavigationTab.dashboard, .subjects, .studySessions, .review], id: \.self) { tab in
+                    Label(tab.rawValue, systemImage: tab.icon)
+                        .tag(tab)
+                        .badge(sidebarBadge(for: tab))
+                }
+            }
+
+            Section("ASSISTANT") {
+                Label(NavigationTab.aria.rawValue, systemImage: NavigationTab.aria.icon)
+                    .tag(NavigationTab.aria)
+            }
+
+            Section("INSIGHTS") {
+                Label(NavigationTab.analytics.rawValue, systemImage: NavigationTab.analytics.icon)
+                    .tag(NavigationTab.analytics)
+                Label(NavigationTab.recommendations.rawValue, systemImage: NavigationTab.recommendations.icon)
+                    .tag(NavigationTab.recommendations)
+                Label(NavigationTab.predictions.rawValue, systemImage: NavigationTab.predictions.icon)
+                    .tag(NavigationTab.predictions)
+            }
+
+        }
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(IBColors.canvas)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 8) {
+                Divider()
+
+                Button {
+                    selectedTab = .profile
+                } label: {
+                    Label("Profile", systemImage: NavigationTab.profile.icon)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(selectedTab == .profile ? IBColors.electricBlue.opacity(0.12) : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    selectedTab = .settings
+                } label: {
+                    Label("Settings", systemImage: NavigationTab.settings.icon)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(selectedTab == .settings ? IBColors.electricBlue.opacity(0.12) : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
+            .background(.regularMaterial)
+        }
+        .navigationTitle("IB Vault")
+        #if os(macOS)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
+        #endif
+        .toolbar {
+            #if os(macOS)
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.left")
+                }
+            }
+            #endif
+        }
+    }
+
+    private var detailPane: some View {
+        Group {
+            switch selectedTab {
+            case .dashboard: DashboardView()
+            case .subjects: SubjectsGridView()
+            case .studySessions: StudyPlannerView()
+            case .review: ReviewLaunchView()
+            case .aria: ARIAChatView()
+            case .analytics: AnalyticsView()
+            case .recommendations: SmartRecommendationsView()
+            case .predictions: PredictiveGradeView()
+            case .profile: ProfileView()
+            case .settings:
+                NavigationStack {
+                    SettingsView()
+                }
+            case .none:
+                ContentUnavailableView("Select a Section", systemImage: "sidebar.left", description: Text("Choose a section from the sidebar to get started."))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     #if os(macOS)
@@ -181,7 +224,7 @@ struct ReviewLaunchView: View {
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
 
     private var eligibleCount: Int {
-        queueManager.eligibleCardsCount(context: context)
+        queueManager.eligibleCardsCount()
     }
 
     private var dueCardsCount: Int {
@@ -258,7 +301,11 @@ struct ReviewLaunchView: View {
             }
             .background(IBColors.canvas)
             .navigationTitle("Review")
-            .sheet(isPresented: $showReview) { ReviewSessionView() }
+            .sheet(isPresented: $showReview, onDismiss: {
+                // A completed review consumed the due queue; refresh the badge
+                // and the launch metrics without waiting for a tab change.
+                queueManager.refreshDueCards(context: context)
+            }) { ReviewSessionView() }
             .sheet(isPresented: $showGuide) { StudyGuideView(subject: nil, mode: .preSession) }
         }
     }

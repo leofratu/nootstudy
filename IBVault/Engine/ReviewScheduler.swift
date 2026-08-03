@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct ReviewScheduleConfig {
+struct ReviewScheduleConfig: Sendable {
     var optimalStudyHours: ClosedRange<Int> = 16...21
     var minutesPerCard: Double = 0.5
     var minimumRecommendedMinutes: Int = 15
@@ -78,24 +78,22 @@ enum ReviewRankingPolicy {
     }
 }
 
+@MainActor
 @Observable
-final class ReviewScheduler: @unchecked Sendable {
+final class ReviewScheduler {
     var schedules: [SubjectReviewSchedule] = []
     var totalDueToday: Int = 0
     var totalOverdue: Int = 0
     var recommendedStudyOrder: [Subject] = []
     
-    private let lock = NSLock()
-    
     func analyze(context: ModelContext, config: ReviewScheduleConfig = .default) {
-        lock.lock()
-        defer { lock.unlock() }
-        
         let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
         let scopes = studiedScopes(in: context)
         let scopesBySubject = Dictionary(grouping: scopes, by: \.subjectName)
         let now = Date()
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
+        // Same for every subject, so compute once instead of per schedule row.
+        let nextOptimal = findNextOptimalSlot(from: now, config: config)
         
         schedules = subjects.compactMap { subject -> SubjectReviewSchedule? in
             let reviewableCards = scopedCards(for: subject, scopesBySubject: scopesBySubject)
@@ -124,8 +122,6 @@ final class ReviewScheduler: @unchecked Sendable {
                 Int(Double(dueCards) * config.minutesPerCard)
             )
             
-            let nextOptimal = findNextOptimalSlot(from: now, config: config)
-            
             return SubjectReviewSchedule(
                 subject: subject,
                 dueCards: dueCards,
@@ -146,10 +142,11 @@ final class ReviewScheduler: @unchecked Sendable {
         let now = Date()
         return scopedCards(for: subject, scopesBySubject: Dictionary(grouping: studiedScopes(in: context), by: \.subjectName))
             .filter { $0.nextReviewDate <= now }
-            .sorted { card1, card2 in
-                if card1.nextReviewDate < card2.nextReviewDate { return true }
-                if card1.easeFactor < card2.easeFactor { return true }
-                return false
+            .sorted {
+                if $0.nextReviewDate != $1.nextReviewDate {
+                    return $0.nextReviewDate < $1.nextReviewDate
+                }
+                return $0.easeFactor < $1.easeFactor
             }
     }
     
@@ -166,6 +163,9 @@ final class ReviewScheduler: @unchecked Sendable {
         guard !schedules.isEmpty else { return [] }
         
         let totalPriority = schedules.reduce(0.0) { $0 + $1.priority }
+        // Every schedule row has due or overdue cards, so priority is always
+        // positive; the guard keeps the division below honest regardless.
+        guard totalPriority > 0 else { return [] }
         var allocations: [(subject: Subject, minutes: Int)] = []
         var remainingMinutes = dailyGoalMinutes
         
@@ -193,25 +193,29 @@ final class ReviewScheduler: @unchecked Sendable {
             }
         )
         
+        let now = Date()
         for dayOffset in 0..<7 {
-            let date = calendar.date(byAdding: .day, value: dayOffset, to: Date())!
+            guard let date = calendar.date(byAdding: .day, value: dayOffset, to: now) else { continue }
             let dayStart = calendar.startOfDay(for: date)
-            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
-            
-            let subjectsForDay = subjects.filter { subject in
-                hasDueOrOverdueCards(
-                    cards: scopedCardsBySubjectID[subject.id] ?? [],
-                    dayStart: dayStart,
-                    dayEnd: dayEnd
-                )
+            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
+            // Count due/overdue cards once per subject per day instead of
+            // re-filtering every card inside the sort closure.
+            let dueCounts = subjects.reduce(into: [UUID: Int]()) { counts, subject in
+                counts[subject.id] = (scopedCardsBySubjectID[subject.id] ?? []).reduce(0) { partial, card in
+                    partial + (card.nextReviewDate < dayEnd ? 1 : 0)
+                }
             }
-            .sorted { s1, s2 in
-                let due1 = (scopedCardsBySubjectID[s1.id] ?? []).filter { $0.nextReviewDate < dayEnd }.count
-                let due2 = (scopedCardsBySubjectID[s2.id] ?? []).filter { $0.nextReviewDate < dayEnd }.count
-                if due1 == due2 { return s1.name.localizedStandardCompare(s2.name) == .orderedAscending }
-                return due1 > due2
-            }
-            
+
+            let subjectsForDay = subjects
+                .filter { (dueCounts[$0.id] ?? 0) > 0 }
+                .sorted { s1, s2 in
+                    let due1 = dueCounts[s1.id] ?? 0
+                    let due2 = dueCounts[s2.id] ?? 0
+                    if due1 == due2 { return s1.name.localizedStandardCompare(s2.name) == .orderedAscending }
+                    return due1 > due2
+                }
+
             if !subjectsForDay.isEmpty {
                 schedule.append((date, subjectsForDay))
             }
@@ -238,31 +242,17 @@ final class ReviewScheduler: @unchecked Sendable {
     private func findNextOptimalSlot(from date: Date, config: ReviewScheduleConfig) -> Date? {
         let calendar = Calendar.current
         let hour = calendar.component(.hour, from: date)
-        
+
         if config.optimalStudyHours.contains(hour) {
             return date
         }
-        
-        let targetHour = hour < config.optimalStudyHours.lowerBound
-            ? config.optimalStudyHours.lowerBound
-            : config.optimalStudyHours.lowerBound
-        
+
+        let targetHour = config.optimalStudyHours.lowerBound
         if hour < config.optimalStudyHours.lowerBound {
             return calendar.date(bySettingHour: targetHour, minute: 0, second: 0, of: date)
         } else {
-            let nextDay = calendar.date(byAdding: .day, value: 1, to: date)!
+            let nextDay = calendar.date(byAdding: .day, value: 1, to: date) ?? date
             return calendar.date(bySettingHour: targetHour, minute: 0, second: 0, of: nextDay)
-        }
-    }
-    
-    private func hasDueOrOverdueCards(
-        cards: [StudyCard],
-        dayStart: Date,
-        dayEnd: Date
-    ) -> Bool {
-        cards.contains { card in
-            (card.nextReviewDate >= dayStart && card.nextReviewDate < dayEnd) ||
-            card.nextReviewDate < dayStart
         }
     }
 }

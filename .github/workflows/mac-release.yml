@@ -8,25 +8,34 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Select Xcode 16 (Swift 6)
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort | tail -1)
+          if [ -n "$XCODE" ]; then
+            sudo xcode-select -s "$XCODE"
+          fi
+          xcodebuild -version
+          swift --version
+
       - name: Install XcodeGen
         run: brew install xcodegen
-        
+
       - name: Generate Xcode Project
         run: xcodegen generate
-        
+
       - name: Build App
         run: |
           xcodebuild -project IBVault.xcodeproj -scheme IBVault -configuration Release -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-          
+
       - name: Archive App
         run: |
           cd build/Build/Products/Release
           zip -r IBVault-macOS.zip IBVault.app
-          
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
