@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum ADHDMedicationType: String, Codable, CaseIterable, Sendable {
+nonisolated enum ADHDMedicationType: String, Codable, CaseIterable, Sendable {
     case methylphenidateIR = "Methylphenidate IR (Ritalin)"
     case methylphenidateER = "Methylphenidate ER (Concerta/Ritalin LA)"
     case amphetamineIR = "Amphetamine IR (Adderall)"
@@ -100,7 +100,7 @@ enum ADHDMedicationType: String, Codable, CaseIterable, Sendable {
     }
 }
 
-enum StudyIntensity: String, Codable, CaseIterable, Sendable {
+nonisolated enum StudyIntensity: String, Codable, CaseIterable, Sendable {
     case belowAverage = "Below Average"
     case average = "Average"
     case aboveAverage = "Above Average"
@@ -134,7 +134,7 @@ enum StudyIntensity: String, Codable, CaseIterable, Sendable {
     }
 }
 
-enum IBYear: String, Codable, CaseIterable, Sendable {
+nonisolated enum IBYear: String, Codable, CaseIterable, Sendable {
     case dp1 = "DP1 (Year 1)"
     case dp2 = "DP2 (Year 2)"
     
@@ -147,7 +147,7 @@ enum IBYear: String, Codable, CaseIterable, Sendable {
 }
 
 @Model
-final class UserProfile {
+nonisolated final class UserProfile {
     var id: UUID
     var totalXP: Int
     var currentStreak: Int
@@ -259,12 +259,12 @@ final class UserProfile {
         self.studentName = ""
         self.studyIntensityRaw = StudyIntensity.average.rawValue
         self.ibYearRaw = IBYear.dp1.rawValue
-        self.targetIBScore = 30
+        self.targetIBScore = 40
         self.rankUpDate = nil
     }
 }
 
-struct ADHDMedicationSettings: Codable, Sendable {
+nonisolated struct ADHDMedicationSettings: Codable, Sendable {
     var medicationType: ADHDMedicationType
     var doseMg: Int
     var dailyDoses: Int
@@ -303,7 +303,7 @@ struct ADHDMedicationSettings: Codable, Sendable {
     }
 }
 
-enum ADHDMedicationTracker {
+nonisolated enum ADHDMedicationTracker {
     static func estimatePlasmaLevel(
         at date: Date,
         settings: ADHDMedicationSettings
@@ -353,7 +353,8 @@ enum ADHDMedicationTracker {
         settings: ADHDMedicationSettings
     ) -> (level: Double, status: String, colorName: String) {
         let level = estimatePlasmaLevel(at: date, settings: settings)
-        
+        guard level > 0 else { return (0, "Not Active", "gray") }
+
         let therapeuticMin = Double(settings.doseMg) * 0.25
         
         if level >= therapeuticMin * 1.5 {
@@ -378,22 +379,17 @@ enum ADHDMedicationTracker {
         
         for i in 0..<settings.dailyDoses {
             let doseMinutes = settings.firstDoseHour * 60 + settings.firstDoseMinute + (i * settings.doseIntervalMinutes)
-            let doseHour = doseMinutes / 60
-            let doseMinute = doseMinutes % 60
-            
-            let peakMinutes = doseMinutes + Int(settings.medicationType.peakHoursAfterDose * 60)
-            let endMinutes = doseMinutes + Int(settings.medicationType.durationHours * 60)
-
-            if let startDate = calendar.date(bySettingHour: doseHour, minute: doseMinute, second: 0, of: today),
-               let peakDate = calendar.date(bySettingHour: peakMinutes / 60, minute: peakMinutes % 60, second: 0, of: today),
-               let endDate = calendar.date(bySettingHour: min(endMinutes / 60, 23), minute: endMinutes % 60, second: 0, of: today) {
-                windows.append((
-                    start: startDate,
-                    peak: peakDate,
-                    end: endDate,
-                    label: "Dose \(i + 1)"
-                ))
+            guard let startDate = calendar.date(byAdding: .minute, value: doseMinutes, to: today),
+                  let peakDate = calendar.date(byAdding: .minute, value: Int(settings.medicationType.peakHoursAfterDose * 60), to: startDate),
+                  let endDate = calendar.date(byAdding: .minute, value: Int(settings.medicationType.durationHours * 60), to: startDate) else {
+                continue
             }
+            windows.append((
+                start: startDate,
+                peak: peakDate,
+                end: endDate,
+                label: "Dose \(i + 1)"
+            ))
         }
         
         return windows

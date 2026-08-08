@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class Subject {
+nonisolated final class Subject {
     var id: UUID
     var name: String
     /// Persisted as "HL"/"SL" for migration safety; prefer the typed `courseLevel`
@@ -52,8 +52,6 @@ final class Subject {
         }
         return breakdown
     }
-
-    var accentColor: String { accentColorHex }
 
     init(name: String, level: String, accentColorHex: String, examDate: Date? = nil) {
         self.id = UUID()

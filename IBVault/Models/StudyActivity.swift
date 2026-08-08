@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class StudyActivity {
+nonisolated final class StudyActivity {
     var id: UUID
     var date: Date
     var cardsReviewed: Int
