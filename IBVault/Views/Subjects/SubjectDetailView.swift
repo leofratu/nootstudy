@@ -3,14 +3,19 @@ import SwiftData
 
 struct SubjectDetailView: View {
     let subject: Subject
-    @Environment(\.modelContext) private var context
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
-    @Query(sort: \CurriculumNode.topicName) private var curriculumNodes: [CurriculumNode]
+    @Query private var academicAssessments: [AcademicAssessment]
+    @Query private var academicMappings: [AcademicAssessmentMapping]
+    @Query private var academicReports: [AcademicReportSnapshot]
     @State private var showAddGrade = false
     @State private var showReview = false
     @State private var showStudyGuide = false
     @State private var showTopicBrowser = false
-    @State private var masteryError: String?
+    @State private var showAcademicImport = false
+    @State private var showMappingReview = false
+    // Curriculum subunits shown expanded by default so the per-subunit mastery
+    // breakdown is visible without clicking into every topic.
+    @State private var expandedUnits: Set<String> = []
 
     private var color: Color { Color(hex: subject.accentColorHex) }
     private var sortedGrades: [Grade] { subject.grades.sorted { $0.date > $1.date } }
@@ -19,37 +24,56 @@ struct SubjectDetailView: View {
     }
     private var curriculumTopicCount: Int { curriculum.flatMap(\.topics).count }
     private var curriculumSubunitCount: Int { curriculum.flatMap(\.topics).flatMap(\.subtopics).count }
-    private var subjectCurriculumNodes: [CurriculumNode] {
-        curriculumNodes.filter {
+    private var learningResources: [LearningResource] {
+        LearningResourceCatalog.resources(
+            for: subject.name,
+            topicNames: curriculum.flatMap(\.topics).map(\.name),
+            limit: 6
+        )
+    }
+    private var subjectAssessments: [AcademicAssessment] {
+        academicAssessments.filter {
             $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame &&
-                $0.level.caseInsensitiveCompare(subject.level) == .orderedSame
+                $0.courseLevel.caseInsensitiveCompare(subject.level) == .orderedSame
         }
+    }
+    private var subjectMappings: [AcademicAssessmentMapping] {
+        academicMappings.filter {
+            $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame &&
+                $0.courseLevel.caseInsensitiveCompare(subject.level) == .orderedSame
+        }
+    }
+    private var subjectProgress: ProgressEvidence {
+        ProgressEvidenceService.score(
+            subjectName: subject.name,
+            courseLevel: subject.level,
+            cards: subject.cards,
+            assessments: subjectAssessments,
+            mappings: subjectMappings,
+            reports: academicReports.filter {
+                $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame &&
+                    $0.courseLevel.caseInsensitiveCompare(subject.level) == .orderedSame
+            },
+            workSessions: subjectWorkSessions
+        )
+    }
+
+    private var masteryDescriptor: String {
+        if subjectProgress.assessmentEvidence != nil { return "assessment-backed mastery" }
+        if subjectProgress.recallMastery != nil { return "recall mastery" }
+        return "no mastery evidence yet"
     }
 
     // MARK: - Lookup indexes
     // Built once per render (single pass over @Query/relationship data) so
-    // per-topic/per-subunit rows never re-scan the full card, node, or session
+    // per-topic/per-subunit rows never re-scan the full card or session
     // collections (previously O(cards × subtopics) per render).
-
-    private static func nodeLookupKey(subject: Subject, topic: String, subtopic: String) -> String {
-        [subject.name, subject.level, topic, subtopic]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .joined(separator: "|")
-    }
 
     private var cardIndex: SubjectCardIndex {
         var index = SubjectCardIndex()
         for card in subject.cards {
             index.byTopic[card.topicName, default: []].append(card)
             index.bySubtopic["\(card.topicName)|\(card.subtopic)", default: []].append(card)
-        }
-        return index
-    }
-
-    private var nodesByKey: [String: CurriculumNode] {
-        var index: [String: CurriculumNode] = [:]
-        for node in subjectCurriculumNodes {
-            index[Self.nodeLookupKey(subject: subject, topic: node.topicName, subtopic: node.subtopicName)] = node
         }
         return index
     }
@@ -80,10 +104,10 @@ struct SubjectDetailView: View {
         }
     }
 
-    private func topicMastery(_ topic: CurriculumTopic, index: SubjectCardIndex, nodes: [String: CurriculumNode]) -> Double {
+    private func topicMastery(_ topic: CurriculumTopic, index: SubjectCardIndex) -> Double {
         guard !topic.subtopics.isEmpty else { return 0 }
         let score = topic.subtopics.reduce(0.0) { partial, subtopic in
-            partial + subtopicMastery(topic: topic.name, subtopic: subtopic, index: index, nodes: nodes)
+            partial + subtopicMastery(topic: topic.name, subtopic: subtopic, index: index)
         }
         return score / Double(topic.subtopics.count)
     }
@@ -91,21 +115,17 @@ struct SubjectDetailView: View {
     private func subtopicMastery(
         topic: String,
         subtopic: String,
-        index: SubjectCardIndex,
-        nodes: [String: CurriculumNode]
+        index: SubjectCardIndex
     ) -> Double {
-        CurriculumProgressService.effectiveMastery(
-            cards: index.bySubtopic["\(topic)|\(subtopic)"] ?? [],
-            node: nodes[Self.nodeLookupKey(subject: subject, topic: topic, subtopic: subtopic)]
-        )
+        ProficiencyTracker.masteryPercentage(for: index.bySubtopic["\(topic)|\(subtopic)"] ?? [])
     }
 
-    private func weightedCurriculumMastery(index: SubjectCardIndex, nodes: [String: CurriculumNode]) -> Double {
+    private func weightedCurriculumMastery(index: SubjectCardIndex) -> Double {
         let topics = curriculum.flatMap(\.topics)
         let subunitCount = topics.reduce(0) { $0 + $1.subtopics.count }
         guard subunitCount > 0 else { return 0 }
         let score = topics.reduce(0.0) { partial, topic in
-            partial + topicMastery(topic, index: index, nodes: nodes) * Double(topic.subtopics.count)
+            partial + topicMastery(topic, index: index) * Double(topic.subtopics.count)
         }
         return score / Double(subunitCount)
     }
@@ -136,6 +156,9 @@ struct SubjectDetailView: View {
                 actionsBar(dueCount: dueCount)
                     .padding(.horizontal, 24)
 
+                progressSignalCard
+                    .padding(.horizontal, 24)
+
                 // Proficiency breakdown
                 proficiencyCard
                     .padding(.horizontal, 24)
@@ -150,6 +173,11 @@ struct SubjectDetailView: View {
                         .padding(.horizontal, 24)
                 }
 
+                if !learningResources.isEmpty {
+                    resourcesCard
+                        .padding(.horizontal, 24)
+                }
+
                 // Grades
                 gradesCard
                     .padding(.horizontal, 24)
@@ -158,6 +186,12 @@ struct SubjectDetailView: View {
         }
         .background(.background)
         .navigationTitle(subject.name)
+        .onAppear {
+            // Show the full sub-unit mastery breakdown by default.
+            if expandedUnits.isEmpty {
+                expandedUnits = Set(curriculum.map(\.name))
+            }
+        }
         .sheet(isPresented: $showAddGrade) {
             AddGradeView(subject: subject)
         }
@@ -172,21 +206,20 @@ struct SubjectDetailView: View {
                 TopicBrowserView(subject: subject)
             }
         }
-        .alert("Could Not Save Mastery", isPresented: Binding(
-            get: { masteryError != nil },
-            set: { if !$0 { masteryError = nil } }
-        )) {
-            Button("OK") { masteryError = nil }
-        } message: {
-            Text(masteryError ?? "The mastery update could not be saved.")
+        .sheet(isPresented: $showAcademicImport) {
+            AcademicImportView()
+        }
+        .sheet(isPresented: $showMappingReview) {
+            AcademicMappingReviewView(subject: subject)
         }
     }
 
     // MARK: - Hero
     private func heroCard(dueCount: Int) -> some View {
-        HStack(spacing: 20) {
+        let mastery = subjectProgress.blendedMastery ?? 0
+        return HStack(spacing: 20) {
             ProgressRing(
-                progress: subject.masteryProgress,
+                progress: mastery,
                 lineWidth: 6,
                 size: 80,
                 color: color
@@ -222,7 +255,7 @@ struct SubjectDetailView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-                Text("\(Int(subject.masteryProgress * 100))% review mastery")
+                Text("\(Int(mastery * 100))% \(masteryDescriptor)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -275,7 +308,59 @@ struct SubjectDetailView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
+
+            Button {
+                showAcademicImport = true
+                IBHaptics.light()
+            } label: {
+                Label("Import evidence", systemImage: "chart.bar.doc.horizontal")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .help("Import academic records")
+
+            Button {
+                showMappingReview = true
+                IBHaptics.light()
+            } label: {
+                Image(systemName: "arrow.triangle.branch")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.bordered)
+            .disabled(subjectAssessments.isEmpty)
+            .help("Review assessment mappings")
         }
+    }
+
+    private var progressSignalCard: some View {
+        HStack(spacing: 0) {
+            progressSignal("Recall", value: subjectProgress.recallMastery, detail: subject.cards.isEmpty ? "No cards yet" : "\(subject.cards.count) FSRS cards", tint: color)
+            Divider().frame(height: 42)
+            progressSignal("Evidence", value: subjectProgress.assessmentEvidence, detail: subjectProgress.scoredAssessmentCount == 0 ? "Import results" : "\(subjectProgress.scoredAssessmentCount) scored", tint: IBColors.teal)
+            Divider().frame(height: 42)
+            progressSignal("Mappings", value: nil, detail: "\(subjectProgress.approvedMappingCount) approved", tint: IBColors.gold)
+            Divider().frame(height: 42)
+            progressSignal("Risk", value: nil, detail: subjectProgress.isAtRisk ? "Needs attention" : "On track", tint: subjectProgress.isAtRisk ? IBColors.coral : IBColors.success)
+        }
+        .padding(14)
+        .glassCard()
+    }
+
+    private func progressSignal(_ label: String, value: Double?, detail: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(IBColors.secondaryText)
+            Text(value.map { "\(Int($0 * 100))%" } ?? "--")
+                .font(.callout.weight(.bold))
+                .foregroundStyle(tint)
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(IBColors.tertiaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
     }
 
     // MARK: - Proficiency
@@ -288,23 +373,39 @@ struct SubjectDetailView: View {
                     .font(.headline)
             }
 
-            let breakdown = subject.overallProficiencyBreakdown
-            let total = max(subject.cards.count, 1)
+            if subject.cards.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "rectangle.stack.badge.plus")
+                        .font(.title3)
+                        .foregroundStyle(color)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("No recall cards yet")
+                            .font(.callout.weight(.bold))
+                        Text("Generate a focused set from the curriculum or import assessment evidence first.")
+                            .font(.caption)
+                            .foregroundStyle(IBColors.secondaryText)
+                    }
+                }
+                .padding(.vertical, 6)
+            } else {
+                let breakdown = subject.overallProficiencyBreakdown
+                let total = max(subject.cards.count, 1)
 
-            ForEach(ProficiencyLevel.allCases, id: \.self) { level in
-                let count = breakdown[level] ?? 0
-                HStack(spacing: 10) {
-                    Text(level.emoji)
-                        .frame(width: 24)
-                    Text(level.rawValue)
-                        .font(.callout)
-                        .frame(width: 90, alignment: .leading)
-                    ProgressView(value: Double(count), total: Double(total))
-                        .tint(proficiencyColor(level))
-                    Text("\(count)")
-                        .font(.callout.bold())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 30, alignment: .trailing)
+                ForEach(ProficiencyLevel.allCases, id: \.self) { level in
+                    let count = breakdown[level] ?? 0
+                    HStack(spacing: 10) {
+                        Text(level.emoji)
+                            .frame(width: 24)
+                        Text(level.rawValue)
+                            .font(.callout)
+                            .frame(width: 90, alignment: .leading)
+                        ProgressView(value: Double(count), total: Double(total))
+                            .tint(proficiencyColor(level))
+                        Text("\(count)")
+                            .font(.callout.bold())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, alignment: .trailing)
+                    }
                 }
             }
         }
@@ -324,7 +425,6 @@ struct SubjectDetailView: View {
     // MARK: - Topics
     private var topicsCard: some View {
         let index = cardIndex
-        let nodes = nodesByKey
         let sessionsByTopic = workSessionsByTopic
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -333,7 +433,7 @@ struct SubjectDetailView: View {
                 Text("Curriculum Mastery")
                     .font(.headline)
                 Spacer()
-                Text("\(Int(weightedCurriculumMastery(index: index, nodes: nodes) * 100))% curriculum · \(subjectWorkSessions.count) work sessions")
+                Text("\(Int((subjectProgress.blendedMastery ?? weightedCurriculumMastery(index: index)) * 100))% \(masteryDescriptor) · \(subjectWorkSessions.count) work sessions")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -347,49 +447,53 @@ struct SubjectDetailView: View {
 
                     ForEach(unit.topics, id: \.name) { topic in
                         let topicCards = index.byTopic[topic.name] ?? []
-                        let mastery = topicMastery(topic, index: index, nodes: nodes)
-                        DisclosureGroup {
+                        let mastery = topicMastery(topic, index: index)
+                        DisclosureGroup(
+                            isExpanded: Binding(
+                                get: { expandedUnits.contains(unit.name) },
+                                set: { isExpanded in
+                                    if isExpanded { expandedUnits.insert(unit.name) } else { expandedUnits.remove(unit.name) }
+                                }
+                            )
+                        ) {
                             VStack(spacing: 0) {
                                 ForEach(topic.subtopics, id: \.self) { subtopic in
                                     let cards = index.bySubtopic["\(topic.name)|\(subtopic)"] ?? []
-                                    let node = nodes[Self.nodeLookupKey(subject: subject, topic: topic.name, subtopic: subtopic)]
-                                    let subMastery = CurriculumProgressService.effectiveMastery(cards: cards, node: node)
+                                    let cardMastery = ProficiencyTracker.masteryPercentage(for: cards)
+                                    let evidence = ProgressEvidenceService.score(
+                                        subjectName: subject.name,
+                                        courseLevel: subject.level,
+                                        topicName: topic.name,
+                                        subtopicName: subtopic,
+                                        cards: cards,
+                                        assessments: subjectAssessments,
+                                        mappings: subjectMappings,
+                                        workSessions: workSessionsFor(
+                                            topic: topic.name,
+                                            subtopic: subtopic,
+                                            in: sessionsByTopic
+                                        )
+                                    )
+                                    let subMastery = evidence.blendedMastery ?? cardMastery
                                     let workSessions = workSessionsFor(topic: topic.name, subtopic: subtopic, in: sessionsByTopic)
-                                    let hasProgress = !cards.isEmpty || node?.recordedProficiency != nil || !workSessions.isEmpty
+                                    let hasProgress = !cards.isEmpty || !workSessions.isEmpty || evidence.hasEvidence
                                     HStack(spacing: 10) {
                                         Image(systemName: hasProgress ? "checkmark.circle.fill" : "circle")
                                             .foregroundStyle(hasProgress ? color : Color.secondary)
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(subtopic).font(.callout)
-                                            Text(subunitActivitySummary(cards: cards, workSessions: workSessions))
+                                            Text(subunitActivitySummary(cards: cards, workSessions: workSessions, evidence: evidence))
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
                                         Spacer()
-                                        if let recorded = node?.recordedProficiency {
-                                            Text(recorded.rawValue)
-                                                .font(.caption2.weight(.semibold))
-                                                .foregroundStyle(proficiencyColor(recorded))
-                                                .padding(.horizontal, 7)
-                                                .frame(height: 22)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 6)
-                                                        .fill(proficiencyColor(recorded).opacity(0.1))
-                                                )
-                                        }
-                                        if !cards.isEmpty || node?.recordedProficiency != nil {
+                                        if hasProgress {
                                             Text("\(Int(subMastery * 100))%")
                                                 .font(.caption.weight(.bold))
                                                 .foregroundStyle(color)
                                             MasteryBar(progress: subMastery, height: 4, color: color)
                                                 .frame(width: 54)
                                         }
-                                        masteryMenu(
-                                            current: node?.recordedProficiency,
-                                            unitName: unit.name,
-                                            topicName: topic.name,
-                                            subtopicName: subtopic
-                                        )
                                     }
                                     .padding(.vertical, 7)
                                     .padding(.leading, 12)
@@ -424,7 +528,7 @@ struct SubjectDetailView: View {
         .glassCard()
     }
 
-    private func subunitActivitySummary(cards: [StudyCard], workSessions: [StudySession]) -> String {
+    private func subunitActivitySummary(cards: [StudyCard], workSessions: [StudySession], evidence: ProgressEvidence) -> String {
         var parts: [String] = []
         parts.append(cards.isEmpty ? "No cards" : "\(cards.count) cards · \(cards.filter(\.isDue).count) due")
         if !workSessions.isEmpty {
@@ -433,69 +537,10 @@ struct SubjectDetailView: View {
                 parts.append("last \(latest.endDate.formatted(date: .abbreviated, time: .omitted))")
             }
         }
+        if evidence.scoredAssessmentCount > 0 {
+            parts.append("\(evidence.scoredAssessmentCount) assessment\(evidence.scoredAssessmentCount == 1 ? "" : "s")")
+        }
         return parts.joined(separator: " · ")
-    }
-
-    private func masteryMenu(
-        current: ProficiencyLevel?,
-        unitName: String,
-        topicName: String,
-        subtopicName: String
-    ) -> some View {
-        Menu {
-            ForEach(ProficiencyLevel.allCases, id: \.self) { level in
-                Button {
-                    setMastery(level, unitName: unitName, topicName: topicName, subtopicName: subtopicName)
-                } label: {
-                    Label(level.rawValue, systemImage: current == level ? "checkmark" : "gauge")
-                }
-            }
-            if current != nil {
-                Divider()
-                Button("Clear Recorded Mastery", role: .destructive) {
-                    clearMastery(topicName: topicName, subtopicName: subtopicName)
-                }
-            }
-        } label: {
-            Image(systemName: "slider.horizontal.3")
-                .frame(width: 24, height: 24)
-        }
-        .menuStyle(.borderlessButton)
-        .help("Set recorded mastery for \(subtopicName)")
-    }
-
-    private func setMastery(
-        _ level: ProficiencyLevel,
-        unitName: String,
-        topicName: String,
-        subtopicName: String
-    ) {
-        do {
-            try CurriculumProgressService.setMastery(
-                level,
-                subject: subject,
-                unitName: unitName,
-                topicName: topicName,
-                subtopicName: subtopicName,
-                source: "Manual",
-                context: context
-            )
-        } catch {
-            masteryError = error.localizedDescription
-        }
-    }
-
-    private func clearMastery(topicName: String, subtopicName: String) {
-        do {
-            try CurriculumProgressService.clearMastery(
-                subject: subject,
-                topicName: topicName,
-                subtopicName: subtopicName,
-                context: context
-            )
-        } catch {
-            masteryError = error.localizedDescription
-        }
     }
 
     // MARK: - Exam-ready knowledge
@@ -570,10 +615,55 @@ struct SubjectDetailView: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(color.opacity(0.15), lineWidth: 0.5))
+            RoundedRectangle(cornerRadius: IBRadius.card)
+                .fill(IBGradient.cardSheen)
+                .shadow(color: IBShadow.cardColor, radius: IBShadow.cardRadius, x: 0, y: IBShadow.cardY)
+                .overlay(RoundedRectangle(cornerRadius: IBRadius.card).strokeBorder(color.opacity(0.15), lineWidth: 0.5))
         )
+    }
+
+    private var resourcesCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "books.vertical.fill")
+                    .foregroundStyle(color)
+                Text("Trusted resources")
+                    .font(.headline)
+                Spacer()
+                Text("Selected for this course")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(learningResources) { resource in
+                Link(destination: resource.url) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "arrow.up.right.square")
+                            .foregroundStyle(color)
+                            .frame(width: 20)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(resource.title)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(IBColors.ink)
+                            Text("\(resource.provider) · \(resource.purpose)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open \(resource.title)")
+
+                if resource.id != learningResources.last?.id {
+                    Divider()
+                }
+            }
+        }
+        .padding(16)
+        .glassCard()
     }
 
     // MARK: - Grades
@@ -715,7 +805,8 @@ struct AddGradeView: View {
                             IBHaptics.success()
                             dismiss()
                         } catch {
-                            context.rollback()
+                            // Undo only this insert, not unrelated pending work.
+                            context.delete(grade)
                             saveError = error.localizedDescription
                         }
                     }

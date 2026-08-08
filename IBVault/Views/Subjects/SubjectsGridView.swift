@@ -4,11 +4,10 @@ import SwiftData
 struct SubjectsGridView: View {
     @Query private var subjects: [Subject]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
+    @Query private var academicAssessments: [AcademicAssessment]
+    @Query private var academicMappings: [AcademicAssessmentMapping]
+    @Query private var academicReports: [AcademicReportSnapshot]
     @State private var searchText = ""
-
-    private let columns = [
-        GridItem(.adaptive(minimum: 270, maximum: 420), spacing: 14)
-    ]
 
     private var sortedSubjects: [Subject] {
         subjects
@@ -16,16 +15,36 @@ struct SubjectsGridView: View {
             .sorted { $0.name < $1.name }
     }
 
+    /// Whole-subject mastery is derived from review performance and imported
+    /// school evidence. Legacy curriculum flags are intentionally excluded.
+    private var masteryBySubject: [UUID: Double] {
+        var result: [UUID: Double] = [:]
+        for subject in subjects {
+            result[subject.id] = ProgressEvidenceService.score(
+                subjectName: subject.name,
+                courseLevel: subject.level,
+                cards: subject.cards,
+                assessments: academicAssessments,
+                mappings: academicMappings,
+                reports: academicReports,
+                workSessions: studySessions
+            ).blendedMastery ?? 0
+        }
+        return result
+    }
+
     private var averageMastery: Int {
         guard !subjects.isEmpty else { return 0 }
-        return Int(subjects.map(\.masteryProgress).reduce(0, +) / Double(subjects.count) * 100)
+        let total = subjects.reduce(0.0) { $0 + (masteryBySubject[$1.id] ?? 0) }
+        return Int((total / Double(subjects.count) * 100).rounded())
     }
 
     var body: some View {
-        // Hoisted so the index is built once per render instead of re-derived
-        // once per subject tile / metric (computed properties re-run on every
-        // access).
+        // Hoisted so the indexes are built once per render instead of
+        // re-derived once per subject tile / metric (computed properties re-run
+        // on every access).
         let dueCounts = dueCountBySubject
+        let mastery = masteryBySubject
         return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
@@ -47,7 +66,7 @@ struct SubjectsGridView: View {
 
                     StudioSectionHeader(
                         searchText.isEmpty ? "Subject portfolio" : "Search results",
-                        subtitle: searchText.isEmpty ? "Mastery reflects active recall, not time spent." : "\(sortedSubjects.count) matching subjects",
+                        subtitle: searchText.isEmpty ? "Mastery reflects recall and imported assessment results." : "\(sortedSubjects.count) matching subjects",
                         symbol: "square.grid.2x2.fill",
                         tint: IBColors.electricBlue
                     ) {
@@ -62,16 +81,20 @@ struct SubjectsGridView: View {
                         )
                         .frame(maxWidth: .infinity)
                     } else {
-                        LazyVGrid(columns: columns, spacing: 14) {
+                        VStack(spacing: 0) {
                             ForEach(sortedSubjects, id: \.id) { subject in
                                 NavigationLink {
                                     SubjectDetailView(subject: subject)
                                 } label: {
-                                    SubjectGridCard(subject: subject, dueCount: dueCounts[subject.id] ?? 0)
+                                    SubjectWorkspaceRow(subject: subject, dueCount: dueCounts[subject.id] ?? 0, mastery: mastery[subject.id] ?? 0)
                                 }
                                 .buttonStyle(.plain)
+                                if subject.id != sortedSubjects.last?.id {
+                                    Divider().padding(.leading, 72)
+                                }
                             }
                         }
+                        .glassCard()
                     }
                 }
                 .frame(maxWidth: 1240, alignment: .leading)
@@ -108,73 +131,82 @@ struct SubjectsGridView: View {
     }
 }
 
-struct SubjectGridCard: View {
+struct SubjectWorkspaceRow: View {
     let subject: Subject
     let dueCount: Int
+    let mastery: Double
 
     private var tint: Color { Color(hex: subject.accentColorHex) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(tint.opacity(0.13))
-                        .frame(width: 42, height: 42)
-                    Image(systemName: subjectSymbol)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(tint)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(subject.name)
-                        .font(.headline)
-                        .foregroundStyle(IBColors.ink)
-                        .lineLimit(1)
-                    StudioPill(title: subject.level, tint: tint)
-                }
-                Spacer()
-                Text("\(Int(subject.masteryProgress * 100))%")
-                    .font(.system(size: 21, weight: .bold, design: .rounded))
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(IBGradient.tint(tint))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(tint.opacity(0.16), lineWidth: 1)
+                    )
+                Image(systemName: subjectSymbol)
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
             }
 
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(subject.name)
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(IBColors.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+                HStack(spacing: 7) {
+                    StudioPill(title: subject.level, tint: tint)
+                    Text(subject.cards.isEmpty ? "No recall cards" : "\(subject.cards.count) cards")
+                        .font(.caption)
+                        .foregroundStyle(IBColors.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 5) {
                 HStack {
                     Text("Mastery")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(IBColors.secondaryText)
                     Spacer()
-                    Text(masteryLabel)
+                    Text("\(Int(mastery * 100))%")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(tint)
                 }
-                MasteryBar(progress: subject.masteryProgress, height: 6, color: tint)
+                MasteryBar(progress: mastery, height: 5, color: tint)
+            }
+            .frame(minWidth: 120, maxWidth: 220, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(dueCount == 0 ? "Clear" : "\(dueCount) due")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(dueCount == 0 ? IBColors.success : IBColors.coral)
+                    .lineLimit(1)
+                    .fixedSize()
+                Text(masteryLabel)
+                    .font(.caption2)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .lineLimit(1)
             }
 
-            HStack(spacing: 14) {
-                Label("\(subject.cards.count) cards", systemImage: "square.stack")
-                Spacer()
-                Label(dueCount == 0 ? "Clear" : "\(dueCount) due", systemImage: dueCount == 0 ? "checkmark.circle.fill" : "clock.badge.exclamationmark")
-                    .foregroundStyle(dueCount == 0 ? IBColors.success : IBColors.coral)
-            }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(IBColors.secondaryText)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(IBColors.tertiaryText)
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: IBRadius.card)
-                .fill(IBColors.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: IBRadius.card)
-                        .stroke(IBColors.cardBorder, lineWidth: 1)
-                )
-        )
+        .padding(.horizontal, 18)
+        .padding(.vertical, 13)
         .contentShape(Rectangle())
     }
 
     private var masteryLabel: String {
-        switch subject.masteryProgress {
+        switch mastery {
         case 0..<0.25: return "Starting"
         case 0.25..<0.6: return "Building"
         case 0.6..<0.85: return "Reliable"
