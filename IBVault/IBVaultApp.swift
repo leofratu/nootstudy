@@ -28,7 +28,11 @@ struct IBVaultApp: App {
             SubjectTrack.self,
             UnitState.self,
             CurriculumNode.self,
-            WeeklyChallenge.self
+            WeeklyChallenge.self,
+            AcademicImport.self,
+            AcademicAssessment.self,
+            AcademicAssessmentMapping.self,
+            AcademicReportSnapshot.self
         ], isAutosaveEnabled: true, isUndoEnabled: false)
         #if os(macOS)
         .defaultSize(width: 1100, height: 750)
@@ -139,10 +143,15 @@ struct IBVaultCommands: Commands {
 struct RootView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
+    @Query private var cards: [StudyCard]
+    @Query private var reviewSessions: [ReviewSession]
+    @Query private var studySessions: [StudySession]
     @State private var hasAttemptedAutomaticBackup = false
     @State private var hasReconciledAchievements = false
     @State private var hasRecomputedProgression = false
     @State private var hasSynchronizedCurriculum = false
+    @State private var hasMigratedFSRS = false
+    @State private var hasNormalizedLegacySessions = false
     @State private var launchError: String?
 
     private var orderedProfiles: [UserProfile] {
@@ -158,10 +167,6 @@ struct RootView: View {
             if let profile = primaryProfile {
                 if profile.onboardingCompleted {
                     ContentView()
-                        .onAppear {
-                            NotificationService.requestPermission()
-                            triggerAutomaticBackupIfNeeded()
-                        }
                 } else {
                     OnboardingView()
                 }
@@ -177,9 +182,7 @@ struct RootView: View {
         // has a profile, so anything hung off the "no profile yet" path never
         // runs for them.
         .onAppear {
-            synchronizeCurriculumIfNeeded()
-            reconcileAchievementsIfNeeded()
-            recomputeProgressionIfNeeded()
+            preparePersistentStateIfNeeded()
         }
         .alert(
             "Something went wrong",
@@ -195,10 +198,57 @@ struct RootView: View {
         .preferredColorScheme(.light)
     }
 
+    private func migrateFSRSIfNeeded() {
+        guard !hasMigratedFSRS else { return }
+        hasMigratedFSRS = true
+        FSRSScheduler.migrate(cards: cards, reviewSessions: reviewSessions)
+        do {
+            try context.save()
+        } catch {
+            launchError = "Could not update review scheduling: \(error.localizedDescription)"
+        }
+    }
+
+    private func normalizeLegacySessionsIfNeeded() {
+        guard !hasNormalizedLegacySessions else { return }
+        hasNormalizedLegacySessions = true
+        var changed = false
+
+        for session in studySessions where session.evidenceVersion == nil {
+            let matchingReviews = reviewSessions.filter { review in
+                review.subjectName.caseInsensitiveCompare(session.subjectName) == .orderedSame &&
+                    review.timestamp >= session.startDate.addingTimeInterval(-60) &&
+                    review.timestamp <= session.endDate.addingTimeInterval(300)
+            }
+            if session.cardsReviewed > matchingReviews.count {
+                session.cardsReviewed = matchingReviews.count
+                session.correctCount = matchingReviews.filter(\.wasCorrect).count
+                session.reviewedCardIDs = matchingReviews.map(\.cardID)
+                changed = true
+            }
+            for review in matchingReviews where review.studySessionID == nil {
+                review.studySessionID = session.id
+                changed = true
+            }
+            session.evidenceVersion = 0
+            changed = true
+        }
+
+        if changed {
+            do {
+                try context.save()
+            } catch {
+                launchError = "Could not update legacy study history: \(error.localizedDescription)"
+            }
+        }
+    }
+
     private func synchronizeCurriculumIfNeeded() {
         guard !hasSynchronizedCurriculum else { return }
         hasSynchronizedCurriculum = true
-        SyllabusSeeder.seedIfNeeded(context: context)
+        if !SyllabusSeeder.seedIfNeeded(context: context) {
+            launchError = "The curriculum update could not be saved. Your previous data remains available."
+        }
     }
 
     private func reconcileAchievementsIfNeeded() {
@@ -218,14 +268,26 @@ struct RootView: View {
         ProgressionService.recompute(context: context)
     }
 
-    private func triggerAutomaticBackupIfNeeded() {
-        guard !hasAttemptedAutomaticBackup else { return }
+    private func preparePersistentStateIfNeeded() {
+        guard triggerAutomaticBackupIfNeeded() else { return }
+        synchronizeCurriculumIfNeeded()
+        migrateFSRSIfNeeded()
+        normalizeLegacySessionsIfNeeded()
+        reconcileAchievementsIfNeeded()
+        recomputeProgressionIfNeeded()
+    }
+
+    @discardableResult
+    private func triggerAutomaticBackupIfNeeded() -> Bool {
+        guard !hasAttemptedAutomaticBackup else { return launchError == nil }
         hasAttemptedAutomaticBackup = true
 
         do {
             try BackupService.autoBackupIfNeeded(context: context)
+            return true
         } catch {
             launchError = "Automatic backup failed: \(error.localizedDescription)"
+            return false
         }
     }
 
@@ -236,8 +298,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationDidFinishLaunching(_ notification: Notification) {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        
-        center.requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
+
+        NotificationService.requestPermission()
+
+        // A restored window frame can land off-screen or be taller than the
+        // visible display, which makes the top (title bar, menus) unreachable.
+        // Fit and center the window once the app is up.
+        DispatchQueue.main.async {
+            for window in NSApp.windows where window.canBecomeMain || window.isVisible {
+                self.fitWindowToScreen(window)
+            }
+        }
+    }
+
+    private func fitWindowToScreen(_ window: NSWindow) {
+        guard let screen = window.screen ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        var frame = window.frame
+
+        // Never let a restored frame collapse the window into an unusable strip.
+        let minWidth: CGFloat = 820
+        let minHeight: CGFloat = 560
+        if frame.width < minWidth { frame.size.width = minWidth }
+        if frame.height < minHeight { frame.size.height = minHeight }
+
+        if frame.height > visible.height - 20 {
+            frame.size.height = visible.height - 20
+        }
+        if frame.width > visible.width {
+            frame.size.width = visible.width
+        }
+        // If the top is off-screen (restored above the display) or the window
+        // does not meaningfully intersect the visible area, center it.
+        let intersects = frame.intersects(visible)
+        let topOffScreen = frame.maxY > visible.maxY + 2
+        if !intersects || topOffScreen {
+            frame.origin.x = visible.midX - frame.width / 2
+            frame.origin.y = visible.minY + max((visible.height - frame.height) / 2, 0)
+            window.setFrame(frame, display: true)
+        }
     }
     
     // Allow notifications to show even when the app is focused

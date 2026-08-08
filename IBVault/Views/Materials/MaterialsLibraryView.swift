@@ -369,7 +369,7 @@ struct SubfolderView: View {
 
 // MARK: - Helpers
 
-private func buildMaterialLibraryStats(for subfolders: [String]) -> MaterialLibraryStats {
+nonisolated private func buildMaterialLibraryStats(for subfolders: [String]) -> MaterialLibraryStats {
     var totalFileCount = 0
     var totalBytes: Int64 = 0
     var fileCounts: [String: Int] = [:]
@@ -384,12 +384,12 @@ private func buildMaterialLibraryStats(for subfolders: [String]) -> MaterialLibr
     return MaterialLibraryStats(totalFileCount: totalFileCount, totalBytes: totalBytes, fileCounts: fileCounts)
 }
 
-private enum MaterialsLibraryCache {
+nonisolated private enum MaterialsLibraryCache {
     private static let cacheLock = NSLock()
     nonisolated(unsafe) private static var directoryCache: [String: MaterialDirectoryContents] = [:]
     nonisolated(unsafe) private static var recursiveFilesCache: [String: [MaterialFile]] = [:]
 
-    static func directoryContents(for url: URL) -> MaterialDirectoryContents {
+    nonisolated static func directoryContents(for url: URL) -> MaterialDirectoryContents {
         let key = url.path
         cacheLock.lock()
         if let cached = directoryCache[key] {
@@ -463,7 +463,7 @@ private enum MaterialsLibraryCache {
     }
 }
 
-func getMaterialsURL(for subfolder: String) -> URL {
+nonisolated func getMaterialsURL(for subfolder: String) -> URL {
     if let url = Bundle.main.url(forResource: subfolder, withExtension: nil, subdirectory: "Materials") {
         return url
     }
@@ -472,10 +472,10 @@ func getMaterialsURL(for subfolder: String) -> URL {
         .appendingPathComponent("Materials/\(subfolder)")
 }
 
-func listFiles(in url: URL) -> [MaterialFile] {
+nonisolated func listFiles(in url: URL) -> [MaterialFile] {
     MaterialsLibraryCache.recursiveFiles(in: url)
 }
 
-private func loadDirectory(_ url: URL) -> MaterialDirectoryContents {
+nonisolated private func loadDirectory(_ url: URL) -> MaterialDirectoryContents {
     MaterialsLibraryCache.directoryContents(for: url)
 }

@@ -4,6 +4,9 @@ import SwiftData
 struct OnboardingView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Subject.name) private var seededSubjects: [Subject]
+    @Query private var academicAssessments: [AcademicAssessment]
+    @Query private var academicMappings: [AcademicAssessmentMapping]
+    @Query private var academicReports: [AcademicReportSnapshot]
     @State private var currentPage = 0
     @State private var isCompleting = false
     @State private var onboardingError: String?
@@ -15,8 +18,37 @@ struct OnboardingView: View {
     private let pages = [
         (icon: "books.vertical.fill", title: "Your IB Study Hub", subtitle: "Everything you need in one place"),
         (icon: "brain.head.profile", title: "Science-Backed Learning", subtitle: "Spaced repetition meets active recall"),
-        (icon: "sparkles", title: "Ready to Begin", subtitle: "Your subjects are preloaded")
+        (icon: "chart.bar.doc.horizontal", title: "Your Starting Point", subtitle: "Mastery calibrated from your school evidence"),
+        (icon: "sparkles", title: "Ready to Begin", subtitle: "Your subjects and starting data are loaded")
     ]
+
+    private struct EvidenceRow: Identifiable {
+        let subject: Subject
+        let progress: ProgressEvidence
+
+        var id: UUID { subject.id }
+        var mastery: Double { progress.blendedMastery ?? progress.assessmentEvidence ?? 0 }
+    }
+
+    private var evidenceRows: [EvidenceRow] {
+        seededSubjects.map { subject in
+            EvidenceRow(
+                subject: subject,
+                progress: ProgressEvidenceService.score(
+                    subjectName: subject.name,
+                    courseLevel: subject.level,
+                    cards: subject.cards,
+                    assessments: academicAssessments,
+                    mappings: academicMappings,
+                    reports: academicReports
+                )
+            )
+        }
+    }
+
+    private var scoredEvidenceCount: Int {
+        evidenceRows.reduce(0) { $0 + $1.progress.scoredAssessmentCount }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,14 +56,14 @@ struct OnboardingView: View {
 
             // Hero icon
             ZStack {
-                Circle()
-                    .fill(IBColors.electricBlue.opacity(0.08))
-                    .frame(width: 120, height: 120)
+                RoundedRectangle(cornerRadius: 28)
+                    .fill(IBGradient.accent)
+                    .frame(width: 96, height: 96)
+                    .shadow(color: IBColors.electricBlue.opacity(0.4), radius: 24, x: 0, y: 10)
                 Image(systemName: pages[safePageIndex].icon)
-                    .font(.system(size: 48, weight: .light))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .font(.system(size: 40, weight: .semibold))
+                    .foregroundStyle(.white)
             }
-            .glow(color: IBColors.electricBlue, radius: 15)
             .padding(.bottom, 24)
             .animation(IBAnimation.smooth, value: currentPage)
 
@@ -59,10 +91,11 @@ struct OnboardingView: View {
                 switch currentPage {
                 case 0: welcomeContent
                 case 1: scienceContent
+                case 2: masteryContent
                 default: subjectContent
                 }
             }
-            .frame(maxWidth: 500)
+            .frame(maxWidth: 560)
             .padding(.horizontal, 40)
             .animation(IBAnimation.smooth, value: currentPage)
 
@@ -72,7 +105,7 @@ struct OnboardingView: View {
             VStack(spacing: 20) {
                 // Step indicators
                 HStack(spacing: 8) {
-                    ForEach(0..<3, id: \.self) { index in
+                    ForEach(0..<pages.count, id: \.self) { index in
                         Circle()
                             .fill(index == currentPage ? IBColors.electricBlue : Color.secondary.opacity(0.3))
                             .frame(width: index == currentPage ? 10 : 7, height: index == currentPage ? 10 : 7)
@@ -89,8 +122,8 @@ struct OnboardingView: View {
                         .controlSize(.large)
                     }
 
-                    Button(currentPage < 2 ? "Continue" : "Start Studying") {
-                        if currentPage < 2 {
+                    Button(currentPage < pages.count - 1 ? "Continue" : "Start Studying") {
+                        if currentPage < pages.count - 1 {
                             withAnimation(IBAnimation.smooth) { currentPage += 1 }
                             IBHaptics.light()
                         } else {
@@ -105,7 +138,14 @@ struct OnboardingView: View {
             .padding(.bottom, 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background)
+        .background(
+            LinearGradient(
+                colors: [IBColors.canvas, IBColors.surface],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
         .alert("Onboarding Incomplete", isPresented: Binding(
             get: { onboardingError != nil },
             set: { if !$0 { onboardingError = nil } }
@@ -141,12 +181,15 @@ struct OnboardingView: View {
                       desc: "Retrieval practice makes you produce an answer instead of only re-reading it")
             featureRow(icon: "chart.line.uptrend.xyaxis", color: .purple,
                       title: "Adaptive Difficulty",
-                      desc: "SM-2 algorithm adjusts card intervals based on your performance")
+                      desc: "FSRS adapts review timing to your recall history")
         }
     }
 
     private var subjectContent: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Your loaded subjects", systemImage: "checkmark.seal.fill")
+                .font(.callout.weight(.bold))
+                .foregroundStyle(IBColors.success)
             if seededSubjects.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -163,27 +206,114 @@ struct OnboardingView: View {
         }
     }
 
+    private var masteryContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(IBColors.teal.opacity(0.12))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(IBColors.teal)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(scoredEvidenceCount) scored school records loaded")
+                        .font(.callout.weight(.bold))
+                    Text("These values establish your starting mastery before recall reviews begin.")
+                        .font(.caption)
+                        .foregroundStyle(IBColors.secondaryText)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: IBRadius.md)
+                    .fill(IBGradient.tint(IBColors.teal))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: IBRadius.md)
+                            .stroke(IBColors.teal.opacity(0.18), lineWidth: 1)
+                    )
+            )
+
+            if evidenceRows.isEmpty {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading your school evidence...")
+                        .font(.callout)
+                        .foregroundStyle(IBColors.secondaryText)
+                }
+                .frame(maxWidth: .infinity, minHeight: 150)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(evidenceRows) { row in
+                            assessmentMasteryRow(row)
+                            if row.id != evidenceRows.last?.id {
+                                Divider().padding(.leading, 12)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 260)
+                .glassCard(cornerRadius: IBRadius.md)
+            }
+        }
+    }
+
+    private func assessmentMasteryRow(_ row: EvidenceRow) -> some View {
+        let tint = IBColors.subjectColor(for: row.subject.name)
+        return HStack(spacing: 12) {
+            Circle()
+                .fill(tint)
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(row.subject.name)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(IBColors.ink)
+                    Spacer(minLength: 8)
+                    Text("\(Int(row.mastery * 100))%")
+                        .font(.callout.weight(.bold))
+                        .foregroundStyle(tint)
+                }
+                MasteryBar(progress: row.mastery, height: 5, color: tint)
+                Text(row.progress.scoredAssessmentCount == 0 ? "No scored evidence yet" : "\(row.progress.scoredAssessmentCount) scored report or assessment records")
+                    .font(.caption2)
+                    .foregroundStyle(IBColors.secondaryText)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
     private func featureRow(icon: String, color: Color, title: String, desc: String) -> some View {
         HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(color.opacity(0.1))
-                    .frame(width: 36, height: 36)
-                Image(systemName: icon)
-                    .foregroundStyle(color)
-                    .font(.system(size: 16, weight: .semibold))
-            }
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 38, height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(IBGradient.tint(color))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(color.opacity(0.16), lineWidth: 1)
+                        )
+                )
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.callout.weight(.semibold))
+                    .foregroundStyle(IBColors.ink)
                 Text(desc)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(IBColors.secondaryText)
             }
             Spacer()
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.03)))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .glassCard(cornerRadius: IBRadius.md)
     }
 
     private func subjectRow(_ name: String, _ level: String, _ color: Color) -> some View {
@@ -210,7 +340,6 @@ struct OnboardingView: View {
         isCompleting = true
         IBHaptics.success()
         SyllabusSeeder.seedIfNeeded(context: context)
-        NotificationService.requestPermission()
 
         // Fetch directly instead of relying on the @Query snapshot so a profile
         // inserted by the app launch path is always seen (avoids duplicates).
@@ -223,10 +352,12 @@ struct OnboardingView: View {
             return
         }
 
+        var createdProfile: UserProfile?
         if existingProfiles.isEmpty {
             let profile = UserProfile()
             profile.onboardingCompleted = true
             context.insert(profile)
+            createdProfile = profile
         } else {
             for profile in existingProfiles {
                 profile.onboardingCompleted = true
@@ -236,7 +367,11 @@ struct OnboardingView: View {
         do {
             try context.save()
         } catch {
-            context.rollback()
+            // Undo only the profile we just created; a failed save must not
+            // roll back unrelated pending work in the shared context.
+            if let createdProfile {
+                context.delete(createdProfile)
+            }
             onboardingError = error.localizedDescription
         }
         isCompleting = false
