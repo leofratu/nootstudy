@@ -3,7 +3,7 @@ import Foundation
 
 /// Combines live mastery with the highest step ever reached. Rank never
 /// regresses; decay surfaces as a fading state instead.
-struct RankProgress: Sendable, Equatable {
+nonisolated struct RankProgress: Sendable, Equatable {
     let liveMastery: Double
     let achieved: RankStep
 

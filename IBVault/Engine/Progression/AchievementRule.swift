@@ -11,7 +11,7 @@ struct AchievementContext: Sendable {
 }
 
 /// A rule, serialised onto `Achievement.ruleRaw` so the model stays storable.
-enum AchievementRule: Equatable, Sendable {
+nonisolated enum AchievementRule: Equatable, Sendable {
     case cardsReviewed(Int)
     case streakDays(Int)
     case totalXP(Int)
@@ -66,7 +66,7 @@ enum AchievementRule: Equatable, Sendable {
     }
 }
 
-enum AchievementEvaluator {
+nonisolated enum AchievementEvaluator {
     /// Unlocks every newly satisfied achievement and returns only those that
     /// changed, so callers can celebrate without re-announcing old unlocks.
     @discardableResult

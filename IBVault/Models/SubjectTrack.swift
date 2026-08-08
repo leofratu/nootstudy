@@ -4,7 +4,7 @@ import SwiftData
 /// Cached progression state for one subject. Recomputed from review history by
 /// the engine; never authoritative on its own.
 @Model
-final class SubjectTrack {
+nonisolated final class SubjectTrack {
     var id: UUID
     var subjectName: String
     var cachedMastery: Double

@@ -10,6 +10,7 @@ struct UserProfileProgressionTests {
         let profile = UserProfile()
         #expect(profile.achievedStep == RankStep(ordinal: 0))
         #expect(profile.totalXP == 0)
+        #expect(profile.targetIBScore == 40)
     }
 
     @Test("Recording XP never changes rank")

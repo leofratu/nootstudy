@@ -5,7 +5,7 @@ import SwiftData
 /// onboarding calibration, editable afterwards from the subject drill-down.
 /// Read by the mastery heatmap and the study planner.
 @Model
-final class UnitState {
+nonisolated final class UnitState {
     var id: UUID
     var subjectName: String
     var unitName: String

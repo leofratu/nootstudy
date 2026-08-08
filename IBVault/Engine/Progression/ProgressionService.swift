@@ -18,12 +18,14 @@ enum ProgressionService: Sendable {
         let profiles: [UserProfile]
         let achievements: [Achievement]
         let tracks: [SubjectTrack]
+        let studySessions: [StudySession]
         do {
             subjects = try context.fetch(FetchDescriptor<Subject>())
             reviews = try context.fetch(FetchDescriptor<ReviewSession>())
             profiles = try context.fetch(FetchDescriptor<UserProfile>())
             achievements = try context.fetch(FetchDescriptor<Achievement>())
             tracks = try context.fetch(FetchDescriptor<SubjectTrack>())
+            studySessions = (try? context.fetch(FetchDescriptor<StudySession>())) ?? []
         } catch {
             // A partial read must not recompute from half a store: that could
             // overwrite good cached mastery with zeroes. Abort the pass so a
@@ -33,14 +35,30 @@ enum ProgressionService: Sendable {
             #endif
             return []
         }
+        // Academic imports were added after the core progression store. Treat
+        // them as optional evidence so an older or deliberately narrow model
+        // container can still recompute from cards and review history.
+        let assessments = (try? context.fetch(FetchDescriptor<AcademicAssessment>())) ?? []
+        let mappings = (try? context.fetch(FetchDescriptor<AcademicAssessmentMapping>())) ?? []
+        let reports = (try? context.fetch(FetchDescriptor<AcademicReportSnapshot>())) ?? []
         guard let profile = profiles.first else { return [] }
 
         var events: [ProgressionEvent] = []
         let snapshots = SnapshotBuilder.snapshots(for: subjects, reviews: reviews)
+        var masteryBySubject: [String: Double] = [:]
 
         // Per-subject tracks.
-        for snapshot in snapshots {
-            let mastery = MasteryCalculator.mastery(for: snapshot, now: now)
+        for (subject, snapshot) in zip(subjects, snapshots) {
+            let mastery = ProgressEvidenceService.score(
+                subjectName: subject.name,
+                courseLevel: subject.level,
+                cards: subject.cards,
+                assessments: assessments,
+                mappings: mappings,
+                reports: reports,
+                workSessions: studySessions
+            ).blendedMastery ?? MasteryCalculator.mastery(for: snapshot, now: now)
+            masteryBySubject[subject.name] = mastery
             let track = tracks.first { $0.subjectName == snapshot.name }
                 ?? {
                     let created = SubjectTrack(subjectName: snapshot.name)
@@ -58,7 +76,12 @@ enum ProgressionService: Sendable {
         }
 
         // Global rank.
-        let globalMastery = MasteryCalculator.globalMastery(for: snapshots, now: now)
+        let totalWeight = subjects.reduce(0.0) { $0 + SubjectLevel(rawLevel: $1.level).masteryWeight }
+        let globalMastery = totalWeight > 0
+            ? subjects.reduce(0.0) {
+                $0 + (masteryBySubject[$1.name] ?? 0) * SubjectLevel(rawLevel: $1.level).masteryWeight
+            } / totalWeight
+            : 0
         let previousGlobal = profile.achievedStep
         if let advanced = profile.advanceRank(liveMastery: globalMastery) {
             events.append(.rankUp(from: previousGlobal, to: advanced))
