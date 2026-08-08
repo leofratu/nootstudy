@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class Grade {
+nonisolated final class Grade {
     var id: UUID
     var component: String // "Paper 1", "Paper 2", "IA", "EE", "TOK", "Overall"
     var score: Int // 1-7
