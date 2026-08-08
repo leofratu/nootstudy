@@ -45,6 +45,20 @@ struct CardGeneratorServiceTests {
         #expect(profile.skillMix.contains(.evaluate))
     }
 
+    @Test("Approved low assessment evidence prioritizes foundation cards")
+    func lowAssessmentEvidenceProfile() {
+        let subject = Subject(name: "Chemistry", level: "HL", accentColorHex: "EF4444")
+        let profile = CardGeneratorService.adaptiveProfile(
+            for: subject,
+            topicName: "Atomic structure",
+            subtopic: "Electron configurations",
+            evidence: 0.42
+        )
+
+        #expect(profile.difficulty == .foundation)
+        #expect(profile.reason.contains("school evidence"))
+    }
+
     @Test("Generated JSON preserves metadata and normalizes math delimiters")
     func parsesRichCardPayload() throws {
         let subject = Subject(name: "Mathematics AA", level: "SL", accentColorHex: "3B82F6")
@@ -64,6 +78,126 @@ struct CardGeneratorServiceTests {
         #expect(cards[0].cognitiveSkill == .apply)
         #expect(cards[0].sourceURL != nil)
         #expect(cards[0].generationPromptVersion == CardGeneratorService.promptVersion)
+    }
+
+    @Test("Instruction-only answers are rejected")
+    func rejectsInstructionOnlyAnswers() {
+        #expect(!CardGeneratorService.isUsefulAnswer(
+            front: "How should an externality diagram be used?",
+            back: "Draw a diagram, label the axes, and explain it."
+        ))
+        #expect(CardGeneratorService.isUsefulAnswer(
+            front: "Why does a negative externality cause overproduction?",
+            back: "Marginal private cost is below marginal social cost because producers do not pay the external cost, so the market quantity exceeds the socially efficient quantity."
+        ))
+    }
+
+    @Test("Generated cards collapse repeated question fronts")
+    func repeatedFrontsAreDeduplicated() throws {
+        let subject = Subject(name: "Economics", level: "HL", accentColorHex: "F59E0B")
+        let response = #"[{"front":"What is CAC?","back":"CAC is total acquisition spend divided by new customers."},{"front":"What is CAC?","back":"Customer acquisition cost measures acquisition spend per acquired customer."}]"#
+        let cards = try CardGeneratorService.parseFlashcards(
+            from: response,
+            subject: subject,
+            topicName: "Startup metrics",
+            subtopic: "CAC"
+        )
+        #expect(cards.count == 1)
+    }
+
+    @MainActor
+    @Test("Local starter cards keep an active session usable without an AI response")
+    func localStarterCardsProvideScopedFallback() {
+        let subject = Subject(name: "Biology", level: "HL", accentColorHex: "10B981")
+        let profile = CardGeneratorService.adaptiveProfile(
+            for: subject,
+            topicName: "Cells and Cell Structure",
+            subtopic: "Prokaryotic cell structure"
+        )
+
+        let cards = CardGeneratorService.localStarterCards(
+            subject: subject,
+            topicName: "Cells and Cell Structure",
+            subtopic: "Prokaryotic cell structure",
+            count: 5,
+            profile: profile
+        )
+
+        #expect(cards.count == 5)
+        #expect(cards.allSatisfy { $0.topicName == "Cells and Cell Structure" })
+        #expect(cards.allSatisfy { $0.subtopic == "Prokaryotic cell structure" })
+        #expect(cards.allSatisfy { $0.generationSource == "Local syllabus starter" })
+        #expect(Set(cards.map(\.front)).count == 5)
+
+        let nextBatch = CardGeneratorService.localStarterCards(
+            subject: subject,
+            topicName: "Cells and Cell Structure",
+            subtopic: "Prokaryotic cell structure",
+            count: 5,
+            startingIndex: cards.count,
+            profile: profile
+        )
+        #expect(Set(cards.map(\.front)).isDisjoint(with: Set(nextBatch.map(\.front))))
+    }
+
+    @Test("Local practice paper remains scoped and includes marked questions")
+    func localPracticePaperFallback() {
+        let paper = PracticeExamFallback.markdown(
+            subject: "Economics",
+            level: "HL",
+            unit: "Microeconomics",
+            topics: ["Market failure"],
+            subtopics: ["Negative externalities"]
+        )
+
+        #expect(paper.contains("Economics HL Practice Set"))
+        #expect(paper.contains("Negative externalities"))
+        #expect(paper.contains("[8 marks]"))
+        #expect(paper.contains("Mark scheme and self-check"))
+    }
+
+    @Test("IB exam rubric selects subject criteria and totals paper marks")
+    func ibExamRubricUsesSubjectCriteria() {
+        let paper = "Question one [3 marks]\nQuestion two [7 marks]\nEssay [10 marks]"
+        let rubric = IBExamRubric.markdown(for: "Economics", level: "HL")
+
+        #expect(IBExamRubric.totalMarks(in: paper) == 20)
+        #expect(rubric.contains("Application"))
+        #expect(rubric.contains("Evaluation"))
+        #expect(IBExamRubric.shortName(for: "Russian A Literature").contains("A-D"))
+    }
+
+    @Test("Local IB grader returns a bounded mark and improvement actions")
+    func localIBExamGraderProducesFeedback() {
+        let feedback = IBExamRubric.localFeedback(
+            subject: "Economics",
+            level: "HL",
+            answer: "A negative externality creates an external cost because third parties are affected. For example, pollution creates health costs. Therefore marginal social cost exceeds marginal private cost. However, a tax depends on accurate information and may affect stakeholders differently. Overall, regulation may work better where measurement is difficult.",
+            totalMarks: 20,
+            scopeTerms: ["Market failure", "Negative externalities"]
+        )
+
+        #expect(feedback.contains("Estimated mark:"))
+        #expect(feedback.contains("Approximate IB grade:"))
+        #expect(feedback.contains("Criterion grading"))
+        #expect(feedback.contains("Next actions"))
+        #expect(!feedback.contains("| Criterion |"))
+    }
+
+    @Test("Unsupported Markdown tables become readable rubric lists")
+    func rubricTableFormattingIsDisplaySafe() {
+        let source = """
+        | Criterion | Focus | Marks |
+        |---|---|---:|
+        | A Language | Range and accuracy | 6 |
+        | B Message | Development and relevance | 6 |
+        """
+        let converted = IBExamRubric.displaySafeMarkdown(source)
+
+        #expect(converted.contains("A Language"))
+        #expect(converted.contains("**Focus:** Range and accuracy"))
+        #expect(converted.contains("**Marks:** 6"))
+        #expect(!converted.contains("|---|"))
     }
 
     @MainActor
@@ -260,6 +394,16 @@ struct CurriculumProgressTests {
 
     @Test("Study session backups retain subunit scope")
     func studySessionBackupRetainsSubunitScope() {
+        let planID = UUID()
+        let cardID = UUID()
+        let entry = StudySessionSubunitEvidence(
+            topicName: "Demand",
+            subtopicName: "The law of demand",
+            minutes: 40,
+            confidenceRating: 4,
+            cardsReviewed: 3,
+            correctCount: 2
+        )
         let original = StudySession(
             subjectName: "Economics",
             topicsCovered: "Demand",
@@ -267,13 +411,21 @@ struct CurriculumProgressTests {
             startDate: Date().addingTimeInterval(-2400),
             cardsReviewed: 3,
             correctCount: 2,
-            xpEarned: 12
+            xpEarned: 12,
+            sourcePlanID: planID,
+            notes: "Compare the welfare-loss diagram with the tax response.",
+            subunitEvidence: [entry],
+            reviewedCardIDs: [cardID]
         )
 
         let restored = StudySessionBackup(from: original).toModel()
 
         #expect(restored.subtopicsCovered == "The law of demand")
         #expect(restored.studyScope.subtopicNames == ["The law of demand"])
+        #expect(restored.sourcePlanID == planID)
+        #expect(restored.notes == "Compare the welfare-loss diagram with the tax response.")
+        #expect(restored.subunitEvidence == [entry])
+        #expect(restored.reviewedCardIDs == [cardID])
     }
 }
 
@@ -360,6 +512,214 @@ struct ARIAMessageFormattingTests {
         #expect(sections.contains(.listItem(marker: "•", text: "Practise for 25 - 30 minutes")))
         #expect(sections.contains(.listItem(marker: "1.", text: "Check the markscheme")))
     }
+
+    @Test("Inline math stays inside its sentence")
+    func rendersInlineMath() {
+        let sections = FormattedMessageFormatter.sections(from: "Use $F = ma$ to solve the force.")
+
+        #expect(sections == [.markdown("Use F = ma to solve the force.")])
+    }
+
+    @Test("Explicit display math uses the dedicated math surface")
+    func rendersDisplayMath() {
+        let sections = FormattedMessageFormatter.sections(from: "Before\n\n$$\\frac{a}{b} = c$$\n\nAfter")
+
+        #expect(sections == [.markdown("Before"), .mathBlock("\\frac{a}{b} = c"), .markdown("After")])
+    }
+
+    @Test("Multiple inline expressions preserve natural prose flow")
+    func preservesMultipleInlineExpressions() {
+        let sections = FormattedMessageFormatter.sections(from: "From $v = u + at$, derive $a = \\frac{v-u}{t}$ directly.")
+
+        #expect(sections == [.markdown("From v = u + at, derive a = (v-u)/t directly.")])
+    }
+
+    @Test("Markdown tables become readable labelled rows")
+    func convertsMarkdownTables() {
+        let source = """
+        | Criterion | Marks | Focus |
+        |---|---:|---|
+        | Language | 6 | Range and accuracy |
+        | Message | 6 | Relevance and examples |
+        """
+
+        let rendered = MessageRenderingPolicy.displaySafeMarkdown(source)
+        #expect(rendered.contains("**Language**"))
+        #expect(rendered.contains("**Marks:** 6"))
+        #expect(rendered.contains("**Focus:** Range and accuracy"))
+        #expect(!rendered.contains("|---|"))
+    }
+
+    @Test("Diagram blocks decode into native canvas data")
+    func decodesDiagramBlock() {
+        let fence = String(repeating: "\u{60}", count: 3)
+        let source = """
+        \(fence)diagram
+        {"type":"coordinate","title":"Parabola","xLabel":"x","yLabel":"y","series":[{"label":"y = x squared","points":[[-1,1],[0,0],[1,1]]}]}
+        \(fence)
+        """
+
+        let sections = FormattedMessageFormatter.sections(from: source)
+        #expect(sections.contains(.diagram(ARIADiagramSpec(
+            type: "coordinate",
+            title: "Parabola",
+            xLabel: "x",
+            yLabel: "y",
+            series: [.init(label: "y = x squared", color: nil, points: [[-1, 1], [0, 0], [1, 1]])],
+            nodes: nil,
+            edges: nil,
+            simulation: nil,
+            particleCount: nil
+        ))))
+    }
+
+    @Test("Canonical canvas fence decodes validated native content")
+    func decodesCanonicalCanvasFence() {
+        let fence = String(repeating: "\u{60}", count: 3)
+        let source = """
+        \(fence)aria-canvas
+        {"type":"canvas","title":"Wave","canvas":{"elements":[{"id":"wave","kind":"polyline","color":"#2563EB","points":[[0.1,0.5],[0.5,0.2],[0.9,0.5]]}]}}
+        \(fence)
+        """
+
+        let sections = FormattedMessageFormatter.sections(from: source)
+        #expect(sections.count == 1)
+        guard case .diagram(let diagram) = sections[0] else {
+            Issue.record("Expected a native diagram")
+            return
+        }
+        #expect(diagram.type == "canvas")
+        #expect(diagram.canvas?.elements.first?.points == [[0.1, 0.5], [0.5, 0.2], [0.9, 0.5]])
+    }
+
+    @Test("Canvas contract rejects controls referenced by no definition")
+    func rejectsUnknownCanvasControl() {
+        let source = """
+        {"type":"canvas","canvas":{"elements":[{"id":"bob","kind":"circle","x":0.5,"y":0.5,"speedControl":"missing"}]}}
+        """
+
+        #expect(ARIAContentContract.decodeDiagram(from: source, language: "aria-canvas") == nil)
+    }
+
+    @Test("Canvas prompt uses a real canonical fence")
+    func canvasPromptUsesCanonicalFence() {
+        #expect(ARIAContentContract.systemInstruction.contains("```aria-canvas"))
+        #expect(!ARIAContentContract.systemInstruction.contains("(diagramFence)"))
+        #expect(ARIAContentContract.systemInstruction.contains(ARIAContentContract.toolName))
+    }
+
+    @Test("Diagram JSON blocks render even when the model uses the json fence")
+    func decodesDiagramJSONFence() {
+        let fence = String(repeating: "\u{60}", count: 3)
+        let source = """
+        \(fence)json
+        {"type":"flow","title":"Transport","nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"edges":[{"from":"a","to":"b","label":"causes"}]}
+        \(fence)
+        """
+
+        let sections = FormattedMessageFormatter.sections(from: source)
+        #expect(sections.contains(.diagram(ARIADiagramSpec(
+            type: "flow",
+            title: "Transport",
+            xLabel: nil,
+            yLabel: nil,
+            series: nil,
+            nodes: [.init(id: "a", label: "A", x: nil, y: nil, color: nil), .init(id: "b", label: "B", x: nil, y: nil, color: nil)],
+            edges: [.init(from: "a", to: "b", label: "causes")],
+            simulation: nil,
+            particleCount: nil
+        ))))
+    }
+
+    @Test("Simulation blocks decode into a live canvas specification")
+    func decodesSimulationDiagram() {
+        let fence = String(repeating: "\u{60}", count: 3)
+        let source = """
+        \(fence)diagram
+        {"type":"simulation","title":"Electron shells","simulation":"atoms","particleCount":12}
+        \(fence)
+        """
+
+        let sections = FormattedMessageFormatter.sections(from: source)
+        #expect(sections.contains(.diagram(ARIADiagramSpec(
+            type: "simulation",
+            title: "Electron shells",
+            xLabel: nil,
+            yLabel: nil,
+            series: nil,
+            nodes: nil,
+            edges: nil,
+            simulation: "atoms",
+            particleCount: 12
+        ))))
+    }
+
+    @Test("Legacy canvas refusals still receive a usable native simulation")
+    func recoversSimulationFromCanvasRefusal() {
+        let sections = FormattedMessageFormatter.sections(from: """
+        I can't embed a fully executable canvas with a velocity slider in this chat.
+        A compatible viewer can render canvas-ready particle data.
+        """)
+
+        #expect(sections.contains(.diagram(ARIADiagramSpec(
+            type: "simulation",
+            title: "Particle simulation",
+            xLabel: nil,
+            yLabel: nil,
+            series: nil,
+            nodes: nil,
+            edges: nil,
+            simulation: "particles",
+            particleCount: 20
+        ))))
+    }
+
+    @Test("Canvas blocks decode arbitrary scene elements and interactive controls")
+    func decodesGenerativeCanvas() {
+        let fence = String(repeating: "\u{60}", count: 3)
+        let source = """
+        \(fence)diagram
+        {"type":"canvas","title":"Pendulum","canvas":{"controls":[{"id":"amplitude","label":"Angle","min":0.02,"max":0.3,"value":0.12,"unit":"rad"}],"elements":[{"id":"bob","kind":"circle","x":0.5,"y":0.35,"radius":0.04,"color":"#2563EB","animation":"sine","amplitudeControl":"amplitude"}]}}
+        \(fence)
+        """
+
+        let sections = FormattedMessageFormatter.sections(from: source)
+        #expect(sections.contains(.diagram(ARIADiagramSpec(
+            type: "canvas",
+            title: "Pendulum",
+            xLabel: nil,
+            yLabel: nil,
+            series: nil,
+            nodes: nil,
+            edges: nil,
+            simulation: nil,
+            particleCount: nil,
+            canvas: .init(
+                elements: [.init(
+                    id: "bob",
+                    kind: "circle",
+                    x: 0.5,
+                    y: 0.35,
+                    x2: nil,
+                    y2: nil,
+                    width: nil,
+                    height: nil,
+                    radius: 0.04,
+                    label: nil,
+                    color: "#2563EB",
+                    animation: "sine",
+                    amplitude: nil,
+                    speed: nil,
+                    phase: nil,
+                    speedControl: nil,
+                    amplitudeControl: "amplitude",
+                    radiusControl: nil,
+                    visibilityControl: nil
+                )],
+                controls: [.init(id: "amplitude", label: "Angle", min: 0.02, max: 0.3, value: 0.12, unit: "rad", kind: nil)]
+            )
+        ))))
+    }
 }
 
 @Suite("AI Configuration Tests")
@@ -406,6 +766,50 @@ struct ARIAChatPersistenceTests {
         #expect(ChatMessageRole(storedValue: modelRole.storedValue)?.isConversation == true)
         #expect(ChatMessageRole(storedValue: failureRole.storedValue)?.isConversation == false)
         #expect(ChatMessageRole(storedValue: dismissedFailure.storedValue)?.isFailure == false)
+    }
+
+    @Test("Every role shape round-trips byte-for-byte through the stored string")
+    func allRolesRoundTripThroughStoredValue() {
+        let roles: [ChatMessageRole] = [
+            .user,
+            .model,
+            .failure(provider: .gemini),
+            .failure(provider: .codexCLI, needsAuthentication: true),
+            .cancelled(provider: .junali),
+            .dismissed(underlying: .user),
+            .dismissed(underlying: .failure(provider: .gemini, needsAuthentication: true)),
+            .dismissed(underlying: .dismissed(underlying: .model))
+        ]
+
+        for role in roles {
+            #expect(ChatMessageRole(storedValue: role.storedValue) == role,
+                    "stored value '\(role.storedValue)' must parse back to the original role")
+        }
+    }
+
+    @Test("isConversation is true only for user and model turns")
+    func isConversationSpansEveryRoleShape() {
+        let user = ChatMessageRole.user
+        let model = ChatMessageRole.model
+        let failure = ChatMessageRole.failure(provider: .gemini)
+        let cancelled = ChatMessageRole.cancelled(provider: .junali)
+        let dismissed = ChatMessageRole.dismissed(underlying: .model)
+
+        #expect(user.isConversation)
+        #expect(model.isConversation)
+        #expect(!failure.isConversation)
+        #expect(!cancelled.isConversation)
+        #expect(!dismissed.isConversation)
+    }
+
+    @Test("needsCodexAuthentication is true only for a Codex authentication failure")
+    func needsCodexAuthenticationIsNarrow() {
+        #expect(ChatMessageRole.failure(provider: .codexCLI, needsAuthentication: true).needsCodexAuthentication)
+        #expect(!ChatMessageRole.failure(provider: .codexCLI).needsCodexAuthentication)
+        #expect(!ChatMessageRole.failure(provider: .gemini, needsAuthentication: true).needsCodexAuthentication)
+        #expect(!ChatMessageRole.cancelled(provider: .codexCLI).needsCodexAuthentication)
+        #expect(!ChatMessageRole.user.needsCodexAuthentication)
+        #expect(!ChatMessageRole.dismissed(underlying: .failure(provider: .codexCLI, needsAuthentication: true)).needsCodexAuthentication)
     }
 
     @MainActor
