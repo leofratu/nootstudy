@@ -7,21 +7,26 @@ struct StudyPlannerView: View {
     @Query(sort: \StudySession.startDate, order: .reverse) private var recentSessions: [StudySession]
     @Query private var subjects: [Subject]
     @State private var showNewSession = false
+    @State private var selectedScheduleSlot: Date?
     @State private var selectedPlan: StudyPlan?
     @State private var selectedReviewSession: StudySession?
+    @State private var planPendingDeletion: StudyPlan?
 
     private var upcomingPlans: [StudyPlan] {
         // Today's plans are shown in their own section; excluding them here
         // prevents a same-day plan appearing in both "Today" and "Upcoming".
         allPlans.filter {
-            ($0.isUpcoming || $0.isActive) && !Calendar.current.isDateInToday($0.scheduledDate)
+            !$0.isFollowUpReview && ($0.isUpcoming || $0.isActive) &&
+                !IBLocalClock.calendar.isDate($0.scheduledDate, inSameDayAs: IBLocalClock.now)
         }
     }
 
     private var todayPlans: [StudyPlan] {
-        let today = Calendar.current.startOfDay(for: Date())
-        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today) ?? today
-        return allPlans.filter { $0.scheduledDate >= today && $0.scheduledDate < tomorrow && !$0.isCompleted }
+        let today = IBLocalClock.calendar.startOfDay(for: IBLocalClock.now)
+        let tomorrow = IBLocalClock.calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        return allPlans.filter {
+            !$0.isFollowUpReview && $0.scheduledDate >= today && $0.scheduledDate < tomorrow && !$0.isCompleted
+        }
     }
 
     private var completedPlans: [StudyPlan] {
@@ -29,7 +34,7 @@ struct StudyPlannerView: View {
     }
 
     private var weekSessionsCount: Int {
-        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast
+        let weekAgo = IBLocalClock.calendar.date(byAdding: .day, value: -7, to: IBLocalClock.now) ?? .distantPast
         return recentSessions.filter { $0.startDate >= weekAgo }.count
     }
 
@@ -45,6 +50,7 @@ struct StudyPlannerView: View {
                         tint: IBColors.electricBlue
                     ) {
                         Button {
+                            selectedScheduleSlot = nil
                             showNewSession = true
                             IBHaptics.medium()
                         } label: {
@@ -68,10 +74,13 @@ struct StudyPlannerView: View {
                     }
 
                     // Calendar
-                    StudyCalendarView(plans: allPlans) { plan in
+                    StudyCalendarView(plans: allPlans.filter { !$0.isFollowUpReview }) { plan in
                         openPlan(plan)
-                    } onDeletePlan: { plan, scheduleReviews in
-                        deletePlan(plan, scheduleReviews: scheduleReviews)
+                    } onDeletePlan: { plan in
+                        planPendingDeletion = plan
+                    } onSchedule: { date in
+                        selectedScheduleSlot = date
+                        showNewSession = true
                     }
 
                     // Upcoming
@@ -96,8 +105,10 @@ struct StudyPlannerView: View {
             }
             .background(IBColors.canvas)
             .navigationTitle("Study Planner")
-            .sheet(isPresented: $showNewSession) {
-                NewStudySessionView()
+            .sheet(isPresented: $showNewSession, onDismiss: {
+                selectedScheduleSlot = nil
+            }) {
+                NewStudySessionView(initialScheduledDate: selectedScheduleSlot)
             }
             .sheet(item: $selectedPlan, onDismiss: {
                 selectedPlan = nil
@@ -121,74 +132,25 @@ struct StudyPlannerView: View {
                     reviewScopeSession: session
                 )
             }
-        }
-    }
-
-    // MARK: - Hero
-    private var heroCard: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 16) {
-                // Left info
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Study Sessions")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-
-                    if todayPlans.isEmpty && upcomingPlans.isEmpty {
-                        Text("Plan your study time. ARIA creates\npersonalised study plans for each session.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(2)
-                    } else {
-                        let todayCount = todayPlans.count
-                        let upCount = upcomingPlans.count
-                        Text("\(todayCount) today · \(upCount) upcoming")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
+            .confirmationDialog(
+                "Delete this study block?",
+                isPresented: Binding(
+                    get: { planPendingDeletion != nil },
+                    set: { if !$0 { planPendingDeletion = nil } }
+                ),
+                presenting: planPendingDeletion
+            ) { plan in
+                Button("Delete block", role: .destructive) {
+                    deletePlan(plan)
+                    planPendingDeletion = nil
                 }
-
-                Spacer()
-
-                // Stats ring
-                if !recentSessions.isEmpty {
-                    let weekSessions = recentSessions.filter {
-                        $0.startDate > (Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? .distantPast)
-                    }.count
-                    VStack(spacing: 4) {
-                        ProgressRing(
-                            progress: min(Double(weekSessions) / 7.0, 1.0),
-                            lineWidth: 5,
-                            size: 52,
-                            color: IBColors.electricBlue
-                        )
-                        Text("\(weekSessions)/7 this week")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
+                Button("Cancel", role: .cancel) {
+                    planPendingDeletion = nil
                 }
-
-                Button {
-                    showNewSession = true
-                    IBHaptics.medium()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("New Session")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
+            } message: { plan in
+                Text("\(plan.subjectName) · \(plan.scheduleLabel). Saved flashcards and completed study history will remain.")
             }
-            .padding(20)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
-        )
     }
 
     // MARK: - Today
@@ -295,11 +257,7 @@ struct StudyPlannerView: View {
                 }
             }
             .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(0.03), radius: 4, y: 1)
-            )
+            .glassCard(cornerRadius: IBRadius.md)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -433,7 +391,7 @@ struct StudyPlannerView: View {
         case "Business Management": return IBColors.businessColor
         case "Advanced Mathematics": return Color(hex: "8B5CF6")
         case "Fundamentals of the Universe": return Color(hex: "6366F1")
-        case "Startups & Venture Capital": return Color(hex: "0EA5E9")
+        case "Life", "Founder Academy", "Startups & Venture Capital": return Color(hex: "0EA5E9")
         default: return .gray
         }
     }
@@ -443,76 +401,15 @@ struct StudyPlannerView: View {
         IBHaptics.light()
     }
 
-    private func deletePlan(_ plan: StudyPlan, scheduleReviews: Bool) {
-        // "Delete & Add Review" schedules follow-up reviews first; plain
-        // "Delete Session" removes the plan (and its review chain) without them.
-        if scheduleReviews && !plan.isFollowUpReview {
-            scheduleSpacedReviews(for: plan)
-        }
-
+    private func deletePlan(_ plan: StudyPlan) {
         context.delete(plan)
         do {
             try context.save()
         } catch {
-            // Undo the deletion (and any review plans scheduled above) so the
-            // plan is not lost to a half-persisted state; the delete dialog can
-            // simply be reopened to retry.
-            context.rollback()
+            context.insert(plan)
             return
         }
         IBHaptics.medium()
-    }
-
-    private func scheduleSpacedReviews(for plan: StudyPlan) {
-        let cal = Calendar.current
-        let endDate = plan.scheduledDate
-        let existingPlans = (try? context.fetch(FetchDescriptor<StudyPlan>())) ?? []
-        
-        let reviewDays = plan.reviewScheduleOffsets
-        
-        for days in reviewDays {
-            guard let date = cal.date(byAdding: .day, value: days, to: endDate),
-                  let scheduledAt = cal.date(bySettingHour: 16, minute: 0, second: 0, of: date) else { continue }
-
-            let duplicateExists = existingPlans.contains {
-                $0.isFollowUpReview &&
-                !$0.isCompleted &&
-                $0.subjectName == plan.subjectName &&
-                $0.topicName == plan.topicName &&
-                $0.subtopicName == plan.subtopicName &&
-                $0.reviewIntervalDays == days &&
-                Calendar.current.isDate($0.scheduledDate, equalTo: scheduledAt, toGranularity: .minute)
-            }
-
-            guard !duplicateExists else { continue }
-            
-            let review = StudyPlan(
-                subjectName: plan.subjectName,
-                topicName: plan.topicName,
-                subtopicName: plan.subtopicName,
-                planMarkdown: """
-                📝 **Spaced Repetition Review**
-
-                Revisit \(plan.selectionSummary) from your session on \(plan.scheduledDate.formatted(date: .abbreviated, time: .omitted)).
-
-                **Quick Recall** (10 min): Try to recall key concepts without notes
-
-                **Review Cards** (15 min): Work through flashcards
-
-                **Practice** (10 min): Attempt one exam-style question
-
-                **Self-Assessment**: Rate your confidence 1-5
-
-                Interval: Day \(days) review
-                """,
-                scheduledDate: scheduledAt,
-                durationMinutes: 30,
-                kind: .followUpReview,
-                reviewIntervalDays: days,
-                reviewScheduleOffsets: []
-            )
-            context.insert(review)
-        }
     }
 
     private func subject(for plan: StudyPlan) -> Subject? {
