@@ -10,28 +10,35 @@ struct NewStudySessionView: View {
     @State private var selectedSubject: Subject?
     @State private var selectedTopics: Set<String> = []
     @State private var selectedSubtopicsByTopic: [String: Set<String>] = [:]
-    @State private var scheduledDate = Date()
+    @State private var scheduledDate = IBLocalClock.nextQuarterHour()
     @State private var durationMinutes = 60
-    @State private var revisitCount = 3
+    @State private var prepareFlashcards = true
     @State private var planMarkdown = ""
+    @State private var planTasks: [StudyPlanTask] = []
     @State private var isGeneratingPlan = false
     @State private var planGenerationFailed = false
     @State private var saveError: String?
     @State private var chatMessages: [(role: String, text: String)] = []
     @State private var chatInput = ""
     @State private var isChatting = false
+    // Bumped whenever the wizard's scope changes or a generation starts, so a
+    // stale in-flight generation can never overwrite the plan for a subject /
+    // topic selection the user has since changed.
+    @State private var planGenerationID = UUID()
+    @State private var hasInitializedSchedule = false
+    private let initialScheduledDate: Date?
 
     private let durations = [30, 45, 60, 90, 120]
-    private let revisitOptions = [0, 1, 2, 3, 4, 5]
-    private let defaultReviewOffsets = [1, 3, 7, 14, 21]
     private static let stepNames = ["Subject", "Topic", "Schedule", "Plan"]
 
     // Static so the schedule step does not allocate a DateFormatter per render.
     private static let endTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
+        IBLocalClock.formatter(dateFormat: "HH:mm")
     }()
+
+    init(initialScheduledDate: Date? = nil) {
+        self.initialScheduledDate = initialScheduledDate
+    }
 
     private var curriculum: [CurriculumUnit] {
         guard let subject = selectedSubject else { return [] }
@@ -64,16 +71,8 @@ struct NewStudySessionView: View {
         return "\(selectedTopicList.count) topics selected"
     }
 
-    // Default schedule: today or tomorrow at 4pm
     private var defaultSchedule: Date {
-        let cal = Calendar.current
-        let now = Date()
-        let hour = cal.component(.hour, from: now)
-        var target = cal.startOfDay(for: now)
-        if hour >= 16 {
-            target = cal.date(byAdding: .day, value: 1, to: target) ?? target
-        }
-        return cal.date(bySettingHour: 16, minute: 0, second: 0, of: target) ?? target
+        IBLocalClock.nextQuarterHour()
     }
 
     var body: some View {
@@ -105,7 +104,7 @@ struct NewStudySessionView: View {
                 // Navigation
                 navigationBar
                     .padding(16)
-                    .background(.ultraThinMaterial)
+                    .background(.bar)
             }
             .background(.background)
             .navigationTitle("New Study Session")
@@ -115,7 +114,9 @@ struct NewStudySessionView: View {
                 }
             }
             .onAppear {
-                scheduledDate = defaultSchedule
+                guard !hasInitializedSchedule else { return }
+                hasInitializedSchedule = true
+                scheduledDate = initialScheduledDate ?? defaultSchedule
             }
             .alert("Could Not Save Plan", isPresented: Binding(
                 get: { saveError != nil },
@@ -167,8 +168,13 @@ struct NewStudySessionView: View {
                         selectedTopics.removeAll()
                         selectedSubtopicsByTopic.removeAll()
                         planMarkdown = ""
+                        planTasks = []
                         chatMessages.removeAll()
+                        invalidatePlanGeneration()
                         IBHaptics.light()
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            step = 1
+                        }
                     } label: {
                         HStack(spacing: 10) {
                             Circle()
@@ -182,6 +188,8 @@ struct NewStudySessionView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(14)
+                        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+                        .contentShape(Rectangle())
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(selectedSubject?.id == subject.id ? Color(hex: subject.accentColorHex).opacity(0.08) : Color.clear)
@@ -192,6 +200,7 @@ struct NewStudySessionView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(selectedSubject?.id == subject.id ? .isSelected : [])
                 }
             }
         }
@@ -329,13 +338,37 @@ struct NewStudySessionView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("When do you want to study?")
                 .font(.title3.bold())
-            Text("School finishes at 4pm — we'll default to after school.")
+            Text("Times use your Mac's current clock and time zone.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 12) {
-                DatePicker("Date & Time", selection: $scheduledDate, displayedComponents: [.date, .hourAndMinute])
-                    .datePickerStyle(.graphical)
+                HStack(spacing: 12) {
+                    DatePicker("Date", selection: $scheduledDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+
+                    DatePicker("Start", selection: $scheduledDate, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact)
+                }
+
+                HStack(spacing: 8) {
+                    Button("Start now") {
+                        scheduledDate = IBLocalClock.nextQuarterHour()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("In 30 min") {
+                        let base = IBLocalClock.nextQuarterHour()
+                        scheduledDate = IBLocalClock.calendar.date(byAdding: .minute, value: 30, to: base) ?? base
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer()
+
+                    Text(IBLocalClock.timeZone.abbreviation(for: scheduledDate) ?? "Local")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
 
                 Divider()
 
@@ -345,47 +378,49 @@ struct NewStudySessionView: View {
                     }
                 }
 
-                HStack(spacing: 4) {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                    Text("Session ends at \(endTimeFormatted)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    Label(startTimeFormatted, systemImage: "play.circle")
+                    Image(systemName: "arrow.right")
+                        .foregroundStyle(.tertiary)
+                    Label(endTimeFormatted, systemImage: "stop.circle")
                 }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+
+                Label(
+                    "Recall is handled by the daily flashcard queue (up to \(ReviewDailyLimitPolicy.maximumCards) cards), not extra calendar sessions.",
+                    systemImage: "rectangle.stack.badge.play"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
                 Divider()
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Picker("Auto revisit count", selection: $revisitCount) {
-                        ForEach(revisitOptions, id: \.self) { count in
-                            Text(count == 0 ? "No auto reviews" : "\(count) review\(count == 1 ? "" : "s")")
-                                .tag(count)
-                        }
-                    }
-
-                    if selectedReviewOffsets.isEmpty {
-                        Text("No follow-up review sessions will be created automatically.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Auto reviews: " + selectedReviewOffsets.map { "Day \($0)" }.joined(separator: ", "))
+                Toggle(isOn: $prepareFlashcards) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Label("Prepare flashcards when the session opens", systemImage: "rectangle.on.rectangle.angled")
+                            .font(.subheadline.weight(.medium))
+                        Text("ARIA will open the scoped flashcard workspace for this session.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
+                .toggleStyle(.switch)
             }
             .padding(16)
             .glassCard()
+            .environment(\.calendar, IBLocalClock.calendar)
+            .environment(\.timeZone, IBLocalClock.timeZone)
         }
     }
 
-    private var endTimeFormatted: String {
-        let end = Calendar.current.date(byAdding: .minute, value: durationMinutes, to: scheduledDate) ?? scheduledDate
-        return Self.endTimeFormatter.string(from: end)
+    private var startTimeFormatted: String {
+        Self.endTimeFormatter.string(from: scheduledDate)
     }
 
-    private var selectedReviewOffsets: [Int] {
-        Array(defaultReviewOffsets.prefix(revisitCount))
+    private var endTimeFormatted: String {
+        let end = IBLocalClock.calendar.date(byAdding: .minute, value: durationMinutes, to: scheduledDate) ?? scheduledDate
+        return Self.endTimeFormatter.string(from: end)
     }
 
     // MARK: - Step 3: Plan
@@ -438,7 +473,6 @@ struct NewStudySessionView: View {
                     }
 
                     FormattedMessageContent(text: planMarkdown)
-                        .textSelection(.enabled)
                         .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .glassCard()
@@ -457,7 +491,6 @@ struct NewStudySessionView: View {
                         HStack(alignment: .top) {
                             if msg.role == "user" { Spacer() }
                             FormattedMessageContent(text: msg.text)
-                                .textSelection(.enabled)
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10)
@@ -481,6 +514,7 @@ struct NewStudySessionView: View {
                         }
                         .buttonStyle(.borderless)
                         .disabled(chatInput.isEmpty || isChatting)
+                        .help("Send message")
                     }
                 }
                 .padding(16)
@@ -543,6 +577,11 @@ struct NewStudySessionView: View {
     private func generatePlan() {
         guard let subject = selectedSubject else { return }
         guard !isGeneratingPlan else { return }
+        // A fresh generation invalidates anything still in flight, so a plan
+        // streamed for an earlier subject/topic selection is discarded if the
+        // user changed scope while it was running.
+        let generationID = UUID()
+        planGenerationID = generationID
         isGeneratingPlan = true
 
         Task {
@@ -550,24 +589,28 @@ struct NewStudySessionView: View {
                 let unitPart = selectedUnitList.isEmpty ? "" : "\nUnits: \(selectedUnitList.joined(separator: ", "))"
                 let subtopicPart = selectedSubtopicList.isEmpty ? "" : "\nFocus subtopics: \(selectedSubtopicList.joined(separator: ", "))"
                 let prompt = """
-                Create a structured study plan for an IB \(subject.level) \(subject.name) student.
+                Create a detailed session plan for an IB \(subject.level) \(subject.name) student.
                 Topics: \(selectedTopicList.joined(separator: ", "))\(unitPart)\(subtopicPart)
                 Duration: \(durationMinutes) minutes
                 Scheduled: \(scheduledDate.formatted())
 
-                Create a practical, time-blocked study plan with:
-                1. **Warm-up** (5 min): Quick recall of key concepts
-                2. **Active Learning** (main block): Specific activities with time allocations
-                3. **Practice** (15-20 min): Exam-style questions or applications
-                4. **Review** (5 min): Summary and spaced repetition card review
-                5. **Key objectives**: What the student should be able to do after this session
+                Return only one valid JSON object containing overview, objectives, and tasks.
+                Every task must contain: id (UUID), title, minutes, activityType,
+                topicName, subtopicName, instructions, successCriterion, and flashcardTarget.
 
-                Make it IB-exam focused. Include specific concepts to cover, practice question types, and mark scheme hints.
-                Keep it concise and actionable — no fluff.
+                Requirements:
+                - Allocate exactly \(durationMinutes) minutes.
+                - Include every selected subunit.
+                - Use at least \(durationMinutes <= 30 ? 4 : (durationMinutes <= 60 ? 6 : (durationMinutes <= 90 ? 8 : 10))) tasks.
+                - Sequence understanding before testing: orient from a trusted resource, build a mental model, retrieve closed-note, correct with feedback, transfer to a new case, then complete an exit ticket.
+                - Include IB command terms and mark-scheme actions where relevant.
+                - Make every task executable without a follow-up question.
                 """
 
                 let systemPrompt = """
-                You are ARIA, an IB study planner. Generate a structured, time-blocked study plan. Be specific about what to study and how. Reference IB exam requirements and mark schemes. Keep it practical and concise.
+                You are ARIA, an IB study planner. Return only valid JSON matching this shape:
+                {"overview":"...","objectives":["..."],"tasks":[{"id":"UUID","title":"...","minutes":10,"activityType":"active-recall","topicName":"...","subtopicName":"...","instructions":"...","successCriterion":"...","flashcardTarget":3}]}
+                Build a complete duration-budgeted session, not a short outline.
                 """
 
                 let response = try await AIProviderService.generateContent(
@@ -575,22 +618,38 @@ struct NewStudySessionView: View {
                     systemInstruction: systemPrompt
                 )
 
+                let decoded = (try? StudyPlanDraft.decode(from: response)) ?? StudyPlanDraft(
+                    overview: "Build reliable recall across the selected scope and finish with a clear next review action.",
+                    objectives: ["Explain the selected ideas without notes", "Apply them to an IB-style task"],
+                    tasks: []
+                )
+                let draft = decoded.normalized(
+                    durationMinutes: durationMinutes,
+                    topicNames: selectedTopicList,
+                    subtopicNames: selectedSubtopicList,
+                    subjectName: subject.name
+                )
+                let renderedPlan = draft.markdown
+
                 ARIAService.recordStudyPlanDraft(
                     subjectName: subject.name,
                     topicName: selectedTopicList.joined(separator: ", "),
                     subtopicName: selectedSubtopicList.joined(separator: ", "),
                     scheduledDate: scheduledDate,
                     durationMinutes: durationMinutes,
-                    planMarkdown: response
+                    planMarkdown: renderedPlan
                 )
 
                 await MainActor.run {
-                    planMarkdown = response
+                    guard generationID == planGenerationID else { return }
+                    planMarkdown = renderedPlan
+                    planTasks = draft.tasks
                     planGenerationFailed = false
                     isGeneratingPlan = false
                 }
             } catch {
                 await MainActor.run {
+                    guard generationID == planGenerationID else { return }
                     planMarkdown = "Failed to generate plan: \(error.localizedDescription)\n\nTry again or write your own plan."
                     planGenerationFailed = true
                     isGeneratingPlan = false
@@ -614,26 +673,38 @@ struct NewStudySessionView: View {
 
                 The user says: \(userMsg)
 
-                Update the study plan based on the user's request. Return the FULL updated plan.
+                Update the plan based on the request and return a replacement JSON object
+                with overview, objectives, and typed tasks. Keep the total at exactly
+                \(durationMinutes) minutes. Preserve these topics: \(selectedTopicList.joined(separator: ", ")).
+                Preserve these subunits: \(selectedSubtopicList.joined(separator: ", ")).
                 """
 
                 let response = try await AIProviderService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You are ARIA. Update the study plan based on user feedback. Return the complete updated plan. Be concise."
+                    systemInstruction: "You are ARIA. Return only a complete valid JSON study plan with overview, objectives, and typed tasks."
                 )
+
+                let draft = try StudyPlanDraft.decode(from: response).normalized(
+                    durationMinutes: durationMinutes,
+                    topicNames: selectedTopicList,
+                    subtopicNames: selectedSubtopicList,
+                    subjectName: selectedSubject?.name ?? ""
+                )
+                let renderedPlan = draft.markdown
 
                 ARIAService.recordStudyPlanRevision(
                     subjectName: selectedSubject?.name ?? "Unknown Subject",
                     topicName: selectedTopicList.joined(separator: ", "),
                     subtopicName: selectedSubtopicList.joined(separator: ", "),
                     userRequest: userMsg,
-                    updatedPlanMarkdown: response,
+                    updatedPlanMarkdown: renderedPlan,
                     sourceReference: "NewStudySessionView.sendChatMessage"
                 )
 
                 await MainActor.run {
                     chatMessages.append((role: "model", text: "Plan updated! ✅"))
-                    planMarkdown = response
+                    planMarkdown = renderedPlan
+                    planTasks = draft.tasks
                     // A successful refine replaces the failed-draft text with a
                     // real plan, so the schedule button must unlock again.
                     planGenerationFailed = false
@@ -658,7 +729,9 @@ struct NewStudySessionView: View {
             planMarkdown: planMarkdown,
             scheduledDate: scheduledDate,
             durationMinutes: durationMinutes,
-            reviewScheduleOffsets: selectedReviewOffsets
+            reviewScheduleOffsets: [],
+            prepareFlashcards: prepareFlashcards,
+            planTasks: planTasks
         )
         context.insert(plan)
 
@@ -689,7 +762,14 @@ struct NewStudySessionView: View {
         selectedSubtopicsByTopic[topicName] ?? []
     }
 
+    private func invalidatePlanGeneration() {
+        planGenerationID = UUID()
+        isGeneratingPlan = false
+        planGenerationFailed = false
+    }
+
     private func toggleTopic(_ topicName: String) {
+        invalidatePlanGeneration()
         if selectedTopics.contains(topicName) {
             selectedTopics.remove(topicName)
             selectedSubtopicsByTopic[topicName] = Set<String>()
@@ -699,6 +779,7 @@ struct NewStudySessionView: View {
     }
 
     private func toggleSubtopic(topic: String, subtopic: String) {
+        invalidatePlanGeneration()
         var subtopics = selectedSubtopics(for: topic)
         if subtopics.contains(subtopic) {
             subtopics.remove(subtopic)
@@ -713,6 +794,7 @@ struct NewStudySessionView: View {
     }
 
     private func toggleUnit(_ unit: CurriculumUnit) {
+        invalidatePlanGeneration()
         if unitTopicsSelected(in: unit) {
             for topic in unit.topics {
                 selectedTopics.remove(topic.name)

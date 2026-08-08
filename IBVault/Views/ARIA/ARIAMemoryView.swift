@@ -63,7 +63,9 @@ struct ARIAMemoryView: View {
                     newNote = ""
                     IBHaptics.success()
                 } catch {
-                    context.rollback()
+                    // Undo only this insert, never the whole shared context
+                    // (which could discard unrelated pending work).
+                    context.delete(memory)
                     persistenceError = error.localizedDescription
                 }
             }
@@ -89,7 +91,9 @@ struct ARIAMemoryView: View {
                         do {
                             try context.save()
                         } catch {
-                            context.rollback()
+                            // Re-insert the item to cancel its pending deletion
+                            // without rolling back unrelated pending work.
+                            context.insert(item)
                             persistenceError = error.localizedDescription
                         }
                     } label: {
@@ -97,6 +101,7 @@ struct ARIAMemoryView: View {
                             .font(.caption)
                     }
                     .buttonStyle(.borderless)
+                    .help("Delete this memory")
                 }
             }
         } header: {

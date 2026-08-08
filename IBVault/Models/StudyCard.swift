@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum ProficiencyLevel: String, Codable, CaseIterable, Sendable {
+nonisolated enum ProficiencyLevel: String, Codable, CaseIterable, Sendable {
     case novice = "Novice"
     case developing = "Developing"
     case proficient = "Proficient"
@@ -26,7 +26,7 @@ enum ProficiencyLevel: String, Codable, CaseIterable, Sendable {
     }
 }
 
-enum RecallQuality: Int, Codable, CaseIterable, Sendable {
+nonisolated enum RecallQuality: Int, Codable, CaseIterable, Sendable {
     case again = 0
     case hard = 2
     case good = 3
@@ -42,7 +42,7 @@ enum RecallQuality: Int, Codable, CaseIterable, Sendable {
     }
 }
 
-enum CardDifficulty: String, Codable, CaseIterable, Identifiable, Sendable {
+nonisolated enum CardDifficulty: String, Codable, CaseIterable, Identifiable, Sendable {
     case foundation = "Foundation"
     case standard = "Standard"
     case exam = "Exam"
@@ -51,7 +51,7 @@ enum CardDifficulty: String, Codable, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 }
 
-enum CardCognitiveSkill: String, Codable, CaseIterable, Identifiable, Sendable {
+nonisolated enum CardCognitiveSkill: String, Codable, CaseIterable, Identifiable, Sendable {
     case recall = "Recall"
     case explain = "Explain"
     case apply = "Apply"
@@ -62,18 +62,30 @@ enum CardCognitiveSkill: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 @Model
-final class StudyCard {
+nonisolated final class StudyCard {
     var id: UUID
     var topicName: String
     var subtopic: String
     var front: String
     var back: String
 
-    // SM-2 Fields
+    // Compatibility fields retained for cards created before FSRS migration.
     var easeFactor: Double
     var interval: Int  // days
     var repetitions: Int
     var nextReviewDate: Date
+
+    // FSRS fields are optional so cards created by earlier app versions can be
+    // upgraded in place. `nextReviewDate` remains the shared queue contract.
+    var fsrsStability: Double?
+    var fsrsDifficulty: Double?
+    var fsrsElapsedDays: Double?
+    var fsrsScheduledDays: Double?
+    var fsrsRepetitions: Int?
+    var fsrsLapses: Int?
+    var fsrsStateRaw: Int?
+    var fsrsLastReviewDate: Date?
+    var fsrsSchedulerVersion: Int?
 
     // Proficiency
     var proficiencyRaw: String
@@ -95,6 +107,8 @@ final class StudyCard {
     var syllabusReference: String?
     var adaptationReason: String?
     var generationPromptVersion: Int?
+    var sourceStudyPlanID: UUID?
+    var sourceStudySessionID: UUID?
 
     // Relationship
     var subject: Subject?
@@ -160,7 +174,9 @@ final class StudyCard {
         sourceURLString: String? = nil,
         syllabusReference: String? = nil,
         adaptationReason: String? = nil,
-        generationPromptVersion: Int? = nil
+        generationPromptVersion: Int? = nil,
+        sourceStudyPlanID: UUID? = nil,
+        sourceStudySessionID: UUID? = nil
     ) {
         self.id = UUID()
         self.topicName = topicName
@@ -171,6 +187,15 @@ final class StudyCard {
         self.interval = 0
         self.repetitions = 0
         self.nextReviewDate = Date()
+        self.fsrsStability = nil
+        self.fsrsDifficulty = nil
+        self.fsrsElapsedDays = nil
+        self.fsrsScheduledDays = nil
+        self.fsrsRepetitions = nil
+        self.fsrsLapses = nil
+        self.fsrsStateRaw = nil
+        self.fsrsLastReviewDate = nil
+        self.fsrsSchedulerVersion = nil
         self.proficiencyRaw = ProficiencyLevel.novice.rawValue
         self.consecutiveCorrect = 0
         self.isCustom = isCustom
@@ -188,5 +213,7 @@ final class StudyCard {
         self.syllabusReference = syllabusReference
         self.adaptationReason = adaptationReason
         self.generationPromptVersion = generationPromptVersion
+        self.sourceStudyPlanID = sourceStudyPlanID
+        self.sourceStudySessionID = sourceStudySessionID
     }
 }

@@ -1,5 +1,47 @@
 import Foundation
 
+/// Shared admission control for every provider path. Multiple ARIA surfaces can
+/// otherwise start requests at once, competing for CPU, network connections,
+/// and the user's provider quota. Two active requests keeps the UI responsive
+/// while still allowing a chat response and one background task to coexist.
+private actor AIRequestGate {
+    static let shared = AIRequestGate(maxConcurrent: 2, maxWaiting: 8)
+
+    private let maxConcurrent: Int
+    private let maxWaiting: Int
+    private var active = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(maxConcurrent: Int, maxWaiting: Int) {
+        self.maxConcurrent = max(1, maxConcurrent)
+        self.maxWaiting = max(1, maxWaiting)
+    }
+
+    func acquire() async throws {
+        try Task.checkCancellation()
+        if active < maxConcurrent {
+            active += 1
+            return
+        }
+        guard waiters.count < maxWaiting else {
+            throw AIProviderError.busy
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+        try Task.checkCancellation()
+    }
+
+    func release() {
+        if let waiter = waiters.first {
+            waiters.removeFirst()
+            waiter.resume()
+        } else {
+            active = max(0, active - 1)
+        }
+    }
+}
+
 enum AIProviderError: Error, LocalizedError, Sendable {
     case missingCredential(provider: AIProviderKind)
     case invalidEndpoint
@@ -9,6 +51,7 @@ enum AIProviderError: Error, LocalizedError, Sendable {
     case codexNotAuthenticated(String)
     case processFailed(String)
     case emptyResponse
+    case busy
 
     var errorDescription: String? {
         switch self {
@@ -28,6 +71,8 @@ enum AIProviderError: Error, LocalizedError, Sendable {
             return message
         case .emptyResponse:
             return "The AI provider completed without returning an answer."
+        case .busy:
+            return "ARIA is already handling several requests. Let the current response finish, then try again."
         }
     }
 }
@@ -43,7 +88,7 @@ struct CodexEventUpdate: Equatable, Sendable {
     let error: String?
 }
 
-enum AIProviderService {
+nonisolated enum AIProviderService {
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 120
@@ -59,32 +104,34 @@ enum AIProviderService {
         modelOverride: String? = nil,
         timeout: TimeInterval = 120
     ) async throws -> String {
-        switch AIConfiguration.provider {
-        case .gemini:
-            guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
-                throw AIProviderError.missingCredential(provider: .gemini)
+        return try await withRequestPermit {
+            switch AIConfiguration.provider {
+            case .gemini:
+                guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
+                    throw AIProviderError.missingCredential(provider: .gemini)
+                }
+                return try await GeminiService.generateContent(
+                    messages: messages,
+                    systemInstruction: systemInstruction,
+                    apiKey: apiKey,
+                    modelOverride: modelOverride,
+                    timeout: timeout
+                )
+            case .junali:
+                return try await generateJunali(
+                    messages: messages,
+                    systemInstruction: systemInstruction,
+                    model: modelOverride ?? AIConfiguration.model(for: .junali),
+                    timeout: timeout
+                )
+            case .codexCLI:
+                return try await generateCodex(
+                    messages: messages,
+                    systemInstruction: systemInstruction,
+                    model: modelOverride ?? AIConfiguration.model(for: .codexCLI),
+                    timeout: timeout
+                )
             }
-            return try await GeminiService.generateContent(
-                messages: messages,
-                systemInstruction: systemInstruction,
-                apiKey: apiKey,
-                modelOverride: modelOverride,
-                timeout: timeout
-            )
-        case .junali:
-            return try await generateJunali(
-                messages: messages,
-                systemInstruction: systemInstruction,
-                model: modelOverride ?? AIConfiguration.model(for: .junali),
-                timeout: timeout
-            )
-        case .codexCLI:
-            return try await generateCodex(
-                messages: messages,
-                systemInstruction: systemInstruction,
-                model: modelOverride ?? AIConfiguration.model(for: .codexCLI),
-                timeout: timeout
-            )
         }
     }
 
@@ -92,49 +139,97 @@ enum AIProviderService {
         messages: [GeminiMessage],
         systemInstruction: String,
         onStatus: @escaping @Sendable (String) -> Void = { _ in }
-    ) -> AsyncThrowingStream<String, Error> {
+    ) -> AsyncThrowingStream<String, any Error> {
         switch AIConfiguration.provider {
         case .gemini:
             guard let apiKey = KeychainService.loadAPIKey(), !apiKey.isEmpty else {
                 return failedStream(AIProviderError.missingCredential(provider: .gemini))
             }
             onStatus("Generating with Gemini")
-            return GeminiService.streamContent(
-                messages: messages,
-                systemInstruction: systemInstruction,
-                apiKey: apiKey
-            )
+            return gatedStream {
+                GeminiService.streamContent(
+                    messages: messages,
+                    systemInstruction: systemInstruction,
+                    apiKey: apiKey
+                )
+            }
         case .junali:
-            return AsyncThrowingStream { continuation in
-                let task = Task {
-                    do {
-                        onStatus("Contacting Junali")
-                        let response = try await generateJunali(
-                            messages: messages,
-                            systemInstruction: systemInstruction,
-                            model: AIConfiguration.model(for: .junali),
-                            timeout: 120
-                        )
-                        continuation.yield(response)
-                        continuation.finish()
-                    } catch {
-                        continuation.finish(throwing: error)
-                    }
-                }
-                continuation.onTermination = { _ in task.cancel() }
+            return gatedResponseStream {
+                onStatus("Contacting Junali")
+                return try await generateJunali(
+                    messages: messages,
+                    systemInstruction: systemInstruction,
+                    model: AIConfiguration.model(for: .junali),
+                    timeout: 120
+                )
             }
         case .codexCLI:
-            return streamCodex(
-                messages: messages,
-                systemInstruction: systemInstruction,
-                model: AIConfiguration.model(for: .codexCLI),
-                timeout: 180,
-                onStatus: onStatus
-            )
+            return gatedStream {
+                streamCodex(
+                    messages: messages,
+                    systemInstruction: systemInstruction,
+                    model: AIConfiguration.model(for: .codexCLI),
+                    timeout: 180,
+                    onStatus: onStatus
+                )
+            }
         }
     }
 
-    private static func failedStream(_ error: Error) -> AsyncThrowingStream<String, Error> {
+    private static func withRequestPermit<T>(_ operation: () async throws -> T) async throws -> T {
+        try await AIRequestGate.shared.acquire()
+        do {
+            let result = try await operation()
+            await AIRequestGate.shared.release()
+            return result
+        } catch {
+            await AIRequestGate.shared.release()
+            throw error
+        }
+    }
+
+    private static func gatedStream(
+        _ operation: @escaping @Sendable () -> AsyncThrowingStream<String, any Error>
+    ) -> AsyncThrowingStream<String, any Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                try await AIRequestGate.shared.acquire()
+                do {
+                    for try await chunk in operation() {
+                        try Task.checkCancellation()
+                        continuation.yield(chunk)
+                    }
+                    await AIRequestGate.shared.release()
+                    continuation.finish()
+                } catch {
+                    await AIRequestGate.shared.release()
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private static func gatedResponseStream(
+        _ operation: @escaping @Sendable () async throws -> String
+    ) -> AsyncThrowingStream<String, any Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                try await AIRequestGate.shared.acquire()
+                do {
+                    continuation.yield(try await operation())
+                    await AIRequestGate.shared.release()
+                    continuation.finish()
+                } catch {
+                    await AIRequestGate.shared.release()
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private static func failedStream(_ error: any Error) -> AsyncThrowingStream<String, any Error> {
         AsyncThrowingStream { continuation in
             continuation.finish(throwing: error)
         }
@@ -147,13 +242,15 @@ enum AIProviderService {
                 return AIProviderStatus(isReady: false, message: "Add a Gemini API key to use this provider.")
             }
             do {
-                _ = try await GeminiService.generateContent(
-                    messages: [GeminiMessage(role: "user", text: "Reply with READY.")],
-                    systemInstruction: "This is a provider health check. Return only READY.",
-                    apiKey: apiKey,
-                    modelOverride: AIConfiguration.model(for: .gemini),
-                    timeout: 30
-                )
+                _ = try await withRequestPermit {
+                    try await GeminiService.generateContent(
+                        messages: [GeminiMessage(role: "user", text: "Reply with READY.")],
+                        systemInstruction: "This is a provider health check. Return only READY.",
+                        apiKey: apiKey,
+                        modelOverride: AIConfiguration.model(for: .gemini),
+                        timeout: 30
+                    )
+                }
                 return AIProviderStatus(isReady: true, message: "Gemini completed a live response check.")
             } catch {
                 return AIProviderStatus(isReady: false, message: error.localizedDescription)
@@ -163,12 +260,14 @@ enum AIProviderService {
                 return AIProviderStatus(isReady: false, message: "Add a Junali API key to use this provider.")
             }
             do {
-                _ = try await generateJunali(
-                    messages: [GeminiMessage(role: "user", text: "Reply with READY.")],
-                    systemInstruction: "This is a provider health check. Return only READY.",
-                    model: AIConfiguration.model(for: .junali),
-                    timeout: 30
-                )
+                _ = try await withRequestPermit {
+                    try await generateJunali(
+                        messages: [GeminiMessage(role: "user", text: "Reply with READY.")],
+                        systemInstruction: "This is a provider health check. Return only READY.",
+                        model: AIConfiguration.model(for: .junali),
+                        timeout: 30
+                    )
+                }
                 return AIProviderStatus(isReady: true, message: "Junali completed a live response check.")
             } catch {
                 return AIProviderStatus(isReady: false, message: error.localizedDescription)
@@ -177,12 +276,14 @@ enum AIProviderService {
             do {
                 let executable = try codexExecutableURL()
                 _ = try await codexLoginStatus(executableURL: executable)
-                _ = try await generateCodex(
-                    messages: [GeminiMessage(role: "user", text: "Reply with READY.")],
-                    systemInstruction: "This is a provider health check. Return only READY.",
-                    model: AIConfiguration.model(for: .codexCLI),
-                    timeout: 45
-                )
+                _ = try await withRequestPermit {
+                    try await generateCodex(
+                        messages: [GeminiMessage(role: "user", text: "Reply with READY.")],
+                        systemInstruction: "This is a provider health check. Return only READY.",
+                        model: AIConfiguration.model(for: .codexCLI),
+                        timeout: 45
+                    )
+                }
                 return AIProviderStatus(isReady: true, message: "Codex CLI completed a live response check using its saved login.")
             } catch {
                 return AIProviderStatus(isReady: false, message: error.localizedDescription)
@@ -391,7 +492,7 @@ enum AIProviderService {
         model: String,
         timeout: TimeInterval,
         onStatus: @escaping @Sendable (String) -> Void = { _ in }
-    ) -> AsyncThrowingStream<String, Error> {
+    ) -> AsyncThrowingStream<String, any Error> {
         let processController = ProcessController()
         let webSearchMode = AIConfiguration.webSearchMode
         let reasoningEffort = AIConfiguration.reasoningEffortValue(for: .codexCLI)
@@ -610,7 +711,7 @@ enum AIProviderService {
     private static func handleCodexEvent(
         _ line: String,
         state: CodexResponseState,
-        continuation: AsyncThrowingStream<String, Error>.Continuation,
+        continuation: AsyncThrowingStream<String, any Error>.Continuation,
         onStatus: @escaping @Sendable (String) -> Void
     ) {
         guard let update = parseCodexEvent(line) else { return }
@@ -752,7 +853,10 @@ enum AIProviderService {
     static func codexLoginCommand() throws -> String {
         let executablePath = try codexExecutableURL().path
         let quotedPath = "'" + executablePath.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        return "\(quotedPath) logout && \(quotedPath) login"
+        // Semicolon, not &&: `codex logout` exits non-zero when the CLI is
+        // already signed out — precisely the state after rejected credentials —
+        // and `&&` would then skip the login the user actually needs.
+        return "\(quotedPath) logout; \(quotedPath) login"
     }
 
     /// Normalizes a provider base URL. Cleartext HTTP is rejected except for

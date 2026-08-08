@@ -5,6 +5,7 @@ struct ReviewSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ProgressionEventCenter.self) private var progressionEvents
+    @Environment(ReviewQueueManager.self) private var queueManager
     @Query private var profiles: [UserProfile]
     @Query(sort: \StudyCard.nextReviewDate) private var allReviewCards: [StudyCard]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
@@ -23,18 +24,13 @@ struct ReviewSessionView: View {
     @State private var sessionQualities: [RecallQuality] = []
     @State private var sessionCorrect = 0
     @State private var sessionStartTime = Date()
+    @State private var studySessionID = UUID()
     @State private var showStudyGuide = false
-    @State private var isGeneratingMoreCards = false
     @State private var generationError: String?
     // Snapshot captured at completion: the reviewed cards are rescheduled on
     // save, so reading cards.count live would show 0 on the completion screen.
     @State private var completedCardCount = 0
     @State private var completedRetentionPercent = 0
-    // Cached when the queue loads so the toolbar's "Generate Cards" affordance
-    // does not fetch the whole Subject store or re-scan every card on each body
-    // evaluation (the empty-state toolbar alone would pay that cost every render).
-    @State private var cachedGenerationSubject: Subject?
-    @State private var cachedGenerationTopics: [String] = []
 
     private var currentCard: StudyCard? {
         currentIndex < cards.count ? cards[currentIndex] : nil
@@ -74,11 +70,11 @@ struct ReviewSessionView: View {
         let subjectName = filterSubject?.name ?? ""
         return "\(allReviewCards.count)|\(studySessions.count)|\(latestSessionID)|\(planID)|\(scopeSessionID)|\(subjectName)"
     }
-    private var generationSubject: Subject? {
-        cachedGenerationSubject
-    }
-    private var generationTopics: [String] {
-        cachedGenerationTopics
+    private var fsrsPreviews: [RecallQuality: FSRSReviewPreview] {
+        guard let currentCard else { return [:] }
+        return Dictionary(
+            uniqueKeysWithValues: FSRSScheduler.previews(for: currentCard).map { ($0.quality, $0) }
+        )
     }
 
     var body: some View {
@@ -94,7 +90,7 @@ struct ReviewSessionView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(IBColors.canvas)
-            .navigationTitle(filterSubject?.name ?? activeScope?.subjectName ?? "Review Session")
+            .navigationTitle(filterSubject?.name ?? activeScope?.subjectName ?? "Flashcard Review")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
@@ -104,19 +100,6 @@ struct ReviewSessionView: View {
                         Label("Guide", systemImage: "book")
                     }
                 }
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        generateMoreFlashcards()
-                    } label: {
-                        if isGeneratingMoreCards {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Label("Generate Cards", systemImage: "sparkles.rectangle.stack")
-                        }
-                    }
-                    .disabled(isGeneratingMoreCards || generationSubject == nil || generationTopics.isEmpty)
-                }
             }
         }
         .onAppear { loadCards() }
@@ -125,7 +108,7 @@ struct ReviewSessionView: View {
         }
         .onDisappear {
             // Closing the sheet mid-session must commit the reviewed cards'
-            // SM-2 reschedule together with their ReviewSession logs, or the
+            // FSRS reschedule together with their ReviewSession logs, or the
             // cards would be pushed into the future while the analytics engine
             // (which reads ReviewSession) never saw the reviews.
             if !sessionComplete && !sessionQualities.isEmpty {
@@ -170,6 +153,17 @@ struct ReviewSessionView: View {
 
                 ProgressView(value: progress)
                     .tint(IBColors.electricBlue)
+
+                HStack(spacing: 8) {
+                    Label("\(cards.count) in today's queue", systemImage: "rectangle.stack")
+                    if queueManager.deferredDueCount > 0 {
+                        Text("\(queueManager.deferredDueCount) deferred")
+                    }
+                    Spacer()
+                    Text("Daily cap: \(ReviewDailyLimitPolicy.maximumCards)")
+                }
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
 
                 if let subject = card.subject {
                     HStack(spacing: 8) {
@@ -318,13 +312,13 @@ struct ReviewSessionView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    QualityButton(label: "Again", color: IBColors.danger) { rateCard(.again) }
+                    QualityButton(label: "Again", color: IBColors.danger, detail: fsrsPreviews[.again]?.intervalLabel) { rateCard(.again) }
                         .keyboardShortcut("1", modifiers: [])
-                    QualityButton(label: "Hard", color: IBColors.warning) { rateCard(.hard) }
+                    QualityButton(label: "Hard", color: IBColors.warning, detail: fsrsPreviews[.hard]?.intervalLabel) { rateCard(.hard) }
                         .keyboardShortcut("2", modifiers: [])
-                    QualityButton(label: "Good", color: IBColors.electricBlue) { rateCard(.good) }
+                    QualityButton(label: "Good", color: IBColors.electricBlue, detail: fsrsPreviews[.good]?.intervalLabel) { rateCard(.good) }
                         .keyboardShortcut("3", modifiers: [])
-                    QualityButton(label: "Easy", color: IBColors.success) { rateCard(.easy) }
+                    QualityButton(label: "Easy", color: IBColors.success, detail: fsrsPreviews[.easy]?.intervalLabel) { rateCard(.easy) }
                         .keyboardShortcut("4", modifiers: [])
                 } else {
                     Spacer()
@@ -355,21 +349,20 @@ struct ReviewSessionView: View {
         // post-save @Query reload so the completion screen keeps its snapshot
         // instead of being replaced by an empty state.
         guard !sessionComplete else { return }
-        // Every load rebuilds the queue from scratch (appear, generate-more,
-        // post-save @Query reload), so park the cursor on the first card.
-        // Keeping the old index can point past the end of a shorter rebuilt
-        // queue, which blanked the session instead of showing the next card.
+        // Every load rebuilds the queue from scratch, so park the cursor on the
+        // first card. Keeping an old index can point beyond a shorter queue.
         currentIndex = 0
         isFlipped = false
         let now = Date()
         let startingEmpty = cards.isEmpty
-        guard activeScope != nil || !studiedScopes.isEmpty else {
-            cards = []
+        // The global session must display exactly the cards counted by the
+        // sidebar and dashboard. Scoped sessions keep their explicit filter
+        // and fallback behavior below.
+        if filterSubject == nil, activeScope == nil {
+            cards = queueManager.dueCards
             if startingEmpty { sessionStartTime = Date() }
-            refreshGenerationContext()
             return
         }
-
         let allCandidates: [StudyCard]
         if let subject = filterSubject {
             allCandidates = subject.cards
@@ -380,6 +373,11 @@ struct ReviewSessionView: View {
         let eligibleCandidates: [StudyCard]
         if let activeScope {
             eligibleCandidates = allCandidates.filter { activeScope.matches($0) }
+        } else if studiedScopes.isEmpty {
+            // The dashboard and queue manager treat all cards as eligible
+            // before the learner has created a scoped study session. The
+            // review sheet must make the same cards available.
+            eligibleCandidates = allCandidates
         } else {
             eligibleCandidates = allCandidates.filter { card in
                 studiedScopes.contains { $0.matches(card) }
@@ -397,21 +395,8 @@ struct ReviewSessionView: View {
             cards = []
         }
 
-        // The session timer starts with the first load; generating more cards
-        // mid-session must not truncate the logged study time.
+        // The session timer starts with the first load.
         if startingEmpty { sessionStartTime = Date() }
-        refreshGenerationContext()
-    }
-
-    /// Mirrors the previous `generationSubject`/`generationTopics` derivation
-    /// but runs once per queue load instead of once per body evaluation.
-    private func refreshGenerationContext() {
-        cachedGenerationSubject = filterSubject ?? cards.first?.subject ?? studySessionsSubject()
-        if let activeScope, !activeScope.topicNames.isEmpty {
-            cachedGenerationTopics = activeScope.topicNames
-        } else {
-            cachedGenerationTopics = Array(Set(cards.map(\.topicName))).sorted()
-        }
     }
 
     private func filteredCards(from candidates: [StudyCard]) -> [StudyCard] {
@@ -445,10 +430,23 @@ struct ReviewSessionView: View {
 
     private func rateCard(_ quality: RecallQuality) {
         guard let card = currentCard else { return }
-        SM2Engine.applyReview(to: card, quality: quality)
+        do {
+            try FSRSScheduler.applyReview(to: card, quality: quality)
+        } catch {
+            generationError = "Could not schedule this review: \(error.localizedDescription)"
+            return
+        }
         sessionQualities.append(quality)
         if quality == .good || quality == .easy { sessionCorrect += 1 }
-        context.insert(ReviewSession(cardID: card.id, subjectName: card.subject?.name ?? "", topicName: card.topicName, qualityRating: quality.rawValue))
+        let review = ReviewSession(
+            cardID: card.id,
+            subjectName: card.subject?.name ?? "",
+            topicName: card.topicName,
+            qualityRating: quality.rawValue,
+            studySessionID: studySessionID
+        )
+        FSRSScheduler.configure(review, quality: quality)
+        context.insert(review)
         switch quality { case .again: IBHaptics.warning(); case .hard: IBHaptics.light(); case .good: IBHaptics.medium(); case .easy: IBHaptics.success() }
         isFlipped = false
         if currentIndex + 1 >= cards.count { completeSession() }
@@ -481,7 +479,34 @@ struct ReviewSessionView: View {
             Set(cards.compactMap { $0.topicName }).sorted().joined(separator: ", ")
         }
         let subjectName = filterSubject?.name ?? activeScope?.subjectName ?? cards.first?.subject?.name ?? "Mixed"
+        let groupedRatings = Dictionary(grouping: Array(zip(cards, sessionQualities))) {
+            "\($0.0.topicName)|\($0.0.subtopic)"
+        }
+        let evidence = groupedRatings.values.map { entries in
+            let reviewed = entries.count
+            let correct = entries.filter { $0.1 == .good || $0.1 == .easy }.count
+            let averageConfidence = entries.isEmpty ? 1 : Int(
+                round(entries.reduce(0.0) {
+                    let value: Double = switch $1.1 {
+                    case .again: 1
+                    case .hard: 2
+                    case .good: 4
+                    case .easy: 5
+                    }
+                    return $0 + value
+                } / Double(entries.count))
+            )
+            return StudySessionSubunitEvidence(
+                topicName: entries.first?.0.topicName ?? "",
+                subtopicName: entries.first?.0.subtopic ?? "",
+                minutes: dedicatedMinutesDouble * Double(reviewed) / Double(max(cards.count, 1)),
+                confidenceRating: averageConfidence,
+                cardsReviewed: reviewed,
+                correctCount: correct
+            )
+        }
         let session = StudySession(
+            id: studySessionID,
             subjectName: subjectName,
             topicsCovered: topics,
             subtopicsCovered: activeScope?.subtopicNames.joined(separator: ", ") ?? "",
@@ -489,7 +514,10 @@ struct ReviewSessionView: View {
             endDate: Date(),
             cardsReviewed: cards.count,
             correctCount: sessionCorrect,
-            xpEarned: sessionXP
+            xpEarned: sessionXP,
+            sourcePlanID: filterPlan?.id,
+            subunitEvidence: evidence,
+            reviewedCardIDs: cards.map(\.id)
         )
         context.insert(session)
 
@@ -518,6 +546,7 @@ struct ReviewSessionView: View {
         // Must run after the ReviewSession, StudyActivity and StudySession records
         // are in the context, or this session's work is invisible to the engine.
         progressionEvents.enqueue(ProgressionService.recompute(context: context))
+        queueManager.refreshDueCardsSynchronously(context: context)
 
         withAnimation(IBAnimation.smooth) { sessionComplete = true }; IBHaptics.success()
 
@@ -554,15 +583,18 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateTitle: String {
-        studySessions.isEmpty ? "No Revision Yet" : "All Caught Up"
+        if queueManager.remainingDailyAllowance == 0 { return "Daily Recall Complete" }
+        return studySessions.isEmpty ? "No Revision Yet" : "All Caught Up"
     }
 
     private var emptyStateSymbol: String {
-        studySessions.isEmpty ? "book.closed.fill" : "checkmark.circle.fill"
+        if queueManager.remainingDailyAllowance == 0 { return "checkmark.seal.fill" }
+        return studySessions.isEmpty ? "book.closed.fill" : "checkmark.circle.fill"
     }
 
     private var emptyStateTint: Color {
-        studySessions.isEmpty ? IBColors.electricBlue : .green
+        if queueManager.remainingDailyAllowance == 0 { return IBColors.success }
+        return studySessions.isEmpty ? IBColors.electricBlue : .green
     }
 
     // MARK: - Completion View
@@ -602,24 +634,6 @@ struct ReviewSessionView: View {
 
             HStack(spacing: 12) {
                 Button {
-                    generateMoreFlashcards()
-                } label: {
-                    HStack {
-                        if isGeneratingMoreCards {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "sparkles.rectangle.stack")
-                        }
-                        Text(isGeneratingMoreCards ? "Generating…" : "Generate More Cards")
-                    }
-                    .frame(minWidth: 160)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .disabled(isGeneratingMoreCards || generationSubject == nil || generationTopics.isEmpty)
-
-                Button {
                     showStudyGuide = true
                 } label: {
                     HStack {
@@ -650,11 +664,14 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateMessage: String {
+        if queueManager.remainingDailyAllowance == 0 {
+            return "You reviewed \(queueManager.reviewedTodayCount) unique cards today. The remaining backlog stays saved for the next daily queue."
+        }
         if studySessions.isEmpty {
             return "No revision yet. Complete a study session first, then spaced repetition will use that material."
         }
         if let scopeSummary {
-            return "No flashcards match \(scopeSummary) yet. Generate cards for this scope first or try another recent study session."
+            return "No saved flashcards match \(scopeSummary) yet. Study that scope first and useful cards will be added automatically."
         }
         return "No studied flashcards are due for review right now. Come back after your next study session or when those cards become due."
     }
@@ -676,83 +693,4 @@ struct ReviewSessionView: View {
         .padding(.horizontal, 24)
     }
 
-    private func studySessionsSubject() -> Subject? {
-        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
-        let subjectName = filterSubject?.name ?? activeScope?.subjectName ?? cards.first?.subject?.name
-        return subjects.first(where: { $0.name == subjectName })
-    }
-
-    private func generateMoreFlashcards() {
-        guard !isGeneratingMoreCards else { return }
-        guard let subject = generationSubject else {
-            generationError = "Could not find the subject for generating more flashcards."
-            return
-        }
-        let topics = generationTopics
-        guard !topics.isEmpty else {
-            generationError = "Could not determine which topics to generate more flashcards for."
-            return
-        }
-
-        // When resumed from the completion screen this is a brand-new session:
-        // clear the previous session's stats so its time and XP are not folded
-        // into the next completion's logs (and double-awarded). Mid-session
-        // generation must NOT reset these — the in-progress round is still
-        // accumulating.
-        let resumingFromCompletion = sessionComplete
-        isGeneratingMoreCards = true
-        generationError = nil
-
-        Task {
-            do {
-                let subtopics = activeScope?.subtopicNames ?? []
-                let cardsPerTopic = max(6, Int(ceil(18.0 / Double(max(topics.count, 1)))))
-                var insertedAny = false
-
-                for topic in topics {
-                    let validSubtopics = subtopics.filter {
-                        SyllabusSeeder.subtopics(for: subject.name, level: subject.level, topicName: topic).contains($0)
-                    }
-                    let generated = try await CardGeneratorService.generateCards(
-                        subject: subject,
-                        topicName: topic,
-                        subtopic: validSubtopics.joined(separator: ", "),
-                        count: cardsPerTopic,
-                        context: context
-                    )
-
-                    for card in generated {
-                        context.insert(card)
-                    }
-                    insertedAny = insertedAny || !generated.isEmpty
-                }
-
-                try context.save()
-
-                await MainActor.run {
-                    isGeneratingMoreCards = false
-                    if insertedAny {
-                        if resumingFromCompletion {
-                            sessionQualities = []
-                            sessionCorrect = 0
-                            sessionXP = 0
-                            completedCardCount = 0
-                            completedRetentionPercent = 0
-                            sessionStartTime = Date()
-                        }
-                        sessionComplete = false
-                        loadCards()
-                        IBHaptics.success()
-                    } else {
-                        generationError = "ARIA did not return any new flashcards for this revision scope."
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    isGeneratingMoreCards = false
-                    generationError = error.localizedDescription
-                }
-            }
-        }
-    }
 }

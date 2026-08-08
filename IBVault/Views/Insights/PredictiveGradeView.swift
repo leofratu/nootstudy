@@ -3,10 +3,13 @@ import SwiftData
 import Charts
 
 struct PredictiveGradeView: View {
-    @Environment(\.modelContext) private var context
     @Query private var subjects: [Subject]
     @Query private var profiles: [UserProfile]
     @Query(sort: \Grade.date, order: .reverse) private var allGrades: [Grade]
+    @Query private var academicAssessments: [AcademicAssessment]
+    @Query private var academicMappings: [AcademicAssessmentMapping]
+    @Query private var academicReports: [AcademicReportSnapshot]
+    @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
 
     /// Per-subject predictions and their sum, refreshed only when the queried
     /// subjects or grades change. `predictSubjectGrade` used to re-scan every
@@ -20,11 +23,11 @@ struct PredictiveGradeView: View {
                 StudioPageHeader(
                     eyebrow: "Forecast",
                     title: "Grade prediction",
-                    subtitle: "A transparent score projection built from your weighted assessments and current mastery trends.",
+                    subtitle: "Teacher predictions from the latest D1 report, using an assumed 2 TOK/EE core points.",
                     symbol: "chart.line.uptrend.xyaxis",
                     tint: IBColors.teal
                 ) {
-                    StudioPill(title: scoreGap >= 0 ? "ON TARGET" : "\(abs(scoreGap)) TO CLOSE", tint: scoreGap >= 0 ? IBColors.success : IBColors.coral)
+                    StudioPill(title: subjectPointsStillNeeded == 0 ? "ON TARGET" : "\(subjectPointsStillNeeded) PTS TO CLOSE", tint: subjectPointsStillNeeded == 0 ? IBColors.success : IBColors.coral)
                 }
 
                 predictedScoreCard
@@ -43,53 +46,36 @@ struct PredictiveGradeView: View {
         .onChange(of: allGrades) { _, _ in refreshPredictions() }
     }
     
-    // MARK: - Header
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(IBColors.success.opacity(0.12))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 18))
-                        .foregroundStyle(IBColors.success)
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Predictive Grade Calculator")
-                        .font(.headline)
-                    Text("Based on your weighted assessments, mastery trends, and historical grades")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                
-                Spacer()
-            }
-        }
-        .padding(16)
-        .glassCard()
-    }
-    
     // MARK: - Overall Prediction
     private var predictedScoreCard: some View {
         VStack(spacing: 16) {
             HStack {
-                Text("Predicted IB Score")
+                Text("Diploma forecast")
                     .font(.headline)
                 Spacer()
             }
             
             HStack(alignment: .center, spacing: 30) {
                 VStack(spacing: 4) {
-                    Text("\(predictedTotalScore)")
+                    Text("\(predictedSubjectPoints)")
                         .font(.system(size: 48, weight: .heavy, design: .rounded))
                         .foregroundStyle(IBColors.electricBlue)
-                    Text("Predicted")
+                    Text("Subject points / 42")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 
+                Divider().frame(height: 50)
+
+                VStack(spacing: 4) {
+                    Text("\(DiplomaForecast.assumedCorePoints)")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(IBColors.teal)
+                    Text("TOK + EE assumed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Divider().frame(height: 50)
                 
                 if let profile = profiles.first {
@@ -106,20 +92,28 @@ struct PredictiveGradeView: View {
                 Divider().frame(height: 50)
                 
                 VStack(spacing: 4) {
-                    Text("\(scoreGap)")
+                    Text("\(predictedDiplomaScore)")
                         .font(.system(size: 36, weight: .bold, design: .rounded))
-                        .foregroundStyle(scoreGapColor)
-                    Text(scoreGapLabel)
+                        .foregroundStyle(targetColor)
+                    Text("Predicted / 45")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             
-            if scoreGap > 0 {
+            if subjectPointsStillNeeded > 0 {
                 HStack(spacing: 8) {
-                    Image(systemName: "arrow.up.circle.fill")
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(IBColors.coral)
+                    Text("Assuming \(DiplomaForecast.assumedCorePoints) TOK/EE core points, you need \(subjectPointsStillNeeded) more points to reach \(targetScore).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(IBColors.success)
-                    Text("\(Int(Double(abs(scoreGap)) * masteryImpactFactor)) points from mastery")
+                    Text("This forecast assumes \(DiplomaForecast.assumedCorePoints) TOK/EE core points.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -130,24 +124,7 @@ struct PredictiveGradeView: View {
     }
     
     private var targetColor: Color {
-        guard let profile = profiles.first else { return .secondary }
-        return predictedTotalScore >= profile.targetIBScore ? IBColors.success : .orange
-    }
-    
-    private var scoreGapColor: Color {
-        if scoreGap >= 0 {
-            return IBColors.success
-        } else {
-            return .red
-        }
-    }
-    
-    private var scoreGapLabel: String {
-        if scoreGap >= 0 {
-            return "Above target"
-        } else {
-            return "To go"
-        }
+        subjectPointsStillNeeded == 0 ? IBColors.success : .orange
     }
     
     // MARK: - Subject Predictions
@@ -161,10 +138,10 @@ struct PredictiveGradeView: View {
                 Spacer()
             }
             
-            ForEach(subjects) { subject in
+            ForEach(diplomaSubjects) { subject in
                 subjectPredictionRow(subject)
                 
-                if subject.id != subjects.last?.id {
+                if subject.id != diplomaSubjects.last?.id {
                     Divider()
                 }
             }
@@ -176,7 +153,7 @@ struct PredictiveGradeView: View {
     private func subjectPredictionRow(_ subject: Subject) -> some View {
         let prediction = predictSubjectGrade(subject)
         let color = Color(hex: subject.accentColorHex)
-        let weightedAverage = subject.weightedGradeAverage
+        let mastery = evidenceBackedMastery(for: subject)
         
         return VStack(spacing: 8) {
             HStack(spacing: 10) {
@@ -194,12 +171,8 @@ struct PredictiveGradeView: View {
                         .font(.caption.bold())
                         .foregroundStyle(color)
                     
-                    if let weightedAverage {
-                        Text("Course avg: \(weightedAverage, specifier: "%.1f")")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else if let latest = prediction.latest {
-                        Text("Latest: \(latest)")
+                    if let latest = prediction.latest {
+                        Text("Latest report: \(latest)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -207,8 +180,8 @@ struct PredictiveGradeView: View {
             }
             
             HStack(spacing: 4) {
-                MasteryBar(progress: subject.masteryProgress, height: 4, color: color)
-                Text("\(Int(subject.masteryProgress * 100))%")
+                MasteryBar(progress: mastery, height: 4, color: color)
+                Text("\(Int(mastery * 100))%")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(width: 35, alignment: .trailing)
@@ -239,7 +212,7 @@ struct PredictiveGradeView: View {
             }
             
             if let profile = profiles.first {
-                let gap = profile.targetIBScore - predictedTotalScore
+                let gap = subjectPointsStillNeeded
                 
                 if gap <= 0 {
                     HStack {
@@ -256,11 +229,11 @@ struct PredictiveGradeView: View {
                     .padding(.vertical, 12)
                 } else {
                     VStack(spacing: 12) {
-                        Text("You need \(gap) more points to reach your target")
+                        Text("You need \(gap) more points to reach \(profile.targetIBScore), assuming \(DiplomaForecast.assumedCorePoints) TOK/EE core points.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         
-                        let weakest = subjects.sorted { $0.masteryProgress < $1.masteryProgress }.prefix(2)
+                        let weakest = diplomaSubjects.sorted { evidenceBackedMastery(for: $0) < evidenceBackedMastery(for: $1) }.prefix(2)
                         
                         if !weakest.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
@@ -276,7 +249,7 @@ struct PredictiveGradeView: View {
                                         Text(subject.name)
                                             .font(.callout)
                                         Spacer()
-                                        Text("\(Int(subject.masteryProgress * 100))%")
+                                        Text("\(Int(evidenceBackedMastery(for: subject) * 100))%")
                                             .font(.caption)
                                             .foregroundStyle(.red)
                                     }
@@ -297,18 +270,23 @@ struct PredictiveGradeView: View {
     }
     
     // MARK: - Helpers
-    private var predictedTotalScore: Int {
-        guard cachedPredictions.count == subjects.count, !subjects.isEmpty else { return computeTotalScore() }
+    private var diplomaSubjects: [Subject] {
+        subjects.filter { DiplomaForecast.isScoredDiplomaSubject($0.name) }
+    }
+
+    private var predictedSubjectPoints: Int {
+        guard cachedPredictions.count == diplomaSubjects.count, !diplomaSubjects.isEmpty else { return computeTotalScore() }
         return cachedTotalScore
     }
 
-    private var scoreGap: Int {
-        guard let profile = profiles.first else { return 0 }
-        return predictedTotalScore - profile.targetIBScore
+    private var targetScore: Int { profiles.first?.targetIBScore ?? 40 }
+
+    private var predictedDiplomaScore: Int {
+        min(45, predictedSubjectPoints + DiplomaForecast.assumedCorePoints)
     }
 
-    private var masteryImpactFactor: Double {
-        0.7
+    private var subjectPointsStillNeeded: Int {
+        max(0, targetScore - predictedDiplomaScore)
     }
 
     private func predictSubjectGrade(_ subject: Subject) -> SubjectPrediction {
@@ -319,13 +297,13 @@ struct PredictiveGradeView: View {
     }
 
     private func computeTotalScore() -> Int {
-        subjects.reduce(0) { $0 + computePrediction(for: $1).predicted }
+        diplomaSubjects.reduce(0) { $0 + computePrediction(for: $1).predicted }
     }
 
     private func refreshPredictions() {
         var predictions: [UUID: SubjectPrediction] = [:]
         var total = 0
-        for subject in subjects {
+        for subject in diplomaSubjects {
             let prediction = computePrediction(for: subject)
             predictions[subject.id] = prediction
             total += prediction.predicted
@@ -335,7 +313,6 @@ struct PredictiveGradeView: View {
     }
 
     private func computePrediction(for subject: Subject) -> SubjectPrediction {
-        let mastery = subject.masteryProgress
         let grades = subject.grades.sorted { $0.date > $1.date }
         let weightedAverage = subject.weightedGradeAverage
         
@@ -343,7 +320,11 @@ struct PredictiveGradeView: View {
         var latest: Int?
         var trend: GradeTrend = .stable
         
-        if let latestGrade = grades.first {
+        if let teacherPrediction = grades.compactMap(\.predictedGrade).first,
+           let latestGrade = grades.first {
+            latest = latestGrade.resolvedIBScore
+            predicted = teacherPrediction
+        } else if let latestGrade = grades.first {
             latest = latestGrade.resolvedIBScore
             
             if grades.count >= 2, let second = grades.dropFirst().first {
@@ -351,13 +332,33 @@ struct PredictiveGradeView: View {
             }
 
             let baseGrade = weightedAverage ?? Double(latestGrade.resolvedIBScore)
-            let masteryBoost = mastery * 1.4
+            let masteryBoost = evidenceBackedMastery(for: subject) * 1.4
             predicted = min(7, max(1, Int((baseGrade + masteryBoost).rounded())))
         } else {
-            predicted = max(1, Int(mastery * 7))
+            predicted = max(1, Int(evidenceBackedMastery(for: subject) * 7))
         }
         
         return SubjectPrediction(predicted: predicted, latest: latest, trend: trend)
+    }
+
+    private func evidenceBackedMastery(for subject: Subject) -> Double {
+        ProgressEvidenceService.score(
+            subjectName: subject.name,
+            courseLevel: subject.level,
+            cards: subject.cards,
+            assessments: academicAssessments,
+            mappings: academicMappings,
+            reports: academicReports,
+            workSessions: studySessions
+        ).blendedMastery ?? 0
+    }
+}
+
+nonisolated enum DiplomaForecast {
+    static let assumedCorePoints = 2
+
+    static func isScoredDiplomaSubject(_ subjectName: String) -> Bool {
+        ["Russian A Literature", "English B", "Business Management", "Economics", "Biology", "Mathematics AA"].contains(subjectName)
     }
 }
 

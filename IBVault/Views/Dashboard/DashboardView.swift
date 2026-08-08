@@ -3,47 +3,68 @@ import SwiftData
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var context
+    @Environment(ReviewQueueManager.self) private var queueManager
     @Query private var profiles: [UserProfile]
     @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
     @Query private var subjects: [Subject]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
+    @Query private var academicAssessments: [AcademicAssessment]
+    @Query private var academicMappings: [AcademicAssessmentMapping]
+    @Query private var academicReports: [AcademicReportSnapshot]
 
-    @State private var ariaService = ARIAService()
+    @State private var ariaService: ARIAService
     @State private var reviewScheduler = ReviewScheduler()
     @State private var showReview = false
     @State private var selectedSubjectForReview: Subject?
-    // Cached so the body does not re-derive scopes and re-scan every card on
-    // each of the ~8 places that read the due queue.
-    @State private var dueCards: [StudyCard] = []
     @State private var greetingText = ""
     // Queue-health ratio cached alongside the due snapshot; computing it here
     // would re-scan every card in the store on every body evaluation.
     @State private var reviewProgress = 0.0
 
     private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
-    private let subjectColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
+
+    private struct EvidenceRow: Identifiable {
+        let subject: Subject
+        let evidence: ProgressEvidence
+
+        var id: UUID { subject.id }
+        var mastery: Double { evidence.blendedMastery ?? evidence.assessmentEvidence ?? 0 }
+    }
 
     private var profile: UserProfile? { profiles.first }
+    /// A single review-queue snapshot is shared with the sidebar and global
+    /// review flow. Dashboard-local filtering previously allowed its count to
+    /// disagree with the cards the review sheet could actually present.
+    private var dueCards: [StudyCard] { queueManager.dueCards }
 
     private var sortedSubjects: [Subject] {
         subjects.sorted { $0.name < $1.name }
     }
 
     private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
+        let hour = IBLocalClock.calendar.component(.hour, from: IBLocalClock.now)
         if hour < 12 { return "Good morning" }
         if hour < 18 { return "Good afternoon" }
         return "Good evening"
     }
 
+    init() {
+        _ariaService = State(initialValue: ARIAServiceFactory.make())
+    }
+
     var body: some View {
-        NavigationStack {
+        // Scored once per render: ProgressEvidenceService.score walks cards,
+        // assessments, mappings, reports, and sessions per subject, so letting
+        // each section derive its own copy quadrupled that work per body pass.
+        let evidence = evidenceRows
+        return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     dashboardHeader
                     metricsGrid
+                    assessmentCalibration(evidence: evidence)
                     focusGrid
-                    subjectPortfolio
+                    subjectPortfolio(evidence: evidence)
                 }
                 .frame(maxWidth: 1240, alignment: .leading)
                 .padding(.horizontal, 28)
@@ -54,6 +75,10 @@ struct DashboardView: View {
             .navigationTitle("Dashboard")
             .sheet(isPresented: $showReview, onDismiss: {
                 reviewScheduler.analyze(context: context)
+                // A completed review consumed the due queue; refresh the shared
+                // queue snapshot so the sidebar badge is not stale until the
+                // next tab change.
+                queueManager.refreshDueCards(context: context)
             }) {
                 ReviewSessionView(filterSubject: selectedSubjectForReview)
             }
@@ -73,14 +98,7 @@ struct DashboardView: View {
     }
 
     private func recomputeDueCards() {
-        let scopes = StudySession.uniqueStudyScopes(from: studySessions)
-        if scopes.isEmpty {
-            dueCards = []
-        } else {
-            dueCards = allCards.filter { card in
-                card.isDue && scopes.contains { $0.matches(card) }
-            }
-        }
+        queueManager.refreshDueCards(context: context)
         recomputeReviewProgress()
     }
 
@@ -126,17 +144,45 @@ struct DashboardView: View {
     }
 
     private var headerSubtitle: String {
+        if !dueCards.isEmpty {
+            return "\(dueCards.count) report-based cards are ready for spaced review."
+        }
         if studySessions.isEmpty {
-            return "Complete a study session to unlock a review plan built from your work."
+            return "Your report baseline is loaded. Start with a focused study block or build more recall cards."
         }
-        if dueCards.isEmpty {
-            return "Your queue is clear. Use the time to plan your next focused session."
-        }
-        return "\(dueCards.count) cards need your attention across \(subjectCountWithDue) subjects."
+        return "Your queue is clear. Use the time to plan your next focused session."
     }
 
     private var subjectCountWithDue: Int {
         Set(dueCards.compactMap { $0.subject?.id }).count
+    }
+
+    private var evidenceRows: [EvidenceRow] {
+        sortedSubjects.map { subject in
+            EvidenceRow(
+                subject: subject,
+                evidence: ProgressEvidenceService.score(
+                    subjectName: subject.name,
+                    courseLevel: subject.level,
+                    cards: subject.cards,
+                    assessments: academicAssessments,
+                    mappings: academicMappings,
+                    reports: academicReports,
+                    workSessions: studySessions
+                )
+            )
+        }
+    }
+
+    private func scoredEvidenceCount(evidence: [EvidenceRow]) -> Int {
+        evidence.reduce(0) { $0 + $1.evidence.scoredAssessmentCount }
+    }
+
+    private func averageEvidenceMastery(evidence: [EvidenceRow]) -> Int {
+        let scored = evidence.filter { $0.evidence.assessmentEvidence != nil }
+        guard !scored.isEmpty else { return 0 }
+        let total = scored.reduce(0.0) { $0 + $1.mastery }
+        return Int((total / Double(scored.count)) * 100)
     }
 
     private var metricsGrid: some View {
@@ -172,12 +218,60 @@ struct DashboardView: View {
         }
     }
 
+    private func assessmentCalibration(evidence: [EvidenceRow]) -> some View {
+        let scoredCount = scoredEvidenceCount(evidence: evidence)
+        let subjectCount = evidence.filter { $0.evidence.assessmentEvidence != nil }.count
+        return HStack(alignment: .center, spacing: 16) {
+            Image(systemName: "chart.bar.doc.horizontal")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(IBColors.teal)
+                .frame(width: 44, height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(IBGradient.tint(IBColors.teal))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(IBColors.teal.opacity(0.16), lineWidth: 1)
+                        )
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Assessment baseline")
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(IBColors.ink)
+                Text(scoredCount == 0 ? "Add a report or assessment to calibrate subject mastery." : "Current subject mastery includes your scored reports and assessments.")
+                    .font(.caption)
+                    .foregroundStyle(IBColors.secondaryText)
+            }
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(averageEvidenceMastery(evidence: evidence))%")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(IBColors.teal)
+                Text("\(scoredCount) scored across \(subjectCount) subjects")
+                    .font(.caption)
+                    .foregroundStyle(IBColors.secondaryText)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .glassCard(cornerRadius: IBRadius.md)
+    }
+
     private var focusGrid: some View {
-        HStack(alignment: .top, spacing: 16) {
-            reviewFocus
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            workspaceSignal
-                .frame(width: 330, alignment: .topLeading)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                reviewFocus
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                workspaceSignal
+                    .frame(width: 330, alignment: .topLeading)
+            }
+            VStack(spacing: 16) {
+                reviewFocus
+                workspaceSignal
+            }
         }
     }
 
@@ -284,7 +378,7 @@ struct DashboardView: View {
         .glassCard()
     }
 
-    private var subjectPortfolio: some View {
+    private func subjectPortfolio(evidence: [EvidenceRow]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             StudioSectionHeader(
                 "Your subjects",
@@ -292,23 +386,40 @@ struct DashboardView: View {
                 symbol: "books.vertical.fill",
                 tint: IBColors.englishColor
             ) {
-                StudioPill(title: "\(sortedSubjects.count) ENROLLED", tint: IBColors.englishColor)
+                HStack(spacing: 10) {
+                    StudioPill(title: "\(sortedSubjects.count) ENROLLED", tint: IBColors.englishColor)
+                    NavigationLink("View all") {
+                        SubjectsGridView()
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(IBColors.electricBlue)
+                }
             }
 
             if sortedSubjects.isEmpty {
                 EmptyStateView(icon: "books.vertical", title: "No subjects yet", message: "Complete onboarding or add subjects to begin building a study plan.")
                     .frame(maxWidth: .infinity)
             } else {
-                LazyVGrid(columns: subjectColumns, spacing: 12) {
+                // Mastery comes from recall and imported assessment results;
+                // legacy curriculum flags do not represent current evidence.
+                // Reuse the render's single evidence pass instead of re-scoring.
+                let masteryBySubject = Dictionary(
+                    uniqueKeysWithValues: evidence.map { ($0.subject.id, $0.evidence.blendedMastery ?? 0) }
+                )
+                VStack(spacing: 0) {
                     ForEach(sortedSubjects, id: \.id) { subject in
                         NavigationLink {
                             SubjectDetailView(subject: subject)
                         } label: {
-                            DashboardSubjectTile(subject: subject, dueCount: scopedDueCount(for: subject))
+                            SubjectWorkspaceRow(subject: subject, dueCount: scopedDueCount(for: subject), mastery: masteryBySubject[subject.id] ?? 0)
                         }
                         .buttonStyle(.plain)
+                        if subject.id != sortedSubjects.last?.id {
+                            Divider().padding(.leading, 72)
+                        }
                     }
                 }
+                .glassCard()
             }
         }
     }
@@ -378,58 +489,6 @@ private struct DashboardToolRow: View {
                 .foregroundStyle(IBColors.tertiaryText)
         }
         .padding(.vertical, 5)
-        .contentShape(Rectangle())
-    }
-}
-
-private struct DashboardSubjectTile: View {
-    let subject: Subject
-    let dueCount: Int
-
-    private var tint: Color { Color(hex: subject.accentColorHex) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(subject.name)
-                        .font(.headline)
-                        .foregroundStyle(IBColors.ink)
-                        .lineLimit(1)
-                    StudioPill(title: subject.level, tint: tint)
-                }
-                Spacer()
-                Text("\(Int(subject.masteryProgress * 100))%")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(tint)
-            }
-
-            MasteryBar(progress: subject.masteryProgress, height: 6, color: tint)
-
-            HStack(spacing: 12) {
-                Label("\(subject.cards.count) cards", systemImage: "square.stack")
-                Spacer()
-                Label(dueCount == 0 ? "Clear" : "\(dueCount) due", systemImage: dueCount == 0 ? "checkmark.circle" : "clock")
-                    .foregroundStyle(dueCount == 0 ? IBColors.success : IBColors.coral)
-            }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(IBColors.secondaryText)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: IBRadius.card)
-                .fill(IBColors.surface)
-                .overlay(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(tint)
-                        .frame(width: 3)
-                        .padding(.vertical, 16)
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: IBRadius.card)
-                        .stroke(IBColors.cardBorder, lineWidth: 1)
-                )
-        )
         .contentShape(Rectangle())
     }
 }

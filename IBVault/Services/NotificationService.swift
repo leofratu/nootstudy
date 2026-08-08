@@ -4,7 +4,7 @@ import UserNotifications
 
 enum NotificationError: Error, LocalizedError {
     case permissionDenied
-    case schedulingFailed(Error)
+    case schedulingFailed(any Error)
     
     var errorDescription: String? {
         switch self {
@@ -25,11 +25,20 @@ struct NotificationConfig {
 }
 
 enum NotificationService {
-    static func requestPermission(completion: (@Sendable (Bool, Error?) -> Void)? = nil) {
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .badge, .sound]
-        ) { granted, error in
-            completion?(granted, error)
+    /// macOS owns the durable authorization decision. Query first so repeat
+    /// launches never attempt to present a permission prompt after the learner
+    /// has allowed, denied, or otherwise resolved it.
+    static func requestPermission(completion: (@Sendable (Bool, (any Error)?) -> Void)? = nil) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else {
+                completion?(settings.authorizationStatus == .authorized, nil)
+                return
+            }
+
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+                completion?(granted, error)
+            }
         }
     }
     

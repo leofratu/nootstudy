@@ -45,24 +45,30 @@ struct StudioPageHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: IBSpacing.lg) {
-            HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .center, spacing: IBSpacing.lg) {
+            HStack(alignment: .center, spacing: 16) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: IBRadius.md)
-                        .fill(tint.opacity(0.12))
-                        .frame(width: 42, height: 42)
+                    RoundedRectangle(cornerRadius: 13)
+                        .fill(IBGradient.tint(tint))
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 13)
+                                .stroke(tint.opacity(0.16), lineWidth: 1)
+                        )
                     Image(systemName: symbol)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(tint)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(eyebrow.uppercased())
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(IBTypography.eyebrow())
+                        .tracking(0.8)
                         .foregroundStyle(tint)
                     Text(title)
-                        .font(.system(size: 28, weight: .bold))
+                        .font(.system(size: 27, weight: .bold))
                         .foregroundStyle(IBColors.ink)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle)
                         .font(.callout)
                         .foregroundStyle(IBColors.secondaryText)
@@ -97,11 +103,15 @@ struct StudioSectionHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 20)
+                .frame(width: 26, height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(tint.opacity(0.1))
+                )
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.system(size: 15, weight: .bold))
@@ -126,43 +136,39 @@ struct StudioMetricTile: View {
     var detail: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(tint)
-                Spacer()
-                Circle()
-                    .fill(tint.opacity(0.13))
-                    .frame(width: 8, height: 8)
+                    .frame(width: 26, height: 26)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(tint.opacity(0.11))
+                    )
+                Text(label.uppercased())
+                    .font(IBTypography.eyebrow(size: 9.5))
+                    .tracking(0.6)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             Text(value)
                 .font(IBTypography.stat)
                 .foregroundStyle(IBColors.ink)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(IBColors.ink)
-                if let detail {
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
-                        .lineLimit(1)
-                }
+                .minimumScaleFactor(0.8)
+            if let detail {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: IBRadius.card)
-                .fill(IBColors.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: IBRadius.card)
-                        .stroke(IBColors.cardBorder, lineWidth: 1)
-                )
-        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .glassCard(cornerRadius: IBRadius.md)
     }
 }
 
@@ -172,11 +178,18 @@ struct StudioPill: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .font(.system(size: 10.5, weight: .bold, design: .rounded))
+            .tracking(0.4)
             .foregroundStyle(tint)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 9)
             .padding(.vertical, 4)
-            .background(Capsule().fill(tint.opacity(0.11)))
+            .background(
+                Capsule()
+                    .fill(tint.opacity(0.1))
+                    .overlay(
+                        Capsule().stroke(tint.opacity(0.14), lineWidth: 1)
+                    )
+            )
     }
 }
 
@@ -192,14 +205,14 @@ struct ProgressRing: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(IBColors.cardBorder.opacity(0.4), lineWidth: lineWidth)
+                .stroke(color.opacity(0.14), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: clampedProgress)
                 .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(IBAnimation.smooth, value: progress)
             Text("\(Int(clampedProgress * 100))")
-                .font(.system(size: size * 0.28, weight: .bold, design: .default))
+                .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
                 .foregroundColor(IBColors.softWhite)
         }
         .frame(width: size, height: size)
@@ -269,9 +282,9 @@ struct SubjectBadge: View {
         .padding(.vertical, compact ? 4 : 6)
         .background(
             Capsule()
-                .fill(color.opacity(0.12))
+                .fill(color.opacity(0.1))
                 .overlay(
-                    Capsule().stroke(color.opacity(0.2), lineWidth: 1)
+                    Capsule().stroke(color.opacity(0.18), lineWidth: 1)
                 )
         )
     }
@@ -286,10 +299,16 @@ struct MasteryBar: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: height / 2)
-                    .fill(IBColors.cardBorder.opacity(0.3))
-                RoundedRectangle(cornerRadius: height / 2)
-                    .fill(color)
+                Capsule()
+                    .fill(IBColors.ink.opacity(0.07))
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [color, color.opacity(0.75)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(width: max(0, geo.size.width * min(progress, 1.0)))
             }
         }
@@ -318,13 +337,13 @@ struct PromptChip: View {
 
     var body: some View {
         Button(action: { action(); IBHaptics.soft() }) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(IBColors.electricBlue)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 26, height: 26)
                     .background(
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: 8)
                             .fill(IBColors.electricBlue.opacity(0.1))
                     )
                 Text(text)
@@ -334,20 +353,13 @@ struct PromptChip: View {
                     .lineLimit(2)
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(IBColors.tertiaryText)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.cardBorder, lineWidth: 1)
-                    )
-            )
+            .glassCard(cornerRadius: IBRadius.md)
         }
         .buttonStyle(.plain)
     }
@@ -366,6 +378,7 @@ struct ThinkingDots: View {
 struct QualityButton: View {
     let label: String
     let color: Color
+    var detail: String? = nil
     let action: () -> Void
     @State private var isPressed = false
 
@@ -375,19 +388,34 @@ struct QualityButton: View {
             action()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { isPressed = false }
         } label: {
-            Text(label)
-                .font(IBTypography.captionBold)
-                // White text over each button's colored fill; deliberately kept
-                // hardcoded since every tint is a saturated accent color.
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: IBRadius.sm)
-                        .fill(color)
-                )
+            VStack(spacing: 2) {
+                Text(label)
+                    .font(IBTypography.captionBold)
+                if let detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+            }
+            // White text over each button's colored fill; deliberately kept
+            // hardcoded since every tint is a saturated accent color.
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, detail == nil ? 14 : 9)
+            .background(
+                RoundedRectangle(cornerRadius: IBRadius.md)
+                    .fill(
+                        LinearGradient(
+                            colors: [color, color.opacity(0.85)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .shadow(color: color.opacity(0.3), radius: 6, x: 0, y: 3)
+            )
         }
-        .scaleEffect(isPressed ? 0.93 : 1)
+        .buttonStyle(.plain)
+        .scaleEffect(isPressed ? 0.95 : 1)
         .animation(IBAnimation.snappy, value: isPressed)
     }
 }
@@ -399,15 +427,19 @@ struct EmptyStateView: View {
     let message: String
 
     var body: some View {
-        VStack(spacing: IBSpacing.lg) {
+        VStack(spacing: IBSpacing.md) {
             ZStack {
                 Circle()
-                    .fill(IBColors.electricBlue.opacity(0.08))
-                    .frame(width: 88, height: 88)
+                    .fill(IBColors.electricBlue.opacity(0.07))
+                    .frame(width: 84, height: 84)
+                Circle()
+                    .stroke(IBColors.electricBlue.opacity(0.1), lineWidth: 1)
+                    .frame(width: 84, height: 84)
                 Image(systemName: icon)
-                    .font(.system(size: 36, weight: .light))
-                    .foregroundColor(IBColors.mutedGray)
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundColor(IBColors.secondaryText)
             }
+            .padding(.bottom, 2)
             Text(title)
                 .font(IBTypography.headline)
                 .foregroundColor(IBColors.softWhite)
@@ -416,6 +448,7 @@ struct EmptyStateView: View {
                 .foregroundColor(IBColors.secondaryText)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
+                .frame(maxWidth: 380)
         }
         .padding(IBSpacing.xl)
     }

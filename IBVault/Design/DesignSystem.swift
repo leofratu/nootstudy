@@ -1,61 +1,75 @@
 import SwiftUI
 import AppKit
 
+nonisolated enum IBLocalClock: Sendable {
+    static var now: Date { Date() }
+    static var calendar: Calendar { Calendar.autoupdatingCurrent }
+    static var timeZone: TimeZone { TimeZone.autoupdatingCurrent }
+    static var locale: Locale { Locale.autoupdatingCurrent }
+
+    static func formatter(dateFormat: String) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.calendar = calendar
+        formatter.dateFormat = dateFormat
+        return formatter
+    }
+
+    static func nextQuarterHour(after date: Date = now) -> Date {
+        let calendar = self.calendar
+        let minute = calendar.component(.minute, from: date)
+        let second = calendar.component(.second, from: date)
+        let elapsedInQuarter = minute % 15
+        let minutesToAdd = elapsedInQuarter == 0 && second == 0 ? 0 : 15 - elapsedInQuarter
+        let advanced = calendar.date(byAdding: .minute, value: minutesToAdd, to: date) ?? date
+        return calendar.dateInterval(of: .minute, for: advanced)?.start ?? advanced
+    }
+}
+
 // MARK: - Color Palette
 struct IBColors {
-    // Neutral workspace surfaces
-    static let surface = Color.white
-    static let surfaceHover = Color(hex: "EEF3FB")
-    static let overlay = Color.white
-    static let canvas = Color(hex: "F4F6FA")
-    static let ink = Color(hex: "1C2536")
-    static let subduedInk = Color(hex: "64708A")
+    // Layered workspace surfaces — a deeper canvas lets elevated cards float.
+    static let surface = Color(hex: "FFFFFF")
+    static let surfaceHover = Color(hex: "F2F5FA")
+    static let canvas = Color(hex: "EDF0F5")
+    static let canvasDeep = Color(hex: "E4E9F1")
+    static let ink = Color(hex: "131A2B")
+    static let subduedInk = Color(hex: "525F78")
 
     // Accents
-    static let electricBlue = Color(hex: "2868E8")
-    static let electricBlueLight = Color(hex: "8DB8FF")
-    static let electricBlueMuted = Color(hex: "2956AB")
-    static let teal = Color(hex: "10A89A")
-    static let coral = Color(hex: "F06A4D")
-    static let gold = Color(hex: "E39B16")
+    static let electricBlue = Color(hex: "2E5BE6")
+    static let electricBlueMuted = Color(hex: "2B4FAE")
+    static let teal = Color(hex: "0C9D90")
+    static let coral = Color(hex: "EC6141")
+    static let gold = Color(hex: "DE9908")
 
     // Text
     static let softWhite = ink
     static let secondaryText = subduedInk
     static let mutedGray = subduedInk
-    static let tertiaryText = Color(hex: "909BB0")
+    static let tertiaryText = Color(hex: "8B95AC")
 
-    // Cards
-    static let cardBackground = Color.white
-    static let cardBorder = Color(hex: "DDE3EE")
-    static let cardInnerShadow = Color(hex: "1C2536").opacity(0.04)
+    // Cards — the border is a faint keyline; elevation comes from shadow.
+    static let cardBorder = Color(hex: "E2E7F0")
 
-    // Semantic
-    static let success = Color(hex: "34D399")
-    static let warning = Color(hex: "FCD34D")
-    static let danger = Color(hex: "FB7185")
-    static let streakOrange = Color(hex: "FF7A45")
+    // Semantic — deepened so they read on white without a wash.
+    static let success = Color(hex: "27B183")
+    static let warning = Color(hex: "EBA726")
+    static let danger = Color(hex: "EE5068")
+    static let streakOrange = Color(hex: "F5733D")
 
     // Subject accents
-    static let englishColor = Color(hex: "9B72FF")
-    static let russianColor = Color(hex: "F472B6")
-    static let biologyColor = Color(hex: "22D3A3")
-    static let mathColor = Color(hex: "4F94FF")
-    static let economicsColor = Color(hex: "FBB940")
-    static let businessColor = Color(hex: "F06060")
-    static let advancedMathColor = Color(hex: "8B5CF6")
-    static let universeColor = Color(hex: "6366F1")
-    static let startupsColor = Color(hex: "0EA5E9")
+    static let englishColor = Color(hex: "8B63F5")
+    static let russianColor = Color(hex: "EC5CA8")
+    static let biologyColor = Color(hex: "19BE97")
+    static let mathColor = Color(hex: "3E86F5")
+    static let economicsColor = Color(hex: "F0AD2E")
+    static let businessColor = Color(hex: "E85B5B")
+    static let advancedMathColor = Color(hex: "7C4FDF")
+    static let universeColor = Color(hex: "565BD8")
+    static let startupsColor = Color(hex: "0A94D1")
 
-    // Kept for the handful of data visualizations that benefit from a range.
-    static let blueGradient = LinearGradient(
-        colors: [Color(hex: "5BA4FF"), Color(hex: "7B6CF6")],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )
-    static let surfaceGradient = LinearGradient(
-        colors: [Color.white.opacity(0.95), Color(hex: "F0F4FA")],
-        startPoint: .top, endPoint: .bottom
-    )
     static func subjectColor(for name: String) -> Color {
         switch name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "advanced mathematics": return advancedMathColor
@@ -91,9 +105,9 @@ extension Color {
 
 // MARK: - Typography
 struct IBTypography {
-    static let largeTitle = Font.system(.largeTitle, design: .default, weight: .bold)
+    static let largeTitle = Font.system(size: 30, weight: .bold, design: .default)
     static let title = Font.system(.title2, design: .default, weight: .bold)
-    static let title3 = Font.system(.title3, design: .default, weight: .medium)
+    static let title3 = Font.system(.title3, design: .default, weight: .semibold)
     static let headline = Font.system(.headline, design: .default, weight: .semibold)
     static let body = Font.system(.body, design: .default, weight: .regular)
     static let callout = Font.system(.callout, design: .default, weight: .medium)
@@ -102,6 +116,10 @@ struct IBTypography {
     static let mono = Font.system(.footnote, design: .monospaced, weight: .medium)
     static let stat = Font.system(size: 26, weight: .bold, design: .rounded)
     static let bigStat = Font.system(size: 40, weight: .bold, design: .rounded)
+    /// Uppercase microcopy for eyebrows and section labels.
+    static func eyebrow(size: CGFloat = 10.5) -> Font {
+        .system(size: size, weight: .bold, design: .rounded)
+    }
 }
 
 // MARK: - Spacing
@@ -114,27 +132,64 @@ struct IBSpacing {
     static let xxl: CGFloat = 48
 }
 
-// MARK: - Corner Radii
+// MARK: - Corner Radii — varied scale so surfaces read as layered, not boxy.
 struct IBRadius {
     static let sm: CGFloat = 8
-    static let md: CGFloat = 8
-    static let lg: CGFloat = 8
-    static let xl: CGFloat = 8
-    static let card: CGFloat = 8
+    static let md: CGFloat = 10
+    static let lg: CGFloat = 14
+    static let xl: CGFloat = 20
+    static let card: CGFloat = 14
+}
+
+// MARK: - Shadows — two-stop elevation: tight contact shadow + diffuse ambient.
+struct IBShadow {
+    static let cardColor = Color.black.opacity(0.05)
+    static let cardRadius: CGFloat = 14
+    static let cardY: CGFloat = 5
+    static let contactColor = Color.black.opacity(0.04)
+    static let contactRadius: CGFloat = 2
+    static let contactY: CGFloat = 1
+}
+
+// MARK: - Gradients
+struct IBGradient {
+    static var accent: LinearGradient {
+        LinearGradient(
+            colors: [IBColors.electricBlue, IBColors.electricBlueMuted],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static func tint(_ color: Color) -> LinearGradient {
+        LinearGradient(
+            colors: [color.opacity(0.16), color.opacity(0.08)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    /// Barely-there vertical sheen applied to elevated cards.
+    static var cardSheen: LinearGradient {
+        LinearGradient(
+            colors: [Color.white, Color(hex: "FBFCFE")],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
 }
 
 // MARK: - Glass Card Modifier
 struct GlassCardModifier: ViewModifier {
     var cornerRadius: CGFloat = IBRadius.card
-    var borderOpacity: Double = 0.5
-    var backgroundOpacity: Double = 0.75
 
     func body(content: Content) -> some View {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(IBColors.surface)
-                    .shadow(color: IBColors.ink.opacity(0.045), radius: 12, x: 0, y: 4)
+                    .fill(IBGradient.cardSheen)
+                    .shadow(color: IBShadow.cardColor, radius: IBShadow.cardRadius, x: 0, y: IBShadow.cardY)
+                    .shadow(color: IBShadow.contactColor, radius: IBShadow.contactRadius, x: 0, y: IBShadow.contactY)
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius)
                             .stroke(IBColors.cardBorder, lineWidth: 1)
@@ -161,10 +216,6 @@ extension View {
     func glow(color: Color = IBColors.electricBlue, radius: CGFloat = 12) -> some View {
         modifier(GlowModifier(color: color, radius: radius))
     }
-
-    func premiumShadow() -> some View {
-        self.shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
-    }
 }
 
 // MARK: - Haptics
@@ -172,7 +223,6 @@ struct IBHaptics {
     static func light() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default) }
     static func medium() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .default) }
     static func soft() { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .default) }
-    static func rigid() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
     static func success() { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
     static func warning() { NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now) }
     static func error() { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }

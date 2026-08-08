@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 
 struct SettingsView: View {
+    private static let fixedTargetIBScore = 40
+
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
@@ -15,7 +17,6 @@ struct SettingsView: View {
     @State private var providerStatus: AIProviderStatus?
     @State private var isTestingProvider = false
     @State private var showReportUpload = false
-    @State private var presetApplied = false
     @State private var backupStatus = ""
     @State private var showBackups = false
     @State private var isBackingUp = false
@@ -24,6 +25,7 @@ struct SettingsView: View {
     @State private var latestBackupDate: Date?
     @State private var showResetConfirmation = false
     @State private var isResetting = false
+    @State private var profileSaveTask: Task<Void, Never>?
 
     // ARIA Settings
     @AppStorage("geminiModel") private var selectedModel = "gemini-2.0-flash"
@@ -49,7 +51,52 @@ struct SettingsView: View {
     @State private var adhdMedSettings: ADHDMedicationSettings = .default
     @State private var showMedicationPicker = false
 
+    /// The categorized left-hand navigation for Settings.
+    private enum SettingsSection: String, CaseIterable, Identifiable {
+        case general = "General"
+        case assistant = "AI & Assistant"
+        case subjects = "Subjects"
+        case study = "Study"
+        case focus = "Focus & Health"
+        case notifications = "Notifications"
+        case appearance = "Appearance"
+        case data = "Data & Backup"
+        case about = "About"
+
+        var id: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .general: return "person.crop.circle"
+            case .assistant: return "sparkles"
+            case .subjects: return "books.vertical"
+            case .study: return "calendar"
+            case .focus: return "heart.text.square"
+            case .notifications: return "bell"
+            case .appearance: return "paintbrush"
+            case .data: return "externaldrive"
+            case .about: return "info.circle"
+            }
+        }
+    }
+
+    @State private var selectedSection: SettingsSection = .general
+
     private var profile: UserProfile? { profiles.first }
+
+    private var sectionSummary: String {
+        switch selectedSection {
+        case .general: return "Your study identity, target, and report data"
+        case .assistant: return "Provider, model, and response controls"
+        case .subjects: return "Curriculum and subject configuration"
+        case .study: return "Review defaults and daily workload"
+        case .focus: return "Focus support and medication tracking"
+        case .notifications: return "Study reminders and warnings"
+        case .appearance: return "Interaction preferences"
+        case .data: return "Backups, recovery, and reset controls"
+        case .about: return "Installed app and assistant details"
+        }
+    }
 
     private var selectedProvider: AIProviderKind {
         AIProviderKind(rawValue: selectedProviderRaw) ?? .gemini
@@ -96,143 +143,287 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            StudioPageHeader(
-                eyebrow: "Workspace controls",
-                title: "Settings",
-                subtitle: "Configure your study plan, assistant, notifications, and local data without losing the thread of your work.",
-                symbol: "slider.horizontal.3",
-                tint: IBColors.electricBlue
-            ) {
-                StudioPill(title: "STUDY STUDIO", tint: IBColors.electricBlue)
-            }
-            .padding(.horizontal, 28)
-            .padding(.top, 24)
-            .padding(.bottom, 18)
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("SETTINGS")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(IBColors.electricBlue)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 14)
 
-            Form {
-                presetSection
-                reportSection
-                aiProviderSection
-                modelConfigurationSection
-                curriculumSection
-                studySection
-                adhdSection
-                backupSection
-                notificationSection
-                appearanceSection
-                dataSection
-                aboutSection
+                ForEach(SettingsSection.allCases) { section in
+                    Button {
+                        selectedSection = section
+                    } label: {
+                        Label(section.rawValue, systemImage: section.icon)
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(selectedSection == section ? IBColors.electricBlue : IBColors.ink)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 11)
+                            .frame(height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(selectedSection == section ? IBColors.electricBlue.opacity(0.11) : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
             }
-            .formStyle(.grouped)
+            .padding(.horizontal, 8)
+            .frame(width: 220)
+            .background(IBColors.surface)
+
+            Divider()
+
+            VStack(spacing: 0) {
+                HStack(alignment: .center, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(selectedSection.rawValue)
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(IBColors.ink)
+                        Text(sectionSummary)
+                            .font(.callout)
+                            .foregroundStyle(IBColors.secondaryText)
+                    }
+                    Spacer(minLength: 20)
+                }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 16)
+
+                Divider()
+
+                sectionContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .background(IBColors.canvas)
-        .navigationTitle("Settings")
         .sheet(isPresented: $showReportUpload) { ReportUploadView() }
         .sheet(isPresented: $showModelPicker) { GeminiModelPickerView(selectedModel: $selectedModel) }
-        .onAppear { refreshViewState(); adhdMedSettings = ADHDMedicationSettings.loadFromDefaults() }
+        .onAppear {
+            enforceFixedTarget()
+            refreshViewState()
+            adhdMedSettings = ADHDMedicationSettings.loadFromDefaults()
+        }
+        .onDisappear {
+            profileSaveTask?.cancel()
+            persistChanges()
+        }
         .sheet(isPresented: $showMedicationPicker) {
             MedicationPickerView(settings: $adhdMedSettings)
         }
     }
 
-    // MARK: - Student Preset
-    private var presetSection: some View {
-        Section {
-            if let p = profile {
-                HStack(spacing: 10) {
-                    Image(systemName: "person.fill")
-                        .foregroundStyle(.tint)
-                    TextField("Your Name", text: Binding(
-                        get: { p.studentName }, set: { p.studentName = $0; persistChanges() }
-                    ))
-                }
-
-                HStack(spacing: 10) {
-                    Image(systemName: "calendar")
-                        .foregroundStyle(.tint)
-                    Picker("IB Year", selection: Binding(
-                        get: { p.ibYear }, set: { p.ibYear = $0; persistChanges() }
-                    )) {
-                        ForEach(IBYear.allCases, id: \.self) { year in
-                            Text(year.rawValue).tag(year)
-                        }
-                    }.pickerStyle(.menu)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "gauge.with.dots.needle.67percent")
-                            .foregroundStyle(.tint)
-                        Text("Study Intensity")
-                    }
-                    Picker("Intensity", selection: Binding(
-                        get: { p.studyIntensity }, set: { p.studyIntensity = $0; persistChanges() }
-                    )) {
-                        ForEach(StudyIntensity.allCases, id: \.self) { intensity in
-                            HStack { Text(intensity.emoji); Text(intensity.rawValue) }.tag(intensity)
-                        }
-                    }.pickerStyle(.menu)
-                    Text("Suggests \(p.studyIntensity.dailyCardSuggestion) cards/day • \(String(format: "%.1f", p.studyIntensity.xpMultiplier))× XP")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 10) {
-                    Image(systemName: "target")
-                        .foregroundStyle(.tint)
-                    Stepper("Target Score: \(p.targetIBScore)/45", value: Binding(
-                        get: { p.targetIBScore }, set: { p.targetIBScore = $0; persistChanges() }
-                    ), in: 12...45)
-                }
-
-                Button {
-                    p.dailyGoal = p.studyIntensity.dailyCardSuggestion
-                    persistChanges()
-                    presetApplied = true; IBHaptics.success()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { presetApplied = false }
-                } label: {
-                    HStack {
-                        Image(systemName: "wand.and.stars")
-                        Text("Apply Preset")
-                        if presetApplied { Spacer(); Text("✓ Applied!").foregroundStyle(.green) }
-                    }
-                }
-            }
-        } header: {
-            Label("Student Profile", systemImage: "graduationcap.fill")
-        } footer: {
-            Text("Presets auto-adjust your daily goal based on your study intensity. ARIA uses this data for personalised recommendations. Rank is earned from your review history.")
+    @ViewBuilder
+    private var sectionContent: some View {
+        switch selectedSection {
+        case .general:
+            studyWorkspace
+        case .assistant:
+            Form { aiProviderSection; modelConfigurationSection }.formStyle(.grouped)
+        case .subjects:
+            Form { curriculumSection }.formStyle(.grouped)
+        case .study:
+            Form { studySection }.formStyle(.grouped)
+        case .focus:
+            Form { adhdSection }.formStyle(.grouped)
+        case .notifications:
+            Form { notificationSection }.formStyle(.grouped)
+        case .appearance:
+            Form { appearanceSection }.formStyle(.grouped)
+        case .data:
+            Form { backupSection; dataSection }.formStyle(.grouped)
+        case .about:
+            Form { aboutSection }.formStyle(.grouped)
         }
     }
 
-    // MARK: - Report Upload
-    private var reportSection: some View {
-        Section {
-            Button { showReportUpload = true } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "doc.text.fill")
-                        .foregroundStyle(.tint)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Upload Report Card")
-                        if let date = profile?.reportLastUploaded {
-                            Text("Last updated: \(date, style: .relative) ago")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Enter grades for all subjects at once")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+    private var studyWorkspace: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                workspaceBand(
+                    title: "Study profile",
+                    subtitle: "The settings ARIA uses to shape your study plan.",
+                    symbol: "person.crop.circle",
+                    tint: IBColors.electricBlue
+                ) {
+                    if let profile {
+                        VStack(spacing: 0) {
+                            HStack(spacing: 14) {
+                                Label("Name", systemImage: "person")
+                                    .frame(width: 150, alignment: .leading)
+                                TextField("Your name", text: Binding(
+                                    get: { profile.studentName },
+                                    set: { profile.studentName = $0; scheduleProfileSave() }
+                                ))
+                                .textFieldStyle(.roundedBorder)
+                            }
+                            .padding(.vertical, 10)
+
+                            Divider()
+
+                            HStack(spacing: 14) {
+                                Label("IB programme", systemImage: "calendar")
+                                    .frame(width: 150, alignment: .leading)
+                                Picker("IB programme", selection: Binding(
+                                    get: { profile.ibYear },
+                                    set: { profile.ibYear = $0; persistChanges() }
+                                )) {
+                                    ForEach(IBYear.allCases, id: \.self) { year in
+                                        Text(year.rawValue).tag(year)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+
+                            Divider()
+
+                            HStack(spacing: 14) {
+                                Label("Study intensity", systemImage: "gauge.with.dots.needle.67percent")
+                                    .frame(width: 150, alignment: .leading)
+                                Picker("Study intensity", selection: Binding(
+                                    get: { profile.studyIntensity },
+                                    set: { profile.studyIntensity = $0; persistChanges() }
+                                )) {
+                                    ForEach(StudyIntensity.allCases, id: \.self) { intensity in
+                                        Text("\(intensity.emoji)  \(intensity.rawValue)").tag(intensity)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                                Spacer()
+                                Text("\(profile.studyIntensity.dailyCardSuggestion) cards/day")
+                                    .font(.caption)
+                                    .foregroundStyle(IBColors.secondaryText)
+                            }
+                            .padding(.vertical, 10)
                         }
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.tertiary)
+                }
+
+                workspaceBand(
+                    title: "IB target",
+                    subtitle: "Your saved diploma target is fixed for this workspace.",
+                    symbol: "target",
+                    tint: IBColors.teal
+                ) {
+                    HStack(alignment: .center, spacing: 18) {
+                        Text("40 / 45")
+                            .font(.system(size: 34, weight: .bold))
+                            .foregroundStyle(IBColors.ink)
+                            .frame(width: 118, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 7) {
+                            ProgressView(value: Double(Self.fixedTargetIBScore), total: 45)
+                                .tint(IBColors.teal)
+                            Text("Saved to your profile and used by prediction and planning surfaces.")
+                                .font(.caption)
+                                .foregroundStyle(IBColors.secondaryText)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+
+                workspaceBand(
+                    title: "Study behavior",
+                    subtitle: "Keep the review flow predictable and low-friction.",
+                    symbol: "rectangle.stack.badge.play",
+                    tint: IBColors.gold
+                ) {
+                    VStack(spacing: 0) {
+                        if let profile {
+                            Stepper("Daily goal", value: Binding(
+                                get: { profile.dailyGoal },
+                                set: { profile.dailyGoal = $0; persistChanges() }
+                            ), in: 5...100, step: 5)
+                            .padding(.vertical, 10)
+                            HStack {
+                                Spacer()
+                                Text("\(profile.dailyGoal) cards")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(IBColors.secondaryText)
+                            }
+                            .padding(.bottom, 10)
+                            Divider()
+                        }
+                        Toggle("Start the next card automatically", isOn: $autoPlayNext)
+                            .padding(.vertical, 10)
+                        Divider()
+                        Toggle("Show due-card count in navigation", isOn: $showDueCountBadge)
+                            .padding(.vertical, 10)
+                        Divider()
+                        Toggle("Show mastery on recall cards", isOn: $showMasteryPercent)
+                            .padding(.vertical, 10)
+                    }
+                }
+
+                workspaceBand(
+                    title: "Report and grades",
+                    subtitle: "Bring your current subject results into the evidence model.",
+                    symbol: "chart.bar.doc.horizontal",
+                    tint: IBColors.coral
+                ) {
+                    Button {
+                        showReportUpload = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "doc.badge.plus")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(IBColors.coral)
+                                .frame(width: 34, height: 34)
+                                .background(IBColors.coral.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Update report results")
+                                    .font(.callout.weight(.bold))
+                                Text(profile?.reportLastUploaded.map { "Last updated \($0.formatted(date: .abbreviated, time: .omitted))" } ?? "Enter current grades across subjects")
+                                    .font(.caption)
+                                    .foregroundStyle(IBColors.secondaryText)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(IBColors.tertiaryText)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 6)
                 }
             }
-        } header: {
-            Label("Report & Grades", systemImage: "chart.bar.doc.horizontal.fill")
+            .frame(maxWidth: 880, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
+    }
+
+    private func workspaceBand<Content: View>(
+        title: String,
+        subtitle: String,
+        symbol: String,
+        tint: Color,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 9) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(IBColors.ink)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(IBColors.secondaryText)
+                }
+            }
+            content()
+        }
+        .padding(.vertical, 4)
     }
 
     // MARK: - AI Provider
@@ -379,6 +570,8 @@ struct SettingsView: View {
                     Image(systemName: isVisible.wrappedValue ? "eye.slash" : "eye")
                 }
                 .buttonStyle(.borderless)
+                .help(isVisible.wrappedValue ? "Hide API key" : "Show API key")
+                .accessibilityLabel(isVisible.wrappedValue ? "Hide API key" : "Show API key")
             }
             HStack {
                 Button("Save to Keychain") {
@@ -548,7 +741,7 @@ struct SettingsView: View {
             }
 
             Picker("Review Order", selection: $reviewOrder) {
-                Text("Spaced (SM-2)").tag("spaced")
+                Text("Spaced (FSRS)").tag("spaced")
                 Text("Weakest First").tag("weakest")
                 Text("Random Shuffle").tag("random")
             }
@@ -721,6 +914,20 @@ struct SettingsView: View {
         refreshBackupState()
     }
 
+    private func enforceFixedTarget() {
+        if let profile {
+            guard profile.targetIBScore != Self.fixedTargetIBScore else { return }
+            profile.targetIBScore = Self.fixedTargetIBScore
+            persistChanges()
+            return
+        }
+
+        let createdProfile = UserProfile()
+        createdProfile.targetIBScore = Self.fixedTargetIBScore
+        context.insert(createdProfile)
+        persistChanges()
+    }
+
     private func refreshKeychainState() {
         hasKey = KeychainService.hasAPIKey
         if hasKey, let loadedKey = KeychainService.loadAPIKey() {
@@ -883,8 +1090,22 @@ struct SettingsView: View {
         do {
             try context.save()
         } catch {
-            context.rollback()
+            // Surface the failure without rolling back the shared context:
+            // a single failed settings save must not discard unrelated pending
+            // work. The mutated setting remains pending and will autosave.
             backupStatus = "✗ Could not save changes: \(error.localizedDescription)"
+        }
+    }
+
+    private func scheduleProfileSave() {
+        profileSaveTask?.cancel()
+        profileSaveTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(500))
+            } catch {
+                return
+            }
+            persistChanges()
         }
     }
 
@@ -1145,6 +1366,7 @@ struct ReportUploadView: View {
     }
 
     private func saveAllGrades() {
+        var createdGrades: [Grade] = []
         for subject in subjects {
             guard let subGrades = grades[subject.name] else { continue }
             for (comp, score) in subGrades {
@@ -1153,6 +1375,7 @@ struct ReportUploadView: View {
                 } else {
                     let grade = Grade(component: comp, score: score, subject: subject)
                     context.insert(grade)
+                    createdGrades.append(grade)
                 }
             }
         }
@@ -1164,7 +1387,11 @@ struct ReportUploadView: View {
             IBHaptics.success()
             dismiss()
         } catch {
-            context.rollback()
+            // Undo only the grades we inserted; a failed save must not roll
+            // back unrelated pending work in the shared context.
+            for grade in createdGrades {
+                context.delete(grade)
+            }
             saveError = error.localizedDescription
         }
     }

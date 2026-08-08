@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Maps SwiftData models into the value types the engine consumes.
-enum SnapshotBuilder: Sendable {
+nonisolated enum SnapshotBuilder: Sendable {
 
     static func snapshot(for subject: Subject, reviews: [ReviewSession]) -> SubjectSnapshot {
         SubjectSnapshot(

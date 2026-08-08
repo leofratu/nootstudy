@@ -1,7 +1,7 @@
 import Foundation
 
 /// Pure functions computing the four mastery signals. No SwiftData, no SwiftUI.
-enum MasterySignals: Sendable {
+nonisolated enum MasterySignals: Sendable {
 
     // Tuning constants. Changing these changes progression pace for every user.
 

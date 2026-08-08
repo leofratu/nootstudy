@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 
 struct SmartRecommendationsView: View {
-    @Environment(\.modelContext) private var context
     @Query private var subjects: [Subject]
     @Query private var profiles: [UserProfile]
     @Query(sort: \StudySession.startDate, order: .reverse) private var sessions: [StudySession]

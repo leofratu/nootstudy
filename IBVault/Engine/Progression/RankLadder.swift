@@ -1,7 +1,7 @@
 import Foundation
 
 /// A fifteen-rank ladder that moves from subatomic scale to the observable universe.
-enum Rank: Int, CaseIterable, Codable, Sendable, Comparable {
+nonisolated enum Rank: Int, CaseIterable, Codable, Sendable, Comparable {
     case electron = 0
     case atom
     case molecule
@@ -63,7 +63,7 @@ enum Rank: Int, CaseIterable, Codable, Sendable, Comparable {
 }
 
 /// Tier within a rank. Three is the lowest, one the highest.
-enum RankTier: Int, CaseIterable, Codable, Sendable, Comparable {
+nonisolated enum RankTier: Int, CaseIterable, Codable, Sendable, Comparable {
     case three = 0
     case two
     case one
@@ -80,7 +80,7 @@ enum RankTier: Int, CaseIterable, Codable, Sendable, Comparable {
 }
 
 /// One of the forty-five positions on the ladder.
-struct RankStep: Codable, Sendable, Equatable, Comparable {
+nonisolated struct RankStep: Codable, Sendable, Equatable, Comparable {
     let rank: Rank
     let tier: RankTier
 

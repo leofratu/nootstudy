@@ -15,7 +15,7 @@ struct SyllabusSeederTests {
         ("Business Management", "HL"),
         ("Advanced Mathematics", "HL"),
         ("Fundamentals of the Universe", "SL"),
-        ("Startups & Venture Capital", "HL")
+        ("Life", "HL")
     ]
 
     @Test("SL curricula exclude higher-level extension topics")
@@ -64,7 +64,7 @@ struct SyllabusSeederTests {
         let courses = [
             "Advanced Mathematics",
             "Fundamentals of the Universe",
-            "Startups & Venture Capital"
+            "Life"
         ]
         for course in courses {
             let curriculum = SyllabusSeeder.curriculum(for: course)
@@ -73,11 +73,12 @@ struct SyllabusSeederTests {
 
             // Startups course must not overlap the Business Management syllabus:
             // it owns startup/VC-specific units, not corporate strategy units.
-            if course == "Startups & Venture Capital" {
+            if course == "Life" {
                 let unitNames = curriculum.map(\.name)
                 #expect(!unitNames.contains { $0.contains("Business Organisation") })
-                #expect(unitNames.contains { $0.contains("Fundraising") })
-                #expect(unitNames.contains { $0.contains("Financial Tools") })
+                #expect(unitNames.count == 4)
+                #expect(unitNames.contains { $0.contains("Machine Learning") })
+                #expect(unitNames.contains { $0.contains("Human Behavior") })
             }
         }
     }
@@ -106,15 +107,18 @@ struct SyllabusSeederTests {
         }
     }
 
-    @Test("Startups course uses startup-specific financial tools, not corporate ratio analysis")
+    @Test("Life covers AI, behavior and founder finance without duplicating IB Business")
     func startupsFinancialToolsAreStartupSpecific() {
-        let curriculum = SyllabusSeeder.curriculum(for: "Startups & Venture Capital")
+        let curriculum = SyllabusSeeder.curriculum(for: "Life")
         let topicNames = curriculum.flatMap(\.topics).map(\.name)
+        let subtopics = curriculum.flatMap(\.topics).flatMap(\.subtopics)
 
-        #expect(topicNames.contains("The Cap Table"))
-        #expect(topicNames.contains("Runway and Cash Management"))
-        #expect(topicNames.contains("Financial Modelling for Startups"))
-        #expect(topicNames.contains("The Term Sheet"))
+        #expect(topicNames.contains("Large Language Models"))
+        #expect(topicNames.contains("LLM Systems in Production"))
+        #expect(topicNames.contains("Steering Conversations"))
+        #expect(topicNames.contains("Fundraising and Venture Capital"))
+        #expect(subtopics.contains("Cap tables and option pools"))
+        #expect(subtopics.count >= 100)
 
         // Must not inherit Business Management's corporate toolkit by name.
         #expect(!topicNames.contains { $0.localizedCaseInsensitiveContains("marketing mix") })
@@ -149,7 +153,7 @@ struct SyllabusSeederTests {
 
     @Test("curriculum(for:) is memoized and stable across calls")
     func curriculumLookupIsStableAcrossCalls() {
-        for subject in ["Advanced Mathematics", "Fundamentals of the Universe", "Startups & Venture Capital", "Biology", "Economics"] {
+        for subject in ["Advanced Mathematics", "Fundamentals of the Universe", "Life", "Biology", "Economics"] {
             let first = Self.structure(of: SyllabusSeeder.curriculum(for: subject))
             let second = Self.structure(of: SyllabusSeeder.curriculum(for: subject))
             #expect(first == second, "\(subject) curriculum must be identical across cached lookups")
@@ -161,7 +165,7 @@ struct SyllabusSeederTests {
     }
 
     @MainActor
-    @Test("seedIfNeeded creates all nine subjects and a curriculum node per subtopic")
+    @Test("seedIfNeeded creates all configured subjects and a curriculum node per subtopic")
     func seedIfNeededCreatesSubjectsAndNodes() throws {
         let container = try ModelContainer(
             for: Subject.self,
@@ -175,7 +179,7 @@ struct SyllabusSeederTests {
         SyllabusSeeder.seedIfNeeded(context: context)
 
         let subjects = try context.fetch(FetchDescriptor<Subject>())
-        #expect(subjects.count == 9)
+        #expect(subjects.count == Self.allSubjectLevels.count)
         #expect(Set(subjects.map(\.name)) == Set(Self.allSubjectLevels.map(\.name)))
 
         let nodes = try context.fetch(FetchDescriptor<CurriculumNode>())

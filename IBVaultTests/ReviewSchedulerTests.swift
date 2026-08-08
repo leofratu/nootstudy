@@ -86,7 +86,8 @@ struct ReviewSchedulerTests {
         let due = scheduler.cardsDueToday(for: subject, context: context)
 
         // Earlier date first, then the later-date pair ordered by ease factor.
-        #expect(due.map(\.id) == [earlierCard.id, lowEase.id, highEase.id])
+        let expectedIDs: [UUID] = [earlierCard.id, lowEase.id, highEase.id]
+        #expect(due.map(\.id) == expectedIDs)
         #expect(!due.contains(where: { $0.id == notDue.id }))
     }
 

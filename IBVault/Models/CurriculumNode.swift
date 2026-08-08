@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class CurriculumNode {
+nonisolated final class CurriculumNode {
     var id: UUID
     var subjectName: String
     var level: String
@@ -72,7 +72,7 @@ final class CurriculumNode {
     }
 }
 
-enum CurriculumProgressService: Sendable {
+nonisolated enum CurriculumProgressService: Sendable {
     static func node(
         in nodes: [CurriculumNode],
         subjectName: String,
@@ -81,11 +81,17 @@ enum CurriculumProgressService: Sendable {
         subtopicName: String
     ) -> CurriculumNode? {
         nodes.first {
-            $0.subjectName.caseInsensitiveCompare(subjectName) == .orderedSame &&
-                $0.level.caseInsensitiveCompare(level) == .orderedSame &&
-                $0.topicName.caseInsensitiveCompare(topicName) == .orderedSame &&
-                $0.subtopicName.caseInsensitiveCompare(subtopicName) == .orderedSame
+            Self.normalized($0.subjectName).caseInsensitiveCompare(Self.normalized(subjectName)) == .orderedSame &&
+                Self.normalized($0.level).caseInsensitiveCompare(Self.normalized(level)) == .orderedSame &&
+                Self.normalized($0.topicName).caseInsensitiveCompare(Self.normalized(topicName)) == .orderedSame &&
+                Self.normalized($0.subtopicName).caseInsensitiveCompare(Self.normalized(subtopicName)) == .orderedSame
         }
+    }
+
+    /// Mirrors the normalization `CurriculumNode.stableKey` applies so a node
+    /// written through `setMastery` is found again on a later lookup.
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func effectiveMastery(cards: [StudyCard], node: CurriculumNode?) -> Double {
@@ -116,6 +122,28 @@ enum CurriculumProgressService: Sendable {
             return partial + effectiveMastery(cards: cards, node: node)
         }
         return score / Double(subtopics.count)
+    }
+
+    /// Whole-subject mastery that prefers recorded curriculum-node proficiency
+    /// and falls back to card-derived mastery for subunits without a recorded
+    /// level. This supports explicit ARIA/manual tracking; subject-facing UI
+    /// uses `ProgressEvidenceService` for evidence-calibrated mastery.
+    static func subjectMastery(subject: Subject, nodes: [CurriculumNode]) -> Double {
+        let curriculum = SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
+        let topics = curriculum.flatMap(\.topics)
+        let subunitCount = topics.reduce(0) { $0 + $1.subtopics.count }
+        guard subunitCount > 0 else {
+            return ProficiencyTracker.masteryPercentage(for: subject)
+        }
+        let score = topics.reduce(0.0) { partial, topic in
+            partial + topicMastery(
+                subject: subject,
+                topicName: topic.name,
+                subtopics: topic.subtopics,
+                nodes: nodes
+            ) * Double(topic.subtopics.count)
+        }
+        return score / Double(subunitCount)
     }
 
     static func matchingWorkSessions(

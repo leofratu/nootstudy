@@ -1,6 +1,6 @@
 import Foundation
 
-enum AIProviderKind: String, CaseIterable, Codable, Identifiable, Sendable {
+nonisolated enum AIProviderKind: String, CaseIterable, Codable, Identifiable, Sendable {
     case gemini
     case junali
     case codexCLI
@@ -115,7 +115,7 @@ struct AIModelOption: Identifiable, Hashable, Sendable {
     let role: String
 }
 
-enum AIConfiguration {
+nonisolated enum AIConfiguration {
     static let junaliDefaultBaseURL = "https://openapi.junliai.org/v1"
     static let codexDefaultModel = "gpt-5.6-sol"
 
@@ -282,6 +282,6 @@ enum AIConfiguration {
     ]
 }
 
-private extension String {
+nonisolated private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }

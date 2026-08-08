@@ -1,17 +1,18 @@
 # IB Vault
 
-IB Vault is a native macOS study app for IB students. It combines SwiftData persistence, SM-2 spaced retrieval, grade and mastery analytics, and ARIA, a Gemini-backed study assistant that can reason over the student's local study context.
+IB Vault is a native macOS study app for IB students. It combines SwiftData persistence, FSRS spaced retrieval, grade and mastery analytics, and ARIA, a Gemini-backed study assistant that can reason over the student's local study context.
 
 The app is intentionally Mac-first: it builds as a sandboxed AppKit-backed SwiftUI application, uses the macOS Keychain for the Gemini API key, exposes native menu commands, and targets macOS 14 or later.
 
 ## Current Capabilities
 
-- Spaced retrieval queue using SM-2 scheduling, overdue prioritization, per-subject filtering, and proficiency tracking.
+- Spaced retrieval queue using FSRS scheduling, a 30-card daily cap, overdue prioritization, per-subject filtering, and proficiency tracking.
 - Native macOS navigation with sidebar tabs, top-menu commands, keyboard shortcuts, unified toolbar styling, and local notification support.
 - ARIA assistant with streaming Gemini responses, bounded context construction, persistent memory, conversation compaction, and app-action planning for study sessions, grades, flashcards, and progress updates.
 - ARIA tool catalog that makes every saved data point malleable on explicit request: flashcards (generate/create/edit/delete), grades and predicted grades (import/add/edit/delete), mastery (set/clear on curriculum subunits or individual cards), unit taught state, subjects (create/update/delete), the user profile (target score, daily goal, intensity, notifications, name), durable memories (save/edit/delete), and study/review sessions and plans (create/reschedule/complete/cancel/delete). Destructive tools require the learner's explicit in-message confirmation.
 - IB study data for subjects, topics, cards, review sessions, grades, study sessions, study plans, achievements, activity history, and user profile/rank state.
-- Nine study tracks: the six IB subjects plus three self-authored personal courses — Advanced Mathematics (proof-first foundations beyond IB AA), Fundamentals of the Universe (cosmology, stellar evolution, relativity), and Startups & Venture Capital (product-market fit, term sheets, cap tables, runway) — each with per-subject ARIA domain knowledge.
+- Nine study tracks: the six IB subjects plus Advanced Mathematics, Fundamentals of the Universe, and Life. Life contains four deep units covering startup fundamentals, machine learning and LLMs, human behavior and influence, and building, selling, and funding a company.
+- Evidence-informed study sessions introduce material through trusted resources before closed-note retrieval, corrective feedback, and transfer practice, with a 45-minute focus and 15-minute recovery rhythm for long blocks.
 - Local-first security posture: app data stays in SwiftData, API keys are stored in Keychain, and Gemini requests are made with `URLSession`.
 
 ## Repository Layout
@@ -21,7 +22,7 @@ IBVault/
   IBVaultApp.swift              macOS app entrypoint, model container, menu commands
   ContentView.swift             root navigation and command routing
   Design/                       reusable styling and shared components
-  Engine/                       SM-2, review ranking, queue management, proficiency logic
+  Engine/                       FSRS, review ranking, queue management, proficiency logic
   Models/                       SwiftData models for study, profile, ARIA, and analytics data
   Services/                     Gemini, ARIA, Keychain, backup, cards, notifications, seeding
   Views/                        SwiftUI app surfaces

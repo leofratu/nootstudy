@@ -1,8 +1,26 @@
 import Foundation
 import SwiftData
 
+nonisolated struct StudySessionSubunitEvidence: Codable, Equatable, Sendable {
+    let topicName: String
+    let subtopicName: String
+    let minutes: Double
+    let confidenceRating: Int
+    let cardsReviewed: Int
+    let correctCount: Int
+
+    var normalizedConfidence: Double {
+        min(max(Double(confidenceRating - 1) / 4, 0), 1)
+    }
+
+    var accuracy: Double? {
+        guard cardsReviewed > 0 else { return nil }
+        return min(max(Double(correctCount) / Double(cardsReviewed), 0), 1)
+    }
+}
+
 @Model
-final class StudySession {
+nonisolated final class StudySession {
     var id: UUID
     var subjectName: String
     var topicsCovered: String  // comma-separated
@@ -12,6 +30,11 @@ final class StudySession {
     var cardsReviewed: Int
     var correctCount: Int
     var xpEarned: Int
+    var sourcePlanID: UUID?
+    var notes: String?
+    var evidenceVersion: Int?
+    var subunitEvidenceJSON: String?
+    var reviewedCardIDsRaw: String?
 
     var duration: TimeInterval {
         endDate.timeIntervalSince(startDate)
@@ -51,8 +74,52 @@ final class StudySession {
         return summary.isEmpty ? subjectName : summary
     }
 
-    init(subjectName: String, topicsCovered: String, subtopicsCovered: String = "", startDate: Date, endDate: Date = Date(), cardsReviewed: Int, correctCount: Int, xpEarned: Int) {
-        self.id = UUID()
+    var subunitEvidence: [StudySessionSubunitEvidence] {
+        get {
+            guard let subunitEvidenceJSON,
+                  let data = subunitEvidenceJSON.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([StudySessionSubunitEvidence].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            evidenceVersion = 1
+            guard !newValue.isEmpty,
+                  let data = try? JSONEncoder().encode(newValue),
+                  let encoded = String(data: data, encoding: .utf8) else {
+                subunitEvidenceJSON = nil
+                return
+            }
+            subunitEvidenceJSON = encoded
+        }
+    }
+
+    var reviewedCardIDs: [UUID] {
+        get {
+            StudyScope.parseList(reviewedCardIDsRaw ?? "").compactMap(UUID.init(uuidString:))
+        }
+        set {
+            reviewedCardIDsRaw = newValue.map(\.uuidString).joined(separator: ",")
+        }
+    }
+
+    init(
+        id: UUID = UUID(),
+        subjectName: String,
+        topicsCovered: String,
+        subtopicsCovered: String = "",
+        startDate: Date,
+        endDate: Date = Date(),
+        cardsReviewed: Int,
+        correctCount: Int,
+        xpEarned: Int,
+        sourcePlanID: UUID? = nil,
+        notes: String = "",
+        subunitEvidence: [StudySessionSubunitEvidence] = [],
+        reviewedCardIDs: [UUID] = []
+    ) {
+        self.id = id
         self.subjectName = subjectName
         self.topicsCovered = topicsCovered
         self.subtopicsCovered = subtopicsCovered.isEmpty ? nil : subtopicsCovered
@@ -61,6 +128,13 @@ final class StudySession {
         self.cardsReviewed = cardsReviewed
         self.correctCount = correctCount
         self.xpEarned = xpEarned
+        self.sourcePlanID = sourcePlanID
+        self.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notes
+        self.evidenceVersion = subunitEvidence.isEmpty ? nil : 1
+        self.subunitEvidenceJSON = nil
+        self.reviewedCardIDsRaw = nil
+        self.subunitEvidence = subunitEvidence
+        self.reviewedCardIDs = reviewedCardIDs
     }
 
     static func uniqueStudyScopes(from sessions: [StudySession]) -> [StudyScope] {
@@ -87,4 +161,4 @@ final class StudySession {
     }
 }
 
-extension StudySession: Identifiable {}
+nonisolated extension StudySession: Identifiable {}

@@ -1,6 +1,6 @@
 import Foundation
 
-enum SubjectLevel: String, Codable, Sendable {
+nonisolated enum SubjectLevel: String, Codable, Sendable {
     case hl = "HL"
     case sl = "SL"
 
@@ -31,8 +31,8 @@ enum SubjectLevel: String, Codable, Sendable {
     }
 }
 
-struct CardSnapshot: Sendable, Equatable {
-    /// SM-2 consecutive successful recall count.
+nonisolated struct CardSnapshot: Sendable, Equatable {
+    /// Compatibility mirror of the scheduler's successful-review count.
     let repetitions: Int
     let intervalDays: Int
 
@@ -42,12 +42,12 @@ struct CardSnapshot: Sendable, Equatable {
     }
 }
 
-struct ReviewSnapshot: Sendable, Equatable {
+nonisolated struct ReviewSnapshot: Sendable, Equatable {
     let timestamp: Date
     let qualityRating: Int
 
     /// A recall counts as successful at `RecallQuality.good` (3) or better on
-    /// the 0–5 SM-2 scale; `again` (0) and `hard` (2) do not.
+    /// the app's 0–5 recall scale; `again` (0) and `hard` (2) do not.
     var isSuccessful: Bool { qualityRating >= 3 }
 
     init(timestamp: Date, qualityRating: Int) {
@@ -56,7 +56,7 @@ struct ReviewSnapshot: Sendable, Equatable {
     }
 }
 
-struct SubjectSnapshot: Sendable, Equatable {
+nonisolated struct SubjectSnapshot: Sendable, Equatable {
     let name: String
     let level: SubjectLevel
     let cards: [CardSnapshot]

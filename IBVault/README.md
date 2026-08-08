@@ -21,7 +21,7 @@ Keep model changes migration-aware. Avoid renaming persisted properties casually
 
 ## Engine Layer
 
-- `SM2Engine.swift`: spaced repetition scheduling and review outcome mutation.
+- `FSRSScheduler.swift`: FSRS spaced-repetition scheduling, migration, and review outcome mutation.
 - `ReviewScheduler.swift`: due-card priority scoring and queue analysis.
 - `ReviewQueueManager.swift`: cached due queue snapshots and scope-aware filtering.
 - `ProficiencyTracker.swift`: mastery/proficiency classification.
@@ -32,7 +32,7 @@ Engine code should stay deterministic and easy to test. Prefer pure helpers for 
 
 - `GeminiService.swift`: typed Gemini request/response encoding, model listing, streaming generation, retries, and error mapping.
 - `ARIAService.swift`: prompt assembly, context selection, stream handling, memory compaction, and app-action execution.
-- `CardGeneratorService.swift`: flashcard creation through Gemini.
+- `CardGeneratorService.swift`: source-grounded flashcard creation through Gemini with useful-answer validation and offline fallback cards.
 - `KeychainService.swift`: macOS Keychain API-key storage with explicit fallback reporting.
 - `BackupService.swift`, `NotificationService.swift`, and `SyllabusSeeder.swift`: local app support services.
 
@@ -61,9 +61,11 @@ When adding Swift files:
 
 The current test target covers:
 
-- SM-2 scheduling.
+- FSRS scheduling and legacy-card migration.
 - Proficiency tracking.
 - Review queue filtering and fallback behavior.
+- Daily review-limit policy and evidence-informed study-plan sequencing.
+- Life curriculum migration, four-unit coverage, and trusted learning-resource selection.
 - Review ranking policy.
 - Rank progression.
 - ADHD medication helper logic.

@@ -18,6 +18,22 @@ struct CardGeneratorService {
         let failures: [String]
     }
 
+    struct AcademicPerformanceContext: Sendable, Equatable {
+        let evidence: ProgressEvidence
+        let teacherFeedback: String?
+
+        var promptSummary: String {
+            var parts: [String] = []
+            if let evidence = evidence.assessmentEvidence {
+                parts.append("Approved school evidence: \(Int(evidence * 100))% from \(self.evidence.scoredAssessmentCount) scored record(s).")
+            }
+            if let teacherFeedback, !teacherFeedback.isEmpty {
+                parts.append("Latest teacher feedback: \(teacherFeedback)")
+            }
+            return parts.isEmpty ? "No approved school-performance evidence is available for this scope." : parts.joined(separator: " ")
+        }
+    }
+
     private struct GeneratedCardPayload: Decodable {
         let front: String
         let back: String
@@ -41,23 +57,50 @@ struct CardGeneratorService {
         topicName: String,
         subtopic: String = "",
         count: Int = 10,
+        localStartingIndex: Int = 0,
         context: ModelContext
     ) async throws -> [StudyCard] {
+        let performanceContext = academicPerformanceContext(
+            subject: subject,
+            topicName: topicName,
+            subtopic: subtopic,
+            context: context
+        )
         let profile = adaptiveProfile(
             for: subject,
             topicName: topicName,
-            subtopic: subtopic
+            subtopic: subtopic,
+            evidence: performanceContext.evidence.assessmentEvidence
         )
         let metadata = SyllabusSeeder.metadata(for: subject.name)
+        let remoteAvailable: Bool = switch AIConfiguration.provider {
+        case .gemini: KeychainService.hasAPIKey
+        case .junali: KeychainService.hasJunaliAPIKey
+        case .codexCLI: true
+        }
+        if !remoteAvailable {
+            return localStarterCards(
+                subject: subject,
+                topicName: topicName,
+                subtopic: subtopic,
+                count: min(max(count, 1), 50),
+                startingIndex: localStartingIndex,
+                profile: profile
+            )
+        }
+        let isPersonalCourse = subject.name == SyllabusSeeder.lifeCourseName ||
+            subject.name == "Advanced Mathematics" || subject.name == "Fundamentals of the Universe"
+        let courseType = isPersonalCourse ? "personal course" : "International Baccalaureate course"
         let systemPrompt = """
-        Role: You create precise, adaptive International Baccalaureate flashcards.
+        Role: You create precise, adaptive flashcards for a \(courseType).
 
         Goal: Produce cards aligned to the supplied \(subject.level) curriculum scope and the learner's current performance.
 
         Success criteria:
         - every card tests one clear idea
         - questions span the requested cognitive skills
-        - answers teach the reasoning needed for an IB response
+        - every back is a self-contained answer, not an instruction to go and produce an answer
+        - answers teach the definition, mechanism, example, or reasoning needed to self-correct
         - equations use valid LaTeX with $...$ inline and $$...$$ for display math
         - no invented citations, syllabus codes, quotations, or statistics
         - output only a valid JSON array matching the requested schema
@@ -74,7 +117,7 @@ struct CardGeneratorService {
         // cardCount can never trigger an unbounded generation loop.
         let targetCount = min(max(count, 1), 50)
         var collectedCards: [StudyCard] = []
-        var lastError: Error?
+        var lastError: (any Error)?
 
         for model in modelsToTry {
             for _ in 0..<2 {
@@ -90,7 +133,8 @@ struct CardGeneratorService {
                     count: remaining,
                     excludingFronts: collectedCards.map(\.front),
                     profile: profile,
-                    syllabusVersion: metadata.catalogVersion
+                    syllabusVersion: metadata.catalogVersion,
+                    performanceContext: performanceContext
                 )
 
                 do {
@@ -128,7 +172,71 @@ struct CardGeneratorService {
         if !collectedCards.isEmpty {
             return collectedCards
         }
+        // A study session must remain usable when the provider is offline,
+        // unauthenticated, rate-limited, or returns malformed JSON. These
+        // syllabus-grounded starter cards are intentionally explicit about
+        // the learner's task, so they are still useful as retrieval prompts
+        // and can be replaced by richer ARIA cards on the next batch.
+        let localCards = localStarterCards(
+            subject: subject,
+            topicName: topicName,
+            subtopic: subtopic,
+            count: targetCount,
+            startingIndex: localStartingIndex,
+            profile: adaptiveProfile(for: subject, topicName: topicName, subtopic: subtopic)
+        )
+        if !localCards.isEmpty {
+            return localCards
+        }
         throw lastError ?? CardGeneratorError.noCardsGenerated
+    }
+
+    @MainActor
+    static func localStarterCards(
+        subject: Subject,
+        topicName: String,
+        subtopic: String,
+        count: Int,
+        startingIndex: Int = 0,
+        profile: AdaptiveProfile
+    ) -> [StudyCard] {
+        guard let knowledge = SubjectKnowledge.knowledge(for: subject.name) else { return [] }
+        let facts = knowledge.keyConcepts.map { statement in
+            let label = statement.components(separatedBy: ":").first?
+                .components(separatedBy: ",").first?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? statement
+            return (front: "What should you understand about \(label)?", answer: statement, hint: "Reconstruct the core idea before revealing it.")
+        } + knowledge.commonMisconceptions.map { statement in
+            let claim = statement.components(separatedBy: " — ").first ?? statement
+            return (front: "Why is this claim misleading: \"\(claim)\"?", answer: statement, hint: "Identify the correction and explain why it matters.")
+        }
+        guard !facts.isEmpty else { return [] }
+        let metadata = SyllabusSeeder.metadata(for: subject.name)
+        let safeCount = min(max(count, 1), min(50, max(0, facts.count - max(startingIndex, 0))))
+        return (0..<safeCount).map { index in
+            let absoluteIndex = max(startingIndex, 0) + index
+            let fact = facts[absoluteIndex]
+            let skill = profile.skillMix.isEmpty ? CardCognitiveSkill.recall : profile.skillMix[absoluteIndex % profile.skillMix.count]
+            let card = StudyCard(
+                topicName: topicName,
+                subtopic: subtopic,
+                front: fact.front,
+                back: fact.answer,
+                subject: subject,
+                isCustom: false,
+                isAIGenerated: false,
+                generationSource: "Local syllabus starter",
+                hint: fact.hint,
+                difficulty: profile.difficulty,
+                cognitiveSkill: skill,
+                sourceTitle: metadata.sourceTitle,
+                sourceURLString: metadata.sourceURL.absoluteString,
+                syllabusReference: syllabusReference(subject: subject, topicName: topicName, subtopic: subtopic),
+                adaptationReason: "Offline source-grounded starter: \(profile.reason)",
+                generationPromptVersion: promptVersion
+            )
+            return card
+        }
     }
 
     @MainActor
@@ -243,7 +351,7 @@ struct CardGeneratorService {
         return deduplicated(payloads.compactMap { payload in
             let front = normalizedMath(payload.front).trimmingCharacters(in: .whitespacesAndNewlines)
             let back = normalizedMath(payload.back).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !front.isEmpty, !back.isEmpty else { return nil }
+            guard isUsefulAnswer(front: front, back: back) else { return nil }
             return StudyCard(
                 topicName: topicName,
                 subtopic: subtopic,
@@ -277,7 +385,7 @@ struct CardGeneratorService {
         for (frontRaw, backRaw) in pairs {
             let front = normalizedMath(frontRaw).trimmingCharacters(in: .whitespacesAndNewlines)
             let back = normalizedMath(backRaw).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !front.isEmpty, !back.isEmpty else { continue }
+            guard isUsefulAnswer(front: front, back: back) else { continue }
             cards.append(StudyCard(
                 topicName: topicName,
                 subtopic: subtopic,
@@ -306,7 +414,8 @@ struct CardGeneratorService {
         count: Int,
         excludingFronts: [String],
         profile: AdaptiveProfile,
-        syllabusVersion: String
+        syllabusVersion: String,
+        performanceContext: AcademicPerformanceContext
     ) -> String {
         let unitPart = SyllabusSeeder.unitName(for: subject.name, level: subject.level, topicName: topicName).map { "\nUnit: \($0)" } ?? ""
         let subtopicPart = subtopic.isEmpty ? "" : "\nSubtopic: \(subtopic)"
@@ -316,25 +425,34 @@ struct CardGeneratorService {
             ? ""
             : "\nAlready generated question fronts to avoid repeating:\n" + excludingFronts.prefix(20).map { "- \($0)" }.joined(separator: "\n")
 
+        let isPersonalCourse = subject.name == SyllabusSeeder.lifeCourseName ||
+            subject.name == "Advanced Mathematics" || subject.name == "Fundamentals of the Universe"
+        let courseLabel = isPersonalCourse ? "personal course" : "IB course"
+        let levelRules = isPersonalCourse
+            ? "- Treat this as a practical personal curriculum; do not invent IB exams, mark schemes, or assessment rules"
+            : "- Match IB exam style where useful and do not include HL-only content for an SL subject"
+
         return """
-        Generate exactly \(count) high-quality IB flashcards for:
+        Generate exactly \(count) high-quality flashcards for this \(courseLabel):
         Subject: \(subject.name) \(subject.level)
         Curriculum catalog: \(syllabusVersion)
         Topic: \(topicName)\(unitPart)\(subtopicPart)\(scopeLine)
         Adaptive target: \(profile.difficulty.rawValue)
         Cognitive skills: \(profile.skillMix.map(\.rawValue).joined(separator: ", "))
         Adaptation reason: \(profile.reason)
+        School-performance context: \(performanceContext.promptSummary)
 
         REQUIREMENTS:
         - Each card must test a SPECIFIC concept, fact, definition, or application
-        - Every card must stay anchored to the named IB unit/topic and avoid unrelated syllabus areas
-        - Questions should match IB exam style and difficulty
-        - Answers should be concise but must include the reasoning or marking point needed to self-correct
+        - Every card must stay anchored to the named unit/topic and avoid unrelated areas
+        - The back must directly answer the front with the actual definition, mechanism, worked step, example, or reason
+        - Never use an instruction-only back such as "draw a diagram", "define the term", "state the model", or "explain why"
+        - Answers should be concise but complete enough to self-correct without another source
         - Use the requested cognitive-skill mix instead of making every card simple recall
         - Include a short useful hint that does not reveal the answer
         - For science/math: include formulas, calculations, units, assumptions, and diagram interpretation where relevant
         - For humanities: include precise concepts, application, counterarguments, and evaluation where relevant
-        - Do not include HL-only content for an SL subject
+        \(levelRules)
         - Use $...$ for inline equations and $$...$$ for display equations; never use Unicode-only equation substitutes when LaTeX is clearer
         - Every card must be materially distinct from the others\(excludingFronts.isEmpty ? "" : " and must not repeat the excluded question fronts")
         \(exclusionLines)
@@ -347,12 +465,26 @@ struct CardGeneratorService {
         """
     }
 
-    static func adaptiveProfile(for subject: Subject, topicName: String, subtopic: String) -> AdaptiveProfile {
+    static func adaptiveProfile(for subject: Subject, topicName: String, subtopic: String, evidence: Double? = nil) -> AdaptiveProfile {
         let scoped = subject.cards.filter { card in
             card.topicName == topicName && (subtopic.isEmpty || card.subtopic == subtopic)
         }
         let reviewed = scoped.filter { $0.totalReviewCount > 0 }
+        if let evidence, evidence < 0.55 {
+            return AdaptiveProfile(
+                difficulty: .foundation,
+                skillMix: [.recall, .explain, .apply],
+                reason: "Approved school evidence is below target, so the set rebuilds the assessed prerequisite knowledge."
+            )
+        }
         guard !reviewed.isEmpty else {
+            if let evidence, evidence >= 0.85 {
+                return AdaptiveProfile(
+                    difficulty: .exam,
+                    skillMix: [.apply, .analyze, .evaluate],
+                    reason: "School performance is strong, so the set targets exam transfer before expanding coverage."
+                )
+            }
             return AdaptiveProfile(
                 difficulty: .standard,
                 skillMix: [.recall, .explain, .apply],
@@ -384,6 +516,41 @@ struct CardGeneratorService {
             skillMix: [.explain, .apply, .analyze],
             reason: "Recall is developing, so the set targets exam-style explanation and application."
         )
+    }
+
+    @MainActor
+    private static func academicPerformanceContext(
+        subject: Subject,
+        topicName: String,
+        subtopic: String,
+        context: ModelContext
+    ) -> AcademicPerformanceContext {
+        let assessments = ((try? context.fetch(FetchDescriptor<AcademicAssessment>())) ?? []).filter {
+            $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame &&
+                $0.courseLevel.caseInsensitiveCompare(subject.level) == .orderedSame
+        }
+        let mappings = ((try? context.fetch(FetchDescriptor<AcademicAssessmentMapping>())) ?? []).filter {
+            $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame &&
+                $0.courseLevel.caseInsensitiveCompare(subject.level) == .orderedSame
+        }
+        let reports = ((try? context.fetch(FetchDescriptor<AcademicReportSnapshot>())) ?? [])
+            .filter {
+                $0.subjectName.caseInsensitiveCompare(subject.name) == .orderedSame &&
+                    $0.courseLevel.caseInsensitiveCompare(subject.level) == .orderedSame
+            }
+            .sorted { ($0.reportDate ?? .distantPast) > ($1.reportDate ?? .distantPast) }
+        let cards = subject.cards.filter { $0.topicName == topicName && (subtopic.isEmpty || $0.subtopic == subtopic) }
+        let evidence = ProgressEvidenceService.score(
+            subjectName: subject.name,
+            courseLevel: subject.level,
+            topicName: topicName,
+            subtopicName: subtopic,
+            cards: cards,
+            assessments: assessments,
+            mappings: mappings
+        )
+        let feedback = reports.first(where: { !$0.teacherComment.isEmpty })?.teacherComment
+        return AcademicPerformanceContext(evidence: evidence, teacherFeedback: feedback)
     }
 
     private static func parsedDifficulty(_ rawValue: String?) -> CardDifficulty? {
@@ -433,11 +600,36 @@ struct CardGeneratorService {
     private static func deduplicated(_ cards: [StudyCard]) -> [StudyCard] {
         var seen = Set<String>()
         return cards.filter { card in
-            let key = "\(card.front.lowercased())::\(card.back.lowercased())"
+            let key = normalizedQuestionKey(card.front)
             guard !seen.contains(key) else { return false }
             seen.insert(key)
             return true
         }
+    }
+
+    nonisolated static func isUsefulAnswer(front: String, back: String) -> Bool {
+        let cleanedFront = front.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedBack = back.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedFront.isEmpty, !cleanedBack.isEmpty else { return false }
+        guard normalizedQuestionKey(cleanedFront) != normalizedQuestionKey(cleanedBack) else { return false }
+
+        let lower = cleanedBack.lowercased()
+        let instructionOnlyPrefixes = [
+            "draw a diagram", "do a diagram", "define ", "state ", "name what", "write the chain",
+            "choose a concrete", "give a precise definition", "explain why", "describe ", "use the command term"
+        ]
+        if instructionOnlyPrefixes.contains(where: { lower.hasPrefix($0) }) {
+            let explanatoryMarkers = [" is ", " are ", " means ", " because ", " therefore ", " refers to ", " results in ", " leads to "]
+            guard explanatoryMarkers.contains(where: { lower.contains($0) }) else { return false }
+        }
+        return true
+    }
+
+    nonisolated private static func normalizedQuestionKey(_ value: String) -> String {
+        value.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     private static func mergeUnique(existing: [StudyCard], incoming: [StudyCard]) -> [StudyCard] {

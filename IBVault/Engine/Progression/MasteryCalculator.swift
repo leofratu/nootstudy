@@ -1,7 +1,7 @@
 import Foundation
 
 /// Composes the mastery signals into a single 0...1 score per subject.
-enum MasteryCalculator: Sendable {
+nonisolated enum MasteryCalculator: Sendable {
 
     static let coverageWeight = 0.40
     static let retentionWeight = 0.35

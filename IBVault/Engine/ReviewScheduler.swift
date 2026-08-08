@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct ReviewScheduleConfig: Sendable {
+nonisolated struct ReviewScheduleConfig: Sendable {
     var optimalStudyHours: ClosedRange<Int> = 16...21
     var minutesPerCard: Double = 0.5
     var minimumRecommendedMinutes: Int = 15
@@ -10,11 +10,12 @@ struct ReviewScheduleConfig: Sendable {
     var examUrgencyWeight: Double = 0.5
     var lowMasteryWeight: Double = 30.0
     var examUrgencyDaysThreshold: Int = 30
+    var maximumDailyCards: Int = ReviewDailyLimitPolicy.maximumCards
     
     static let `default` = ReviewScheduleConfig()
 }
 
-struct SubjectReviewSchedule: Identifiable {
+nonisolated struct SubjectReviewSchedule: Identifiable {
     let id = UUID()
     let subject: Subject
     let dueCards: Int
@@ -47,7 +48,7 @@ struct SubjectReviewSchedule: Identifiable {
     }
 }
 
-struct ReviewRankingInput: Sendable {
+nonisolated struct ReviewRankingInput: Sendable {
     let dueCount: Int
     let overdueCount: Int
     let mastery: Double
@@ -133,7 +134,7 @@ final class ReviewScheduler {
         }
         .sorted { $0.priority > $1.priority }
         
-        totalDueToday = schedules.reduce(0) { $0 + $1.dueCards }
+        totalDueToday = min(config.maximumDailyCards, schedules.reduce(0) { $0 + $1.dueCards })
         totalOverdue = schedules.reduce(0) { $0 + $1.overdueCards }
         recommendedStudyOrder = schedules.map { $0.subject }
     }
@@ -171,7 +172,7 @@ final class ReviewScheduler {
         
         for schedule in schedules {
             let proportion = schedule.priority / totalPriority
-            let minutes = min(remainingMinutes, Int(Double(dailyGoalMinutes) * proportion))
+                let minutes = min(remainingMinutes, Int(Double(dailyGoalMinutes) * proportion))
             if minutes > 0 {
                 allocations.append((schedule.subject, minutes))
                 remainingMinutes -= minutes

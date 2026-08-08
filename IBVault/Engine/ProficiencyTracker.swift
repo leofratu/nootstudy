@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct ProficiencyConfig: Sendable {
+nonisolated struct ProficiencyConfig: Sendable {
     var masteryRepetitionsThreshold: Int = 6
     var masteryIntervalThreshold: Int = 21
     var masterySuccessRateThreshold: Double = 0.85
@@ -16,7 +16,7 @@ struct ProficiencyConfig: Sendable {
     static let `default` = ProficiencyConfig()
 }
 
-enum ProficiencyTracker {
+nonisolated enum ProficiencyTracker {
     static func updateProficiency(for card: StudyCard, config: ProficiencyConfig = .default) {
         let successRate = card.effectivenessRate
         let reviewCount = card.totalReviewCount

@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-enum KeychainError: Error, LocalizedError, Sendable {
+nonisolated enum KeychainError: Error, LocalizedError, Sendable {
     case encodingFailed
     case saveFailed(status: OSStatus)
     case loadFailed(status: OSStatus)
@@ -24,7 +24,7 @@ enum KeychainError: Error, LocalizedError, Sendable {
     }
 }
 
-enum KeychainService {
+nonisolated enum KeychainService {
     private static let service = "com.nootstudy.ibvault"
     private static let apiKeyAccount = "gemini_api_key"
     private static let junaliAPIKeyAccount = "junali_api_key"

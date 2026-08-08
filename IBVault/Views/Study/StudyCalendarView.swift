@@ -1,431 +1,257 @@
 import SwiftUI
 import SwiftData
 
+/// A stable week board for study planning. It deliberately avoids invisible
+/// timeline hit targets: every day has one visible scheduling action and every
+/// plan has one predictable tap target.
 struct StudyCalendarView: View {
     let plans: [StudyPlan]
     let onTapPlan: (StudyPlan) -> Void
-    let onDeletePlan: ((StudyPlan, Bool) -> Void)?
+    let onDeletePlan: ((StudyPlan) -> Void)?
+    let onSchedule: ((Date) -> Void)?
 
     @State private var selectedWeekOffset = 0
-    @State private var showDeleteConfirmation = false
-    @State private var planToDelete: StudyPlan?
-    @State private var scheduleReviewsOnDelete = false
+    @State private var now = IBLocalClock.now
+
+    private let dayWidth: CGFloat = 156
+
+    init(
+        plans: [StudyPlan],
+        onTapPlan: @escaping (StudyPlan) -> Void,
+        onDeletePlan: ((StudyPlan) -> Void)? = nil,
+        onSchedule: ((Date) -> Void)? = nil
+    ) {
+        self.plans = plans
+        self.onTapPlan = onTapPlan
+        self.onDeletePlan = onDeletePlan
+        self.onSchedule = onSchedule
+    }
 
     private var currentWeekStart: Date {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        let weekday = cal.component(.weekday, from: today)
-        let mondayOffset = (weekday == 1) ? -6 : (2 - weekday)
-        let monday = cal.date(byAdding: .day, value: mondayOffset + (selectedWeekOffset * 7), to: today) ?? today
-        return monday
+        let calendar = IBLocalClock.calendar
+        let today = calendar.startOfDay(for: now)
+        let weekday = calendar.component(.weekday, from: today)
+        let mondayOffset = weekday == 1 ? -6 : 2 - weekday
+        return calendar.date(byAdding: .day, value: mondayOffset + selectedWeekOffset * 7, to: today) ?? today
     }
 
     private var weekDays: [Date] {
-        (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: currentWeekStart) }
+        (0..<7).compactMap { IBLocalClock.calendar.date(byAdding: .day, value: $0, to: currentWeekStart) }
     }
 
-    // After-school study slots: 4pm to 10pm
-    private let timeSlots = Array(16...21)
-
-    private static let dayAbbrevFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "E"
-        return formatter
-    }()
-
-    private static let dayNumFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d"
-        return formatter
-    }()
-
-    private static let weekRangeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM"
-        return formatter
-    }()
-
-    /// Plans bucketed once per render by "dayStart|hour" so the 42 calendar
-    /// cells don't each rescan the full plan list.
-    private var planBuckets: [String: [StudyPlan]] {
-        guard let firstSlot = timeSlots.first, let lastSlot = timeSlots.last else { return [:] }
-        let cal = Calendar.current
-        var buckets: [String: [StudyPlan]] = [:]
-        for plan in visiblePlans {
-            let planHour = cal.component(.hour, from: plan.scheduledDate)
-            let endHour = max(cal.component(.hour, from: plan.scheduledEndDate), planHour + 1)
-            guard planHour <= lastSlot else { continue }
-            let dayStart = cal.startOfDay(for: plan.scheduledDate).timeIntervalSinceReferenceDate
-            let startHour = max(firstSlot, planHour)
-            let finalHour = min(lastSlot, endHour - 1)
-            guard startHour <= finalHour else { continue }
-            for hour in startHour...finalHour {
-                buckets["\(dayStart)|\(hour)", default: []].append(plan)
-            }
-        }
-        return buckets
+    private var weekPlans: [StudyPlan] {
+        let calendar = IBLocalClock.calendar
+        let start = calendar.startOfDay(for: currentWeekStart)
+        let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
+        return plans.filter { !$0.isCompleted && $0.scheduledDate >= start && $0.scheduledDate < end }
     }
 
-    private var visiblePlans: [StudyPlan] {
-        plans.filter { !$0.isCompleted }
-    }
-
-    private var weekPlansCount: Int {
-        visiblePlans.filter { plan in
-            let start = Calendar.current.startOfDay(for: currentWeekStart)
-            let end = Calendar.current.date(byAdding: .day, value: 7, to: start) ?? start
-            return plan.scheduledDate >= start && plan.scheduledDate < end
-        }.count
-    }
+    private var totalMinutes: Int { weekPlans.reduce(0) { $0 + $1.durationMinutes } }
 
     var body: some View {
-        // Bucket the plans exactly once per body evaluation and thread the map
-        // through the 42 day/hour cells below; the computed `planBuckets` is
-        // otherwise re-derived from every plan on every `plansForSlot` call.
-        let buckets = planBuckets
-        return VStack(alignment: .leading, spacing: 0) {
-            // Header
-            headerBar
-                .padding(16)
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider()
 
-            Divider().opacity(0.3)
-
-            // Calendar Grid
-            HStack(alignment: .top, spacing: 0) {
-                // Time labels column
-                VStack(spacing: 0) {
-                    Color.clear.frame(height: 34)
-                    ForEach(timeSlots, id: \.self) { hour in
-                        Text(String(format: "%02d:00", hour))
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .frame(height: 52, alignment: .top)
-                            .padding(.top, 3)
+            ScrollView(.horizontal, showsIndicators: true) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(weekDays, id: \.self) { day in
+                        dayColumn(day)
                     }
                 }
-                .frame(width: 42)
-                .padding(.leading, 6)
-
-                // Vertical divider
-                Rectangle()
-                    .fill(Color.primary.opacity(0.04))
-                    .frame(width: 0.5)
-
-                // Day columns
-                ForEach(weekDays, id: \.self) { day in
-                    if day != weekDays.first {
-                        Rectangle()
-                            .fill(Color.primary.opacity(0.03))
-                            .frame(width: 0.5)
-                    }
-                    dayColumn(day, buckets: buckets)
-                }
+                .padding(14)
             }
-            .padding(.bottom, 12)
+            .frame(minHeight: 350)
         }
-        .background(calendarBackground)
-        // Single alert anchored to the whole calendar rather than inside the
-        // day/slot loops, where multiple alerts shared one Bool across rendered
-        // rows and fought over presenting.
-        .alert("Delete Session?", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                if let plan = planToDelete {
-                    onDeletePlan?(plan, scheduleReviewsOnDelete)
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                planToDelete = nil
-            }
-        } message: {
-            if planToDelete != nil {
-                Text(scheduleReviewsOnDelete
-                    ? "This will also schedule spaced repetition reviews for this session."
-                    : "This session and its scheduled reviews will be removed.")
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(IBColors.surface)
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(IBColors.cardBorder, lineWidth: 1))
+        )
+        .task {
+            now = IBLocalClock.now
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                now = IBLocalClock.now
             }
         }
     }
 
-    // Liquid glass background
-    private var calendarBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(.ultraThinMaterial)
-            RoundedRectangle(cornerRadius: 14)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.04),
-                            Color.white.opacity(0.01),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.15),
-                            Color.white.opacity(0.05),
-                            Color.clear
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 0.5
-                )
-        }
-        .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
-    }
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(IBColors.electricBlue)
+                .frame(width: 32, height: 32)
+                .background(RoundedRectangle(cornerRadius: 7).fill(IBColors.electricBlue.opacity(0.10)))
 
-    private var headerBar: some View {
-        HStack(spacing: 10) {
-            // Calendar icon with glow
-            ZStack {
-                Circle()
-                    .fill(IBColors.electricBlue.opacity(0.06))
-                    .frame(width: 28, height: 28)
-                Image(systemName: "calendar")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(IBColors.electricBlue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Week board").font(.callout.weight(.bold))
+                Text(weekRange).font(.caption).foregroundStyle(IBColors.secondaryText)
             }
 
-            Text("CALENDAR")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .tracking(1)
+            Spacer(minLength: 12)
 
-            Spacer()
-
-            // Week stats
-            if weekPlansCount > 0 {
-                HStack(spacing: 3) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.orange)
-                    Text("\(weekPlansCount) sessions")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule()
-                        .fill(.orange.opacity(0.06))
-                )
+            HStack(spacing: 14) {
+                calendarStat(value: "\(weekPlans.count)", label: "blocks")
+                calendarStat(value: formatMinutes(totalMinutes), label: "planned")
             }
 
-            // Navigation
-            HStack(spacing: 3) {
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { selectedWeekOffset -= 1 }
-                } label: {
+            HStack(spacing: 6) {
+                Button { withAnimation(.snappy) { selectedWeekOffset -= 1 } } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 9, weight: .bold))
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(Color.secondary.opacity(0.06)))
-                }
-                .buttonStyle(.borderless)
-
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { selectedWeekOffset = 0 }
-                } label: {
-                    Text("Today")
-                        .font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.mini)
+                .controlSize(.small)
+                .help("Previous week")
 
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { selectedWeekOffset += 1 }
-                } label: {
+                Button("Today") { withAnimation(.snappy) { selectedWeekOffset = 0 } }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(IBColors.electricBlue)
+
+                Button { withAnimation(.snappy) { selectedWeekOffset += 1 } } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(Color.secondary.opacity(0.06)))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Next week")
             }
-
-            // Week range
-            let weekLabel: String = {
-                "\(Self.weekRangeFormatter.string(from: currentWeekStart)) – \(Self.weekRangeFormatter.string(from: weekDays.last ?? currentWeekStart))"
-            }()
-            Text(weekLabel)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(.tertiary)
         }
+        .padding(14)
     }
 
-    private func dayColumn(_ day: Date, buckets: [String: [StudyPlan]]) -> some View {
-        let cal = Calendar.current
-        let isToday = cal.isDateInToday(day)
-        let isPast = cal.startOfDay(for: day) < cal.startOfDay(for: Date())
+    private func calendarStat(value: String, label: String) -> some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text(value).font(.caption.weight(.bold).monospacedDigit()).foregroundStyle(IBColors.ink)
+            Text(label).font(.caption2).foregroundStyle(IBColors.secondaryText)
+        }
+        .frame(minWidth: 48, alignment: .trailing)
+    }
 
-        return VStack(spacing: 0) {
-            // Day header
-            VStack(spacing: 2) {
-                Text(dayAbbrev(day))
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(
-                        isToday
-                            ? AnyShapeStyle(IBColors.electricBlue)
-                            : isPast
-                                ? AnyShapeStyle(.quaternary)
-                                : AnyShapeStyle(.tertiary)
-                    )
-                    .textCase(.uppercase)
+    private func dayColumn(_ day: Date) -> some View {
+        let isToday = IBLocalClock.calendar.isDate(day, inSameDayAs: now)
+        let dayPlans = weekPlans.filter { IBLocalClock.calendar.isDate($0.scheduledDate, inSameDayAs: day) }
+            .sorted { $0.scheduledDate < $1.scheduledDate }
 
-                ZStack {
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(isToday ? IBColors.electricBlue : IBColors.secondaryText)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(day.formatted(.dateTime.day()))
+                        .font(.title3.weight(.bold).monospacedDigit())
+                        .foregroundStyle(isToday ? IBColors.electricBlue : IBColors.ink)
                     if isToday {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [IBColors.electricBlue, IBColors.electricBlue.opacity(0.8)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .frame(width: 24, height: 24)
-                            .shadow(color: IBColors.electricBlue.opacity(0.3), radius: 6, y: 1)
-                    }
-                    Text(dayNum(day))
-                        .font(.system(size: 12, weight: isToday ? .bold : .regular, design: .rounded))
-                        .foregroundStyle(
-                            isToday
-                                ? AnyShapeStyle(.white)
-                                : isPast
-                                    ? AnyShapeStyle(.tertiary)
-                                    : AnyShapeStyle(.primary)
-                        )
-                }
-            }
-            .frame(height: 34)
-
-            // Time slots
-            ForEach(timeSlots, id: \.self) { hour in
-                let slotPlans = plansForSlot(day: day, hour: hour, buckets: buckets)
-                ZStack {
-                    // Base slot
-                    Rectangle()
-                        .fill(slotBackground(isToday: isToday, isPast: isPast, hour: hour))
-
-                    // Grid line
-                    VStack {
-                        Rectangle()
-                            .fill(Color.primary.opacity(0.03))
-                            .frame(height: 0.5)
-                        Spacer()
-                    }
-
-                    // Now indicator
-                    if isToday && cal.component(.hour, from: Date()) == hour {
-                        VStack {
-                            HStack(spacing: 0) {
-                                Circle()
-                                    .fill(.red)
-                                    .frame(width: 6, height: 6)
-                                Rectangle()
-                                    .fill(.red)
-                                    .frame(height: 1)
-                            }
-                            Spacer()
-                        }
-                        .padding(.top, CGFloat(cal.component(.minute, from: Date())) / 60.0 * 52)
-                    }
-
-                    // Plan block
-                    if let plan = slotPlans.first {
-                        Button {
-                            onTapPlan(plan)
-                        } label: {
-                            sessionBlock(plan: plan)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            if onDeletePlan != nil {
-                                Button(role: .destructive) {
-                                    planToDelete = plan
-                                    scheduleReviewsOnDelete = false
-                                    showDeleteConfirmation = true
-                                } label: {
-                                    Label("Delete Session", systemImage: "trash")
-                                }
-
-                                if !plan.isFollowUpReview {
-                                    Divider()
-
-                                    Button {
-                                        planToDelete = plan
-                                        scheduleReviewsOnDelete = true
-                                        showDeleteConfirmation = true
-                                    } label: {
-                                        Label("Delete & Add Review", systemImage: "arrow.triangle.2.circlepath")
-                                    }
-                                }
-                            }
-                        }
+                        Text("TODAY")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(IBColors.electricBlue)
                     }
                 }
-                .frame(height: 52)
+                Text(dayPlans.isEmpty ? "Open" : "\(dayPlans.count) block\(dayPlans.count == 1 ? "" : "s")")
+                    .font(.caption2)
+                    .foregroundStyle(IBColors.secondaryText)
             }
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                if dayPlans.isEmpty {
+                    ContentUnavailableView("Open day", systemImage: "calendar", description: Text("Schedule one focused block."))
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                } else {
+                    ForEach(dayPlans) { plan in
+                        planBlock(plan)
+                    }
+                }
+
+                if let onSchedule {
+                    Button {
+                        onSchedule(defaultScheduleDate(on: day))
+                    } label: {
+                        Label("Schedule", systemImage: "plus")
+                            .font(.caption.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Schedule a study block on this day")
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 10)
         }
-        .frame(maxWidth: .infinity)
+        .frame(width: dayWidth, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isToday ? IBColors.electricBlue.opacity(0.045) : Color.clear)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isToday ? IBColors.electricBlue.opacity(0.18) : IBColors.cardBorder, lineWidth: 1))
     }
 
-    private func sessionBlock(plan: StudyPlan) -> some View {
-        let color = subjectColor(plan.subjectName)
-        let isReview = plan.isFollowUpReview
-
-        return VStack(spacing: 1) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(
-                        LinearGradient(
-                            colors: [color.opacity(0.2), color.opacity(0.12)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .shadow(color: color.opacity(0.15), radius: 3, y: 1)
-
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(color.opacity(0.25), lineWidth: 0.5)
-
-                VStack(spacing: 1) {
-                    if isReview {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundStyle(color)
-                    }
-                    Text(subjectAbbrev(plan.subjectName))
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .foregroundStyle(color)
+    private func planBlock(_ plan: StudyPlan) -> some View {
+        let tint = subjectColor(plan.subjectName)
+        return Button { onTapPlan(plan) } label: {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 5) {
+                    Circle().fill(tint).frame(width: 6, height: 6)
+                    Text(timeLabel(plan.scheduledDate)).font(.caption2.weight(.bold).monospacedDigit())
+                    Spacer(minLength: 0)
+                    Text("\(plan.durationMinutes)m").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                Text(subjectAbbrev(plan.subjectName))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                Text(plan.selectionSummary)
+                    .font(.caption2)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+            .padding(9)
+            .background(RoundedRectangle(cornerRadius: 7).fill(tint.opacity(0.09)))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(tint.opacity(0.22), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if let onDeletePlan {
+                Button(role: .destructive) { onDeletePlan(plan) } label: {
+                    Label("Delete block", systemImage: "trash")
                 }
             }
         }
-        .padding(2)
+        .accessibilityLabel("\(plan.subjectName), \(plan.durationMinutes) minutes, \(plan.scheduleLabel)")
     }
 
-    private func slotBackground(isToday: Bool, isPast: Bool, hour: Int) -> Color {
-        if isToday {
-            return IBColors.electricBlue.opacity(0.015)
+    private var weekRange: String {
+        let formatter = IBLocalClock.formatter(dateFormat: "d MMM")
+        return "\(formatter.string(from: currentWeekStart)) - \(formatter.string(from: weekDays.last ?? currentWeekStart))"
+    }
+
+    private func defaultScheduleDate(on day: Date) -> Date {
+        let calendar = IBLocalClock.calendar
+        let candidate = calendar.date(bySettingHour: 16, minute: 0, second: 0, of: day) ?? day
+        if calendar.isDate(day, inSameDayAs: now), candidate < now {
+            return IBLocalClock.nextQuarterHour()
         }
-        if isPast {
-            return Color.secondary.opacity(0.008)
-        }
-        return Color.clear
+        return candidate
     }
 
-    private func dayAbbrev(_ date: Date) -> String {
-        Self.dayAbbrevFormatter.string(from: date)
+    private func timeLabel(_ date: Date) -> String {
+        IBLocalClock.formatter(dateFormat: "HH:mm").string(from: date)
     }
 
-    private func dayNum(_ date: Date) -> String {
-        Self.dayNumFormatter.string(from: date)
+    private func formatMinutes(_ minutes: Int) -> String {
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        if hours == 0 { return "\(remainder)m" }
+        if remainder == 0 { return "\(hours)h" }
+        return "\(hours)h \(remainder)m"
     }
 
     private func subjectAbbrev(_ name: String) -> String {
@@ -433,19 +259,14 @@ struct StudyCalendarView: View {
         case "English B": return "ENG"
         case "Russian A Literature": return "RUS"
         case "Biology": return "BIO"
-        case "Mathematics AA": return "MAT"
+        case "Mathematics AA": return "MATH"
         case "Economics": return "ECO"
-        case "Business Management": return "BM"
-        case "Advanced Mathematics": return "ADV"
-        case "Fundamentals of the Universe": return "FOU"
-        case "Startups & Venture Capital": return "SV"
-        default: return String(name.prefix(3)).uppercased()
+        case "Business Management": return "BUS"
+        case "Life": return "LIFE"
+        case "Advanced Mathematics": return "ADV MATH"
+        case "Fundamentals of the Universe": return "UNIVERSE"
+        default: return String(name.prefix(8)).uppercased()
         }
-    }
-
-    private func plansForSlot(day: Date, hour: Int, buckets: [String: [StudyPlan]]) -> [StudyPlan] {
-        let dayStart = Calendar.current.startOfDay(for: day).timeIntervalSinceReferenceDate
-        return buckets["\(dayStart)|\(hour)"] ?? []
     }
 
     private func subjectColor(_ name: String) -> Color {
@@ -456,10 +277,24 @@ struct StudyCalendarView: View {
         case "Mathematics AA": return IBColors.mathColor
         case "Economics": return IBColors.economicsColor
         case "Business Management": return IBColors.businessColor
+        case "Life": return Color(hex: "0EA5E9")
         case "Advanced Mathematics": return Color(hex: "8B5CF6")
         case "Fundamentals of the Universe": return Color(hex: "6366F1")
-        case "Startups & Venture Capital": return Color(hex: "0EA5E9")
-        default: return .gray
+        default: return IBColors.secondaryText
         }
+    }
+}
+
+// Retained as a pure compatibility helper for restored backups/tests that still
+// reason about the former timeline geometry. The week board no longer depends
+// on pixel offsets for interaction.
+nonisolated enum CalendarTimelineLayout: Sendable {
+    static func offset(hour: Int, minute: Int, firstHour: Int, hourHeight: CGFloat) -> CGFloat {
+        let clampedMinute = min(max(minute, 0), 59)
+        return (CGFloat(hour - firstHour) + CGFloat(clampedMinute) / 60) * hourHeight
+    }
+
+    static func blockHeight(durationMinutes: Int, hourHeight: CGFloat) -> CGFloat {
+        max(CGFloat(max(durationMinutes, 0)) / 60 * hourHeight, 48)
     }
 }

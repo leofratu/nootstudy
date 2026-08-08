@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum WeeklyChallengeRule: String, Codable, CaseIterable, Sendable {
+nonisolated enum WeeklyChallengeRule: String, Codable, CaseIterable, Sendable {
     case reviewCards
     case studyMinutes
     case coverSubjects
@@ -16,7 +16,7 @@ enum WeeklyChallengeRule: String, Codable, CaseIterable, Sendable {
 }
 
 @Model
-final class WeeklyChallenge {
+nonisolated final class WeeklyChallenge {
     var id: UUID
     var ruleRaw: String
     var target: Int

@@ -410,16 +410,9 @@ struct TopicBrowserView: View {
     ) -> some View {
         let cards = cards(for: topic, subtopic: subtopic, in: cardsIndex)
         let count = cards.count
-        let node = CurriculumProgressService.node(
-            in: nodes,
-            subjectName: subject.name,
-            level: subject.level,
-            topicName: topic,
-            subtopicName: subtopic
-        )
-        let mastery = CurriculumProgressService.effectiveMastery(cards: cards, node: node)
+        let mastery = ProficiencyTracker.masteryPercentage(for: cards)
         let workSessions = workSessionsFor(topic: topic, subtopic: subtopic, in: sessionsByTopic)
-        let hasProgress = count > 0 || node?.recordedProficiency != nil || !workSessions.isEmpty
+        let hasProgress = count > 0 || !workSessions.isEmpty
         let isHovered = hoveredSubtopic == subtopic
 
         return HStack(spacing: 12) {
@@ -449,7 +442,7 @@ struct TopicBrowserView: View {
                     if !workSessions.isEmpty {
                         Text("\(workSessions.count) work")
                     }
-                    if count > 0 || node?.recordedProficiency != nil {
+                    if count > 0 {
                         MasteryBar(progress: mastery, height: 3, color: accent)
                             .frame(width: 58)
                         Text("\(Int(mastery * 100))% mastery")
@@ -460,20 +453,6 @@ struct TopicBrowserView: View {
             }
 
             Spacer(minLength: 8)
-
-            if let recorded = node?.recordedProficiency {
-                Text(recorded.rawValue)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(proficiencyColor(recorded))
-                    .padding(.horizontal, 7)
-                    .frame(height: 22)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(proficiencyColor(recorded).opacity(0.1))
-                    )
-            }
-
-            masteryMenu(current: node?.recordedProficiency, topic: topic, subtopic: subtopic)
 
             Button {
                 generateCards(topic: topic, subtopic: subtopic)

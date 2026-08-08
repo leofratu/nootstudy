@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class Achievement {
+nonisolated final class Achievement {
     var id: String
     var title: String
     var desc: String

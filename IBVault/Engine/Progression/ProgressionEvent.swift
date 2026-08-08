@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Something worth celebrating. The only vocabulary the UI uses for moments.
-enum ProgressionEvent: Equatable, Sendable {
+nonisolated enum ProgressionEvent: Equatable, Sendable {
     case rankUp(from: RankStep, to: RankStep)
     case tierUp(subjectName: String, to: RankStep)
     case achievementUnlocked(id: String, title: String)

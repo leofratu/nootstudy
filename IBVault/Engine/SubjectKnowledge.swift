@@ -4,7 +4,7 @@ import Foundation
 /// enrich the subject detail screens. This is curated exam-relevant knowledge
 /// (key concepts, high-yield topics, common misconceptions, exam technique and
 /// command terms) that is stable enough to live in code rather than in a prompt.
-struct SubjectKnowledge: Sendable {
+nonisolated struct SubjectKnowledge: Sendable {
     let subjectName: String
     let keyConcepts: [String]
     let highYieldTopics: [String]
@@ -42,6 +42,10 @@ struct SubjectKnowledge: Sendable {
 
     static func knowledge(for subjectName: String) -> SubjectKnowledge? {
         let trimmed = subjectName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.caseInsensitiveCompare("Startups & Venture Capital") == .orderedSame ||
+            trimmed.caseInsensitiveCompare("Founder Academy") == .orderedSame {
+            return life
+        }
         return all.first { $0.subjectName.caseInsensitiveCompare(trimmed) == .orderedSame }
     }
 
@@ -54,7 +58,7 @@ struct SubjectKnowledge: Sendable {
         russianALiterature,
         advancedMathematics,
         universe,
-        startupsAndVC
+        life
     ]
 
     static let biology = SubjectKnowledge(
@@ -309,38 +313,175 @@ struct SubjectKnowledge: Sendable {
         commandTerms: ["Explain", "Describe", "Compare", "Evaluate", "Calculate", "Justify", "Outline"]
     )
 
-    static let startupsAndVC = SubjectKnowledge(
-        subjectName: "Startups & Venture Capital",
+    static let life = SubjectKnowledge(
+        subjectName: "Life",
         keyConcepts: [
-            "Idea validation and product-market fit before anything scales",
+            "Problem selection, customer discovery and product-market fit before scaling",
+            "Machine-learning foundations, transformers, LLM product architecture and responsible AI",
+            "Human behavior, ethical influence, negotiation and evidence-based debate",
             "Unit economics: CAC, LTV, margins, and the LTV/CAC ratio",
             "Fundraising stages from pre-seed to growth and what each round buys",
             "The term sheet: valuation, dilution, liquidation preference, vesting, anti-dilution",
-            "Financial tools: cap table, runway, financial model, startup accounting",
-            "How VCs think: fund economics, pattern recognition, and the 25-year playbook"
+            "Financial tools: cap table, runway, financial model and startup accounting"
         ],
         highYieldTopics: [
-            "Why product-market fit precedes the Series A",
+            "Running customer interviews that test behavior rather than invite compliments",
+            "How tokens, embeddings, attention, transformers, RAG and tool use fit together",
+            "Using frames, calibrated questions and concessions without manipulating people",
+            "Why product-market fit precedes scale",
             "Reading and modelling a cap table with an option pool",
-            "The term sheet clauses that actually matter",
-            "Runway math and when to raise",
-            "The financial model VCs expect (realistic, sensitivity-tested, unit-driven)"
+            "Pitching problem, proof, market, business model, team and ask as one coherent story"
         ],
         commonMisconceptions: [
             "A great idea is the hard part — execution and distribution are where companies are won",
+            "An LLM retrieves facts like a database — it predicts tokens and can produce plausible errors",
+            "Winning a debate means humiliating the other person — durable persuasion protects trust and shared truth",
             "Raising money is the goal — it is a means to compound a durable advantage",
             "High revenue growth alone impresses investors — quality of revenue (retention, unit economics) matters more",
             "Dilution is bad — dilution that funds growth at a higher valuation can increase founder ownership",
-            "A high valuation is always good — it sets the bar for the next round and can create a down round",
-            "Investors want you to be 'nice' — they want you to be honest, coachable and decisive"
+            "A high valuation is always good — it can set an unhealthy bar for the next round"
         ],
         examTechnique: [
-            "Speak in metrics and cohorts, not adjectives: show retention curves and unit economics",
-            "For fundraising, frame the story as: problem → product → traction → market → why this team",
+            "For decisions, state the assumption, evidence, downside and next measurable test",
+            "For AI products, show evaluation results, latency, failure modes and unit cost rather than a polished demo alone",
+            "For difficult conversations, summarize their interests before proposing your frame",
+            "For fundraising, frame the story as: problem → insight → product → proof → market → team → ask",
             "Know your cap table cold, including option-pool dilution at every round",
-            "Be prepared to defend the 18-month plan with a bottom-up model and sensitivities",
             "Negotiate term sheets on control and optionality, not just headline valuation"
         ],
-        commandTerms: ["Evaluate", "Justify", "Recommend", "Model", "Compare", "Analyse", "Prioritise"]
+        commandTerms: ["Define", "Explain", "Model", "Test", "Evaluate", "Pitch", "Negotiate", "Prioritise"]
     )
+}
+
+nonisolated struct LearningResource: Identifiable, Hashable, Sendable {
+    let title: String
+    let provider: String
+    let url: URL
+    let purpose: String
+    let subjects: Set<String>
+    let topicKeywords: [String]
+    let priority: Int
+
+    var id: String { url.absoluteString }
+}
+
+nonisolated enum LearningResourceCatalog: Sendable {
+    static func resources(for subjectName: String, topicNames: [String], limit: Int = 4) -> [LearningResource] {
+        let normalizedSubject = subjectName.lowercased()
+        let scope = topicNames.joined(separator: " ").lowercased()
+        return all
+            .filter { resource in resource.subjects.contains { $0.lowercased() == normalizedSubject } }
+            .sorted { lhs, rhs in
+                let lhsScore = matchScore(lhs, scope: scope)
+                let rhsScore = matchScore(rhs, scope: scope)
+                if lhsScore != rhsScore { return lhsScore > rhsScore }
+                return lhs.priority > rhs.priority
+            }
+            .prefix(max(limit, 0))
+            .map { $0 }
+    }
+
+    private static func matchScore(_ resource: LearningResource, scope: String) -> Int {
+        resource.priority + resource.topicKeywords.reduce(0) { score, keyword in
+            score + (scope.contains(keyword.lowercased()) ? 100 : 0)
+        }
+    }
+
+    static let all: [LearningResource] = [
+        LearningResource(
+            title: "EcoNinja syllabus notes", provider: "EcoNinja", url: URL(string: "https://www.econinja.net/")!,
+            purpose: "Concise IB Economics definitions, diagrams and syllabus notes.", subjects: ["Economics"],
+            topicKeywords: ["microeconomics", "macroeconomics", "global economy", "demand", "supply"], priority: 90
+        ),
+        LearningResource(
+            title: "IB Economics course brief", provider: "International Baccalaureate", url: URL(string: "https://www.ibo.org/programmes/diploma-programme/curriculum/individuals-and-societies/economics/")!,
+            purpose: "Authoritative course scope, concepts and assessment structure.", subjects: ["Economics"],
+            topicKeywords: [], priority: 100
+        ),
+        LearningResource(
+            title: "Understanding our Economy", provider: "CORE Econ", url: URL(string: "https://books.core-econ.org/understanding-our-economy/")!,
+            purpose: "Open-access explanations and real-world economic case studies.", subjects: ["Economics"],
+            topicKeywords: ["scarcity", "inequality", "environment", "innovation", "institutions"], priority: 80
+        ),
+        LearningResource(
+            title: "Economic data and evidence", provider: "Our World in Data", url: URL(string: "https://ourworldindata.org/economic-growth")!,
+            purpose: "Current charts and evidence for evaluation and real-world examples.", subjects: ["Economics"],
+            topicKeywords: ["growth", "development", "inequality", "global"], priority: 70
+        ),
+        LearningResource(
+            title: "BioNinja IB Biology", provider: "BioNinja", url: URL(string: "https://ib.bioninja.com.au/")!,
+            purpose: "Syllabus-organized explanations, diagrams and review material.", subjects: ["Biology"],
+            topicKeywords: [], priority: 90
+        ),
+        LearningResource(
+            title: "BioInteractive", provider: "HHMI", url: URL(string: "https://www.biointeractive.org/")!,
+            purpose: "Research-grounded animations, data activities and case studies.", subjects: ["Biology"],
+            topicKeywords: ["genetics", "evolution", "ecology", "cells"], priority: 80
+        ),
+        LearningResource(
+            title: "Desmos graphing calculator", provider: "Desmos", url: URL(string: "https://www.desmos.com/calculator")!,
+            purpose: "Explore functions, transformations and calculus visually.", subjects: ["Mathematics AA", "Advanced Mathematics"],
+            topicKeywords: ["functions", "calculus", "trigonometry", "graphs"], priority: 85
+        ),
+        LearningResource(
+            title: "Essence of linear algebra", provider: "3Blue1Brown", url: URL(string: "https://www.3blue1brown.com/topics/linear-algebra")!,
+            purpose: "Visual intuition for vectors, matrices and transformations.", subjects: ["Advanced Mathematics"],
+            topicKeywords: ["linear algebra", "vectors", "matrices", "eigenvalues"], priority: 90
+        ),
+        LearningResource(
+            title: "Startup School", provider: "Y Combinator", url: URL(string: "https://www.startupschool.org/curriculum/")!,
+            purpose: "Free founder curriculum on ideas, users, MVPs, launch, growth and fundraising.", subjects: ["Life"],
+            topicKeywords: ["startup", "founder", "mvp", "product", "growth", "fundraising", "pitch"], priority: 95
+        ),
+        LearningResource(
+            title: "Machine Learning Crash Course", provider: "Google", url: URL(string: "https://developers.google.com/machine-learning/crash-course")!,
+            purpose: "Beginner-friendly ML concepts, exercises and practical models.", subjects: ["Life"],
+            topicKeywords: ["machine learning", "regression", "classification", "neural", "data"], priority: 95
+        ),
+        LearningResource(
+            title: "CS229 course notes", provider: "Stanford", url: URL(string: "https://cs229.stanford.edu/materials.html-full")!,
+            purpose: "Deeper mathematical notes on supervised and unsupervised learning.", subjects: ["Life"],
+            topicKeywords: ["machine learning", "optimization", "supervised", "unsupervised"], priority: 78
+        ),
+        LearningResource(
+            title: "Neural networks", provider: "3Blue1Brown", url: URL(string: "https://www.3blue1brown.com/topics/neural-networks")!,
+            purpose: "Visual intuition for neural networks, gradient descent and backpropagation.", subjects: ["Life"],
+            topicKeywords: ["neural", "gradient", "backpropagation", "transformer"], priority: 88
+        ),
+        LearningResource(
+            title: "Hugging Face LLM Course", provider: "Hugging Face", url: URL(string: "https://huggingface.co/learn/llm-course/chapter1/1")!,
+            purpose: "Hands-on transformers, tokenization, fine-tuning and model use.", subjects: ["Life"],
+            topicKeywords: ["llm", "language model", "transformer", "token", "fine-tuning"], priority: 90
+        ),
+        LearningResource(
+            title: "Machine Learning Crash Course", provider: "Google", url: URL(string: "https://developers.google.com/machine-learning/crash-course")!,
+            purpose: "Interactive foundations from regression and data through neural networks, LLMs and production ML.", subjects: ["Life"],
+            topicKeywords: ["machine learning", "regression", "classification", "neural", "llm", "production", "evaluation"], priority: 94
+        ),
+        LearningResource(
+            title: "Full Stack LLM Bootcamp", provider: "The Full Stack", url: URL(string: "https://fullstackdeeplearning.com/llm-bootcamp/")!,
+            purpose: "End-to-end practice for defining, building, evaluating and deploying LLM-powered products.", subjects: ["Life"],
+            topicKeywords: ["llm", "production", "deployment", "evaluation", "agents", "retrieval", "startup"], priority: 92
+        ),
+        LearningResource(
+            title: "Social Psychology", provider: "OpenStax", url: URL(string: "https://openstax.org/books/psychology-2e/pages/12-introduction")!,
+            purpose: "Open textbook coverage of social influence, attitudes, groups and behavior.", subjects: ["Life"],
+            topicKeywords: ["behavior", "influence", "social proof", "bias", "conformity"], priority: 88
+        ),
+        LearningResource(
+            title: "Program on Negotiation", provider: "Harvard Law School", url: URL(string: "https://www.pon.harvard.edu/category/daily/negotiation-skills-daily/")!,
+            purpose: "Evidence-informed negotiation concepts, preparation and case analysis.", subjects: ["Life"],
+            topicKeywords: ["negotiation", "batna", "zopa", "objection", "conversation"], priority: 86
+        ),
+        LearningResource(
+            title: "Logic in argumentative writing", provider: "Purdue OWL", url: URL(string: "https://owl.purdue.edu/owl/general_writing/academic_writing/logic_in_argumentative_writing/index.html")!,
+            purpose: "Claims, evidence, logical structure and common reasoning errors.", subjects: ["Life"],
+            topicKeywords: ["debate", "argument", "logic", "fallacy", "rebuttal"], priority: 84
+        ),
+        LearningResource(
+            title: "The Learning Scientists", provider: "Learning Scientists", url: URL(string: "https://www.learningscientists.org/downloadable-materials")!,
+            purpose: "Practical guides to retrieval, spacing, interleaving and elaboration.", subjects: ["Life"],
+            topicKeywords: ["learning", "memory", "recall", "study"], priority: 72
+        )
+    ]
 }

@@ -39,12 +39,12 @@ struct ProgressionServiceTests {
         in subject: Subject,
         context: ModelContext,
         recalls: Int = 3
-    ) -> StudyCard {
+    ) throws -> StudyCard {
         let card = StudyCard(topicName: topic, front: "Q", back: "A", subject: subject)
         context.insert(card)
 
         for _ in 0..<recalls {
-            SM2Engine.applyReview(to: card, quality: .good)
+            try FSRSScheduler.applyReview(to: card, quality: .good)
             context.insert(
                 ReviewSession(
                     cardID: card.id,
@@ -73,7 +73,7 @@ struct ProgressionServiceTests {
 
         let subject = Subject(name: "Biology", level: "SL", accentColorHex: "#10B981")
         context.insert(subject)
-        Self.recordReviewedCard(topic: "Cells", in: subject, context: context, recalls: 1)
+        try Self.recordReviewedCard(topic: "Cells", in: subject, context: context, recalls: 1)
 
         let events = ProgressionService.recompute(context: context)
 
@@ -98,7 +98,7 @@ struct ProgressionServiceTests {
 
         let subject = Subject(name: "Physics", level: "HL", accentColorHex: "#3B82F6")
         context.insert(subject)
-        Self.recordReviewedCard(topic: "Mechanics", in: subject, context: context)
+        try Self.recordReviewedCard(topic: "Mechanics", in: subject, context: context)
 
         let first = ProgressionService.recompute(context: context)
         let second = ProgressionService.recompute(context: context)
@@ -132,7 +132,7 @@ struct ProgressionServiceTests {
         context.insert(subject)
 
         for index in 0..<4 {
-            Self.recordReviewedCard(topic: "Bonding \(index)", in: subject, context: context)
+            try Self.recordReviewedCard(topic: "Bonding \(index)", in: subject, context: context)
         }
 
         ProgressionService.recompute(context: context)

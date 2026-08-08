@@ -1,6 +1,6 @@
 import Foundation
 
-struct GeminiConfig: Sendable {
+nonisolated struct GeminiConfig: Sendable {
     var apiBase: String = "https://generativelanguage.googleapis.com/v1beta"
     var defaultRequestTimeout: TimeInterval = 90
     var defaultResourceTimeout: TimeInterval = 180
@@ -11,12 +11,12 @@ struct GeminiConfig: Sendable {
     static let `default` = GeminiConfig()
 }
 
-struct GeminiMessage: Sendable {
+nonisolated struct GeminiMessage: Sendable {
     let role: String
     let text: String
 }
 
-struct GeminiModel: Identifiable, Hashable, Sendable {
+nonisolated struct GeminiModel: Identifiable, Hashable, Sendable {
     let id: String
     let displayName: String
     let description: String
@@ -37,7 +37,7 @@ struct GeminiModel: Identifiable, Hashable, Sendable {
     }
 }
 
-struct GeminiRequestBody: Encodable {
+nonisolated struct GeminiRequestBody: Encodable {
     let systemInstruction: GeminiSystemInstruction?
     let contents: [GeminiContent]
     let generationConfig: GeminiGenerationConfig
@@ -49,29 +49,29 @@ struct GeminiRequestBody: Encodable {
     }
 }
 
-struct GeminiSystemInstruction: Encodable {
+nonisolated struct GeminiSystemInstruction: Encodable {
     let parts: [GeminiPart]
 }
 
-struct GeminiContent: Encodable {
+nonisolated struct GeminiContent: Encodable {
     let role: String
     let parts: [GeminiPart]
 }
 
-struct GeminiPart: Codable {
+nonisolated struct GeminiPart: Codable {
     let text: String
 }
 
-struct GeminiGenerationConfig: Encodable {
+nonisolated struct GeminiGenerationConfig: Encodable {
     let temperature: Double
     let topP: Double
 }
 
-private struct GeminiListModelsResponse: Decodable {
+nonisolated private struct GeminiListModelsResponse: Decodable {
     let models: [GeminiModelResponse]
 }
 
-private struct GeminiModelResponse: Decodable {
+nonisolated private struct GeminiModelResponse: Decodable {
     let name: String
     let displayName: String
     let description: String?
@@ -80,28 +80,28 @@ private struct GeminiModelResponse: Decodable {
     let supportedGenerationMethods: [String]?
 }
 
-private struct GeminiGenerateResponse: Decodable {
+nonisolated private struct GeminiGenerateResponse: Decodable {
     let candidates: [GeminiCandidate]?
 }
 
-private struct GeminiCandidate: Decodable {
+nonisolated private struct GeminiCandidate: Decodable {
     let content: GeminiResponseContent?
 }
 
-private struct GeminiResponseContent: Decodable {
+nonisolated private struct GeminiResponseContent: Decodable {
     let parts: [GeminiPart]?
 }
 
-private struct GeminiAPIErrorResponse: Decodable {
+nonisolated private struct GeminiAPIErrorResponse: Decodable {
     let error: GeminiAPIErrorPayload?
 }
 
-private struct GeminiAPIErrorPayload: Decodable {
+nonisolated private struct GeminiAPIErrorPayload: Decodable {
     let message: String?
     let status: String?
 }
 
-enum GeminiError: Error, LocalizedError, Sendable {
+nonisolated enum GeminiError: Error, LocalizedError, Sendable {
     case invalidResponse
     case apiError(statusCode: Int, message: String)
     case parseError
@@ -162,7 +162,7 @@ enum GeminiError: Error, LocalizedError, Sendable {
     }
 }
 
-enum GeminiService {
+nonisolated enum GeminiService {
     private static let defaultSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = GeminiConfig.default.defaultRequestTimeout
@@ -306,7 +306,7 @@ enum GeminiService {
         systemInstruction: String,
         apiKey: String,
         config: GeminiConfig = .default
-    ) -> AsyncThrowingStream<String, Error> {
+    ) -> AsyncThrowingStream<String, any Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -440,7 +440,7 @@ enum GeminiService {
             let message = error.message ?? body
             let status = error.status ?? ""
             
-            if status == "RESOURCE_EXHAUSTED" || statusCode == 429 {
+            if status == "RESOURCE_EXHAUSTED" {
                 return .quotaExceeded
             }
             if status == "SAFETY" || message.lowercased().contains("blocked") {
@@ -448,6 +448,9 @@ enum GeminiService {
             }
             if status == "MODEL_NOT_FOUND" {
                 return .invalidModel
+            }
+            if statusCode == 429 {
+                return .rateLimited(retryAfter: nil)
             }
             return .apiError(statusCode: statusCode, message: message)
         }
@@ -465,7 +468,7 @@ enum GeminiService {
         maxRetries: Int,
         timeout: TimeInterval
     ) async throws -> (Data, URLResponse) {
-        var lastError: Error?
+        var lastError: (any Error)?
         let session = timeout <= GeminiConfig.default.defaultRequestTimeout ? defaultSession : configuredSession(timeout: timeout)
         
         for attempt in 0...maxRetries {
