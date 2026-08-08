@@ -1,11 +1,11 @@
 import Foundation
 import SwiftData
 
-struct BackupService {
+nonisolated struct BackupService {
     private static let folderName = "IBVault Backups"
     private static let automaticBackupInterval: TimeInterval = 60 * 60 * 24
 
-    static var backupDirectory: URL {
+    nonisolated static var backupDirectory: URL {
         guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
             return FileManager.default.temporaryDirectory.appendingPathComponent(folderName)
         }
@@ -38,7 +38,7 @@ struct BackupService {
         }
     }
 
-    static var latestBackupDate: Date? {
+    nonisolated static var latestBackupDate: Date? {
         let metaURL = backupDirectory.appendingPathComponent("backup_meta.json")
         guard let data = try? Data(contentsOf: metaURL),
               let meta = try? JSONDecoder().decode(BackupMeta.self, from: data) else { return nil }
@@ -46,7 +46,7 @@ struct BackupService {
     }
 
     @discardableResult
-    static func autoBackupIfNeeded(context: ModelContext) throws -> URL? {
+    nonisolated static func autoBackupIfNeeded(context: ModelContext) throws -> URL? {
         if let latestBackupDate,
            Date().timeIntervalSince(latestBackupDate) < automaticBackupInterval {
             return nil
@@ -59,7 +59,7 @@ struct BackupService {
 
     /// Exports against a scratch context derived from the caller's store, so a
     /// background caller never touches a context it did not create.
-    static func exportBackup(context: ModelContext) throws -> URL {
+    nonisolated static func exportBackup(context: ModelContext) throws -> URL {
         try exportBackup(container: context.container)
     }
 
@@ -67,7 +67,7 @@ struct BackupService {
     /// container is `Sendable` (safe to share across threads), so a background
     /// queue can drive the export without touching any context from the main
     /// actor. Reads the committed store state.
-    static func exportBackup(container: ModelContainer) throws -> URL {
+    nonisolated static func exportBackup(container: ModelContainer) throws -> URL {
         let scratch = ModelContext(container)
         return try performExport(using: scratch)
     }
@@ -137,6 +137,22 @@ struct BackupService {
         let curriculumNodes = try fetchAll(CurriculumNode.self, context: context)
         try write(curriculumNodes.map(CurriculumNodeBackup.init), named: "curriculum_progress.json", into: backupDir, encoder: encoder)
         writtenFiles.append("curriculum_progress.json")
+
+        let academicImports = try fetchAll(AcademicImport.self, context: context)
+        try write(academicImports.map(AcademicImportBackup.init), named: "academic_imports.json", into: backupDir, encoder: encoder)
+        writtenFiles.append("academic_imports.json")
+
+        let academicAssessments = try fetchAll(AcademicAssessment.self, context: context)
+        try write(academicAssessments.map(AcademicAssessmentBackup.init), named: "academic_assessments.json", into: backupDir, encoder: encoder)
+        writtenFiles.append("academic_assessments.json")
+
+        let academicMappings = try fetchAll(AcademicAssessmentMapping.self, context: context)
+        try write(academicMappings.map(AcademicAssessmentMappingBackup.init), named: "academic_mappings.json", into: backupDir, encoder: encoder)
+        writtenFiles.append("academic_mappings.json")
+
+        let academicReports = try fetchAll(AcademicReportSnapshot.self, context: context)
+        try write(academicReports.map(AcademicReportSnapshotBackup.init), named: "academic_reports.json", into: backupDir, encoder: encoder)
+        writtenFiles.append("academic_reports.json")
         
         let adhdSettings = ADHDMedicationSettings.loadFromDefaults()
         try write(ADHDMedicationBackup(from: adhdSettings), named: "adhd_medication.json", into: backupDir, encoder: encoder)
@@ -155,7 +171,18 @@ struct BackupService {
     static func restoreFromLatest(context: ModelContext) throws {
         let dir = backupDirectory
         let contents = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)
-        let backupDirs = contents.filter { $0.hasDirectoryPath && $0.lastPathComponent.hasPrefix("backup_") }
+        // Only completed exports are restorable. A `backup_` directory left by
+        // an interrupted export can still decode the files it contains, which
+        // would pass the hasAnyDataset guard and then clear every dataset the
+        // partial export does not carry. The meta file is written last, so its
+        // presence marks a finished backup.
+        let backupDirs = contents
+            .filter { $0.hasDirectoryPath && $0.lastPathComponent.hasPrefix("backup_") }
+            .filter {
+                let metaURL = $0.appendingPathComponent("backup_meta.json")
+                guard let data = try? Data(contentsOf: metaURL) else { return false }
+                return (try? JSONDecoder().decode(BackupMeta.self, from: data)) != nil
+            }
             .sorted { $0.lastPathComponent > $1.lastPathComponent }
 
         guard let latest = backupDirs.first else { throw BackupError.noBackupFound }
@@ -183,6 +210,10 @@ struct BackupService {
         let achievementBackups = try decodeOrNil([AchievementBackup].self, fileName: "achievements.json", from: directory, decoder: decoder)
         let unitStateBackups = try decodeOrNil([UnitStateBackup].self, fileName: "unit_states.json", from: directory, decoder: decoder)
         let curriculumNodeBackups = try decodeOrNil([CurriculumNodeBackup].self, fileName: "curriculum_progress.json", from: directory, decoder: decoder)
+        let academicImportBackups = try decodeOrNil([AcademicImportBackup].self, fileName: "academic_imports.json", from: directory, decoder: decoder)
+        let academicAssessmentBackups = try decodeOrNil([AcademicAssessmentBackup].self, fileName: "academic_assessments.json", from: directory, decoder: decoder)
+        let academicMappingBackups = try decodeOrNil([AcademicAssessmentMappingBackup].self, fileName: "academic_mappings.json", from: directory, decoder: decoder)
+        let academicReportBackups = try decodeOrNil([AcademicReportSnapshotBackup].self, fileName: "academic_reports.json", from: directory, decoder: decoder)
         let adhdBackup = try decodeOrNil(ADHDMedicationBackup.self, fileName: "adhd_medication.json", from: directory, decoder: decoder)
 
         // A backup directory that decodes to zero datasets is not a real
@@ -202,6 +233,10 @@ struct BackupService {
             || achievementBackups != nil
             || unitStateBackups != nil
             || curriculumNodeBackups != nil
+            || academicImportBackups != nil
+            || academicAssessmentBackups != nil
+            || academicMappingBackups != nil
+            || academicReportBackups != nil
             || adhdBackup != nil
         guard hasAnyDataset else { throw BackupError.noBackupFound }
 
@@ -227,6 +262,10 @@ struct BackupService {
         try clearAll(Achievement.self, context: context)
         try clearAll(UnitState.self, context: context)
         try clearAll(CurriculumNode.self, context: context)
+        try clearAll(AcademicImport.self, context: context)
+        try clearAll(AcademicAssessment.self, context: context)
+        try clearAll(AcademicAssessmentMapping.self, context: context)
+        try clearAll(AcademicReportSnapshot.self, context: context)
 
         if let backup = profile {
             context.insert(backup.toModel())
@@ -302,6 +341,19 @@ struct BackupService {
             }
         }
 
+        if let backups = academicImportBackups {
+            for backup in backups { context.insert(backup.toModel()) }
+        }
+        if let backups = academicAssessmentBackups {
+            for backup in backups { context.insert(backup.toModel()) }
+        }
+        if let backups = academicMappingBackups {
+            for backup in backups { context.insert(backup.toModel()) }
+        }
+        if let backups = academicReportBackups {
+            for backup in backups { context.insert(backup.toModel()) }
+        }
+
         if let backup = adhdBackup {
             let adhdSettings = backup.toSettings()
             adhdSettings.saveToDefaults()
@@ -313,7 +365,7 @@ struct BackupService {
 
     // MARK: - List Backups
 
-    static func listBackups() -> [(name: String, date: Date, url: URL)] {
+    nonisolated static func listBackups() -> [(name: String, date: Date, url: URL)] {
         guard let contents = try? FileManager.default.contentsOfDirectory(at: backupDirectory, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles) else { return [] }
         return contents.filter { $0.hasDirectoryPath && $0.lastPathComponent.hasPrefix("backup_") }
             .compactMap { url in
@@ -327,7 +379,7 @@ struct BackupService {
             .sorted { $0.date > $1.date }
     }
 
-    static func deleteBackup(at url: URL) throws {
+    nonisolated static func deleteBackup(at url: URL) throws {
         try FileManager.default.removeItem(at: url)
     }
 
@@ -390,7 +442,7 @@ enum BackupError: Error, LocalizedError, Sendable {
 }
 
 // MARK: - Backup Meta
-struct BackupMeta: Codable {
+nonisolated struct BackupMeta: Codable {
     let date: Date
     let fileCount: Int
     let version: String
@@ -398,7 +450,7 @@ struct BackupMeta: Codable {
 
 // MARK: - Backup Models (Codable mirrors of SwiftData models)
 
-struct ProfileBackup: Codable {
+nonisolated struct ProfileBackup: Codable {
     let totalXP: Int; let currentStreak: Int; let longestStreak: Int
     let streakFreezes: Int; let dailyGoal: Int
     let achievedRankRaw: Int; let achievedTierRaw: Int
@@ -425,7 +477,7 @@ struct ProfileBackup: Codable {
     }
 }
 
-struct SubjectBackup: Codable {
+nonisolated struct SubjectBackup: Codable {
     let name: String; let level: String; let accentColorHex: String; let examDate: Date?
     let cards: [CardBackup]
 
@@ -445,7 +497,7 @@ struct SubjectBackup: Codable {
     }
 }
 
-struct CardBackup: Codable {
+nonisolated struct CardBackup: Codable {
     let id: UUID; let topicName: String; let subtopic: String; let front: String; let back: String
     let easeFactor: Double; let interval: Int; let repetitions: Int
     let nextReviewDate: Date; let proficiencyRaw: String; let consecutiveCorrect: Int
@@ -455,6 +507,9 @@ struct CardBackup: Codable {
     let hint: String?; let difficultyRaw: String?; let cognitiveSkillRaw: String?
     let sourceTitle: String?; let sourceURLString: String?; let syllabusReference: String?
     let adaptationReason: String?; let generationPromptVersion: Int?
+    let sourceStudyPlanID: UUID?; let sourceStudySessionID: UUID?
+    let fsrsStability: Double?; let fsrsDifficulty: Double?; let fsrsElapsedDays: Double?; let fsrsScheduledDays: Double?
+    let fsrsRepetitions: Int?; let fsrsLapses: Int?; let fsrsStateRaw: Int?; let fsrsLastReviewDate: Date?; let fsrsSchedulerVersion: Int?
 
     init(from c: StudyCard) {
         id = c.id; topicName = c.topicName; subtopic = c.subtopic; front = c.front; back = c.back
@@ -467,6 +522,10 @@ struct CardBackup: Codable {
         hint = c.hint; difficultyRaw = c.difficultyRaw; cognitiveSkillRaw = c.cognitiveSkillRaw
         sourceTitle = c.sourceTitle; sourceURLString = c.sourceURLString; syllabusReference = c.syllabusReference
         adaptationReason = c.adaptationReason; generationPromptVersion = c.generationPromptVersion
+        sourceStudyPlanID = c.sourceStudyPlanID; sourceStudySessionID = c.sourceStudySessionID
+        fsrsStability = c.fsrsStability; fsrsDifficulty = c.fsrsDifficulty; fsrsElapsedDays = c.fsrsElapsedDays
+        fsrsScheduledDays = c.fsrsScheduledDays; fsrsRepetitions = c.fsrsRepetitions; fsrsLapses = c.fsrsLapses
+        fsrsStateRaw = c.fsrsStateRaw; fsrsLastReviewDate = c.fsrsLastReviewDate; fsrsSchedulerVersion = c.fsrsSchedulerVersion
     }
 
     func toModel() -> StudyCard {
@@ -488,11 +547,15 @@ struct CardBackup: Codable {
         c.hint = hint; c.difficultyRaw = difficultyRaw; c.cognitiveSkillRaw = cognitiveSkillRaw
         c.sourceTitle = sourceTitle; c.sourceURLString = sourceURLString; c.syllabusReference = syllabusReference
         c.adaptationReason = adaptationReason; c.generationPromptVersion = generationPromptVersion
+        c.sourceStudyPlanID = sourceStudyPlanID; c.sourceStudySessionID = sourceStudySessionID
+        c.fsrsStability = fsrsStability; c.fsrsDifficulty = fsrsDifficulty; c.fsrsElapsedDays = fsrsElapsedDays
+        c.fsrsScheduledDays = fsrsScheduledDays; c.fsrsRepetitions = fsrsRepetitions; c.fsrsLapses = fsrsLapses
+        c.fsrsStateRaw = fsrsStateRaw; c.fsrsLastReviewDate = fsrsLastReviewDate; c.fsrsSchedulerVersion = fsrsSchedulerVersion
         return c
     }
 }
 
-struct UnitStateBackup: Codable {
+nonisolated struct UnitStateBackup: Codable {
     let subjectName: String
     let unitName: String
     let isTaught: Bool
@@ -508,7 +571,7 @@ struct UnitStateBackup: Codable {
     }
 }
 
-struct CurriculumNodeBackup: Codable {
+nonisolated struct CurriculumNodeBackup: Codable {
     let id: UUID
     let subjectName: String
     let level: String
@@ -562,7 +625,78 @@ struct CurriculumNodeBackup: Codable {
     }
 }
 
-struct GradeBackup: Codable {
+nonisolated struct AcademicImportBackup: Codable {
+    let id: UUID; let sourceFolderName: String; let sourceFingerprint: String; let importedAt: Date
+    let assessmentCount: Int; let curriculumUnitCount: Int; let reportCount: Int; let warningCount: Int
+
+    init(from record: AcademicImport) {
+        id = record.id; sourceFolderName = record.sourceFolderName; sourceFingerprint = record.sourceFingerprint
+        importedAt = record.importedAt; assessmentCount = record.assessmentCount; curriculumUnitCount = record.curriculumUnitCount
+        reportCount = record.reportCount; warningCount = record.warningCount
+    }
+
+    func toModel() -> AcademicImport {
+        let record = AcademicImport(sourceFolderName: sourceFolderName, sourceFingerprint: sourceFingerprint, assessmentCount: assessmentCount, curriculumUnitCount: curriculumUnitCount, reportCount: reportCount, warningCount: warningCount)
+        record.id = id; record.importedAt = importedAt
+        return record
+    }
+}
+
+nonisolated struct AcademicAssessmentBackup: Codable {
+    let id: UUID; let importID: UUID?; let sourceKey: String; let sourceFileName: String; let sourceURLString: String?
+    let subjectName: String; let courseLevel: String; let sourceClassLabel: String; let assessmentDate: Date?
+    let title: String; let assessmentType: String; let category: String; let status: String
+    let achievedPoints: Double?; let possiblePoints: Double?; let percentage: Double?; let ibScore: Int?; let details: String
+
+    init(from assessment: AcademicAssessment) {
+        id = assessment.id; importID = assessment.importID; sourceKey = assessment.sourceKey; sourceFileName = assessment.sourceFileName; sourceURLString = assessment.sourceURLString
+        subjectName = assessment.subjectName; courseLevel = assessment.courseLevel; sourceClassLabel = assessment.sourceClassLabel; assessmentDate = assessment.assessmentDate
+        title = assessment.title; assessmentType = assessment.assessmentType; category = assessment.category; status = assessment.status
+        achievedPoints = assessment.achievedPoints; possiblePoints = assessment.possiblePoints; percentage = assessment.percentage; ibScore = assessment.ibScore; details = assessment.details
+    }
+
+    func toModel() -> AcademicAssessment {
+        let assessment = AcademicAssessment(importID: importID, sourceKey: sourceKey, sourceFileName: sourceFileName, sourceURLString: sourceURLString, subjectName: subjectName, courseLevel: courseLevel, sourceClassLabel: sourceClassLabel, assessmentDate: assessmentDate, title: title, assessmentType: assessmentType, category: category, status: status, achievedPoints: achievedPoints, possiblePoints: possiblePoints, percentage: percentage, ibScore: ibScore, details: details)
+        assessment.id = id
+        return assessment
+    }
+}
+
+nonisolated struct AcademicAssessmentMappingBackup: Codable {
+    let id: UUID; let assessmentID: UUID; let subjectName: String; let courseLevel: String; let curriculumNodeKey: String
+    let unitName: String; let topicName: String; let subtopicName: String; let statusRaw: String; let confidence: Double
+    let rationale: String; let proposedBy: String; let updatedAt: Date
+
+    init(from mapping: AcademicAssessmentMapping) {
+        id = mapping.id; assessmentID = mapping.assessmentID; subjectName = mapping.subjectName; courseLevel = mapping.courseLevel; curriculumNodeKey = mapping.curriculumNodeKey
+        unitName = mapping.unitName; topicName = mapping.topicName; subtopicName = mapping.subtopicName; statusRaw = mapping.statusRaw; confidence = mapping.confidence
+        rationale = mapping.rationale; proposedBy = mapping.proposedBy; updatedAt = mapping.updatedAt
+    }
+
+    func toModel() -> AcademicAssessmentMapping {
+        let mapping = AcademicAssessmentMapping(assessmentID: assessmentID, subjectName: subjectName, courseLevel: courseLevel, curriculumNodeKey: curriculumNodeKey, unitName: unitName, topicName: topicName, subtopicName: subtopicName, status: AcademicMappingStatus(rawValue: statusRaw) ?? .unmapped, confidence: confidence, rationale: rationale, proposedBy: proposedBy)
+        mapping.id = id; mapping.updatedAt = updatedAt
+        return mapping
+    }
+}
+
+nonisolated struct AcademicReportSnapshotBackup: Codable {
+    let id: UUID; let importID: UUID?; let sourceFileName: String; let reportDate: Date?; let subjectName: String; let courseLevel: String
+    let gradeRaw: String; let predictedGradeRaw: String; let effort: String; let teacherComment: String
+
+    init(from report: AcademicReportSnapshot) {
+        id = report.id; importID = report.importID; sourceFileName = report.sourceFileName; reportDate = report.reportDate; subjectName = report.subjectName; courseLevel = report.courseLevel
+        gradeRaw = report.gradeRaw; predictedGradeRaw = report.predictedGradeRaw; effort = report.effort; teacherComment = report.teacherComment
+    }
+
+    func toModel() -> AcademicReportSnapshot {
+        let report = AcademicReportSnapshot(importID: importID, sourceFileName: sourceFileName, reportDate: reportDate, subjectName: subjectName, courseLevel: courseLevel, gradeRaw: gradeRaw, predictedGradeRaw: predictedGradeRaw, effort: effort, teacherComment: teacherComment)
+        report.id = id
+        return report
+    }
+}
+
+nonisolated struct GradeBackup: Codable {
     let id: UUID; let component: String; let score: Int; let predictedGrade: Int?
     let date: Date; let teacherFeedback: String; let subjectName: String
     let assessmentTitle: String?
@@ -606,13 +740,17 @@ struct GradeBackup: Codable {
     }
 }
 
-struct SessionBackup: Codable {
+nonisolated struct SessionBackup: Codable {
     let id: UUID; let timestamp: Date; let cardID: UUID; let subjectName: String; let topicName: String
     let qualityRating: Int; let sessionDuration: TimeInterval; let wasCorrect: Bool
+    let fsrsRatingRaw: Int?; let schedulerVersion: Int?
+    let studySessionID: UUID?
 
     init(from s: ReviewSession) {
         id = s.id; timestamp = s.timestamp; cardID = s.cardID; subjectName = s.subjectName; topicName = s.topicName
         qualityRating = s.qualityRating; sessionDuration = s.sessionDuration; wasCorrect = s.wasCorrect
+        fsrsRatingRaw = s.fsrsRatingRaw; schedulerVersion = s.schedulerVersion
+        studySessionID = s.studySessionID
     }
 
     func toModel() -> ReviewSession {
@@ -621,16 +759,19 @@ struct SessionBackup: Codable {
             subjectName: subjectName,
             topicName: topicName,
             qualityRating: qualityRating,
-            sessionDuration: sessionDuration
+            sessionDuration: sessionDuration,
+            studySessionID: studySessionID
         )
         session.id = id
         session.timestamp = timestamp
         session.wasCorrect = wasCorrect
+        session.fsrsRatingRaw = fsrsRatingRaw
+        session.schedulerVersion = schedulerVersion
         return session
     }
 }
 
-struct MemoryBackup: Codable {
+nonisolated struct MemoryBackup: Codable {
     let id: UUID; let categoryRaw: String; let content: String; let timestamp: Date
     let isCompacted: Bool; let isArchived: Bool; let importanceRaw: Int
     let subjectName: String?; let topicName: String?; let importanceScore: Double
@@ -665,7 +806,7 @@ struct MemoryBackup: Codable {
     }
 }
 
-struct ChatBackup: Codable {
+nonisolated struct ChatBackup: Codable {
     let id: UUID; let role: String; let content: String; let timestamp: Date; let sessionID: UUID?
 
     init(from c: ChatMessage) {
@@ -680,7 +821,7 @@ struct ChatBackup: Codable {
     }
 }
 
-struct ChatSessionBackup: Codable {
+nonisolated struct ChatSessionBackup: Codable {
     let id: UUID; let title: String; let createdAt: Date; let updatedAt: Date
     let lastMessagePreview: String; let isArchived: Bool
 
@@ -698,7 +839,7 @@ struct ChatSessionBackup: Codable {
     }
 }
 
-struct ActivityBackup: Codable {
+nonisolated struct ActivityBackup: Codable {
     let id: UUID; let date: Date; let cardsReviewed: Int; let minutesStudied: Double; let xpEarned: Int
 
     init(from a: StudyActivity) {
@@ -712,16 +853,19 @@ struct ActivityBackup: Codable {
     }
 }
 
-struct StudySessionBackup: Codable {
+nonisolated struct StudySessionBackup: Codable {
     let id: UUID; let subjectName: String; let topicsCovered: String
     let subtopicsCovered: String?
     let startDate: Date; let endDate: Date; let cardsReviewed: Int; let correctCount: Int; let xpEarned: Int
+    let sourcePlanID: UUID?; let notes: String?; let evidenceVersion: Int?; let subunitEvidenceJSON: String?; let reviewedCardIDsRaw: String?
 
     init(from session: StudySession) {
         id = session.id; subjectName = session.subjectName; topicsCovered = session.topicsCovered
         subtopicsCovered = session.subtopicsCovered
         startDate = session.startDate; endDate = session.endDate; cardsReviewed = session.cardsReviewed
         correctCount = session.correctCount; xpEarned = session.xpEarned
+        sourcePlanID = session.sourcePlanID; notes = session.notes; evidenceVersion = session.evidenceVersion
+        subunitEvidenceJSON = session.subunitEvidenceJSON; reviewedCardIDsRaw = session.reviewedCardIDsRaw
     }
 
     func toModel() -> StudySession {
@@ -733,18 +877,25 @@ struct StudySessionBackup: Codable {
             endDate: endDate,
             cardsReviewed: cardsReviewed,
             correctCount: correctCount,
-            xpEarned: xpEarned
+            xpEarned: xpEarned,
+            sourcePlanID: sourcePlanID,
+            notes: notes ?? ""
         )
         session.id = id
+        session.evidenceVersion = evidenceVersion
+        session.subunitEvidenceJSON = subunitEvidenceJSON
+        session.reviewedCardIDsRaw = reviewedCardIDsRaw
         return session
     }
 }
 
-struct StudyPlanBackup: Codable {
+nonisolated struct StudyPlanBackup: Codable {
     let id: UUID; let subjectName: String; let topicName: String; let subtopicName: String
     let planMarkdown: String; let createdDate: Date; let scheduledDate: Date; let scheduledEndDate: Date
     let isCompleted: Bool; let notes: String; let durationMinutes: Int; let kindRaw: String; let reviewIntervalDays: Int?
     let reviewScheduleOffsetsRaw: String?
+    let prepareFlashcards: Bool?
+    let planTasksJSON: String?
 
     init(from plan: StudyPlan) {
         id = plan.id; subjectName = plan.subjectName; topicName = plan.topicName; subtopicName = plan.subtopicName
@@ -752,6 +903,8 @@ struct StudyPlanBackup: Codable {
         scheduledEndDate = plan.scheduledEndDate; isCompleted = plan.isCompleted; notes = plan.notes
         durationMinutes = plan.durationMinutes; kindRaw = plan.kindRaw; reviewIntervalDays = plan.reviewIntervalDays
         reviewScheduleOffsetsRaw = plan.reviewScheduleOffsetsRaw
+        prepareFlashcards = plan.prepareFlashcards
+        planTasksJSON = plan.planTasksJSON
     }
 
     func toModel() -> StudyPlan {
@@ -773,11 +926,13 @@ struct StudyPlanBackup: Codable {
         plan.createdDate = createdDate
         plan.scheduledEndDate = scheduledEndDate
         plan.isCompleted = isCompleted
+        plan.prepareFlashcards = prepareFlashcards ?? false
+        plan.planTasksJSON = planTasksJSON
         return plan
     }
 }
 
-struct AchievementBackup: Codable {
+nonisolated struct AchievementBackup: Codable {
     let id: String; let title: String; let desc: String; let icon: String
     let unlocked: Bool; let unlockDate: Date?; let category: String
     /// Optional so backups written before progression rules existed still decode.
@@ -811,7 +966,7 @@ struct AchievementBackup: Codable {
     }
 }
 
-struct ADHDMedicationBackup: Codable {
+nonisolated struct ADHDMedicationBackup: Codable {
     let medicationTypeRaw: String
     let doseMg: Int
     let dailyDoses: Int
