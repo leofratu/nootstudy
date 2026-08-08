@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import SwiftData
 import SwiftUI
+import WebKit
 
 private struct ARIAChatFailure: Identifiable {
     let id: UUID
@@ -12,7 +13,7 @@ private struct ARIAChatFailure: Identifiable {
     let needsCodexSignIn: Bool
 
     init(
-        error: Error,
+        error: any Error,
         sessionID: UUID?,
         prompt: String?,
         provider: AIProviderKind
@@ -59,10 +60,11 @@ struct ARIAChatView: View {
     @AppStorage("junaliModel") private var junaliModel = AIConfiguration.codexDefaultModel
     @AppStorage("codexModel") private var codexModel = AIConfiguration.codexDefaultModel
     @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
-    @State private var ariaService = ARIAService()
+    @State private var ariaService: ARIAService
     @State private var inputText = ""
     @State private var streamingText = ""
     @State private var showMemory = false
+    @State private var showChatCleanupConfirmation = false
     @State private var chatFailure: ARIAChatFailure?
     @State private var selectedSessionID: UUID?
     @State private var activeSessionID: UUID?
@@ -75,7 +77,12 @@ struct ARIAChatView: View {
 
     private var selectedSession: ARIAChatSession? {
         guard let selectedSessionID else { return visibleSessions.first }
-        return visibleSessions.first(where: { $0.id == selectedSessionID }) ?? visibleSessions.first
+        // Never fall back to a different session when the @Query snapshot has
+        // not caught up to a just-inserted chat: falling back makes the
+        // conversation area flash the previous session's transcript right after
+        // "New Chat". Return nil so the empty state shows until the new
+        // session appears in the snapshot.
+        return visibleSessions.first(where: { $0.id == selectedSessionID })
     }
 
     private var selectedProvider: AIProviderKind {
@@ -107,6 +114,10 @@ struct ARIAChatView: View {
         if ariaTemperature <= 0.35 { return "Precise" }
         if ariaTemperature <= 0.85 { return "Balanced" }
         return "Exploratory"
+    }
+
+    init() {
+        _ariaService = State(initialValue: ARIAServiceFactory.make())
     }
 
     var body: some View {
@@ -177,6 +188,7 @@ struct ARIAChatView: View {
                             Label("New Chat", systemImage: "square.and.pencil")
                         }
                         .disabled(ariaService.isLoading)
+                        .keyboardShortcut("n", modifiers: .command)
                     }
 
                     ToolbarItem(placement: .primaryAction) {
@@ -186,6 +198,14 @@ struct ARIAChatView: View {
                     }
                 }
                 .sheet(isPresented: $showMemory) { ARIAMemoryView() }
+                .alert("Delete chats older than 30 days?", isPresented: $showChatCleanupConfirmation) {
+                    Button("Delete", role: .destructive) {
+                        deleteChatsOlderThan30Days()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This permanently removes the matching conversations and their messages.")
+                }
                 .task {
                     await MainActor.run {
                         bootstrapSessionsIfNeeded()
@@ -232,18 +252,20 @@ struct ARIAChatView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(IBColors.teal.opacity(0.12))
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(IBGradient.accent)
                         .frame(width: 34, height: 34)
+                        .shadow(color: IBColors.electricBlue.opacity(0.3), radius: 6, x: 0, y: 2)
                     Image(systemName: "sparkles")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(IBColors.teal)
+                        .foregroundStyle(.white)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("ARIA")
                         .font(.system(size: 15, weight: .bold))
                     Text("STUDY COMPANION")
                         .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .tracking(0.6)
                         .foregroundStyle(IBColors.teal)
                 }
                 Spacer(minLength: 4)
@@ -261,6 +283,20 @@ struct ARIAChatView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(ariaService.isLoading)
+                .help("New Chat")
+                Menu {
+                    Button(role: .destructive) {
+                        showChatCleanupConfirmation = true
+                    } label: {
+                        Label("Delete Chats Older Than 30 Days", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .menuStyle(.borderlessButton)
+                .disabled(ariaService.isLoading)
+                .help("Chat actions")
             }
             .padding(.horizontal, 14)
             .frame(height: 58)
@@ -303,12 +339,13 @@ struct ARIAChatView: View {
             Spacer().frame(height: 28)
 
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.electricBlue.opacity(0.09))
-                    .frame(width: 58, height: 58)
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(IBGradient.accent)
+                    .frame(width: 60, height: 60)
+                    .shadow(color: IBColors.electricBlue.opacity(0.35), radius: 14, x: 0, y: 6)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .font(.system(size: 25, weight: .semibold))
+                    .foregroundStyle(.white)
             }
 
             VStack(spacing: 6) {
@@ -354,34 +391,40 @@ struct ARIAChatView: View {
                         sendMessage(inputText)
                     }
                 } label: {
+                    let canSend = !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading
                     Image(systemName: ariaService.isLoading ? "stop.fill" : "arrow.up")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(width: 32, height: 32)
                         .background(
-                            Circle().fill(
-                                inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !ariaService.isLoading
-                                    ? IBColors.tertiaryText.opacity(0.45) : IBColors.electricBlue
-                            )
+                            Group {
+                                if canSend {
+                                    Circle().fill(IBGradient.accent)
+                                } else {
+                                    Circle().fill(IBColors.tertiaryText.opacity(0.45))
+                                }
+                            }
+                            .shadow(color: canSend ? IBColors.electricBlue.opacity(0.3) : .clear, radius: 6, x: 0, y: 2)
                         )
                 }
                 .buttonStyle(.plain)
                 .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !ariaService.isLoading)
                 .help(ariaService.isLoading ? "Stop response" : "Send message")
             }
-            .padding(4)
+            .padding(5)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.canvas)
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(IBColors.surface)
+                    .shadow(color: IBShadow.cardColor, radius: 10, x: 0, y: 3)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 20)
                             .stroke(IBColors.cardBorder, lineWidth: 1)
                     )
             )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 11)
-        .background(IBColors.surface)
+        .background(IBColors.canvas)
     }
 
     private var configurationRail: some View {
@@ -639,11 +682,13 @@ struct ARIAChatView: View {
 
         guard let message = persistedMessage(id: failure.id),
               ChatMessageRole(storedValue: message.role)?.isFailure == true else { return }
+        let previousRole = message.role
         if let parsedRole = ChatMessageRole(storedValue: message.role) { message.role = ChatMessageRole.dismissed(underlying: parsedRole).storedValue }
         do {
             try context.save()
         } catch {
-            context.rollback()
+            // Revert only this message's role, not unrelated pending work.
+            message.role = previousRole
             chatFailure = ARIAChatFailure(
                 message: "This recovery notice could not be dismissed: \(error.localizedDescription)",
                 sessionID: failure.sessionID,
@@ -661,7 +706,7 @@ struct ARIAChatView: View {
             try context.save()
             return true
         } catch {
-            context.rollback()
+            context.insert(message)
             chatFailure = ARIAChatFailure(
                 message: "The saved response could not be prepared for retry: \(error.localizedDescription)",
                 sessionID: message.sessionID,
@@ -719,13 +764,14 @@ struct ARIAChatView: View {
     private func updatePersistedFailure(_ failure: ARIAChatFailure, content: String) -> Bool {
         guard let message = persistedMessage(id: failure.id),
               ChatMessageRole(storedValue: message.role)?.isFailure == true else { return false }
+        let previousContent = message.content
         message.content = content
         do {
             try context.save()
             chatFailure = nil
             return true
         } catch {
-            context.rollback()
+            message.content = previousContent
             return false
         }
     }
@@ -774,7 +820,9 @@ struct ARIAChatView: View {
             do {
                 try context.save()
             } catch {
-                context.rollback()
+                if let bootstrappedSession {
+                    context.delete(bootstrappedSession)
+                }
                 chatFailure = ARIAChatFailure(
                     message: "Chat setup could not be saved: \(error.localizedDescription)",
                     sessionID: selectedSessionID,
@@ -788,7 +836,11 @@ struct ARIAChatView: View {
             selectedSessionID = preferredSelection ?? visibleSessions.first?.id
         }
         if let bootstrappedSession { return bootstrappedSession }
-        return visibleSessions.first(where: { $0.id == selectedSessionID }) ?? visibleSessions.first
+        // Match only the explicit selection. The previous `?? visibleSessions.first`
+        // fallback could hand a freshly-typed message to a *different* session
+        // when the selection pointed at a just-inserted chat the @Query snapshot
+        // had not yet published. Returning nil keeps the input intact instead.
+        return visibleSessions.first(where: { $0.id == selectedSessionID })
     }
 
     @MainActor
@@ -803,7 +855,7 @@ struct ARIAChatView: View {
         do {
             try context.save()
         } catch {
-            context.rollback()
+            context.delete(session)
             chatFailure = ARIAChatFailure(
                 message: "The new chat could not be saved: \(error.localizedDescription)",
                 sessionID: selectedSessionID,
@@ -844,7 +896,7 @@ struct ARIAChatView: View {
         do {
             try context.save()
         } catch {
-            context.rollback()
+            context.insert(session)
             chatFailure = ARIAChatFailure(
                 message: "The chat could not be deleted: \(error.localizedDescription)",
                 sessionID: selectedSessionID,
@@ -854,6 +906,35 @@ struct ARIAChatView: View {
         }
         if selectedSessionID == sessionID {
             selectedSessionID = visibleSessions.first(where: { $0.id != sessionID })?.id
+        }
+    }
+
+    @MainActor
+    private func deleteChatsOlderThan30Days() {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
+        let staleSessions = sessions.filter { $0.updatedAt < cutoff }
+        guard !staleSessions.isEmpty else { return }
+
+        let staleIDs = Set(staleSessions.map(\.id))
+        let messageDescriptor = FetchDescriptor<ChatMessage>()
+        for message in (try? context.fetch(messageDescriptor)) ?? [] where message.sessionID.map(staleIDs.contains) == true {
+            context.delete(message)
+        }
+        for session in staleSessions {
+            context.delete(session)
+        }
+        do {
+            try context.save()
+            if let selectedSessionID, staleIDs.contains(selectedSessionID) {
+                self.selectedSessionID = visibleSessions.first(where: { !staleIDs.contains($0.id) })?.id
+            }
+        } catch {
+            context.rollback()
+            chatFailure = ARIAChatFailure(
+                message: "The old chats could not be deleted: \(error.localizedDescription)",
+                sessionID: selectedSessionID,
+                provider: selectedProvider
+            )
         }
     }
 
@@ -1251,22 +1332,22 @@ struct MessageRow: View {
                 HStack(alignment: .top, spacing: 10) {
                     Spacer(minLength: 80)
                     VStack(alignment: .trailing, spacing: 5) {
-                        Text("You")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(IBColors.secondaryText)
+                        HStack(spacing: 6) {
+                            MessageCopyButton(text: message.content)
+                            Text("You")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(IBColors.secondaryText)
+                        }
                         Text(message.content)
                             .lineSpacing(3)
-                            .foregroundStyle(IBColors.ink)
+                            .foregroundStyle(.white)
                             .textSelection(.enabled)
-                            .padding(.horizontal, 13)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                             .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(IBColors.electricBlue.opacity(0.1))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(IBColors.electricBlue.opacity(0.16), lineWidth: 1)
-                                    )
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(IBGradient.accent)
+                                    .shadow(color: IBColors.electricBlue.opacity(0.25), radius: 8, x: 0, y: 3)
                             )
                     }
                     .frame(maxWidth: 590, alignment: .trailing)
@@ -1276,20 +1357,15 @@ struct MessageRow: View {
                 HStack(alignment: .top, spacing: 12) {
                     ariaAvatar
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("ARIA")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(IBColors.electricBlue)
+                        HStack(spacing: 6) {
+                            Text("ARIA")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(IBColors.electricBlue)
+                            MessageCopyButton(text: message.content)
+                        }
                         FormattedMessageContent(text: message.content, preferRichRendering: true)
-                            .textSelection(.enabled)
                             .padding(14)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(IBColors.surface)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(IBColors.cardBorder, lineWidth: 1)
-                                    )
-                            )
+                            .glassCard(cornerRadius: 16)
                     }
                     .frame(maxWidth: 760, alignment: .leading)
                     Spacer(minLength: 20)
@@ -1302,23 +1378,56 @@ struct MessageRow: View {
     private var ariaAvatar: some View {
         ZStack {
             Circle()
-                .fill(IBColors.electricBlue.opacity(0.12))
+                .fill(IBGradient.accent)
                 .frame(width: 30, height: 30)
+                .shadow(color: IBColors.electricBlue.opacity(0.3), radius: 5, x: 0, y: 2)
             Image(systemName: "sparkles")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(IBColors.electricBlue)
+                .foregroundStyle(.white)
         }
     }
 
     private var userAvatar: some View {
         ZStack {
             Circle()
-                .fill(Color.accentColor.opacity(0.12))
+                .fill(IBColors.ink.opacity(0.06))
                 .frame(width: 30, height: 30)
             Image(systemName: "person.fill")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(IBColors.secondaryText)
         }
+    }
+}
+
+private enum ARIAClipboard {
+    @discardableResult
+    static func copy(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        return pasteboard.setString(text, forType: .string)
+    }
+}
+
+private struct MessageCopyButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            copied = ARIAClipboard.copy(text)
+            guard copied else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                copied = false
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.caption2.weight(.semibold))
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(copied ? IBColors.success : IBColors.secondaryText)
+        .help(copied ? "Copied" : "Copy message")
     }
 }
 
@@ -1330,11 +1439,12 @@ struct StreamingMessageRow: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(IBColors.electricBlue.opacity(0.12))
+                    .fill(IBGradient.accent)
                     .frame(width: 30, height: 30)
+                    .shadow(color: IBColors.electricBlue.opacity(0.3), radius: 5, x: 0, y: 2)
                 Image(systemName: "sparkles")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(.white)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -1347,14 +1457,7 @@ struct StreamingMessageRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                     .padding(14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(IBColors.surface)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(IBColors.cardBorder, lineWidth: 1)
-                            )
-                    )
+                    .glassCard(cornerRadius: 16)
             }
             .frame(maxWidth: 760, alignment: .leading)
             Spacer()
@@ -1415,13 +1518,111 @@ struct FormattedMessageContent: View {
             }
 
         case .mathBlock(let latex):
-            NativeMathBlockView(latex: latex)
+            MathJaxBlockView(latex: latex)
 
         case .codeBlock(let code, let language):
             CodeBlockView(code: code, language: language)
 
+        case .diagram(let diagram):
+            ARIADiagramView(diagram: diagram)
+
         case .flashcard(let front, let back):
             FlashcardMessageView(front: front, back: back)
+        }
+    }
+}
+
+private struct MathJaxBlockView: View {
+    let latex: String
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var contentHeight: CGFloat = 48
+    @State private var usesFallback = false
+
+    var body: some View {
+        Group {
+            if usesFallback {
+                NativeMathBlockView(latex: latex)
+            } else {
+                OfflineMathJaxView(
+                    latex: latex,
+                    colorScheme: colorScheme,
+                    height: $contentHeight,
+                    didFail: $usesFallback
+                )
+                .frame(height: min(max(contentHeight, 36), 360))
+                .accessibilityLabel("Rendered mathematical expression")
+            }
+        }
+        .padding(.vertical, 4)
+        .overlay(alignment: .topTrailing) {
+            MessageCopyButton(text: latex)
+                .opacity(0.72)
+        }
+    }
+}
+
+private struct OfflineMathJaxView: NSViewRepresentable {
+    let latex: String
+    let colorScheme: ColorScheme
+    @Binding var height: CGFloat
+    @Binding var didFail: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(height: $height, didFail: $didFail)
+    }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        let controller = WKUserContentController()
+        controller.add(context.coordinator, name: "mathHeight")
+        controller.add(context.coordinator, name: "mathError")
+        configuration.userContentController = controller
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.navigationDelegate = context.coordinator
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        guard context.coordinator.lastLatex != latex || context.coordinator.lastColorScheme != colorScheme else { return }
+        context.coordinator.lastLatex = latex
+        context.coordinator.lastColorScheme = colorScheme
+        context.coordinator.didFail.wrappedValue = false
+        guard let scriptURL = Bundle.main.url(forResource: "tex-svg", withExtension: "js") else {
+            context.coordinator.didFail.wrappedValue = true
+            return
+        }
+        let html = MathRenderingPolicy.htmlDocument(latex: latex, colorScheme: colorScheme)
+        webView.loadHTMLString(html, baseURL: scriptURL.deletingLastPathComponent())
+    }
+
+    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "mathHeight")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "mathError")
+    }
+
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+        var lastLatex = ""
+        var lastColorScheme: ColorScheme?
+        var height: Binding<CGFloat>
+        var didFail: Binding<Bool>
+
+        init(height: Binding<CGFloat>, didFail: Binding<Bool>) {
+            self.height = height
+            self.didFail = didFail
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "mathHeight", let rawHeight = message.body as? Double {
+                height.wrappedValue = CGFloat(rawHeight)
+            } else if message.name == "mathError" {
+                didFail.wrappedValue = true
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+            didFail.wrappedValue = true
         }
     }
 }
@@ -1578,7 +1779,614 @@ enum FormattedMessageSection: Equatable {
     case listItem(marker: String, text: String)
     case mathBlock(String)
     case codeBlock(code: String, language: String)
+    case diagram(ARIADiagramSpec)
     case flashcard(front: String, back: String)
+}
+
+private struct ARIADiagramView: View {
+    let diagram: ARIADiagramSpec
+    @State private var isExpanded = false
+    @State private var zoom: CGFloat = 1
+    @State private var zoomBase: CGFloat = 1
+    @State private var offset = CGSize.zero
+    @State private var offsetBase = CGSize.zero
+    @State private var simulationResetID = UUID()
+
+    private var canvasHeight: CGFloat { isExpanded ? 420 : 280 }
+
+    private var modeTitle: String {
+        if diagram.isSimulation { return "Simulation" }
+        if diagram.isCanvas { return "Canvas" }
+        if diagram.isFlow { return "Flow" }
+        return "Graph"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: diagram.isSimulation ? "atom" : (diagram.isCanvas ? "rectangle.3.group.bubble" : (diagram.isFlow ? "point.3.connected.trianglepath.dotted" : "chart.xyaxis.line")))
+                    .foregroundStyle(IBColors.teal)
+                Text(diagram.title ?? (diagram.isSimulation ? "Interactive simulation" : (diagram.isCanvas ? "Interactive canvas" : (diagram.isFlow ? "Concept diagram" : "Interactive graph"))))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(IBColors.ink)
+                    .lineLimit(2)
+                Spacer()
+                Text(modeTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(IBColors.secondaryText)
+                    .padding(.horizontal, 7)
+                    .frame(height: 24)
+                    .background(IBColors.canvas, in: Capsule())
+                Button {
+                    if diagram.isSimulation || diagram.isCanvas {
+                        simulationResetID = UUID()
+                    } else {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            zoom = 1
+                            zoomBase = 1
+                            offset = .zero
+                            offsetBase = .zero
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Reset diagram")
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: isExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .help(isExpanded ? "Collapse canvas" : "Expand canvas")
+            }
+
+            Divider()
+
+            if diagram.isSimulation {
+                ARIAParticleSimulationView(
+                    mode: diagram.simulation ?? "atoms",
+                    particleCount: diagram.particleCount ?? 18
+                )
+                .id(simulationResetID)
+                .frame(height: canvasHeight)
+            } else if diagram.isCanvas, let scene = diagram.canvas {
+                ARIAGenerativeCanvasView(scene: scene, canvasHeight: canvasHeight - 92)
+                    .id(simulationResetID)
+            } else {
+                Canvas { context, size in
+                    if diagram.isFlow {
+                        drawFlow(in: &context, size: size)
+                    } else {
+                        drawCoordinateGraph(in: &context, size: size)
+                    }
+                }
+                .frame(height: canvasHeight)
+                .background(IBColors.canvas.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .scaleEffect(zoom)
+                .offset(offset)
+                .clipped()
+                .highPriorityGesture(
+                    DragGesture()
+                        .onChanged {
+                            offset = CGSize(
+                                width: offsetBase.width + $0.translation.width,
+                                height: offsetBase.height + $0.translation.height
+                            )
+                        }
+                        .onEnded { _ in
+                            offset.width = min(max(offset.width, -120), 120)
+                            offset.height = min(max(offset.height, -90), 90)
+                            offsetBase = offset
+                        }
+                )
+                .simultaneousGesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            zoom = min(max(zoomBase * value, 0.75), 2.5)
+                        }
+                        .onEnded { _ in
+                            zoomBase = zoom
+                        }
+                )
+                .accessibilityLabel(diagram.title ?? "Interactive ARIA diagram")
+            }
+
+            if !diagram.isFlow, !diagram.isCanvas, !diagram.graphSeries.isEmpty {
+                HStack(spacing: 12) {
+                    ForEach(Array(diagram.graphSeries.enumerated()), id: \.offset) { index, series in
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(seriesColor(series, index: index))
+                                .frame(width: 7, height: 7)
+                            Text(series.label ?? "Series \(index + 1)")
+                                .font(.caption2)
+                                .foregroundStyle(IBColors.secondaryText)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(IBColors.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(IBColors.cardBorder, lineWidth: 1)
+                )
+        )
+    }
+
+    private func drawCoordinateGraph(in context: inout GraphicsContext, size: CGSize) {
+        let values = diagram.graphSeries.flatMap(\.points).filter { $0.count >= 2 }
+        guard !values.isEmpty else {
+            context.draw(Text("ARIA diagram data is empty").font(.caption), at: CGPoint(x: size.width / 2, y: size.height / 2))
+            return
+        }
+        let xValues = values.map { $0[0] }
+        let yValues = values.map { $0[1] }
+        let xMin = (xValues.min() ?? -1).rounded(.down) - 1
+        let xMax = (xValues.max() ?? 1).rounded(.up) + 1
+        let yMin = (yValues.min() ?? -1).rounded(.down) - 1
+        let yMax = (yValues.max() ?? 1).rounded(.up) + 1
+        let safeXSpan = max(xMax - xMin, 1)
+        let safeYSpan = max(yMax - yMin, 1)
+        let plot = CGRect(x: 38, y: 16, width: max(size.width - 54, 80), height: max(size.height - 50, 80))
+        func point(_ value: [Double]) -> CGPoint {
+            CGPoint(
+                x: plot.minX + CGFloat((value[0] - xMin) / safeXSpan) * plot.width,
+                y: plot.maxY - CGFloat((value[1] - yMin) / safeYSpan) * plot.height
+            )
+        }
+
+        for step in 0...5 {
+            let x = plot.minX + CGFloat(step) / 5 * plot.width
+            let y = plot.minY + CGFloat(step) / 5 * plot.height
+            var vertical = Path()
+            vertical.move(to: CGPoint(x: x, y: plot.minY))
+            vertical.addLine(to: CGPoint(x: x, y: plot.maxY))
+            context.stroke(vertical, with: .color(IBColors.cardBorder.opacity(0.7)), lineWidth: 0.5)
+            var horizontal = Path()
+            horizontal.move(to: CGPoint(x: plot.minX, y: y))
+            horizontal.addLine(to: CGPoint(x: plot.maxX, y: y))
+            context.stroke(horizontal, with: .color(IBColors.cardBorder.opacity(0.7)), lineWidth: 0.5)
+        }
+        if xMin <= 0, xMax >= 0 {
+            let x = point([0, yMin]).x
+            var axis = Path()
+            axis.move(to: CGPoint(x: x, y: plot.minY))
+            axis.addLine(to: CGPoint(x: x, y: plot.maxY))
+            context.stroke(axis, with: .color(IBColors.secondaryText), lineWidth: 1)
+        }
+        if yMin <= 0, yMax >= 0 {
+            let y = point([xMin, 0]).y
+            var axis = Path()
+            axis.move(to: CGPoint(x: plot.minX, y: y))
+            axis.addLine(to: CGPoint(x: plot.maxX, y: y))
+            context.stroke(axis, with: .color(IBColors.secondaryText), lineWidth: 1)
+        }
+
+        for (index, series) in diagram.graphSeries.enumerated() {
+            let points = series.points.filter { $0.count >= 2 }
+            guard let first = points.first else { continue }
+            var path = Path()
+            path.move(to: point(first))
+            for value in points.dropFirst() { path.addLine(to: point(value)) }
+            let color = seriesColor(series, index: index)
+            context.stroke(path, with: .color(color), lineWidth: 2)
+            for value in points {
+                let position = point(value)
+                context.fill(Path(ellipseIn: CGRect(x: position.x - 2.5, y: position.y - 2.5, width: 5, height: 5)), with: .color(color))
+            }
+        }
+        if let xLabel = diagram.xLabel {
+            context.draw(Text(xLabel).font(.caption2), at: CGPoint(x: plot.midX, y: size.height - 10))
+        }
+        if let yLabel = diagram.yLabel {
+            context.draw(Text(yLabel).font(.caption2), at: CGPoint(x: 14, y: plot.midY))
+        }
+    }
+
+    private func drawFlow(in context: inout GraphicsContext, size: CGSize) {
+        let nodes = diagram.flowNodes
+        guard !nodes.isEmpty else {
+            context.draw(Text("ARIA diagram data is empty").font(.caption), at: CGPoint(x: size.width / 2, y: size.height / 2))
+            return
+        }
+        let positions = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { index, node in
+            let columns = max(Int(ceil(sqrt(Double(nodes.count)))), 1)
+            let row = index / columns
+            let column = index % columns
+            let x = node.x.map { CGFloat($0) * size.width } ?? (CGFloat(column + 1) / CGFloat(columns + 1) * size.width)
+            let rows = max(Int(ceil(Double(nodes.count) / Double(columns))), 1)
+            let y = node.y.map { CGFloat($0) * size.height } ?? (CGFloat(row + 1) / CGFloat(rows + 1) * size.height)
+            return (node.id, CGPoint(x: x, y: y))
+        })
+        for edge in diagram.flowEdges {
+            guard let start = positions[edge.from], let end = positions[edge.to] else { continue }
+            var path = Path()
+            path.move(to: start)
+            path.addLine(to: end)
+            context.stroke(path, with: .color(IBColors.secondaryText.opacity(0.75)), lineWidth: 1.4)
+            let angle = atan2(end.y - start.y, end.x - start.x)
+            let arrow = CGPoint(x: end.x - cos(angle) * 18, y: end.y - sin(angle) * 18)
+            var arrowPath = Path()
+            arrowPath.move(to: arrow)
+            arrowPath.addLine(to: CGPoint(x: arrow.x - cos(angle - .pi / 5) * 7, y: arrow.y - sin(angle - .pi / 5) * 7))
+            arrowPath.move(to: arrow)
+            arrowPath.addLine(to: CGPoint(x: arrow.x - cos(angle + .pi / 5) * 7, y: arrow.y - sin(angle + .pi / 5) * 7))
+            context.stroke(arrowPath, with: .color(IBColors.secondaryText.opacity(0.75)), lineWidth: 1.4)
+            if let label = edge.label {
+                context.draw(Text(label).font(.caption2), at: CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 10))
+            }
+        }
+        for (index, node) in nodes.enumerated() {
+            guard let point = positions[node.id] else { continue }
+            let rect = CGRect(x: point.x - 54, y: point.y - 19, width: 108, height: 38)
+            let color = node.color.map(Color.init(hex:)) ?? seriesColor(nil, index: index)
+            context.fill(Path(roundedRect: rect, cornerRadius: 7), with: .color(color.opacity(0.14)))
+            context.stroke(Path(roundedRect: rect, cornerRadius: 7), with: .color(color.opacity(0.75)), lineWidth: 1)
+            context.draw(
+                Text(node.label).font(.caption.weight(.semibold)).foregroundColor(IBColors.ink),
+                at: point,
+                anchor: .center
+            )
+        }
+    }
+
+    private func seriesColor(_ series: ARIADiagramSpec.Series?, index: Int) -> Color {
+        if let hex = series?.color, !hex.isEmpty { return Color(hex: hex) }
+        return [IBColors.electricBlue, IBColors.teal, IBColors.coral, IBColors.gold][index % 4]
+    }
+}
+
+private struct ARIAParticleSimulationView: View {
+    let mode: String
+    let particleCount: Int
+    @State private var isPlaying = true
+    @State private var speed = 1.0
+    @State private var pausedElapsed: TimeInterval = 0
+    @State private var activeStartedAt = Date()
+
+    private var isAtomMode: Bool {
+        mode.localizedCaseInsensitiveContains("atom") || mode.localizedCaseInsensitiveContains("electron")
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { timeline in
+                Canvas { context, size in
+                    let elapsed = pausedElapsed + (isPlaying ? timeline.date.timeIntervalSince(activeStartedAt) : 0)
+                    let time = elapsed * speed
+                    if isAtomMode {
+                        drawAtom(in: &context, size: size, time: time)
+                    } else {
+                        drawParticles(in: &context, size: size, time: time)
+                    }
+                }
+                .background(Color.black.opacity(0.03))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    togglePlayback()
+                } label: {
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                }
+                .buttonStyle(.borderless)
+                .help(isPlaying ? "Pause simulation" : "Play simulation")
+
+                Slider(value: $speed, in: 0.25...2.5)
+                    .frame(maxWidth: 150)
+                Text("\(speed, format: .number.precision(.fractionLength(1)))x")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(IBColors.secondaryText)
+                Spacer()
+                Text(isAtomMode ? "Electron orbit model" : "Particle motion model")
+                    .font(.caption2)
+                    .foregroundStyle(IBColors.secondaryText)
+            }
+        }
+        .accessibilityLabel(isAtomMode ? "Interactive atom simulation" : "Interactive particle simulation")
+    }
+
+    private func togglePlayback() {
+        if isPlaying {
+            pausedElapsed += Date().timeIntervalSince(activeStartedAt)
+            isPlaying = false
+        } else {
+            activeStartedAt = Date()
+            isPlaying = true
+        }
+    }
+
+    private func drawAtom(in context: inout GraphicsContext, size: CGSize, time: Double) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let radii: [CGFloat] = [48, 88]
+        for radius in radii {
+            context.stroke(
+                Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
+                with: .color(IBColors.electricBlue.opacity(0.24)),
+                lineWidth: 1
+            )
+        }
+        context.fill(
+            Path(ellipseIn: CGRect(x: center.x - 18, y: center.y - 18, width: 36, height: 36)),
+            with: .color(IBColors.coral)
+        )
+        for index in 0..<4 {
+            let radius = radii[index % radii.count]
+            let angle = time * (index.isMultiple(of: 2) ? 1.3 : -0.9) + Double(index) * .pi / 2
+            let point = CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
+            context.fill(
+                Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6, width: 12, height: 12)),
+                with: .color(IBColors.electricBlue)
+            )
+        }
+    }
+
+    private func drawParticles(in context: inout GraphicsContext, size: CGSize, time: Double) {
+        let count = min(max(particleCount, 4), 48)
+        for index in 0..<count {
+            let phase = Double(index) * 1.618
+            let x = 14 + (sin(time * (0.35 + Double(index % 5) * 0.08) + phase) + 1) / 2 * max(size.width - 28, 1)
+            let y = 14 + (cos(time * (0.48 + Double(index % 7) * 0.06) + phase * 0.7) + 1) / 2 * max(size.height - 28, 1)
+            let color = [IBColors.electricBlue, IBColors.teal, IBColors.coral, IBColors.gold][index % 4]
+            context.fill(
+                Path(ellipseIn: CGRect(x: x - 4, y: y - 4, width: 8, height: 8)),
+                with: .color(color.opacity(0.82))
+            )
+        }
+    }
+}
+
+/// A data-only Canvas scene. ARIA can combine visual primitives and named
+/// parameters without the app ever evaluating provider-supplied code.
+private struct ARIAGenerativeCanvasView: View {
+    let scene: ARIADiagramSpec.CanvasScene
+    let canvasHeight: CGFloat
+    @State private var isPlaying = true
+    @State private var masterSpeed = 1.0
+    @State private var pausedElapsed: TimeInterval = 0
+    @State private var activeStartedAt = Date()
+    @State private var controlValues: [String: Double]
+    @State private var toggleValues: [String: Bool]
+
+    init(scene: ARIADiagramSpec.CanvasScene, canvasHeight: CGFloat) {
+        self.scene = scene
+        self.canvasHeight = canvasHeight
+        _controlValues = State(
+            initialValue: Dictionary(
+                (scene.controls ?? [])
+                    .filter { $0.max > $0.min }
+                    .map { ($0.id, min(max($0.value, $0.min), $0.max)) },
+                uniquingKeysWith: { _, latest in latest }
+            )
+        )
+        _toggleValues = State(
+            initialValue: Dictionary(
+                (scene.controls ?? [])
+                    .filter { $0.kind?.lowercased() == "toggle" }
+                    .map { ($0.id, $0.value >= 0.5) },
+                uniquingKeysWith: { _, latest in latest }
+            )
+        )
+    }
+
+    private var validControls: [ARIADiagramSpec.CanvasScene.Control] {
+        (scene.controls ?? []).filter { $0.max > $0.min && !$0.id.isEmpty }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { timeline in
+                Canvas { context, size in
+                    let elapsed = pausedElapsed + (isPlaying ? timeline.date.timeIntervalSince(activeStartedAt) : 0)
+                    draw(in: &context, size: size, time: elapsed * masterSpeed)
+                }
+                .frame(height: max(canvasHeight, 210))
+                .background(IBColors.canvas.opacity(0.82))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(IBColors.cardBorder.opacity(0.75), lineWidth: 1)
+                )
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    togglePlayback()
+                } label: {
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(.borderless)
+                .help(isPlaying ? "Pause animation" : "Play animation")
+
+                Text("Speed")
+                    .font(.caption2)
+                    .foregroundStyle(IBColors.secondaryText)
+                Slider(value: $masterSpeed, in: 0.1...3)
+                    .frame(maxWidth: 130)
+                Text("\(masterSpeed, format: .number.precision(.fractionLength(1)))x")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(IBColors.secondaryText)
+            }
+
+            ForEach(validControls, id: \.id) { control in
+                if control.kind?.lowercased() == "toggle" {
+                    Toggle(
+                        control.label,
+                        isOn: Binding(
+                            get: { toggleValues[control.id] ?? (control.value >= 0.5) },
+                            set: { toggleValues[control.id] = $0 }
+                        )
+                    )
+                    .font(.caption2)
+                    .toggleStyle(.switch)
+                    .padding(.horizontal, 2)
+                } else {
+                    HStack(spacing: 10) {
+                        Text(control.label)
+                            .font(.caption2)
+                            .foregroundStyle(IBColors.secondaryText)
+                            .frame(width: 104, alignment: .leading)
+                        Slider(
+                            value: Binding(
+                                get: { controlValues[control.id] ?? control.value },
+                                set: { controlValues[control.id] = $0 }
+                            ),
+                            in: control.min...control.max
+                        )
+                        Text(valueLabel(for: control))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(IBColors.secondaryText)
+                            .frame(width: 54, alignment: .trailing)
+                    }
+                }
+            }
+        }
+        .accessibilityLabel("Interactive ARIA Canvas")
+    }
+
+    private func valueLabel(for control: ARIADiagramSpec.CanvasScene.Control) -> String {
+        let value = controlValues[control.id] ?? control.value
+        let suffix = control.unit ?? ""
+        return String(format: "%.2f", value) + suffix
+    }
+
+    private func togglePlayback() {
+        if isPlaying {
+            pausedElapsed += Date().timeIntervalSince(activeStartedAt)
+            isPlaying = false
+        } else {
+            activeStartedAt = Date()
+            isPlaying = true
+        }
+    }
+
+    private func controlValue(_ id: String?, fallback: Double) -> Double {
+        guard let id else { return fallback }
+        return controlValues[id] ?? fallback
+    }
+
+    private func draw(in context: inout GraphicsContext, size: CGSize, time: Double) {
+        for element in scene.elements {
+            if let visibilityControl = element.visibilityControl,
+               !(toggleValues[visibilityControl] ?? true) {
+                continue
+            }
+            let color = element.color.map(Color.init(hex:)) ?? IBColors.electricBlue
+            let point = animatedPoint(for: element, size: size, time: time)
+            let kind = element.kind.lowercased()
+            let minDimension = min(size.width, size.height)
+            let radius = CGFloat(controlValue(element.radiusControl, fallback: element.radius ?? 0.035)) * minDimension
+
+            switch kind {
+            case "polyline":
+                let points = (element.points ?? [])
+                    .filter { $0.count >= 2 }
+                    .map { pointFor(x: $0[0], y: $0[1], size: size) }
+                if let first = points.first {
+                    var path = Path()
+                    path.move(to: first)
+                    for item in points.dropFirst() {
+                        path.addLine(to: item)
+                    }
+                    context.stroke(path, with: .color(color), lineWidth: 2)
+                }
+
+            case "line":
+                let end = pointFor(x: element.x2 ?? element.x ?? 0.5, y: element.y2 ?? element.y ?? 0.5, size: size)
+                var path = Path()
+                path.move(to: point)
+                path.addLine(to: end)
+                context.stroke(path, with: .color(color), lineWidth: 2)
+
+            case "arrow", "vector":
+                let end = pointFor(x: element.x2 ?? element.x ?? 0.5, y: element.y2 ?? element.y ?? 0.5, size: size)
+                drawArrow(from: point, to: end, color: color, context: &context)
+
+            case "rect", "rectangle":
+                let width = CGFloat(element.width ?? 0.16) * size.width
+                let height = CGFloat(element.height ?? 0.1) * size.height
+                let rect = CGRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
+                context.fill(Path(roundedRect: rect, cornerRadius: 6), with: .color(color.opacity(0.2)))
+                context.stroke(Path(roundedRect: rect, cornerRadius: 6), with: .color(color), lineWidth: 1.4)
+
+            case "text", "label":
+                context.draw(
+                    Text(element.label ?? "").font(.caption.weight(.semibold)).foregroundColor(color),
+                    at: point,
+                    anchor: .center
+                )
+
+            default:
+                let rect = CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2)
+                context.fill(Path(ellipseIn: rect), with: .color(color.opacity(0.88)))
+                if let label = element.label {
+                    context.draw(
+                        Text(label).font(.caption2.weight(.medium)).foregroundColor(IBColors.ink),
+                        at: CGPoint(x: point.x, y: point.y + radius + 12),
+                        anchor: .center
+                    )
+                }
+            }
+        }
+    }
+
+    private func animatedPoint(
+        for element: ARIADiagramSpec.CanvasScene.Element,
+        size: CGSize,
+        time: Double
+    ) -> CGPoint {
+        let base = pointFor(x: element.x ?? 0.5, y: element.y ?? 0.5, size: size)
+        let speed = controlValue(element.speedControl, fallback: element.speed ?? 1)
+        let amplitude = CGFloat(controlValue(element.amplitudeControl, fallback: element.amplitude ?? 0.08)) * min(size.width, size.height)
+        let phase = time * speed + (element.phase ?? 0)
+
+        switch element.animation?.lowercased() {
+        case "orbit", "circle":
+            return CGPoint(x: base.x + cos(phase) * amplitude, y: base.y + sin(phase) * amplitude)
+        case "sine", "wave":
+            return CGPoint(x: base.x, y: base.y + sin(phase) * amplitude)
+        case "linear", "drift":
+            let progress = (sin(phase) + 1) / 2
+            return CGPoint(x: base.x + (progress - 0.5) * amplitude * 2, y: base.y)
+        case "bounce", "vibrate":
+            return CGPoint(x: base.x + cos(phase * 1.37) * amplitude, y: base.y + sin(phase * 1.91) * amplitude)
+        default:
+            return base
+        }
+    }
+
+    private func pointFor(x: Double, y: Double, size: CGSize) -> CGPoint {
+        CGPoint(x: CGFloat(x) * size.width, y: CGFloat(y) * size.height)
+    }
+
+    private func drawArrow(from start: CGPoint, to end: CGPoint, color: Color, context: inout GraphicsContext) {
+        var path = Path()
+        path.move(to: start)
+        path.addLine(to: end)
+        context.stroke(path, with: .color(color), lineWidth: 2)
+
+        let angle = atan2(end.y - start.y, end.x - start.x)
+        let head = CGPoint(x: end.x - cos(angle) * 11, y: end.y - sin(angle) * 11)
+        var headPath = Path()
+        headPath.move(to: head)
+        headPath.addLine(to: CGPoint(x: head.x - cos(angle - .pi / 5) * 7, y: head.y - sin(angle - .pi / 5) * 7))
+        headPath.move(to: head)
+        headPath.addLine(to: CGPoint(x: head.x - cos(angle + .pi / 5) * 7, y: head.y - sin(angle + .pi / 5) * 7))
+        context.stroke(headPath, with: .color(color), lineWidth: 2)
+    }
 }
 
 private struct FlashcardMessageView: View {
@@ -1645,9 +2453,8 @@ private struct CodeBlockView: View {
                 }
                 Spacer()
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(code, forType: .string)
-                    copied = true
+                    copied = ARIAClipboard.copy(code)
+                    guard copied else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 } label: {
                     HStack(spacing: 4) {
@@ -1736,7 +2543,11 @@ enum FormattedMessageFormatter {
             let code = codeBlockLines.joined(separator: "\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !code.isEmpty {
-                sections.append(.codeBlock(code: code, language: codeBlockLanguage))
+                if let diagram = diagramSpec(from: code, language: codeBlockLanguage) {
+                    sections.append(.diagram(diagram))
+                } else {
+                    sections.append(.codeBlock(code: code, language: codeBlockLanguage))
+                }
             }
             codeBlockLines.removeAll()
             codeBlockLanguage = ""
@@ -1820,7 +2631,62 @@ enum FormattedMessageFormatter {
             appendCodeBlockBuffer()
         }
 
+        if !sections.contains(where: {
+            if case .diagram = $0 { return true }
+            return false
+        }), let inferredSimulation = fallbackSimulation(for: normalized) {
+            sections.append(.diagram(inferredSimulation))
+        }
+
         return sections.isEmpty ? [.markdown(normalized)] : sections
+    }
+
+    private static func diagramSpec(from code: String, language: String) -> ARIADiagramSpec? {
+        ARIAContentContract.decodeDiagram(from: code, language: language)
+    }
+
+    /// Old model responses may refuse a Canvas request instead of producing the
+    /// protocol block. Preserve the explanation but still mount a usable native
+    /// simulation for those already-saved messages.
+    private static func fallbackSimulation(for source: String) -> ARIADiagramSpec? {
+        let normalized = source.lowercased()
+        let refusalTerms = [
+            "cannot embed",
+            "can't embed",
+            "cannot render",
+            "can't render",
+            "compatible viewer",
+            "canvas-ready"
+        ]
+        guard refusalTerms.contains(where: normalized.contains) else { return nil }
+
+        if normalized.contains("atom") || normalized.contains("electron") {
+            return ARIADiagramSpec(
+                type: "simulation",
+                title: "Atom simulation",
+                xLabel: nil,
+                yLabel: nil,
+                series: nil,
+                nodes: nil,
+                edges: nil,
+                simulation: "atoms",
+                particleCount: 12
+            )
+        }
+        guard normalized.contains("particle") || normalized.contains("velocity") || normalized.contains("motion") else {
+            return nil
+        }
+        return ARIADiagramSpec(
+            type: "simulation",
+            title: "Particle simulation",
+            xLabel: nil,
+            yLabel: nil,
+            series: nil,
+            nodes: nil,
+            edges: nil,
+            simulation: "particles",
+            particleCount: 20
+        )
     }
 
     static func extractFlashcards(from source: String) -> [(front: String, back: String)] {
@@ -1928,9 +2794,7 @@ enum FormattedMessageFormatter {
     }
 
     private static func displayFriendlyMarkdown(_ source: String) -> String {
-        source
-            .replacingOccurrences(of: "—", with: " - ")
-            .replacingOccurrences(of: "–", with: " - ")
+        MessageRenderingPolicy.displaySafeMarkdown(source)
     }
 
     private static func appendStructuredMarkdownSections(
@@ -2040,28 +2904,46 @@ enum FormattedMessageFormatter {
                 }
             }
             
-            if trimmedParagraph.contains("$$") {
+            if trimmedParagraph.contains("$") {
                 var buffer = ""
                 var index = trimmedParagraph.startIndex
                 
                 while index < trimmedParagraph.endIndex {
                     let remaining = trimmedParagraph[index...]
-                    
-                    if remaining.hasPrefix("$$") {
-                        let contentStart = trimmedParagraph.index(index, offsetBy: 2)
-                        
-                        if let closingRange = trimmedParagraph[contentStart...].range(of: "$$") {
+                    let delimiter: String?
+                    if remaining.hasPrefix("$$"), !isEscapedDelimiter(at: index, in: trimmedParagraph) {
+                        delimiter = "$$"
+                    } else if remaining.hasPrefix("$"), !isEscapedDelimiter(at: index, in: trimmedParagraph) {
+                        delimiter = "$"
+                    } else {
+                        delimiter = nil
+                    }
+
+                    if let delimiter {
+                        let contentStart = trimmedParagraph.index(index, offsetBy: delimiter.count)
+
+                        if let closingRange = nextMathDelimiter(
+                            delimiter,
+                            in: trimmedParagraph,
+                            from: contentStart
+                        ) {
                             let mathContent = String(trimmedParagraph[contentStart..<closingRange.lowerBound])
                                 .trimmingCharacters(in: .whitespacesAndNewlines)
                             
-                            let markdown = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !markdown.isEmpty {
-                                sections.append(.markdown(markdown))
-                            }
-                            buffer = ""
-                            
-                            if !mathContent.isEmpty {
-                                sections.append(.mathBlock(mathContent))
+                            if delimiter == "$" {
+                                if !mathContent.isEmpty {
+                                    buffer += MathRenderingPolicy.inlineText(mathContent)
+                                }
+                            } else {
+                                let markdown = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !markdown.isEmpty {
+                                    sections.append(.markdown(markdown))
+                                }
+                                buffer = ""
+
+                                if !mathContent.isEmpty {
+                                    sections.append(.mathBlock(mathContent))
+                                }
                             }
                             
                             index = closingRange.upperBound
@@ -2081,6 +2963,38 @@ enum FormattedMessageFormatter {
                 sections.append(.markdown(trimmedParagraph))
             }
         }
+    }
+
+    private static func nextMathDelimiter(
+        _ delimiter: String,
+        in source: String,
+        from start: String.Index
+    ) -> Range<String.Index>? {
+        var index = start
+        while index < source.endIndex {
+            let remaining = source[index...]
+            let isSingleDollarInsideDisplayMath = delimiter == "$" && remaining.hasPrefix("$$")
+            if remaining.hasPrefix(delimiter),
+               !isSingleDollarInsideDisplayMath,
+               !isEscapedDelimiter(at: index, in: source) {
+                let upperBound = source.index(index, offsetBy: delimiter.count)
+                return index..<upperBound
+            }
+            index = source.index(after: index)
+        }
+        return nil
+    }
+
+    private static func isEscapedDelimiter(at index: String.Index, in source: String) -> Bool {
+        guard index > source.startIndex else { return false }
+        var cursor = source.index(before: index)
+        var slashCount = 0
+        while source[cursor] == "\\" {
+            slashCount += 1
+            guard cursor > source.startIndex else { break }
+            cursor = source.index(before: cursor)
+        }
+        return slashCount.isMultiple(of: 2) == false
     }
 
     private static func parseCodeBlock(from source: String) -> (code: String, language: String)? {
@@ -2177,7 +3091,7 @@ enum FormattedMessageFormatter {
     }
 }
 
-enum MathExpressionFormatter {
+nonisolated enum MathExpressionFormatter {
     private static let commandMap: [String: String] = [
         "\\alpha": "α", "\\beta": "β", "\\gamma": "γ", "\\delta": "δ", "\\epsilon": "ϵ",
         "\\theta": "θ", "\\lambda": "λ", "\\mu": "μ", "\\pi": "π", "\\sigma": "σ",
