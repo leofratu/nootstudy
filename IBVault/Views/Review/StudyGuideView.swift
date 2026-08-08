@@ -7,7 +7,7 @@ struct StudyGuideView: View {
     let subject: Subject?
     let mode: GuideMode
 
-    @State private var ariaService = ARIAService()
+    @State private var ariaService: ARIAService
     @State private var guideText = ""
     @State private var isGenerating = false
     @State private var error: String?
@@ -23,36 +23,20 @@ struct StudyGuideView: View {
         case examPrep = "Exam Prep Sprint"
     }
 
+    /// Explicit init (instead of the synthesized memberwise one) so the heavy
+    /// `@State`-of-`@Observable` default does not make the call sites slow to
+    /// type-check.
+    init(subject: Subject?, mode: GuideMode) {
+        self.subject = subject
+        self.mode = mode
+        _ariaService = State(initialValue: ARIAServiceFactory.make())
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // Context header
-                    contextCard
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-
-                    if isGenerating && guideText.isEmpty {
-                        loadingCard
-                            .padding(.horizontal, 24)
-                    }
-
-                    if let err = error {
-                        errorCard(err)
-                            .padding(.horizontal, 24)
-                    }
-
-                    if !guideText.isEmpty {
-                        guideContent
-                            .padding(.horizontal, 24)
-                    }
-
-                    if !isGenerating && guideText.isEmpty {
-                        modeSelector
-                            .padding(.horizontal, 24)
-                    }
-                }
-                .padding(.bottom, 24)
+                contentStack
+                    .padding(.horizontal, 24)
             }
             .background(.background)
             .navigationTitle("Study Guide")
@@ -67,6 +51,46 @@ struct StudyGuideView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 500)
+    }
+
+    private var contentStack: some View {
+        VStack(spacing: 16) {
+            contextCard
+            loadingSection
+            errorSection
+            guideSection
+            selectorSection
+        }
+        .padding(.top, 20)
+        .padding(.bottom, 24)
+    }
+
+    @ViewBuilder
+    private var loadingSection: some View {
+        if isGenerating && guideText.isEmpty {
+            loadingCard
+        }
+    }
+
+    @ViewBuilder
+    private var errorSection: some View {
+        if let err = error {
+            errorCard(err)
+        }
+    }
+
+    @ViewBuilder
+    private var guideSection: some View {
+        if !guideText.isEmpty {
+            guideContent
+        }
+    }
+
+    @ViewBuilder
+    private var selectorSection: some View {
+        if !isGenerating && guideText.isEmpty {
+            modeSelector
+        }
     }
 
     // MARK: - Context

@@ -1,12 +1,29 @@
 import Foundation
 import SwiftData
 
+nonisolated enum ReviewDailyLimitPolicy: Sendable {
+    static let maximumCards = 30
+
+    static func allowance(reviewedCardIDs: Set<UUID>, maximum: Int = maximumCards) -> Int {
+        max(0, maximum - reviewedCardIDs.count)
+    }
+
+    static func limitedCards(_ cards: [StudyCard], reviewedCardIDs: Set<UUID>, maximum: Int = maximumCards) -> [StudyCard] {
+        let remaining = allowance(reviewedCardIDs: reviewedCardIDs, maximum: maximum)
+        return Array(cards.filter { !reviewedCardIDs.contains($0.id) }.prefix(remaining))
+    }
+}
+
 @MainActor
 @Observable
 final class ReviewQueueManager {
     // MARK: - Published State
     private(set) var dueCards: [StudyCard] = []
     private(set) var totalDueCount: Int = 0
+    private(set) var backlogDueCount: Int = 0
+    private(set) var deferredDueCount: Int = 0
+    private(set) var reviewedTodayCount: Int = 0
+    private(set) var remainingDailyAllowance: Int = ReviewDailyLimitPolicy.maximumCards
 
     // O(1) per-subject due count cache: keyed by subject UUID string
     private(set) var dueCountCache: [String: Int] = [:]
@@ -62,8 +79,14 @@ final class ReviewQueueManager {
             let fetched = try context.fetch(descriptor)
             let scopeIndex = ScopeIndex(scopes: studiedScopes)
             let filtered = scopeIndex.isEmpty ? fetched : filterCardsToScopes(fetched, matching: scopeIndex)
+            let reviewedIDs = reviewedCardIDsToday(in: context)
+            let available = ReviewDailyLimitPolicy.limitedCards(filtered, reviewedCardIDs: reviewedIDs)
             lastRefreshError = nil
-            applyDueCardsSnapshot(filtered)
+            reviewedTodayCount = reviewedIDs.count
+            remainingDailyAllowance = ReviewDailyLimitPolicy.allowance(reviewedCardIDs: reviewedIDs)
+            backlogDueCount = filtered.filter { !reviewedIDs.contains($0.id) }.count
+            deferredDueCount = max(0, backlogDueCount - available.count)
+            applyDueCardsSnapshot(available)
 
             // Cache the eligible pool count here (once per refresh) instead of
             // letting views run a full unfiltered fetch inside their body.
@@ -89,18 +112,21 @@ final class ReviewQueueManager {
     // MARK: - Subject-scoped due cards (for ReviewSession)
     func dueCardsForSubject(_ subject: Subject, context: ModelContext) -> [StudyCard] {
         let now = Date()
+        let reviewedIDs = reviewedCardIDsToday(in: context)
         let studiedScopes = fetchStudiedScopes(in: context).filter { $0.subjectName == subject.name }
         let scopeIndex = ScopeIndex(scopes: studiedScopes)
 
         if scopeIndex.isEmpty {
-            return subject.cards
+            let due = subject.cards
                 .filter { $0.nextReviewDate <= now }
                 .sorted { $0.nextReviewDate < $1.nextReviewDate }
+            return ReviewDailyLimitPolicy.limitedCards(due, reviewedCardIDs: reviewedIDs)
         }
 
-        return filterCardsToScopes(subject.cards, matching: scopeIndex)
+        let due = filterCardsToScopes(subject.cards, matching: scopeIndex)
             .filter { $0.nextReviewDate <= now }
             .sorted { $0.nextReviewDate < $1.nextReviewDate }
+        return ReviewDailyLimitPolicy.limitedCards(due, reviewedCardIDs: reviewedIDs)
     }
 
     func dueCountPerSubject() -> [String: Int] {
@@ -124,6 +150,13 @@ final class ReviewQueueManager {
     private func fetchStudiedScopes(in context: ModelContext) -> [StudyScope] {
         let sessions = (try? context.fetch(FetchDescriptor<StudySession>())) ?? []
         return StudySession.uniqueStudyScopes(from: sessions)
+    }
+
+    private func reviewedCardIDsToday(in context: ModelContext) -> Set<UUID> {
+        let start = IBLocalClock.calendar.startOfDay(for: IBLocalClock.now)
+        let predicate = #Predicate<ReviewSession> { $0.timestamp >= start }
+        let reviews = (try? context.fetch(FetchDescriptor<ReviewSession>(predicate: predicate))) ?? []
+        return Set(reviews.lazy.map(\.cardID))
     }
 
     private func applyDueCardsSnapshot(_ cards: [StudyCard]) {

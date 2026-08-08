@@ -132,3 +132,20 @@ struct ReviewQueueManagerTests {
         #expect(manager.dueCountPerSubject()[subject2.id.uuidString] == 2)
     }
 }
+
+@Suite("Daily Review Limit Policy")
+struct ReviewDailyLimitPolicyTests {
+    @Test("Daily queue caps unique cards and excludes cards already reviewed today")
+    func capsDailyQueue() {
+        let cards = (0..<45).map { index in
+            StudyCard(topicName: "Topic", front: "Question \(index)", back: "Answer \(index)")
+        }
+        let alreadyReviewed = Set(cards.prefix(7).map(\.id))
+
+        let limited = ReviewDailyLimitPolicy.limitedCards(cards, reviewedCardIDs: alreadyReviewed)
+
+        #expect(limited.count == 23)
+        #expect(limited.allSatisfy { !alreadyReviewed.contains($0.id) })
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: alreadyReviewed) == 23)
+    }
+}
