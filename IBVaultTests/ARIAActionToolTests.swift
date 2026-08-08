@@ -7,7 +7,7 @@ import SwiftData
 /// would return, seeded into a fresh in-memory store. Each scenario runs through
 /// the exact production pipeline (parse, dedupe, destructive gate, scratch-context
 /// execution) via ARIAService.applyAppToolPlan.
-struct ToolScenario: Sendable {
+nonisolated struct ToolScenario: Sendable {
     let id: String
     let name: String
     let userMessage: String
@@ -61,6 +61,10 @@ struct ARIAAppToolE2ETests {
             Achievement.self,
             UnitState.self,
             CurriculumNode.self,
+            AcademicImport.self,
+            AcademicAssessment.self,
+            AcademicAssessmentMapping.self,
+            AcademicReportSnapshot.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }
@@ -112,7 +116,7 @@ struct ARIAAppToolE2ETests {
 
 /// Non-isolated library that builds the full scenario matrix. Keep helpers here
 /// so seed closures are plain `@Sendable` closures over `ModelContext`.
-enum E2EScenarioLibrary {
+nonisolated enum E2EScenarioLibrary {
 
     @Sendable static func standardSeed(_ context: ModelContext) throws {
         let profile = UserProfile()
@@ -179,6 +183,70 @@ enum E2EScenarioLibrary {
     // MARK: - Extended edge-case matrix
 
     static func extraScenarios(_ out: inout [ToolScenario]) {
+        out.append(ToolScenario(
+            id: "assessment-01", name: "record_assessment calibrates subject and subunit evidence",
+            userMessage: "Record my 18/20 Biology cell theory test as assessment evidence",
+            modelJSON: #"[{"type":"record_assessment","subjectName":"Biology","assessmentTitle":"Cell theory test","assessmentType":"Test","category":"Summative","achievedPoints":18,"maxPoints":20,"topics":["Cells and Cell Structure"],"subtopics":["Prokaryotic cell structure"]}]"#,
+            seed: standardSeed,
+            verify: { ctx in
+                let assessments = try ctx.fetch(FetchDescriptor<AcademicAssessment>())
+                let mappings = try ctx.fetch(FetchDescriptor<AcademicAssessmentMapping>())
+                guard let assessment = assessments.first else { return false }
+                return assessment.normalizedScore == 0.9
+                    && mappings.contains { $0.assessmentID == assessment.id && $0.status == .approved }
+            },
+            summaryContains: ["mastery will now use it"]
+        ))
+
+        out.append(ToolScenario(
+            id: "assessment-02", name: "delete_assessment requires explicit request",
+            userMessage: "Delete the Cell theory test assessment",
+            modelJSON: #"[{"type":"delete_assessment","subjectName":"Biology","assessmentTitle":"Cell theory test"}]"#,
+            seed: { ctx in
+                try standardSeed(ctx)
+                ctx.insert(AcademicAssessment(
+                    sourceKey: "cell-test",
+                    sourceFileName: "school.xlsx",
+                    subjectName: "Biology",
+                    courseLevel: "HL",
+                    sourceClassLabel: "IB Biology HL",
+                    assessmentDate: Date(),
+                    title: "Cell theory test",
+                    assessmentType: "Test",
+                    category: "Summative",
+                    status: "Graded",
+                    percentage: 90
+                ))
+            },
+            verify: { ctx in
+                try ctx.fetch(FetchDescriptor<AcademicAssessment>()).isEmpty
+            },
+            summaryContains: ["Deleted"]
+        ))
+
+        out.append(ToolScenario(
+            id: "chat-01", name: "delete_old_chats removes stale sessions and their messages",
+            userMessage: "Delete ARIA chats older than 30 days",
+            modelJSON: #"[{"type":"delete_old_chats","olderThanDays":30}]"#,
+            seed: { ctx in
+                try standardSeed(ctx)
+                let oldSession = ARIAChatSession(title: "Old planning chat")
+                oldSession.updatedAt = Date().addingTimeInterval(-60 * 86_400)
+                ctx.insert(oldSession)
+                ctx.insert(ChatMessage(role: .user, content: "Old message", sessionID: oldSession.id))
+                let recentSession = ARIAChatSession(title: "Recent planning chat")
+                ctx.insert(recentSession)
+            },
+            verify: { ctx in
+                let sessions = try ctx.fetch(FetchDescriptor<ARIAChatSession>())
+                let messages = try ctx.fetch(FetchDescriptor<ChatMessage>())
+                return sessions.count == 1
+                    && sessions.first?.title == "Recent planning chat"
+                    && messages.isEmpty
+            },
+            summaryContains: ["Deleted 1 ARIA chat"]
+        ))
+
         out.append(ToolScenario(
             id: "card-11", name: "create_flashcard with subtopic and skill",
             userMessage: "Add an Apply-level card on eukaryotic ultrastructure",
@@ -1360,7 +1428,10 @@ enum E2EScenarioLibrary {
             seed: standardSeed,
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
-                return plans.contains { $0.isFollowUpReview && $0.subjectName == "Biology" }
+                let subjects = try ctx.fetch(FetchDescriptor<Subject>())
+                let biology = subjects.first { $0.name == "Biology" }
+                let queued = biology?.cards.filter { $0.nextReviewDate <= Date() } ?? []
+                return !plans.contains(where: \.isFollowUpReview) && !queued.isEmpty
             },
             summaryContains: ["review"]
         ))
@@ -1435,4 +1506,3 @@ enum E2EScenarioLibrary {
         ))
     }
 }
-

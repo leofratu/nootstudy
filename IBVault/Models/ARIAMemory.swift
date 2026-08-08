@@ -5,7 +5,7 @@ import SwiftData
 /// string, so conversation/failure/cancellation/dismissed roles round-trip
 /// through the store while call sites switch on typed cases instead of string
 /// prefixes.
-indirect enum ChatMessageRole: Sendable, Equatable {
+nonisolated indirect enum ChatMessageRole: Sendable, Equatable {
     case user
     case model
     case failure(provider: AIProviderKind, needsAuthentication: Bool = false)
@@ -87,7 +87,7 @@ indirect enum ChatMessageRole: Sendable, Equatable {
     }
 }
 
-enum MemoryCategory: String, Codable, CaseIterable, Sendable {
+nonisolated enum MemoryCategory: String, Codable, CaseIterable, Sendable {
     case grades = "Grades & Targets"
     case weakTopics = "Weak Topics"
     case studyHabits = "Study Habits"
@@ -142,7 +142,7 @@ enum MemoryCategory: String, Codable, CaseIterable, Sendable {
     }
 }
 
-enum MemoryImportance: Int, Codable, Comparable, Sendable {
+nonisolated enum MemoryImportance: Int, Codable, Comparable, Sendable {
     case low = 1
     case medium = 2
     case high = 3
@@ -154,7 +154,7 @@ enum MemoryImportance: Int, Codable, Comparable, Sendable {
 }
 
 @Model
-final class ARIAMemory {
+nonisolated final class ARIAMemory {
     var id: UUID
     var categoryRaw: String
     var content: String
@@ -233,7 +233,7 @@ final class ARIAMemory {
 }
 
 @Model
-final class ChatMessage {
+nonisolated final class ChatMessage {
     var id: UUID
     var role: String
     var content: String
@@ -261,7 +261,7 @@ final class ChatMessage {
 }
 
 @Model
-final class ARIAChatSession {
+nonisolated final class ARIAChatSession {
     var id: UUID
     var title: String
     var createdAt: Date
