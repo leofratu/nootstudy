@@ -16,7 +16,7 @@ struct SubjectKnowledgeTests {
     @Test("Every seeded subject has curated knowledge")
     func everyCurriculumSubjectHasKnowledge() {
         for subject in ["Biology", "Mathematics AA", "Economics", "Business Management", "English B", "Russian A Literature",
-                        "Advanced Mathematics", "Fundamentals of the Universe", "Startups & Venture Capital"] {
+                        "Advanced Mathematics", "Fundamentals of the Universe", "Life"] {
             let knowledge = SubjectKnowledge.knowledge(for: subject)
             #expect(knowledge != nil, "\(subject) should have domain knowledge")
             #expect(knowledge?.keyConcepts.isEmpty == false)
@@ -32,7 +32,7 @@ struct SubjectKnowledgeTests {
         let seeded = Set([
             "Biology", "Mathematics AA", "Economics", "Business Management",
             "English B", "Russian A Literature", "Advanced Mathematics",
-            "Fundamentals of the Universe", "Startups & Venture Capital"
+            "Fundamentals of the Universe", "Life"
         ])
         let catalog = Set(SubjectKnowledge.all.map(\.subjectName))
         #expect(catalog == seeded, "knowledge catalog must track the seeded subject set")
@@ -46,11 +46,36 @@ struct SubjectKnowledgeTests {
         #expect(block.contains("Command terms:"))
     }
 
+    @Test("Life prompt block covers AI, influence and venture fundamentals")
+    func startupsPromptBlockContainsVentureWisdom() {
+        let block = SubjectKnowledge.knowledge(for: "Life")?.promptBlock ?? ""
+        #expect(block.contains("Life domain knowledge:"))
+        #expect(block.lowercased().contains("machine-learning"))
+        #expect(block.lowercased().contains("negotiation"))
+        #expect(block.lowercased().contains("product-market fit"))
+        #expect(block.lowercased().contains("cap table"))
+        #expect(block.lowercased().contains("term sheet"))
+        #expect(block.lowercased().contains("runway"))
+        #expect(block.contains("Command terms:"))
+    }
+
     @Test("Matching is case-insensitive")
     func matchingIsCaseInsensitive() {
         #expect(SubjectKnowledge.knowledge(for: "biology") != nil)
         #expect(SubjectKnowledge.knowledge(for: "ECONOMICS") != nil)
         #expect(SubjectKnowledge.knowledge(for: "Philosophy") == nil)
+    }
+
+    @Test("Life resources include foundations and production AI practice")
+    func lifeResourceCatalogIncludesProductionAI() {
+        let resources = LearningResourceCatalog.resources(
+            for: "Life",
+            topicNames: ["Machine Learning", "LLM Systems in Production"],
+            limit: 10
+        )
+        #expect(resources.contains { $0.provider == "Google" })
+        #expect(resources.contains { $0.provider == "The Full Stack" })
+        #expect(resources.contains { $0.provider == "Hugging Face" })
     }
 
     @Test("High-yield topics reference real curriculum content or a general claim")

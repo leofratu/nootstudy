@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 // MARK: - Curriculum Structure
-enum IBCourseLevel: String, CaseIterable, Codable, Hashable, Sendable {
+nonisolated enum IBCourseLevel: String, CaseIterable, Codable, Hashable, Sendable {
     case sl = "SL"
     case hl = "HL"
 
@@ -11,12 +11,12 @@ enum IBCourseLevel: String, CaseIterable, Codable, Hashable, Sendable {
     }
 }
 
-struct CurriculumUnit {
+nonisolated struct CurriculumUnit {
     let name: String
     let topics: [CurriculumTopic]
 }
 
-struct CurriculumTopic {
+nonisolated struct CurriculumTopic {
     let name: String
     let subtopics: [String]
     let levels: Set<IBCourseLevel>
@@ -32,15 +32,18 @@ struct CurriculumTopic {
     }
 }
 
-struct CurriculumMetadata: Sendable {
+nonisolated struct CurriculumMetadata: Sendable {
     let catalogVersion: String
     let firstAssessment: String
     let sourceTitle: String
     let sourceURL: URL
 }
 
-struct SyllabusSeeder {
-    static func seedIfNeeded(context: ModelContext) {
+nonisolated struct SyllabusSeeder {
+    static let lifeCourseName = "Life"
+
+    @discardableResult
+    static func seedIfNeeded(context: ModelContext) -> Bool {
         let descriptor = FetchDescriptor<Subject>()
         let existingCount = (try? context.fetchCount(descriptor)) ?? 0
         if existingCount == 0 {
@@ -49,7 +52,8 @@ struct SyllabusSeeder {
                 context.insert(subject)
             }
         }
-        synchronizeCurriculum(context: context)
+        migratePersonalCurriculum(context: context)
+        return synchronizeCurriculum(context: context)
     }
 
     /// The per-subject curriculum trees are large computed properties that
@@ -80,7 +84,9 @@ struct SyllabusSeeder {
         case "Business Management": result = businessCurriculum
         case "Advanced Mathematics": result = advancedMathCurriculum
         case "Fundamentals of the Universe": result = universeCurriculum
-        case "Startups & Venture Capital": result = startupCurriculum
+        case lifeCourseName: result = lifeCurriculum
+        // Read-only aliases keep older backups and in-flight migrations legible.
+        case "Founder Academy", "Startups & Venture Capital": result = lifeCurriculum
         default: result = []
         }
 
@@ -164,11 +170,11 @@ struct SyllabusSeeder {
                 sourceTitle: "Fundamentals of the Universe",
                 sourceURL: URL(string: "https://www.ibo.org/") ?? URL(fileURLWithPath: "/")
             )
-        case "Startups & Venture Capital":
+        case lifeCourseName, "Founder Academy", "Startups & Venture Capital":
             return CurriculumMetadata(
-                catalogVersion: "2026.1 / personal course",
+                catalogVersion: "2026.2 / personal course",
                 firstAssessment: "Self-paced",
-                sourceTitle: "Startups & Venture Capital",
+                sourceTitle: lifeCourseName,
                 sourceURL: URL(string: "https://www.ibo.org/") ?? URL(fileURLWithPath: "/")
             )
         default:
@@ -176,9 +182,12 @@ struct SyllabusSeeder {
         }
     }
 
-    static func synchronizeCurriculum(context: ModelContext) {
-        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
-        let existingNodes = (try? context.fetch(FetchDescriptor<CurriculumNode>())) ?? []
+    @discardableResult
+    static func synchronizeCurriculum(context: ModelContext) -> Bool {
+        guard
+            let subjects = try? context.fetch(FetchDescriptor<Subject>()),
+            let existingNodes = try? context.fetch(FetchDescriptor<CurriculumNode>())
+        else { return false }
         var nodesByKey: [String: CurriculumNode] = [:]
         for node in existingNodes {
             if nodesByKey[node.stableKey] == nil {
@@ -246,14 +255,90 @@ struct SyllabusSeeder {
             context.delete(card)
         }
 
+        // Early offline batches saved prompts whose backs were instructions
+        // ("draw a diagram", "define..."), not answers. Remove those generated
+        // artifacts and collapse exact repeated questions while preserving
+        // custom cards and the most-reviewed copy.
+        let allCards = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
+        let unusable = allCards.filter {
+            $0.generationSource == "Local syllabus starter" &&
+                !CardGeneratorService.isUsefulAnswer(front: $0.front, back: $0.back)
+        }
+        let unusableIDs = Set(unusable.map(\.id))
+        for card in unusable {
+            card.subject?.cards.removeAll { $0.id == card.id }
+            context.delete(card)
+        }
+
+        var keptByQuestion: [String: StudyCard] = [:]
+        for card in allCards where !card.isCustom && !unusableIDs.contains(card.id) {
+            let subjectID = card.subject?.id.uuidString ?? "unassigned"
+            let normalizedFront = card.front.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            let key = [subjectID, card.topicName.lowercased(), card.subtopic.lowercased(), normalizedFront]
+                .joined(separator: "|")
+            if let kept = keptByQuestion[key] {
+                let shouldReplace = card.totalReviewCount > kept.totalReviewCount
+                let duplicate = shouldReplace ? kept : card
+                if shouldReplace { keptByQuestion[key] = card }
+                duplicate.subject?.cards.removeAll { $0.id == duplicate.id }
+                context.delete(duplicate)
+            } else {
+                keptByQuestion[key] = card
+            }
+        }
+
         do {
             try context.save()
+            return true
         } catch {
             // Non-fatal: curriculum stays unsynchronized but the app keeps
             // working. A Debug build surfaces it loudly; Release logs once.
             #if DEBUG
             assertionFailure("Failed to synchronize curriculum: \(error.localizedDescription)")
             #endif
+            return false
+        }
+    }
+
+    /// Consolidates the retired TOK and startup subjects into the single
+    /// personal course. Relationship reassignment happens before deletion so
+    /// existing flashcards and grades survive the migration.
+    private static func migratePersonalCurriculum(context: ModelContext) {
+        let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
+        let legacyNames = ["Founder Academy", "Startups & Venture Capital", "Theory of Knowledge"]
+        let lifeSubject = subjects.first { $0.name == lifeCourseName }
+            ?? subjects.first { $0.name == "Founder Academy" }
+            ?? subjects.first { $0.name == "Startups & Venture Capital" }
+            ?? subjects.first { $0.name == "Theory of Knowledge" }
+            ?? {
+                let created = Subject(name: lifeCourseName, level: "HL", accentColorHex: "0EA5E9")
+                context.insert(created)
+                return created
+            }()
+
+        lifeSubject.name = lifeCourseName
+        lifeSubject.level = "HL"
+        lifeSubject.accentColorHex = "0EA5E9"
+
+        for legacy in subjects where legacy.id != lifeSubject.id && legacyNames.contains(legacy.name) {
+            for card in legacy.cards {
+                card.subject = lifeSubject
+            }
+            for grade in legacy.grades {
+                grade.subject = lifeSubject
+            }
+            context.delete(legacy)
+        }
+
+        // Follow-up plans were synthetic 30-minute calendar sessions. Reviews
+        // now live exclusively in the bounded card queue, so pending blocks are
+        // obsolete and safe to remove while completed history remains intact.
+        let plans = (try? context.fetch(FetchDescriptor<StudyPlan>())) ?? []
+        for plan in plans where plan.isFollowUpReview && !plan.isCompleted {
+            context.delete(plan)
         }
     }
 
@@ -328,8 +413,8 @@ struct SyllabusSeeder {
         let universe = Subject(name: "Fundamentals of the Universe", level: "SL", accentColorHex: "6366F1")
         subjects.append(universe)
 
-        let startups = Subject(name: "Startups & Venture Capital", level: "HL", accentColorHex: "0EA5E9")
-        subjects.append(startups)
+        let life = Subject(name: lifeCourseName, level: "HL", accentColorHex: "0EA5E9")
+        subjects.append(life)
 
         return subjects
     }
@@ -1488,164 +1573,141 @@ struct SyllabusSeeder {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Startups & Venture Capital (personal course)
-    // Building companies and raising capital — deliberately outside the IB
-    // Business Management syllabus, which stops at corporate strategy.
+    // MARK: - Life (personal course)
+    // A practical, non-IB curriculum for a teenage founder. Each unit is large
+    // enough to function as a standalone course and ends in applied founder work.
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    private static var startupCurriculum: [CurriculumUnit] {
+    private static var lifeCurriculum: [CurriculumUnit] {
         [
-            CurriculumUnit(name: "Unit 1 — Course Overview", topics: [
-                CurriculumTopic(name: "How This Course Works", subtopics: [
-                    "What it covers",
-                    "The startup lifecycle at a glance",
-                    "How it differs from IB Business Management",
-                    "The founder's mindset",
-                    "Setting your learning goals"
+            CurriculumUnit(name: "Unit 1 - Startup Fundamentals", topics: [
+                CurriculumTopic(name: "How Startups Work", subtopics: [
+                    "Startup vs small business vs scale-up", "The startup lifecycle from idea to exit",
+                    "Founder, co-founder, employee, advisor, angel and VC roles", "Equity, ownership and incentives",
+                    "Risk, uncertainty and asymmetric outcomes", "Common startup failure modes"
                 ]),
-                CurriculumTopic(name: "The Startup Journey", subtopics: [
-                    "From idea to exit",
-                    "The stages of a company",
-                    "Key players: founders, investors, advisors",
-                    "What success looks like",
-                    "Common failure modes"
+                CurriculumTopic(name: "Finding a Real Problem", subtopics: [
+                    "Problem selection and founder-market fit", "Market pain, frequency and urgency",
+                    "Customer segments and ideal customer profiles", "Customer discovery interviews",
+                    "Avoiding leading questions and false validation", "Turning observations into testable hypotheses"
                 ]),
+                CurriculumTopic(name: "Product Foundations", subtopics: [
+                    "Problem-solution fit", "Minimum viable product (MVP)", "Prototype vs MVP vs production product",
+                    "Build-measure-learn loops", "Product requirements and scope discipline",
+                    "Product-market fit signals", "Pivot, persevere or stop decisions"
+                ]),
+                CurriculumTopic(name: "Startup Language", subtopics: [
+                    "TAM, SAM and SOM", "B2B, B2C, B2B2C and marketplaces", "SaaS and recurring revenue",
+                    "ARR, MRR and annual contract value", "DAU, WAU and MAU", "Activation, retention and churn",
+                    "CAC, LTV and payback period", "Gross margin and contribution margin"
+                ]),
+                CurriculumTopic(name: "Founder Operating System", subtopics: [
+                    "Setting weekly priorities", "Decision logs and reversible decisions", "Managing school and startup energy",
+                    "Working with adults as a young founder", "Building credibility without pretending expertise",
+                    "Ethics, privacy and duty of care", "Resilience without glorifying burnout"
+                ])
             ]),
-            CurriculumUnit(name: "Unit 2 — Founding and Product", topics: [
-                CurriculumTopic(name: "Idea Validation", subtopics: [
-                    "Problem-solution fit",
-                    "Customer interviews",
-                    "Building the right thing",
-                    "The lean startup loop",
-                    "Validating real demand"
+            CurriculumUnit(name: "Unit 2 - Machine Learning and LLMs", topics: [
+                CurriculumTopic(name: "Computing and Data Foundations", subtopics: [
+                    "Bits, files, memory and computation", "Algorithms and data structures", "Python and notebooks",
+                    "APIs, databases and cloud services", "Structured vs unstructured data", "Data cleaning and labeling",
+                    "Training, validation and test sets", "Correlation, causation and leakage"
                 ]),
-                CurriculumTopic(name: "Product-Market Fit", subtopics: [
-                    "Defining product-market fit",
-                    "Metrics that signal fit",
-                    "Iterating toward fit",
-                    "Pivots vs persevere",
-                    "Knowing when you have it"
+                CurriculumTopic(name: "Machine Learning from Zero", subtopics: [
+                    "What machine learning is", "Supervised, unsupervised and reinforcement learning",
+                    "Features, labels, parameters and hyperparameters", "Regression and classification",
+                    "Loss functions and optimization", "Gradient descent intuition", "Overfitting and underfitting",
+                    "Bias-variance trade-off", "Precision, recall, F1 and confusion matrices"
                 ]),
-                CurriculumTopic(name: "Building an MVP", subtopics: [
-                    "Scope discipline",
-                    "Speed of iteration",
-                    "Technical debt trade-offs",
-                    "Winning early adopters",
-                    "Closing the feedback loop"
+                CurriculumTopic(name: "Neural Networks", subtopics: [
+                    "Neurons, weights, biases and activations", "Layers and representations", "Forward propagation",
+                    "Backpropagation intuition", "Embeddings and vector similarity", "Attention mechanisms",
+                    "Transformers", "Compute, memory and batching", "Pre-training, fine-tuning and inference"
                 ]),
+                CurriculumTopic(name: "Large Language Models", subtopics: [
+                    "Tokens and tokenization", "Next-token prediction", "Context windows", "Prompts and system instructions",
+                    "Temperature and sampling", "Hallucinations and calibration", "Retrieval-augmented generation (RAG)",
+                    "Tool use and function calling", "Agents and workflows", "Fine-tuning, adapters and distillation",
+                    "Multimodal models", "Evaluation datasets and human evaluation"
+                ]),
+                CurriculumTopic(name: "Building an AI Product", subtopics: [
+                    "Choosing a model and provider", "Prototype architecture", "Prompt and output contracts",
+                    "Latency, reliability and fallbacks", "Token costs and unit economics", "Caching and rate limits",
+                    "Guardrails and content safety", "Privacy, consent and data retention", "Observability and evaluations",
+                    "Shipping an AI MVP", "When not to use an LLM"
+                ]),
+                CurriculumTopic(name: "LLM Systems in Production", subtopics: [
+                    "Inference endpoints and model serving", "Throughput, latency and tail latency",
+                    "Batching, streaming and the KV cache", "Quantization and memory trade-offs",
+                    "Structured outputs and schema validation", "Semantic caching and request deduplication",
+                    "Routing, fallbacks and graceful degradation", "Tracing prompts, tools and model calls",
+                    "Offline evals, golden sets and regression gates", "Red-teaming and prompt-injection testing",
+                    "SLOs, cost budgets and incident response", "Data retention and deletion in AI systems"
+                ]),
+                CurriculumTopic(name: "AI Strategy and Responsible Use", subtopics: [
+                    "Open-source vs hosted models", "Model commoditization and durable moats", "Data network effects",
+                    "Copyright and training data", "Bias and fairness", "Security threats and prompt injection",
+                    "Regulatory awareness", "Human oversight", "Communicating AI limitations honestly"
+                ])
             ]),
-            CurriculumUnit(name: "Unit 3 — Company Building", topics: [
-                CurriculumTopic(name: "Unit Economics", subtopics: [
-                    "Customer acquisition cost (CAC)",
-                    "Lifetime value (LTV)",
-                    "Gross and contribution margin",
-                    "When unit economics break even",
-                    "The LTV/CAC ratio"
+            CurriculumUnit(name: "Unit 3 - Human Behavior and Influence", topics: [
+                CurriculumTopic(name: "Behavior Foundations", subtopics: [
+                    "Attention, memory and cognitive load", "Motivation and incentives", "Identity and status",
+                    "Social proof and conformity", "Loss aversion and framing", "Anchoring and contrast effects",
+                    "Confirmation bias", "Trust, reciprocity and consistency", "Ethical influence vs manipulation"
                 ]),
-                CurriculumTopic(name: "Growth and Distribution", subtopics: [
-                    "Acquisition channels",
-                    "Viral loops",
-                    "Retention and engagement",
-                    "Churn and cohorts",
-                    "Scaling playbooks"
+                CurriculumTopic(name: "Presence and Communication", subtopics: [
+                    "Clear thinking before speaking", "Voice, pace and pauses", "Body language and eye contact",
+                    "Listening for interests and constraints", "Asking high-leverage questions", "Mirroring and labeling",
+                    "Concise explanations", "Story structure", "Reading the room", "Presenting with calm authority"
                 ]),
-                CurriculumTopic(name: "Startup Metrics", subtopics: [
-                    "ARR and MRR",
-                    "Active users",
-                    "Retention curves",
-                    "The north star metric",
-                    "Reporting to the board"
+                CurriculumTopic(name: "Steering Conversations", subtopics: [
+                    "Setting the frame and desired outcome", "Building an agenda collaboratively", "Finding shared ground",
+                    "Redirecting without evasion", "Using summaries to regain control", "Handling interruptions",
+                    "Responding to hostility", "Saying no while preserving the relationship", "Closing with a concrete next step"
                 ]),
-                CurriculumTopic(name: "Team and Culture", subtopics: [
-                    "Founding team composition",
-                    "Equity splits among co-founders",
-                    "Hiring your first employees",
-                    "Company values",
-                    "Remote vs office dynamics"
+                CurriculumTopic(name: "Debate and Argument", subtopics: [
+                    "Claims, evidence and warrants", "Validity, soundness and burden of proof", "Steel-manning",
+                    "Common logical fallacies", "Cross-examination questions", "Rebuttal and counter-rebuttal",
+                    "Concessions that strengthen credibility", "Handling uncertainty", "Persuading an audience vs defeating an opponent",
+                    "Knowing when not to debate"
                 ]),
+                CurriculumTopic(name: "Negotiation", subtopics: [
+                    "Positions vs interests", "BATNA, reservation point and ZOPA", "Anchoring responsibly",
+                    "Information gathering", "Tradeable variables", "Calibrated questions", "Handling objections",
+                    "Multi-issue offers", "Documenting agreements", "Long-term reputation and repeat games"
+                ])
             ]),
-            CurriculumUnit(name: "Unit 4 — Fundraising and Venture Capital", topics: [
-                CurriculumTopic(name: "How VCs Think", subtopics: [
-                    "The VC business model",
-                    "Fund economics: management fees and carry",
-                    "What VCs actually look for",
-                    "Pattern recognition across 25 years of deals",
-                    "How deals get sourced"
+            CurriculumUnit(name: "Unit 4 - Build, Sell and Fund", topics: [
+                CurriculumTopic(name: "Go-to-Market", subtopics: [
+                    "Positioning and category", "Value propositions", "Beachhead markets", "Founder-led sales",
+                    "Sales discovery and qualification", "Demos that prove value", "Pricing and packaging",
+                    "Acquisition channels", "Content, community and partnerships", "Growth loops and referrals"
                 ]),
-                CurriculumTopic(name: "Fundraising Stages", subtopics: [
-                    "Friends and family / pre-seed",
-                    "Seed",
-                    "Series A",
-                    "Series B and growth",
-                    "The milestone each round buys"
+                CurriculumTopic(name: "Metrics and Finance", subtopics: [
+                    "Cohort retention", "North-star and counter-metrics", "Funnel conversion", "Revenue models",
+                    "Burn rate and runway", "Cash-flow forecasting", "Budgeting and scenario planning",
+                    "Cap tables and option pools", "Dilution modeling", "Basic startup accounting and tax hygiene"
                 ]),
-                CurriculumTopic(name: "The Term Sheet", subtopics: [
-                    "Valuation and dilution",
-                    "Liquidation preference",
-                    "Vesting and cliffs",
-                    "Anti-dilution provisions",
-                    "Board seats and control",
-                    "Pro-rata rights"
+                CurriculumTopic(name: "Pitching", subtopics: [
+                    "Audience and pitch objective", "Problem, insight and urgency", "Product and live demo",
+                    "Market and competition", "Traction and proof", "Business model and economics", "Why this team",
+                    "The ask and use of funds", "Pitch deck narrative", "Two-minute, five-minute and investor pitches",
+                    "Question handling and follow-up"
                 ]),
-                CurriculumTopic(name: "The Pitch", subtopics: [
-                    "Anatomy of the pitch deck",
-                    "Storytelling and narrative",
-                    "The financial story",
-                    "Objection handling",
-                    "The live demo"
+                CurriculumTopic(name: "Fundraising and Venture Capital", subtopics: [
+                    "Bootstrapping, grants, angels and venture capital", "Pre-seed, seed and Series A milestones",
+                    "How venture funds make money", "Investor sourcing and warm introductions", "Fundraising process and momentum",
+                    "SAFE notes and convertible instruments", "Valuation and dilution", "Liquidation preferences",
+                    "Pro-rata, anti-dilution and control rights", "Term-sheet negotiation", "Due diligence and data rooms"
                 ]),
-                CurriculumTopic(name: "Due Diligence", subtopics: [
-                    "What investors verify",
-                    "Legal and cap table review",
-                    "Financial due diligence",
-                    "Founder references",
-                    "Preparing the data room"
-                ]),
-                CurriculumTopic(name: "Working with Investors", subtopics: [
-                    "Choosing the right investor",
-                    "Running board meetings",
-                    "Reporting expectations",
-                    "The follow-on round",
-                    "Long-term investor relations"
-                ]),
-            ]),
-            CurriculumUnit(name: "Unit 5 — Financial Tools and Operations", topics: [
-                CurriculumTopic(name: "The Cap Table", subtopics: [
-                    "What a cap table is",
-                    "Reading a cap table",
-                    "Option pools",
-                    "Modelling dilution",
-                    "Cap table management tools"
-                ]),
-                CurriculumTopic(name: "Financial Modelling for Startups", subtopics: [
-                    "The revenue model",
-                    "Cost structure",
-                    "Cash flow forecasting",
-                    "The three-statement model",
-                    "Scenario planning"
-                ]),
-                CurriculumTopic(name: "Runway and Cash Management", subtopics: [
-                    "Burn rate",
-                    "Runway math",
-                    "Managing cash discipline",
-                    "When to raise",
-                    "Extending the runway"
-                ]),
-                CurriculumTopic(name: "Startup Accounting", subtopics: [
-                    "Revenue recognition",
-                    "Accrual vs cash accounting",
-                    "Key financial statements",
-                    "Tax basics for startups",
-                    "Setting up bookkeeping"
-                ]),
-                CurriculumTopic(name: "Fundraising Financials", subtopics: [
-                    "What VCs expect in the model",
-                    "The unit economics deck",
-                    "The hockey stick and realism",
-                    "Sensitivity analysis",
-                    "Crafting the 18-month plan"
-                ]),
-            ]),
+                CurriculumTopic(name: "Team, Legal and Execution", subtopics: [
+                    "Co-founder selection and equity splits", "Vesting and cliffs", "Hiring the first team",
+                    "Feedback, conflict and accountability", "Company formation and founder agreements",
+                    "Contracts, intellectual property and confidentiality", "Board updates and investor relations",
+                    "Security and privacy basics", "Launch readiness", "Post-launch learning and iteration"
+                ])
+            ])
         ]
     }
 }
