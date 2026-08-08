@@ -5,13 +5,13 @@ struct StudySessionLogView: View {
     @Query(sort: \StudySession.startDate, order: .reverse) private var sessions: [StudySession]
 
     private var groupedSessions: [(date: Date, sessions: [StudySession])] {
-        let grouped = Dictionary(grouping: sessions) { Calendar.current.startOfDay(for: $0.startDate) }
+        let grouped = Dictionary(grouping: sessions) { IBLocalClock.calendar.startOfDay(for: $0.startDate) }
         return grouped.map { (date: $0.key, sessions: $0.value) }
             .sorted { $0.date > $1.date }
     }
 
     private var weeklyStats: (sessions: Int, cards: Int, minutes: Int) {
-        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let weekAgo = IBLocalClock.calendar.date(byAdding: .day, value: -7, to: IBLocalClock.now) ?? IBLocalClock.now
         let recent = sessions.filter { $0.startDate >= weekAgo }
         let totalCards = recent.reduce(0) { $0 + $1.cardsReviewed }
         let totalMinutes = Int(recent.reduce(0.0) { $0 + $1.duration } / 60)
@@ -107,6 +107,12 @@ struct StudySessionLogView: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                if let notes = session.notes, !notes.isEmpty {
+                    Label(notes, systemImage: "note.text")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
 
             Spacer()

@@ -3,10 +3,8 @@ import SwiftData
 import Charts
 
 struct LearningAnalyticsView: View {
-    @Environment(\.modelContext) private var context
     @Query private var subjects: [Subject]
     @Query(sort: \StudySession.startDate, order: .reverse) private var sessions: [StudySession]
-    @Query private var activities: [StudyActivity]
 
     /// Renders a 0-23 hour in 12-hour clock form ("1 PM", "12 AM", …).
     static func hourLabel(_ hour: Int) -> String {

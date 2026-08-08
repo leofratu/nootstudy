@@ -3,7 +3,6 @@ import SwiftUI
 
 struct ADHDTrackerView: View {
     @State private var settings: ADHDMedicationSettings = .default
-    @State private var selectedHour: Double?
     @State private var showMedicationPicker = false
 
     private static let timeFormatter: DateFormatter = {
@@ -20,6 +19,15 @@ struct ADHDTrackerView: View {
         let doseStart = settings.firstDoseHour * 60 + settings.firstDoseMinute
         let adjusted = minutes < doseStart ? minutes + 24 * 60 : minutes
         return Double(adjusted - doseStart) / 60.0
+    }
+
+    /// The shared x-axis domain (0...16 hours) used by the timeline and
+    /// focus-window charts. A focus window that extends past midnight (e.g. a
+    /// 24-hour medication) can compute an end hour far beyond this domain;
+    /// clamping keeps both charts aligned instead of letting a bar blow out the
+    /// focus chart's axis.
+    private func clampedDoseHour(_ hours: Double) -> Double {
+        min(max(hours, 0), 16)
     }
 
     private var pkData: [(time: String, hour: Double, level: Double)] {
@@ -335,8 +343,8 @@ struct ADHDTrackerView: View {
                 Chart {
                     ForEach(Array(windows.enumerated()), id: \.offset) { index, window in
                         BarMark(
-                            xStart: .value("Start", hoursSinceFirstDose(window.start)),
-                            xEnd: .value("End", hoursSinceFirstDose(window.end)),
+                            xStart: .value("Start", clampedDoseHour(hoursSinceFirstDose(window.start))),
+                            xEnd: .value("End", clampedDoseHour(hoursSinceFirstDose(window.end))),
                             y: .value("Dose", "Dose \(index + 1)"),
                             height: .fixed(18)
                         )
