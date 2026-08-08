@@ -34,3 +34,6 @@ DerivedData/
 # Generated design exploration and temporary ImageGen output
 output/
 tmp/
+
+# Local agent run logs may contain machine paths or private task context.
+repo_plan/runs/*/
