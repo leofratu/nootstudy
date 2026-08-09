@@ -28,6 +28,8 @@ nonisolated enum KeychainService {
     private static let service = "com.nootstudy.ibvault"
     private static let apiKeyAccount = "gemini_api_key"
     private static let junaliAPIKeyAccount = "junali_api_key"
+    private static let googleOAuthConfigurationAccount = "google_calendar_oauth_configuration"
+    private static let googleOAuthTokenAccount = "google_calendar_oauth_token"
     private static let userDefaultsFallbackKey = "gemini_api_key_fallback"
 
     static func saveAPIKey(_ key: String) -> Bool {
@@ -72,6 +74,34 @@ nonisolated enum KeychainService {
 
     static var hasJunaliAPIKey: Bool {
         loadJunaliAPIKey()?.isEmpty == false
+    }
+
+    static func saveGoogleOAuthConfiguration(_ configuration: GoogleOAuthConfiguration) -> Bool {
+        guard let data = try? JSONEncoder().encode(configuration),
+              let value = String(data: data, encoding: .utf8) else { return false }
+        return saveSecret(value, account: googleOAuthConfigurationAccount)
+    }
+
+    static func loadGoogleOAuthConfiguration() -> GoogleOAuthConfiguration? {
+        guard let value = loadSecret(account: googleOAuthConfigurationAccount),
+              let data = value.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(GoogleOAuthConfiguration.self, from: data)
+    }
+
+    static func saveGoogleOAuthToken(_ token: GoogleOAuthToken) -> Bool {
+        guard let data = try? JSONEncoder().encode(token),
+              let value = String(data: data, encoding: .utf8) else { return false }
+        return saveSecret(value, account: googleOAuthTokenAccount)
+    }
+
+    static func loadGoogleOAuthToken() -> GoogleOAuthToken? {
+        guard let value = loadSecret(account: googleOAuthTokenAccount),
+              let data = value.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(GoogleOAuthToken.self, from: data)
+    }
+
+    static func deleteGoogleOAuthToken() -> Bool {
+        deleteSecret(account: googleOAuthTokenAccount)
     }
 
     private static func saveSecret(_ value: String, account: String) -> Bool {

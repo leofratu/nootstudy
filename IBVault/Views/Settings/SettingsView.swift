@@ -1,5 +1,7 @@
+import AppKit
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     private static let fixedTargetIBScore = 40
@@ -54,6 +56,8 @@ struct SettingsView: View {
     @State private var calendarOptions: [CalendarSyncOption] = []
     @State private var calendarSyncStatus = ""
     @State private var isConfiguringCalendar = false
+    @State private var isGoogleConfigured = false
+    @State private var isGoogleConnected = false
 
     @State private var adhdMedSettings: ADHDMedicationSettings = .default
     @State private var showMedicationPicker = false
@@ -207,7 +211,8 @@ struct SettingsView: View {
             }
             refreshViewState()
             adhdMedSettings = ADHDMedicationSettings.loadFromDefaults()
-            if calendarSyncEnabled {
+            refreshGoogleCalendarState()
+            if isGoogleConnected {
                 if let lastError = UserDefaults.standard.string(forKey: CalendarSyncPreferences.lastErrorKey) {
                     calendarSyncStatus = lastError
                 } else if let lastSyncDate = UserDefaults.standard.object(forKey: CalendarSyncPreferences.lastSyncDateKey) as? Date {
@@ -777,37 +782,88 @@ struct SettingsView: View {
 
     private var calendarSyncSection: some View {
         Section {
-            Toggle(isOn: Binding(
-                get: { calendarSyncEnabled },
-                set: { newValue in
-                    if newValue {
-                        Task { await enableCalendarSync() }
-                    } else {
-                        calendarSyncEnabled = false
-                        calendarSyncStatus = "Sync paused. Existing calendar events were kept."
-                    }
-                }
-            )) {
+            HStack(spacing: 12) {
+                Image(systemName: isGoogleConnected ? "checkmark.circle.fill" : "calendar.badge.plus")
+                    .foregroundStyle(isGoogleConnected ? .green : IBColors.electricBlue)
+                    .font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Google Calendar Sync")
-                    Text("Keep planned study sessions aligned with a calendar on your Google account")
+                    Text(isGoogleConnected ? "Google Calendar connected" : "Connect Google Calendar")
+                    Text(isGoogleConnected
+                         ? "Noot can keep your planned study sessions up to date"
+                         : "Sign in directly from Noot. No macOS account setup required.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Spacer()
+                if isConfiguringCalendar {
+                    ProgressView().controlSize(.small)
+                } else if isGoogleConnected {
+                    Button("Disconnect", role: .destructive) {
+                        disconnectGoogleCalendar()
+                    }
+                }
             }
 
-            if calendarSyncEnabled || isConfiguringCalendar {
+            if !isGoogleConnected {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isGoogleConfigured ? "OAuth configuration ready" : "Google OAuth configuration")
+                        Text(isGoogleConfigured
+                             ? "Your Desktop app credentials are stored securely."
+                             : "Choose the Desktop app JSON downloaded from Google Cloud.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        chooseGoogleOAuthConfiguration()
+                    } label: {
+                        Label(isGoogleConfigured ? "Replace File" : "Choose File", systemImage: "doc.badge.plus")
+                    }
+                }
+
+                HStack {
+                    Link(destination: URL(string: "https://console.cloud.google.com/auth/clients")!) {
+                        Label("Open Google Cloud", systemImage: "arrow.up.right.square")
+                    }
+                    Spacer()
+                    Button {
+                        Task { await connectGoogleCalendar() }
+                    } label: {
+                        Label("Connect Google", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!isGoogleConfigured || isConfiguringCalendar)
+                }
+            } else {
+                Toggle(isOn: Binding(
+                    get: { calendarSyncEnabled },
+                    set: { newValue in
+                        calendarSyncEnabled = newValue
+                        if newValue {
+                            calendarSyncStatus = "Syncing study sessions..."
+                            Task { await syncCalendarsNow() }
+                        } else {
+                            calendarSyncStatus = "Sync paused. Existing Google Calendar events were kept."
+                        }
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Automatic sync")
+                        Text("Update Google Calendar when your study plan changes")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 if calendarOptions.isEmpty {
                     HStack {
                         Text("Calendar")
                         Spacer()
-                        if isConfiguringCalendar {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Button("Load Calendars") {
-                                Task { await loadCalendarOptions() }
-                            }
+                        Button("Load Calendars") {
+                            Task { await loadCalendarOptions() }
                         }
+                        .disabled(isConfiguringCalendar)
                     }
                 } else {
                     Picker("Calendar", selection: $selectedCalendarIdentifier) {
@@ -816,6 +872,7 @@ struct SettingsView: View {
                         }
                     }
                     .onChange(of: selectedCalendarIdentifier) { _, _ in
+                        guard calendarSyncEnabled else { return }
                         calendarSyncStatus = "Calendar changed. Syncing..."
                         Task { await syncCalendarsNow() }
                     }
@@ -844,21 +901,23 @@ struct SettingsView: View {
         } header: {
             Label("Calendar", systemImage: "calendar.badge.checkmark")
         } footer: {
-            Text("Choose a writable calendar from the Google account connected in macOS System Settings. Noot only manages events created for Noot study plans.")
+            Text("Noot requests access only to read your calendar list and manage study events. Your Google password never enters the app.")
         }
     }
 
     @MainActor
-    private func enableCalendarSync() async {
+    private func connectGoogleCalendar() async {
         isConfiguringCalendar = true
-        calendarSyncStatus = "Requesting calendar access..."
+        calendarSyncStatus = "Waiting for Google sign-in..."
         defer { isConfiguringCalendar = false }
 
         do {
+            try await CalendarSyncService.shared.connect()
+            refreshGoogleCalendarState()
             try await loadCalendarOptions(keepProgressVisible: true)
             guard !calendarOptions.isEmpty else {
                 calendarSyncEnabled = false
-                calendarSyncStatus = "No writable calendars found. Add your Google account in macOS System Settings first."
+                calendarSyncStatus = "Connected, but Google returned no writable calendars."
                 return
             }
 
@@ -873,6 +932,45 @@ struct SettingsView: View {
             calendarSyncEnabled = false
             CalendarSyncPreferences.recordFailure(error)
             calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func chooseGoogleOAuthConfiguration() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Google OAuth Configuration"
+        panel.message = "Select the Desktop app JSON file downloaded from Google Cloud."
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try CalendarSyncService.shared.importConfiguration(from: url)
+            refreshGoogleCalendarState()
+            calendarSyncStatus = "Configuration saved securely. Connect Google to continue."
+        } catch {
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func disconnectGoogleCalendar() {
+        CalendarSyncService.shared.disconnect()
+        calendarSyncEnabled = false
+        calendarOptions = []
+        selectedCalendarIdentifier = ""
+        calendarSyncStatus = "Google Calendar disconnected. Existing events were kept."
+        refreshGoogleCalendarState()
+    }
+
+    @MainActor
+    private func refreshGoogleCalendarState() {
+        isGoogleConfigured = CalendarSyncService.shared.isConfigured
+        isGoogleConnected = CalendarSyncService.shared.isConnected
+        if !isGoogleConnected {
+            calendarSyncEnabled = false
         }
     }
 

@@ -41,7 +41,6 @@ targets:
       properties:
         LSMinimumSystemVersion: "14.0"
         NSUserNotificationAlertStyle: "alert"
-        NSCalendarsFullAccessUsageDescription: "Noot Study syncs your planned study sessions with the calendar you choose."
         # XcodeGen regenerates Info.plist from this block, so the version must
         # live here. Editing Info.plist directly is silently reverted by the
         # next `xcodegen generate`.
