@@ -13,8 +13,6 @@ struct StudyCalendarView: View {
     @State private var selectedWeekOffset = 0
     @State private var now = IBLocalClock.now
 
-    private let dayWidth: CGFloat = 156
-
     init(
         plans: [StudyPlan],
         onTapPlan: @escaping (StudyPlan) -> Void,
@@ -53,15 +51,16 @@ struct StudyCalendarView: View {
             header
             Divider()
 
-            ScrollView(.horizontal, showsIndicators: true) {
-                HStack(alignment: .top, spacing: 10) {
-                    ForEach(weekDays, id: \.self) { day in
-                        dayColumn(day)
+            LazyVStack(spacing: 0) {
+                ForEach(Array(weekDays.enumerated()), id: \.element) { index, day in
+                    dayRow(day)
+                    if index < weekDays.count - 1 {
+                        Divider().padding(.leading, 86)
                     }
                 }
-                .padding(14)
             }
-            .frame(minHeight: 350)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
@@ -80,10 +79,9 @@ struct StudyCalendarView: View {
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: "calendar.badge.clock")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(IBColors.electricBlue)
-                .frame(width: 32, height: 32)
-                .background(RoundedRectangle(cornerRadius: 7).fill(IBColors.electricBlue.opacity(0.10)))
+                .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Week board").font(.callout.weight(.bold))
@@ -129,93 +127,89 @@ struct StudyCalendarView: View {
         .frame(minWidth: 48, alignment: .trailing)
     }
 
-    private func dayColumn(_ day: Date) -> some View {
+    private func dayRow(_ day: Date) -> some View {
         let isToday = IBLocalClock.calendar.isDate(day, inSameDayAs: now)
         let dayPlans = weekPlans.filter { IBLocalClock.calendar.isDate($0.scheduledDate, inSameDayAs: day) }
             .sorted { $0.scheduledDate < $1.scheduledDate }
 
-        return VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(isToday ? IBColors.electricBlue : IBColors.secondaryText)
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(day.formatted(.dateTime.day()))
-                        .font(.title3.weight(.bold).monospacedDigit())
-                        .foregroundStyle(isToday ? IBColors.electricBlue : IBColors.ink)
-                    if isToday {
-                        Text("TODAY")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(IBColors.electricBlue)
-                    }
-                }
-                Text(dayPlans.isEmpty ? "Open" : "\(dayPlans.count) block\(dayPlans.count == 1 ? "" : "s")")
-                    .font(.caption2)
-                    .foregroundStyle(IBColors.secondaryText)
+                Text(day.formatted(.dateTime.day()))
+                    .font(.system(size: 18, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(isToday ? IBColors.electricBlue : IBColors.ink)
             }
-            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.top, 10)
+            .frame(width: 54, alignment: .leading)
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 if dayPlans.isEmpty {
-                    ContentUnavailableView("Open day", systemImage: "calendar", description: Text("Schedule one focused block."))
-                        .frame(maxWidth: .infinity, minHeight: 120)
+                    Text(isToday ? "No session planned today" : "Open for a focused session")
+                        .font(.callout)
+                        .foregroundStyle(IBColors.secondaryText)
+                        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
                 } else {
                     ForEach(dayPlans) { plan in
                         planBlock(plan)
                     }
                 }
-
-                if let onSchedule {
-                    Button {
-                        onSchedule(defaultScheduleDate(on: day))
-                    } label: {
-                        Label("Schedule", systemImage: "plus")
-                            .font(.caption.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Schedule a study block on this day")
-                }
             }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let onSchedule {
+                Button {
+                    onSchedule(defaultScheduleDate(on: day))
+                } label: {
+                    Image(systemName: "plus")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(IBColors.secondaryText)
+                .help("Schedule a study block on this day")
+            }
         }
-        .frame(width: dayWidth, alignment: .topLeading)
+        .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isToday ? IBColors.electricBlue.opacity(0.045) : Color.clear)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isToday ? IBColors.electricBlue.opacity(0.04) : Color.clear)
         )
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isToday ? IBColors.electricBlue.opacity(0.18) : IBColors.cardBorder, lineWidth: 1))
     }
 
     private func planBlock(_ plan: StudyPlan) -> some View {
         let tint = subjectColor(plan.subjectName)
         return Button { onTapPlan(plan) } label: {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 5) {
-                    Circle().fill(tint).frame(width: 6, height: 6)
-                    Text(timeLabel(plan.scheduledDate)).font(.caption2.weight(.bold).monospacedDigit())
-                    Spacer(minLength: 0)
-                    Text("\(plan.durationMinutes)m").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(tint)
+                    .frame(width: 3, height: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(plan.subjectName)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(IBColors.ink)
+                        .lineLimit(1)
+                    Text(plan.selectionSummary)
+                        .font(.caption)
+                        .foregroundStyle(IBColors.secondaryText)
+                        .lineLimit(1)
                 }
-                Text(subjectAbbrev(plan.subjectName))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                Text(plan.selectionSummary)
-                    .font(.caption2)
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(timeLabel(plan.scheduledDate))
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                    Text("\(plan.durationMinutes)m")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(IBColors.secondaryText)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(IBColors.secondaryText)
-                    .lineLimit(2)
             }
-            .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
-            .padding(9)
-            .background(RoundedRectangle(cornerRadius: 7).fill(tint.opacity(0.09)))
-            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(tint.opacity(0.22), lineWidth: 1))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 6).fill(IBColors.surface))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(IBColors.cardBorder, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .contextMenu {

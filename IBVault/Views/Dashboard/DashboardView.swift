@@ -102,10 +102,13 @@ struct DashboardView: View {
     }
 
     private func updateGreeting() {
-        greetingText = ariaService.generateGreeting(
-            readyCount: queueManager.totalDueCount,
-            deferredCount: queueManager.deferredDueCount
+        let readyCount: Int = queueManager.totalDueCount
+        let deferredCount: Int = queueManager.deferredDueCount
+        let greeting: String = ariaService.generateGreeting(
+            readyCount: readyCount,
+            deferredCount: deferredCount
         )
+        greetingText = greeting
     }
 
     private func recomputeReviewProgress() {

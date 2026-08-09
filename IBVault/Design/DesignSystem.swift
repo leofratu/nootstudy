@@ -52,7 +52,7 @@ struct IBColors {
     static let mutedGray = subduedInk
     static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
 
-    // Cards — the border is a faint keyline; elevation comes from shadow.
+    // Quiet keylines define hierarchy without floating every surface.
     static let cardBorder = Color(nsColor: .separatorColor)
 
     // Semantic — deepened so they read on white without a wash.
@@ -145,12 +145,12 @@ struct IBRadius {
 
 // MARK: - Shadows
 struct IBShadow {
-    static let cardColor = Color.black.opacity(0.055)
-    static let cardRadius: CGFloat = 7
-    static let cardY: CGFloat = 2
-    static let contactColor = Color.black.opacity(0.025)
-    static let contactRadius: CGFloat = 1
-    static let contactY: CGFloat = 1
+    static let cardColor = Color.clear
+    static let cardRadius: CGFloat = 0
+    static let cardY: CGFloat = 0
+    static let contactColor = Color.clear
+    static let contactRadius: CGFloat = 0
+    static let contactY: CGFloat = 0
 }
 
 // MARK: - Gradients
@@ -190,8 +190,6 @@ struct GlassCardModifier: ViewModifier {
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(IBColors.surfaceRaised)
-                    .shadow(color: IBShadow.cardColor, radius: IBShadow.cardRadius, x: 0, y: IBShadow.cardY)
-                    .shadow(color: IBShadow.contactColor, radius: IBShadow.contactRadius, x: 0, y: IBShadow.contactY)
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius)
                             .stroke(IBColors.cardBorder, lineWidth: 1)

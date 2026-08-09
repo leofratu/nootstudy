@@ -61,12 +61,9 @@ struct SettingsView: View {
     /// The categorized left-hand navigation for Settings.
     private enum SettingsSection: String, CaseIterable, Identifiable {
         case general = "General"
-        case assistant = "AI & Assistant"
+        case assistant = "AI & Memory"
         case subjects = "Subjects"
         case study = "Study"
-        case focus = "Focus & Health"
-        case notifications = "Notifications"
-        case appearance = "Appearance"
         case data = "Data & Backup"
         case about = "About"
 
@@ -78,9 +75,6 @@ struct SettingsView: View {
             case .assistant: return "sparkles"
             case .subjects: return "books.vertical"
             case .study: return "calendar"
-            case .focus: return "heart.text.square"
-            case .notifications: return "bell"
-            case .appearance: return "paintbrush"
             case .data: return "externaldrive"
             case .about: return "info.circle"
             }
@@ -96,10 +90,7 @@ struct SettingsView: View {
         case .general: return "Your study identity, target, and report data"
         case .assistant: return "Provider, model, and response controls"
         case .subjects: return "Curriculum and subject configuration"
-        case .study: return "Review defaults and daily workload"
-        case .focus: return "Focus support and medication tracking"
-        case .notifications: return "Study reminders and warnings"
-        case .appearance: return "Interaction preferences"
+        case .study: return "Workload, calendar, focus, and reminders"
         case .data: return "Backups, recovery, and reset controls"
         case .about: return "Installed app and assistant details"
         }
@@ -152,9 +143,9 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("SETTINGS")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(IBColors.electricBlue)
+                Text("Settings")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(IBColors.secondaryText)
                     .padding(.horizontal, 12)
                     .padding(.top, 14)
 
@@ -164,13 +155,13 @@ struct SettingsView: View {
                     } label: {
                         Label(section.rawValue, systemImage: section.icon)
                             .font(.callout.weight(.medium))
-                            .foregroundStyle(selectedSection == section ? IBColors.electricBlue : IBColors.ink)
+                            .foregroundStyle(IBColors.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 11)
                             .frame(height: 34)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(selectedSection == section ? IBColors.electricBlue.opacity(0.11) : Color.clear)
+                                    .fill(selectedSection == section ? IBColors.surfaceHover : Color.clear)
                             )
                     }
                     .buttonStyle(.plain)
@@ -178,8 +169,8 @@ struct SettingsView: View {
                 Spacer()
             }
             .padding(.horizontal, 8)
-            .frame(width: 220)
-            .background(IBColors.surface)
+            .frame(width: 194)
+            .background(IBColors.canvasDeep)
 
             Divider()
 
@@ -187,7 +178,7 @@ struct SettingsView: View {
                 HStack(alignment: .center, spacing: 18) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(selectedSection.rawValue)
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.system(size: 22, weight: .semibold))
                             .foregroundStyle(IBColors.ink)
                         Text(sectionSummary)
                             .font(.callout)
@@ -244,13 +235,14 @@ struct SettingsView: View {
         case .subjects:
             Form { curriculumSection }.formStyle(.grouped)
         case .study:
-            Form { studySection; calendarSyncSection }.formStyle(.grouped)
-        case .focus:
-            Form { adhdSection }.formStyle(.grouped)
-        case .notifications:
-            Form { notificationSection }.formStyle(.grouped)
-        case .appearance:
-            Form { appearanceSection }.formStyle(.grouped)
+            Form {
+                studySection
+                calendarSyncSection
+                adhdSection
+                notificationSection
+                appearanceSection
+            }
+            .formStyle(.grouped)
         case .data:
             Form { backupSection; dataSection }.formStyle(.grouped)
         case .about:

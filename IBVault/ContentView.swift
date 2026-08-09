@@ -7,7 +7,7 @@ import AppKit
 enum NavigationTab: String, CaseIterable, Hashable {
     case dashboard = "Today"
     case subjects = "Subjects"
-    case studySessions = "Study Sessions"
+    case studySessions = "Sessions"
     case review = "Review"
     case aria = "ARIA"
     case analytics = "Progress"
@@ -110,69 +110,60 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
-        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .frame(height: 34)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(selectedTab == tab ? IBColors.electricBlue.opacity(0.11) : Color.clear)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(selectedTab == tab ? IBColors.surfaceHover : Color.clear)
         )
         .contentShape(Rectangle())
     }
 
     private var sidebarList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 12) {
                     ZStack {
-                    RoundedRectangle(cornerRadius: 7)
+                        RoundedRectangle(cornerRadius: 6)
                             .fill(IBColors.electricBlue)
-                            .frame(width: 34, height: 34)
-                            .shadow(color: IBColors.electricBlue.opacity(0.35), radius: 8, x: 0, y: 3)
+                            .frame(width: 30, height: 30)
                         Image(systemName: "books.vertical.fill")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(.white)
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Noot Study")
                             .font(.system(size: 14.5, weight: .bold))
                             .foregroundStyle(IBColors.ink)
-                        Text("Study studio")
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(IBColors.secondaryText)
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 14)
 
-                sidebarSectionHeader("STUDY")
                 ForEach([
                     NavigationTab.dashboard,
-                    .subjects,
                     .studySessions,
-                    .review
+                    .review,
+                    .subjects,
+                    .aria,
+                    .analytics
                 ], id: \.self) { tab in
                     sidebarButton(tab)
                 }
-
-                sidebarSectionHeader("ASSISTANT")
-                sidebarButton(.aria)
-
-                sidebarSectionHeader("INSIGHTS")
-                sidebarButton(.analytics)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
         }
         .scrollIndicators(.hidden)
-        .background(IBColors.canvas.opacity(0.45))
+        .background(IBColors.canvasDeep)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             sidebarFooter
         }
         .navigationTitle("Noot Study")
         #if os(macOS)
-        .navigationSplitViewColumnWidth(min: 210, ideal: 232, max: 300)
+        .navigationSplitViewColumnWidth(min: 188, ideal: 204, max: 232)
         #endif
         .toolbar {
             #if os(macOS)
@@ -186,16 +177,6 @@ struct ContentView: View {
         }
     }
 
-    private func sidebarSectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(IBTypography.eyebrow(size: 9.5))
-            .tracking(0.9)
-            .foregroundStyle(IBColors.tertiaryText)
-            .padding(.horizontal, 12)
-            .padding(.top, 14)
-            .padding(.bottom, 5)
-    }
-
     private var sidebarFooter: some View {
         let profile = profiles.first
         let name = profile?.studentName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -203,6 +184,22 @@ struct ContentView: View {
         return VStack(spacing: 0) {
             Divider()
                 .opacity(0.6)
+            Button {
+                selectedTab = .settings
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(selectedTab == .settings ? IBColors.electricBlue : IBColors.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(selectedTab == .settings ? IBColors.surfaceHover : Color.clear)
+                    )
+            }
+            .buttonStyle(.plain)
+
             HStack(spacing: 10) {
                 Button {
                     selectedTab = .profile
@@ -210,8 +207,8 @@ struct ContentView: View {
                     HStack(spacing: 10) {
                         ZStack {
                             Circle()
-                                .fill(IBGradient.accent)
-                                .frame(width: 30, height: 30)
+                                .fill(IBColors.electricBlue)
+                                .frame(width: 28, height: 28)
                             Text(initial)
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
@@ -234,26 +231,11 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    selectedTab = .settings
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(selectedTab == .settings ? IBColors.electricBlue : IBColors.secondaryText)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill(selectedTab == .settings ? IBColors.electricBlue.opacity(0.1) : Color.clear)
-                        )
-                }
-                .buttonStyle(.plain)
-                .help("Settings")
-
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
         }
-        .background(.bar)
+        .padding(8)
+        .background(IBColors.canvasDeep)
     }
 
     private var detailPane: some View {
@@ -274,6 +256,11 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(IBColors.canvas)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.cardBorder, lineWidth: 1))
+        .padding(10)
+        .background(IBColors.canvasDeep)
     }
 
     #if os(macOS)
