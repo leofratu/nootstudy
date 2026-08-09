@@ -184,6 +184,9 @@ struct RootView: View {
         .onAppear {
             preparePersistentStateIfNeeded()
         }
+        .overlay(alignment: .topLeading) {
+            CalendarSyncCoordinator()
+        }
         .alert(
             "Something went wrong",
             isPresented: Binding(
@@ -195,7 +198,6 @@ struct RootView: View {
         } message: {
             Text(launchError ?? "")
         }
-        .preferredColorScheme(.light)
     }
 
     private func migrateFSRSIfNeeded() {

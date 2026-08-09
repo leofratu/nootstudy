@@ -29,13 +29,15 @@ nonisolated enum IBLocalClock: Sendable {
 
 // MARK: - Color Palette
 struct IBColors {
-    // Layered workspace surfaces — a deeper canvas lets elevated cards float.
-    static let surface = Color(hex: "FFFFFF")
-    static let surfaceHover = Color(hex: "F2F5FA")
-    static let canvas = Color(hex: "EDF0F5")
-    static let canvasDeep = Color(hex: "E4E9F1")
-    static let ink = Color(hex: "131A2B")
-    static let subduedInk = Color(hex: "525F78")
+    // Native semantic surfaces keep contrast correct in light, dark, and
+    // increased-contrast modes without maintaining parallel hard-coded themes.
+    static let surface = Color(nsColor: .controlBackgroundColor)
+    static let surfaceRaised = Color(nsColor: .windowBackgroundColor)
+    static let surfaceHover = Color(nsColor: .unemphasizedSelectedContentBackgroundColor)
+    static let canvas = Color(nsColor: .windowBackgroundColor)
+    static let canvasDeep = Color(nsColor: .underPageBackgroundColor)
+    static let ink = Color(nsColor: .labelColor)
+    static let subduedInk = Color(nsColor: .secondaryLabelColor)
 
     // Accents
     static let electricBlue = Color(hex: "2E5BE6")
@@ -48,10 +50,10 @@ struct IBColors {
     static let softWhite = ink
     static let secondaryText = subduedInk
     static let mutedGray = subduedInk
-    static let tertiaryText = Color(hex: "8B95AC")
+    static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
 
     // Cards — the border is a faint keyline; elevation comes from shadow.
-    static let cardBorder = Color(hex: "E2E7F0")
+    static let cardBorder = Color(nsColor: .separatorColor)
 
     // Semantic — deepened so they read on white without a wash.
     static let success = Color(hex: "27B183")
@@ -132,22 +134,22 @@ struct IBSpacing {
     static let xxl: CGFloat = 48
 }
 
-// MARK: - Corner Radii — varied scale so surfaces read as layered, not boxy.
+// MARK: - Corner Radii
 struct IBRadius {
-    static let sm: CGFloat = 8
-    static let md: CGFloat = 10
-    static let lg: CGFloat = 14
-    static let xl: CGFloat = 20
-    static let card: CGFloat = 14
+    static let sm: CGFloat = 5
+    static let md: CGFloat = 7
+    static let lg: CGFloat = 8
+    static let xl: CGFloat = 8
+    static let card: CGFloat = 8
 }
 
-// MARK: - Shadows — two-stop elevation: tight contact shadow + diffuse ambient.
+// MARK: - Shadows
 struct IBShadow {
-    static let cardColor = Color.black.opacity(0.05)
-    static let cardRadius: CGFloat = 14
-    static let cardY: CGFloat = 5
-    static let contactColor = Color.black.opacity(0.04)
-    static let contactRadius: CGFloat = 2
+    static let cardColor = Color.black.opacity(0.055)
+    static let cardRadius: CGFloat = 7
+    static let cardY: CGFloat = 2
+    static let contactColor = Color.black.opacity(0.025)
+    static let contactRadius: CGFloat = 1
     static let contactY: CGFloat = 1
 }
 
@@ -169,10 +171,10 @@ struct IBGradient {
         )
     }
 
-    /// Barely-there vertical sheen applied to elevated cards.
+    /// Kept for existing call sites; semantic colors make it adaptive.
     static var cardSheen: LinearGradient {
         LinearGradient(
-            colors: [Color.white, Color(hex: "FBFCFE")],
+            colors: [IBColors.surfaceRaised, IBColors.surface],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -187,7 +189,7 @@ struct GlassCardModifier: ViewModifier {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(IBGradient.cardSheen)
+                    .fill(IBColors.surfaceRaised)
                     .shadow(color: IBShadow.cardColor, radius: IBShadow.cardRadius, x: 0, y: IBShadow.cardY)
                     .shadow(color: IBShadow.contactColor, radius: IBShadow.contactRadius, x: 0, y: IBShadow.contactY)
                     .overlay(

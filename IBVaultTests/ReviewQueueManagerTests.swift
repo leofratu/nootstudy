@@ -135,6 +135,16 @@ struct ReviewQueueManagerTests {
 
 @Suite("Daily Review Limit Policy")
 struct ReviewDailyLimitPolicyTests {
+    @Test("Daily maximum adapts to study intensity and respects a lower personal goal")
+    func adaptsDailyMaximum() {
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage) == 15)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .average) == 20)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .aboveAverage) == 25)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .intensive) == 30)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .intensive, dailyGoal: 10) == 10)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage, dailyGoal: 30) == 15)
+    }
+
     @Test("Daily queue caps unique cards and excludes cards already reviewed today")
     func capsDailyQueue() {
         let cards = (0..<45).map { index in

@@ -22,5 +22,7 @@
 	<string>14.0</string>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Noot Study syncs your planned study sessions with the calendar you choose.</string>
 </dict>
 </plist>

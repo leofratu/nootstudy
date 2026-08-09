@@ -105,7 +105,7 @@ struct AnalyticsView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     StudioPageHeader(
                         eyebrow: "Learning intelligence",
-                        title: "Analytics",
+                        title: "Progress",
                         subtitle: "Measure consistency, retrieval quality, and the subjects that need a different plan.",
                         symbol: "chart.xyaxis.line",
                         tint: IBColors.teal
@@ -143,7 +143,7 @@ struct AnalyticsView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(IBColors.canvas)
-            .navigationTitle("Analytics")
+            .navigationTitle("Progress")
         }
     }
 

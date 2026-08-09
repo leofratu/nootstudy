@@ -513,6 +513,31 @@ struct ARIAMessageFormattingTests {
         #expect(sections.contains(.listItem(marker: "1.", text: "Check the markscheme")))
     }
 
+    @Test("Headings, quotes, and dividers retain their structure")
+    func preservesBlockStructure() {
+        let sections = FormattedMessageFormatter.sections(from: """
+        ## Core idea
+        > Evidence should change the plan.
+        ---
+        Apply it deliberately.
+        """)
+
+        #expect(sections == [
+            .heading(level: 2, text: "Core idea"),
+            .quote("Evidence should change the plan."),
+            .divider,
+            .markdown("Apply it deliberately.")
+        ])
+    }
+
+    @Test("Formatting leaves URLs and dotted identifiers intact")
+    func preservesURLsAndIdentifiers() {
+        let source = "Open https://docs.example.ai/Guide.V2 and inspect model.v2.output."
+        let sections = FormattedMessageFormatter.sections(from: source)
+
+        #expect(sections == [.markdown(source)])
+    }
+
     @Test("Inline math stays inside its sentence")
     func rendersInlineMath() {
         let sections = FormattedMessageFormatter.sections(from: "Use $F = ma$ to solve the force.")
@@ -599,6 +624,23 @@ struct ARIAMessageFormattingTests {
         """
 
         #expect(ARIAContentContract.decodeDiagram(from: source, language: "aria-canvas") == nil)
+    }
+
+    @Test("Canvas contract rejects unsafe geometry and animation values")
+    func rejectsUnsafeCanvasValues() {
+        let oversized = """
+        {"type":"canvas","canvas":{"elements":[{"id":"shape","kind":"rect","x":0.5,"y":0.5,"width":1000000}]}}
+        """
+        let negativeRadius = """
+        {"type":"canvas","canvas":{"elements":[{"id":"shape","kind":"circle","x":0.5,"y":0.5,"radius":-1}]}}
+        """
+        let extremeSpeed = """
+        {"type":"canvas","canvas":{"elements":[{"id":"shape","kind":"circle","x":0.5,"y":0.5,"speed":1000000}]}}
+        """
+
+        #expect(ARIAContentContract.decodeDiagram(from: oversized, language: "aria-canvas") == nil)
+        #expect(ARIAContentContract.decodeDiagram(from: negativeRadius, language: "aria-canvas") == nil)
+        #expect(ARIAContentContract.decodeDiagram(from: extremeSpeed, language: "aria-canvas") == nil)
     }
 
     @Test("Canvas prompt uses a real canonical fence")

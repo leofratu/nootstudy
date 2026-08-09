@@ -5,12 +5,12 @@ import AppKit
 #endif
 
 enum NavigationTab: String, CaseIterable, Hashable {
-    case dashboard = "Dashboard"
+    case dashboard = "Today"
     case subjects = "Subjects"
     case studySessions = "Study Sessions"
     case review = "Review"
     case aria = "ARIA"
-    case analytics = "Analytics"
+    case analytics = "Progress"
     case recommendations = "Recommendations"
     case predictions = "Predictions"
     case profile = "Profile"
@@ -126,8 +126,8 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(IBGradient.accent)
+                    RoundedRectangle(cornerRadius: 7)
+                            .fill(IBColors.electricBlue)
                             .frame(width: 34, height: 34)
                             .shadow(color: IBColors.electricBlue.opacity(0.35), radius: 8, x: 0, y: 3)
                         Image(systemName: "books.vertical.fill")
@@ -135,7 +135,7 @@ struct ContentView: View {
                             .foregroundStyle(.white)
                     }
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("IB Vault")
+                        Text("Noot Study")
                             .font(.system(size: 14.5, weight: .bold))
                             .foregroundStyle(IBColors.ink)
                         Text("Study studio")
@@ -146,7 +146,7 @@ struct ContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 14)
 
-                sidebarSectionHeader("WORKSPACE")
+                sidebarSectionHeader("STUDY")
                 ForEach([
                     NavigationTab.dashboard,
                     .subjects,
@@ -160,16 +160,7 @@ struct ContentView: View {
                 sidebarButton(.aria)
 
                 sidebarSectionHeader("INSIGHTS")
-                ForEach([
-                    NavigationTab.analytics,
-                    .recommendations,
-                    .predictions
-                ], id: \.self) { tab in
-                    sidebarButton(tab)
-                }
-
-                sidebarSectionHeader("SYSTEM")
-                sidebarButton(.settings)
+                sidebarButton(.analytics)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -179,7 +170,7 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             sidebarFooter
         }
-        .navigationTitle("IB Vault")
+        .navigationTitle("Noot Study")
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 210, ideal: 232, max: 300)
         #endif
@@ -243,6 +234,21 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
 
+                Button {
+                    selectedTab = .settings
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(selectedTab == .settings ? IBColors.electricBlue : IBColors.secondaryText)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7)
+                                .fill(selectedTab == .settings ? IBColors.electricBlue.opacity(0.1) : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Settings")
+
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -258,7 +264,7 @@ struct ContentView: View {
             case .studySessions: StudyPlannerView()
             case .review: ReviewLaunchView()
             case .aria: ARIAChatView()
-            case .analytics: AnalyticsView()
+            case .analytics: ProgressHubView()
             case .recommendations: SmartRecommendationsView()
             case .predictions: PredictiveGradeView()
             case .profile: ProfileView()

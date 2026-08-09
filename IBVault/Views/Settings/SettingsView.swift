@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
+    @Query(sort: \StudyPlan.scheduledDate, order: .forward) private var studyPlans: [StudyPlan]
     @State private var apiKey = ""
     @State private var junaliAPIKey = ""
     @State private var showAPIKey = false
@@ -47,6 +48,12 @@ struct SettingsView: View {
     @AppStorage("autoPlayNext") private var autoPlayNext = false
     @AppStorage("showDueCountBadge") private var showDueCountBadge = true
     @AppStorage("reviewOrder") private var reviewOrder = "spaced"
+    @AppStorage(CalendarSyncPreferences.isEnabledKey) private var calendarSyncEnabled = false
+    @AppStorage(CalendarSyncPreferences.calendarIdentifierKey) private var selectedCalendarIdentifier = ""
+
+    @State private var calendarOptions: [CalendarSyncOption] = []
+    @State private var calendarSyncStatus = ""
+    @State private var isConfiguringCalendar = false
 
     @State private var adhdMedSettings: ADHDMedicationSettings = .default
     @State private var showMedicationPicker = false
@@ -198,12 +205,25 @@ struct SettingsView: View {
             }
         }
         .background(IBColors.canvas)
+        .navigationTitle("Settings")
         .sheet(isPresented: $showReportUpload) { ReportUploadView() }
         .sheet(isPresented: $showModelPicker) { GeminiModelPickerView(selectedModel: $selectedModel) }
         .onAppear {
             enforceFixedTarget()
+            if let profile, profile.dailyGoal > ReviewDailyLimitPolicy.maximumCards {
+                profile.dailyGoal = ReviewDailyLimitPolicy.maximumCards
+                persistChanges()
+            }
             refreshViewState()
             adhdMedSettings = ADHDMedicationSettings.loadFromDefaults()
+            if calendarSyncEnabled {
+                if let lastError = UserDefaults.standard.string(forKey: CalendarSyncPreferences.lastErrorKey) {
+                    calendarSyncStatus = lastError
+                } else if let lastSyncDate = UserDefaults.standard.object(forKey: CalendarSyncPreferences.lastSyncDateKey) as? Date {
+                    calendarSyncStatus = "Last synced \(lastSyncDate.formatted(date: .abbreviated, time: .shortened))."
+                }
+                Task { await loadCalendarOptions() }
+            }
         }
         .onDisappear {
             profileSaveTask?.cancel()
@@ -224,7 +244,7 @@ struct SettingsView: View {
         case .subjects:
             Form { curriculumSection }.formStyle(.grouped)
         case .study:
-            Form { studySection }.formStyle(.grouped)
+            Form { studySection; calendarSyncSection }.formStyle(.grouped)
         case .focus:
             Form { adhdSection }.formStyle(.grouped)
         case .notifications:
@@ -337,7 +357,7 @@ struct SettingsView: View {
                             Stepper("Daily goal", value: Binding(
                                 get: { profile.dailyGoal },
                                 set: { profile.dailyGoal = $0; persistChanges() }
-                            ), in: 5...100, step: 5)
+                            ), in: 5...30, step: 5)
                             .padding(.vertical, 10)
                             HStack {
                                 Spacer()
@@ -729,7 +749,7 @@ struct SettingsView: View {
             if let p = profile {
                 Stepper("Daily Goal: \(p.dailyGoal) cards", value: Binding(
                     get: { p.dailyGoal }, set: { p.dailyGoal = $0; persistChanges() }
-                ), in: 5...100, step: 5)
+                ), in: 5...30, step: 5)
 
                 HStack {
                     Text("Streak Freezes"); Spacer()
@@ -761,6 +781,151 @@ struct SettingsView: View {
         } header: {
             Label("Study", systemImage: "book.fill")
         }
+    }
+
+    private var calendarSyncSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { calendarSyncEnabled },
+                set: { newValue in
+                    if newValue {
+                        Task { await enableCalendarSync() }
+                    } else {
+                        calendarSyncEnabled = false
+                        calendarSyncStatus = "Sync paused. Existing calendar events were kept."
+                    }
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Google Calendar Sync")
+                    Text("Keep planned study sessions aligned with a calendar on your Google account")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if calendarSyncEnabled || isConfiguringCalendar {
+                if calendarOptions.isEmpty {
+                    HStack {
+                        Text("Calendar")
+                        Spacer()
+                        if isConfiguringCalendar {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Button("Load Calendars") {
+                                Task { await loadCalendarOptions() }
+                            }
+                        }
+                    }
+                } else {
+                    Picker("Calendar", selection: $selectedCalendarIdentifier) {
+                        ForEach(calendarOptions) { option in
+                            Text(option.displayName).tag(option.id)
+                        }
+                    }
+                    .onChange(of: selectedCalendarIdentifier) { _, _ in
+                        calendarSyncStatus = "Calendar changed. Syncing..."
+                        Task { await syncCalendarsNow() }
+                    }
+
+                    HStack {
+                        Button {
+                            Task { await syncCalendarsNow() }
+                        } label: {
+                            Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(isConfiguringCalendar || selectedCalendarIdentifier.isEmpty)
+
+                        Spacer()
+                        if isConfiguringCalendar {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                }
+            }
+
+            if !calendarSyncStatus.isEmpty {
+                Text(calendarSyncStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Label("Calendar", systemImage: "calendar.badge.checkmark")
+        } footer: {
+            Text("Choose a writable calendar from the Google account connected in macOS System Settings. Noot only manages events created for Noot study plans.")
+        }
+    }
+
+    @MainActor
+    private func enableCalendarSync() async {
+        isConfiguringCalendar = true
+        calendarSyncStatus = "Requesting calendar access..."
+        defer { isConfiguringCalendar = false }
+
+        do {
+            try await loadCalendarOptions(keepProgressVisible: true)
+            guard !calendarOptions.isEmpty else {
+                calendarSyncEnabled = false
+                calendarSyncStatus = "No writable calendars found. Add your Google account in macOS System Settings first."
+                return
+            }
+
+            if !calendarOptions.contains(where: { $0.id == selectedCalendarIdentifier }) {
+                selectedCalendarIdentifier = calendarOptions[0].id
+            }
+            calendarSyncEnabled = true
+            try await CalendarSyncService.shared.sync(plans: studyPlans)
+            calendarSyncStatus = syncSuccessMessage()
+            NotificationCenter.default.post(name: .calendarSyncRequested, object: nil)
+        } catch {
+            calendarSyncEnabled = false
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func loadCalendarOptions(keepProgressVisible: Bool = false) async throws {
+        if !keepProgressVisible { isConfiguringCalendar = true }
+        defer { if !keepProgressVisible { isConfiguringCalendar = false } }
+
+        calendarOptions = try await CalendarSyncService.shared.writableCalendars()
+        if calendarOptions.contains(where: { $0.id == selectedCalendarIdentifier }) == false,
+           let first = calendarOptions.first {
+            selectedCalendarIdentifier = first.id
+        }
+    }
+
+    @MainActor
+    private func loadCalendarOptions() async {
+        do {
+            try await loadCalendarOptions(keepProgressVisible: false)
+            calendarSyncStatus = calendarOptions.isEmpty
+                ? "No writable calendars found."
+                : "Choose the calendar that belongs to your Google account."
+        } catch {
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func syncCalendarsNow() async {
+        guard calendarSyncEnabled, !selectedCalendarIdentifier.isEmpty else { return }
+        isConfiguringCalendar = true
+        defer { isConfiguringCalendar = false }
+
+        do {
+            try await CalendarSyncService.shared.sync(plans: studyPlans)
+            calendarSyncStatus = syncSuccessMessage()
+        } catch {
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    private func syncSuccessMessage() -> String {
+        "Synced \(studyPlans.count) study session\(studyPlans.count == 1 ? "" : "s") just now."
     }
 
     // MARK: - ADHD Section

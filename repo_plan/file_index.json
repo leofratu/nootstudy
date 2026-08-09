@@ -1,6 +1,6 @@
 {
  "generated_at": "20260803T144453Z",
- "root": "/Users/main/Desktop/nootstudy",
+ "root": ".",
  "source": "git ls-files plus content-quality regression pass artifact",
  "files": [
   ".github/workflows/mac-release.yml",

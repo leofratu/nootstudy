@@ -114,7 +114,25 @@ nonisolated enum ARIAContentContract: Sendable {
 
     private static func validControl(_ control: ARIADiagramSpec.CanvasScene.Control) -> Bool {
         !control.id.isEmpty && !control.label.isEmpty && control.min.isFinite && control.max.isFinite &&
-            control.value.isFinite && control.max > control.min && (control.kind == nil || ["slider", "toggle"].contains(control.kind!.lowercased()))
+            control.value.isFinite && control.max > control.min &&
+            abs(control.min) <= 10_000 && abs(control.max) <= 10_000 &&
+            (control.min...control.max).contains(control.value) &&
+            (control.kind == nil || ["slider", "toggle"].contains(control.kind!.lowercased()))
+    }
+
+    private static func validOptionalUnitValue(_ value: Double?) -> Bool {
+        guard let value else { return true }
+        return value.isFinite && (0...1.1).contains(value)
+    }
+
+    private static func validOptionalSpeed(_ value: Double?) -> Bool {
+        guard let value else { return true }
+        return value.isFinite && (0...10).contains(value)
+    }
+
+    private static func validOptionalPhase(_ value: Double?) -> Bool {
+        guard let value else { return true }
+        return value.isFinite && abs(value) <= 10_000
     }
 
     private static func validElement(_ element: ARIADiagramSpec.CanvasScene.Element, controlIDs: Set<String>) -> Bool {
@@ -124,6 +142,13 @@ nonisolated enum ARIAContentContract: Sendable {
               validOptionalCoordinate(element.y),
               validOptionalCoordinate(element.x2),
               validOptionalCoordinate(element.y2),
+              validOptionalUnitValue(element.width),
+              validOptionalUnitValue(element.height),
+              validOptionalUnitValue(element.radius),
+              validOptionalUnitValue(element.amplitude),
+              validOptionalSpeed(element.speed),
+              validOptionalPhase(element.phase),
+              (element.points?.count ?? 0) <= 256,
               element.points?.allSatisfy(validPoint) ?? true,
               element.animation.map({ supportedAnimations.contains($0.lowercased()) }) ?? true else {
             return false

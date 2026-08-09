@@ -21,7 +21,7 @@ struct DashboardView: View {
     // would re-scan every card in the store on every body evaluation.
     @State private var reviewProgress = 0.0
 
-    private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+    private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
 
     private struct EvidenceRow: Identifiable {
         let subject: Subject
@@ -72,24 +72,22 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(IBColors.canvas)
-            .navigationTitle("Dashboard")
+            .navigationTitle("Today")
             .sheet(isPresented: $showReview, onDismiss: {
                 reviewScheduler.analyze(context: context)
                 // A completed review consumed the due queue; refresh the shared
                 // queue snapshot so the sidebar badge is not stale until the
                 // next tab change.
-                queueManager.refreshDueCards(context: context)
+                recomputeDueCards()
             }) {
                 ReviewSessionView(filterSubject: selectedSubjectForReview)
             }
             .task {
                 reviewScheduler.analyze(context: context)
                 recomputeDueCards()
-                greetingText = ariaService.generateGreeting(context: context)
             }
             .onChange(of: allCards) { _, _ in
                 recomputeDueCards()
-                greetingText = ariaService.generateGreeting(context: context)
             }
             .onChange(of: studySessions) { _, _ in
                 recomputeDueCards()
@@ -100,6 +98,14 @@ struct DashboardView: View {
     private func recomputeDueCards() {
         queueManager.refreshDueCards(context: context)
         recomputeReviewProgress()
+        updateGreeting()
+    }
+
+    private func updateGreeting() {
+        greetingText = ariaService.generateGreeting(
+            readyCount: queueManager.totalDueCount,
+            deferredCount: queueManager.deferredDueCount
+        )
     }
 
     private func recomputeReviewProgress() {
@@ -113,7 +119,7 @@ struct DashboardView: View {
 
     private var dashboardHeader: some View {
         StudioPageHeader(
-            eyebrow: "Study workspace",
+            eyebrow: "Today",
             title: "\(greeting), \(profile?.studentName.isEmpty == false ? profile?.studentName ?? "" : "there")",
             subtitle: headerSubtitle,
             symbol: "rectangle.3.group.fill"
@@ -200,13 +206,6 @@ struct DashboardView: View {
                 symbol: "flame.fill",
                 tint: IBColors.gold,
                 detail: "\(profile?.longestStreak ?? 0)d personal best"
-            )
-            StudioMetricTile(
-                value: "\(profile?.totalXP ?? 0)",
-                label: "Learning XP",
-                symbol: "bolt.fill",
-                tint: IBColors.electricBlue,
-                detail: profile?.achievedStep.displayName ?? "Building momentum"
             )
             StudioMetricTile(
                 value: "\(Int(reviewProgress * 100))%",
@@ -348,31 +347,6 @@ struct DashboardView: View {
                 .foregroundStyle(IBColors.ink)
                 .lineSpacing(2)
                 .textSelection(.enabled)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 10) {
-                NavigationLink {
-                    StudyPlannerView()
-                } label: {
-                    DashboardToolRow(symbol: "calendar.badge.clock", tint: IBColors.electricBlue, title: "Plan a study block", detail: "Set the next focused session")
-                }
-                .buttonStyle(.plain)
-
-                NavigationLink {
-                    SmartRecommendationsView()
-                } label: {
-                    DashboardToolRow(symbol: "lightbulb.fill", tint: IBColors.gold, title: "See recommendations", detail: "Prioritize your next action")
-                }
-                .buttonStyle(.plain)
-
-                NavigationLink {
-                    AnalyticsView()
-                } label: {
-                    DashboardToolRow(symbol: "chart.line.uptrend.xyaxis", tint: IBColors.teal, title: "Check momentum", detail: "Review learning performance")
-                }
-                .buttonStyle(.plain)
-            }
         }
         .padding(18)
         .glassCard()
@@ -459,36 +433,6 @@ private struct DashboardQueueRow: View {
                 .foregroundStyle(IBColors.tertiaryText)
         }
         .padding(.vertical, 10)
-        .contentShape(Rectangle())
-    }
-}
-
-private struct DashboardToolRow: View {
-    let symbol: String
-    let tint: Color
-    let title: String
-    let detail: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 22)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.callout.weight(.bold))
-                    .foregroundStyle(IBColors.ink)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
-            }
-            Spacer()
-            Image(systemName: "arrow.up.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(IBColors.tertiaryText)
-        }
-        .padding(.vertical, 5)
         .contentShape(Rectangle())
     }
 }
