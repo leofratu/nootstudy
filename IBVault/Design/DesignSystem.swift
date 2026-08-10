@@ -29,15 +29,16 @@ nonisolated enum IBLocalClock: Sendable {
 
 // MARK: - Color Palette
 struct IBColors {
-    // Native semantic surfaces keep contrast correct in light, dark, and
-    // increased-contrast modes without maintaining parallel hard-coded themes.
-    static let surface = Color(nsColor: .controlBackgroundColor)
-    static let surfaceRaised = Color(nsColor: .windowBackgroundColor)
-    static let surfaceHover = Color(nsColor: .unemphasizedSelectedContentBackgroundColor)
-    static let canvas = Color(nsColor: .windowBackgroundColor)
-    static let canvasDeep = Color(nsColor: .underPageBackgroundColor)
-    static let ink = Color(nsColor: .labelColor)
-    static let subduedInk = Color(nsColor: .secondaryLabelColor)
+    // Noot intentionally ships one controlled light appearance. Using AppKit
+    // semantic colors here allowed restored/system dark appearances to turn
+    // only part of the hierarchy dark, leaving white content panels on top.
+    static let surface = Color(hex: "FFFFFF")
+    static let surfaceRaised = Color(hex: "FFFFFF")
+    static let surfaceHover = Color(hex: "E8EBF0")
+    static let canvas = Color(hex: "F7F8FA")
+    static let canvasDeep = Color(hex: "EEF0F3")
+    static let ink = Color(hex: "17191F")
+    static let subduedInk = Color(hex: "626873")
 
     // Accents
     static let electricBlue = Color(hex: "2E5BE6")
@@ -50,10 +51,10 @@ struct IBColors {
     static let softWhite = ink
     static let secondaryText = subduedInk
     static let mutedGray = subduedInk
-    static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
+    static let tertiaryText = Color(hex: "8B929D")
 
     // Quiet keylines define hierarchy without floating every surface.
-    static let cardBorder = Color(nsColor: .separatorColor)
+    static let cardBorder = Color(hex: "DDE1E7")
 
     // Semantic — deepened so they read on white without a wash.
     static let success = Color(hex: "27B183")

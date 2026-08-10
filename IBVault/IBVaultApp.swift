@@ -11,6 +11,7 @@ struct IBVaultApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .preferredColorScheme(.light)
         }
         .modelContainer(for: [
             Subject.self,
@@ -298,6 +299,10 @@ struct RootView: View {
 #if os(macOS)
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Keep AppKit chrome, menus, sheets, and SwiftUI semantic controls in
+        // the same light appearance as the product palette.
+        NSApp.appearance = NSAppearance(named: .aqua)
+
         let center = UNUserNotificationCenter.current()
         center.delegate = self
 
