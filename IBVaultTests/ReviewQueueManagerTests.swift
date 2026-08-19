@@ -131,6 +131,39 @@ struct ReviewQueueManagerTests {
         #expect(manager.dueCount(for: subject2) == 2)
         #expect(manager.dueCountPerSubject()[subject2.id.uuidString] == 2)
     }
+
+    @MainActor
+    @Test("All due cards remain available regardless of the profile daily goal")
+    func allDueCardsRemainAvailable() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: StudyCard.self,
+            Subject.self,
+            StudySession.self,
+            ReviewSession.self,
+            UserProfile.self,
+            configurations: config
+        )
+        let context = container.mainContext
+        let profile = UserProfile()
+        profile.dailyGoal = 18
+        context.insert(profile)
+
+        let past = Date().addingTimeInterval(-3600)
+        for index in 0..<56 {
+            let card = StudyCard(topicName: "Topic", front: "Question \(index)", back: "Answer \(index)")
+            card.nextReviewDate = past
+            context.insert(card)
+        }
+        try context.save()
+
+        let manager = ReviewQueueManager()
+        manager.refreshDueCardsSynchronously(context: context)
+
+        #expect(manager.totalDueBacklogCount == 56)
+        #expect(manager.dueCards.count == 56)
+        #expect(manager.deferredDueCount == 0)
+    }
 }
 
 @Suite("Daily Review Limit Policy")
