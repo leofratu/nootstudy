@@ -215,4 +215,10 @@ struct ReviewQueueRecoveryTests {
         #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set(), maximum: 30) == 30)
         #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set(repeating: UUID(), count: 0), maximum: 30) == 30)
     }
+
+    @Test("intensity caps remain bounded")
+    func intensityCapsRemainBounded() {
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .intensive) == 30)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage, dailyGoal: 100) == 15)
+    }
 }
