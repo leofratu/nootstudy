@@ -370,7 +370,8 @@ nonisolated final class StudyPlan {
     var kindRaw: String
     var reviewIntervalDays: Int?
     var reviewScheduleOffsetsRaw: String?
-    var prepareFlashcards: Bool
+    // Optional for migration from stores created before this flag existed.
+    var prepareFlashcards: Bool?
     var planTasksJSON: String?
 
     var kind: StudyPlanKind {
