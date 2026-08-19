@@ -103,6 +103,9 @@ class ARIAService {
         let scheduledAt: String?
         let durationMinutes: Int?
         let cardCount: Int?
+        let flashcardOnly: Bool?
+        let flashcardTargetCount: Int?
+        let flashcardDifficulty: String?
         let masteryLevel: String?
         let dailyGoal: Int?
         let targetIBScore: Int?
@@ -165,6 +168,9 @@ class ARIAService {
             self.scheduledAt = nil
             self.durationMinutes = nil
             self.cardCount = nil
+            self.flashcardOnly = nil
+            self.flashcardTargetCount = nil
+            self.flashcardDifficulty = nil
             self.masteryLevel = masteryLevel
             self.dailyGoal = nil
             self.targetIBScore = nil
@@ -980,7 +986,7 @@ class ARIAService {
         }
 
         lines.append("")
-        lines.append("Return JSON array with fields: type, subjectName, topics, subtopics, scheduledAt, durationMinutes, cardCount, masteryLevel, dailyGoal, targetIBScore, minutesStudied, xpEarned, notes, memoryCategory, searchText, frontText, backText, hint, difficulty, cognitiveSkill, cardID, gradeID, memoryID, assessmentTitle, assessmentDate, assessmentType, category, percentage, component, score, predictedGrade, achievedPoints, maxPoints, weightPercent, sourceName, termName, name, level, accentColorHex, examDate, studyIntensity, ibYear, studentName, notificationHour, notificationMinute, streakFreezes, unitName, isTaught, clearMastery, olderThanDays.")
+        lines.append("Return JSON array with fields: type, subjectName, topics, subtopics, scheduledAt, durationMinutes, cardCount, flashcardOnly, flashcardTargetCount, flashcardDifficulty, masteryLevel, dailyGoal, targetIBScore, minutesStudied, xpEarned, notes, memoryCategory, searchText, frontText, backText, hint, difficulty, cognitiveSkill, cardID, gradeID, memoryID, assessmentTitle, assessmentDate, assessmentType, category, percentage, component, score, predictedGrade, achievedPoints, maxPoints, weightPercent, sourceName, termName, name, level, accentColorHex, examDate, studyIntensity, ibYear, studentName, notificationHour, notificationMinute, streakFreezes, unitName, isTaught, clearMastery, olderThanDays.")
         return lines.joined(separator: "\n")
     }
 
@@ -1085,7 +1091,11 @@ class ARIAService {
             subtopicName: subtopics.joined(separator: ", "),
             planMarkdown: action.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             scheduledDate: scheduledDate,
-            durationMinutes: duration
+            durationMinutes: duration,
+            prepareFlashcards: action.flashcardOnly == true || action.flashcardTargetCount != nil,
+            flashcardOnly: action.flashcardOnly ?? false,
+            flashcardTargetCount: action.flashcardTargetCount,
+            flashcardDifficulty: CardDifficulty.allCases.first { $0.rawValue.caseInsensitiveCompare(action.flashcardDifficulty ?? "") == .orderedSame }
         )
         context.insert(plan)
 

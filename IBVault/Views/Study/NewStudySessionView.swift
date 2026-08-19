@@ -13,6 +13,9 @@ struct NewStudySessionView: View {
     @State private var scheduledDate = IBLocalClock.nextQuarterHour()
     @State private var durationMinutes = 60
     @State private var prepareFlashcards = true
+    @State private var flashcardOnly = false
+    @State private var flashcardTargetCount = 10
+    @State private var flashcardDifficulty: CardDifficulty = .exam
     @State private var planMarkdown = ""
     @State private var planTasks: [StudyPlanTask] = []
     @State private var isGeneratingPlan = false
@@ -59,6 +62,10 @@ struct NewStudySessionView: View {
         curriculum.compactMap { unit in
             unit.topics.contains(where: { selectedTopics.contains($0.name) }) ? unit.name : nil
         }
+    }
+
+    private var recommendedFlashcardCount: Int {
+        min(50, max(8, max(selectedSubtopicList.count, selectedTopicList.count) * 4))
     }
 
     private var selectedTopicSummary: String {
@@ -406,6 +413,40 @@ struct NewStudySessionView: View {
                     }
                 }
                 .toggleStyle(.switch)
+
+                Toggle(isOn: $flashcardOnly) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Label("Flashcards-only session", systemImage: "rectangle.on.rectangle.fill")
+                            .font(.subheadline.weight(.medium))
+                        Text("Open directly into recall practice.").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .onChange(of: flashcardOnly) { _, enabled in if enabled { prepareFlashcards = true } }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label("Flashcards for this scope", systemImage: "slider.horizontal.3")
+                            .font(.subheadline.weight(.medium))
+                        Spacer()
+                        Text("\(flashcardTargetCount)").font(.subheadline.monospacedDigit().weight(.semibold))
+                    }
+                    Slider(value: Binding(get: { Double(flashcardTargetCount) }, set: { flashcardTargetCount = Int($0.rounded()) }), in: 5...50, step: 1)
+                    HStack {
+                        Text("5").font(.caption2).foregroundStyle(.tertiary)
+                        Spacer()
+                        Button("Use \(recommendedFlashcardCount) recommended") { flashcardTargetCount = recommendedFlashcardCount }
+                            .buttonStyle(.borderless).font(.caption)
+                        Spacer()
+                        Text("50").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    Picker("IB difficulty", selection: $flashcardDifficulty) {
+                        ForEach(CardDifficulty.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Text("ARIA spreads this target across the selected sub-unit at the chosen IB level.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             .padding(16)
             .glassCard()
@@ -731,7 +772,10 @@ struct NewStudySessionView: View {
             durationMinutes: durationMinutes,
             reviewScheduleOffsets: [],
             prepareFlashcards: prepareFlashcards,
-            planTasks: planTasks
+            planTasks: planTasks,
+            flashcardOnly: flashcardOnly,
+            flashcardTargetCount: flashcardTargetCount,
+            flashcardDifficulty: flashcardDifficulty
         )
         context.insert(plan)
 

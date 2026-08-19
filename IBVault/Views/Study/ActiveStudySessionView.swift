@@ -27,6 +27,7 @@ struct ActiveStudySessionView: View {
     @State private var flashcardBatchSize = 10
     @State private var flashcardTopicName = ""
     @State private var flashcardSubtopicName = ""
+    @State private var flashcardDifficulty: CardDifficulty = .exam
     @State private var completedTaskIDs: Set<UUID> = []
     @State private var showRewardPulse = false
     @State private var previousStreak = 0
@@ -276,9 +277,11 @@ struct ActiveStudySessionView: View {
     }
 
     private func prepareFlashcardsIfRequested() {
-        guard plan.prepareFlashcards == true, !didPrepareFlashcards else { return }
+        guard (plan.prepareFlashcards == true || plan.flashcardOnly == true), !didPrepareFlashcards else { return }
         didPrepareFlashcards = true
         selectedTab = .flashcards
+        flashcardBatchSize = min(max(plan.flashcardTargetCount ?? 10, 5), 50)
+        if let raw = plan.flashcardDifficultyRaw, let value = CardDifficulty(rawValue: raw) { flashcardDifficulty = value }
         generateFlashcards()
     }
 
@@ -623,6 +626,10 @@ struct ActiveStudySessionView: View {
                         .frame(width: 46)
                     Stepper("Card count", value: flashcardBatchBinding, in: 1...50)
                         .labelsHidden()
+                    Picker("IB difficulty", selection: $flashcardDifficulty) {
+                        ForEach(CardDifficulty.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .frame(width: 110)
                 }
                 Button(action: generateFlashcards) {
                     Label(
@@ -1440,7 +1447,8 @@ struct ActiveStudySessionView: View {
                     subtopic: flashcardSubtopicName,
                     count: flashcardBatchSize,
                     localStartingIndex: generatedCards.count,
-                    context: context
+                    context: context,
+                    preferredDifficulty: flashcardDifficulty
                 )
                 generatedBatch.append(contentsOf: generatedCardsForScope.map {
                     GeneratedFlashcard(

@@ -373,6 +373,9 @@ nonisolated final class StudyPlan {
     // Optional for migration from stores created before this flag existed.
     var prepareFlashcards: Bool?
     var planTasksJSON: String?
+    var flashcardOnly: Bool?
+    var flashcardTargetCount: Int?
+    var flashcardDifficultyRaw: String?
 
     var kind: StudyPlanKind {
         get { StudyPlanKind(rawValue: kindRaw) ?? .studySession }
@@ -494,7 +497,10 @@ nonisolated final class StudyPlan {
         reviewIntervalDays: Int? = nil,
         reviewScheduleOffsets: [Int] = [],
         prepareFlashcards: Bool = false,
-        planTasks: [StudyPlanTask] = []
+        planTasks: [StudyPlanTask] = [],
+        flashcardOnly: Bool = false,
+        flashcardTargetCount: Int? = nil,
+        flashcardDifficulty: CardDifficulty? = nil
     ) {
         self.id = UUID()
         self.subjectName = subjectName
@@ -512,6 +518,9 @@ nonisolated final class StudyPlan {
         self.reviewScheduleOffsetsRaw = reviewScheduleOffsets.map(String.init).joined(separator: ",")
         self.prepareFlashcards = prepareFlashcards
         self.planTasksJSON = nil
+        self.flashcardOnly = flashcardOnly
+        self.flashcardTargetCount = flashcardTargetCount
+        self.flashcardDifficultyRaw = flashcardDifficulty?.rawValue
         self.planTasks = planTasks
     }
 }
