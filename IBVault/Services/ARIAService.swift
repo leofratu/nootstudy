@@ -1810,6 +1810,7 @@ class ARIAService {
             tags: (action.topics ?? []) + (action.subtopics ?? [])
         )
         context.insert(memory)
+        try context.save()
         return "Saved that to ARIA memory under \(category.rawValue)."
     }
 
