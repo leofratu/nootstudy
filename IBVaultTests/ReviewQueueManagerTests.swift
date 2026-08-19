@@ -209,4 +209,10 @@ struct ReviewQueueRecoveryTests {
         manager.refreshDueCardsSynchronously(context: context)
         #expect(manager.totalDueBacklogCount == 3)
     }
+
+    @Test("daily allowance never hides backlog")
+    func dailyAllowancePreservesBacklog() {
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set(), maximum: 30) == 30)
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set(repeating: UUID(), count: 0), maximum: 30) == 30)
+    }
 }
