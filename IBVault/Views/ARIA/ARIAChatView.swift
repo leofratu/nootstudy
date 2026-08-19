@@ -185,16 +185,18 @@ struct ARIAChatView: View {
                         Button {
                             createNewChat()
                         } label: {
-                            Label("New Chat", systemImage: "square.and.pencil")
+                            Image(systemName: "square.and.pencil")
                         }
                         .disabled(ariaService.isLoading)
                         .keyboardShortcut("n", modifiers: .command)
+                        .help("New chat")
                     }
 
                     ToolbarItem(placement: .primaryAction) {
                         Button { showMemory = true } label: {
-                            Label("Memory", systemImage: "brain")
+                            Image(systemName: "brain")
                         }
+                        .help("ARIA memory")
                     }
                 }
                 .sheet(isPresented: $showMemory) { ARIAMemoryView() }
@@ -252,10 +254,9 @@ struct ARIAChatView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(IBGradient.accent)
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(IBColors.electricBlue)
                         .frame(width: 34, height: 34)
-                        .shadow(color: IBColors.electricBlue.opacity(0.3), radius: 6, x: 0, y: 2)
                     Image(systemName: "sparkles")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.white)
@@ -339,12 +340,11 @@ struct ARIAChatView: View {
             Spacer().frame(height: 28)
 
             ZStack {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(IBGradient.accent)
-                    .frame(width: 60, height: 60)
-                    .shadow(color: IBColors.electricBlue.opacity(0.35), radius: 14, x: 0, y: 6)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(IBColors.electricBlue)
+                    .frame(width: 50, height: 50)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 25, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.white)
             }
 
@@ -375,12 +375,12 @@ struct ARIAChatView: View {
         VStack(spacing: 9) {
             configurationRail
 
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 8) {
                 TextField("Ask ARIA…", text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...5)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 9)
                     .onSubmit { sendMessage(inputText) }
                     .disabled(ariaService.isLoading)
 
@@ -411,13 +411,12 @@ struct ARIAChatView: View {
                 .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !ariaService.isLoading)
                 .help(ariaService.isLoading ? "Stop response" : "Send message")
             }
-            .padding(5)
+            .padding(4)
             .background(
-                RoundedRectangle(cornerRadius: 20)
+                RoundedRectangle(cornerRadius: 8)
                     .fill(IBColors.surface)
-                    .shadow(color: IBShadow.cardColor, radius: 10, x: 0, y: 3)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20)
+                        RoundedRectangle(cornerRadius: 8)
                             .stroke(IBColors.cardBorder, lineWidth: 1)
                     )
             )
@@ -428,9 +427,9 @@ struct ARIAChatView: View {
     }
 
     private var configurationRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                Menu {
+        HStack(spacing: 8) {
+            Menu {
+                Section("Provider") {
                     ForEach(AIProviderKind.allCases) { provider in
                         Button {
                             selectProvider(provider)
@@ -441,16 +440,9 @@ struct ARIAChatView: View {
                             )
                         }
                     }
-                } label: {
-                    ARIAConfigurationMenuLabel(
-                        title: selectedProvider.shortName,
-                        symbol: selectedProvider.symbolName,
-                        tint: IBColors.teal
-                    )
                 }
-                .help("AI provider")
 
-                Menu {
+                Section("Model") {
                     ForEach(AIConfiguration.knownModels[selectedProvider] ?? []) { option in
                         Button {
                             setSelectedModel(option.id)
@@ -463,20 +455,12 @@ struct ARIAChatView: View {
                     }
 
                     if !(AIConfiguration.knownModels[selectedProvider] ?? []).contains(where: { $0.id == selectedModel }) {
-                        Divider()
                         Text("Custom: \(selectedModel)")
                     }
-                } label: {
-                    ARIAConfigurationMenuLabel(
-                        title: AIConfiguration.modelDisplayName(selectedModel, for: selectedProvider),
-                        symbol: "cpu",
-                        tint: IBColors.electricBlue
-                    )
                 }
-                .help("Model")
 
                 if selectedProvider == .gemini {
-                    Menu {
+                    Section("Response style") {
                         Button {
                             ariaTemperature = 0.2
                         } label: {
@@ -492,16 +476,9 @@ struct ARIAChatView: View {
                         } label: {
                             Label("Exploratory", systemImage: geminiCreativityName == "Exploratory" ? "checkmark" : "wand.and.stars")
                         }
-                    } label: {
-                        ARIAConfigurationMenuLabel(
-                            title: geminiCreativityName,
-                            symbol: "dial.medium",
-                            tint: IBColors.gold
-                        )
                     }
-                    .help("Response creativity")
                 } else {
-                    Menu {
+                    Section("Reasoning") {
                         ForEach(AIConfiguration.supportedReasoningEfforts(for: selectedProvider)) { effort in
                             Button {
                                 reasoningEffortRaw = effort.rawValue
@@ -512,16 +489,9 @@ struct ARIAChatView: View {
                                 )
                             }
                         }
-                    } label: {
-                        ARIAConfigurationMenuLabel(
-                            title: selectedReasoningEffort.displayName,
-                            symbol: "brain.head.profile",
-                            tint: IBColors.gold
-                        )
                     }
-                    .help("Reasoning effort: \(selectedReasoningEffort.detail)")
 
-                    Menu {
+                    Section("Answer detail") {
                         ForEach(AIResponseVerbosity.allCases) { verbosity in
                             Button {
                                 verbosityRaw = verbosity.rawValue
@@ -532,18 +502,11 @@ struct ARIAChatView: View {
                                 )
                             }
                         }
-                    } label: {
-                        ARIAConfigurationMenuLabel(
-                            title: selectedVerbosity.displayName,
-                            symbol: "text.alignleft",
-                            tint: IBColors.ink
-                        )
                     }
-                    .help("Answer detail")
                 }
 
                 if selectedProvider == .codexCLI {
-                    Menu {
+                    Section("Web search") {
                         ForEach(AIWebSearchMode.allCases) { mode in
                             Button {
                                 webSearchModeRaw = mode.rawValue
@@ -554,18 +517,29 @@ struct ARIAChatView: View {
                                 )
                             }
                         }
-                    } label: {
-                        ARIAConfigurationMenuLabel(
-                            title: selectedWebSearchMode.displayName,
-                            symbol: "globe",
-                            tint: IBColors.success
-                        )
                     }
-                    .help("Web search: \(selectedWebSearchMode.detail)")
                 }
+            } label: {
+                Label(
+                    "\(selectedProvider.shortName) · \(AIConfiguration.modelDisplayName(selectedModel, for: selectedProvider))",
+                    systemImage: "slider.horizontal.3"
+                )
+                .font(.caption.weight(.medium))
+                .foregroundStyle(IBColors.secondaryText)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Response settings")
+
+            Spacer()
+
+            if ariaService.isLoading {
+                Text(ariaService.currentStatus)
+                    .font(.caption)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .lineLimit(1)
             }
         }
-        .scrollClipDisabled()
         .disabled(ariaService.isLoading)
     }
 
@@ -1250,37 +1224,6 @@ private struct ARIAThinkingIndicator: View {
     }
 }
 
-private struct ARIAConfigurationMenuLabel: View {
-    let title: String
-    let symbol: String
-    let tint: Color
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(tint)
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(IBColors.ink)
-                .lineLimit(1)
-            Image(systemName: "chevron.down")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(IBColors.tertiaryText)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 26)
-        .background(
-            RoundedRectangle(cornerRadius: 7)
-                .fill(IBColors.canvas)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7)
-                        .stroke(IBColors.cardBorder, lineWidth: 1)
-                )
-        )
-    }
-}
-
 private struct ARIAChatSessionRow: View {
     let session: ARIAChatSession
     let isSelected: Bool
@@ -1345,9 +1288,8 @@ struct MessageRow: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                             .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(IBGradient.accent)
-                                    .shadow(color: IBColors.electricBlue.opacity(0.25), radius: 8, x: 0, y: 3)
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(IBColors.electricBlue)
                             )
                     }
                     .frame(maxWidth: 590, alignment: .trailing)
@@ -1364,8 +1306,8 @@ struct MessageRow: View {
                             MessageCopyButton(text: message.content)
                         }
                         FormattedMessageContent(text: message.content, preferRichRendering: true)
-                            .padding(14)
-                            .glassCard(cornerRadius: 16)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 6)
                     }
                     .frame(maxWidth: 760, alignment: .leading)
                     Spacer(minLength: 20)
@@ -1378,9 +1320,8 @@ struct MessageRow: View {
     private var ariaAvatar: some View {
         ZStack {
             Circle()
-                .fill(IBGradient.accent)
+                .fill(IBColors.electricBlue)
                 .frame(width: 30, height: 30)
-                .shadow(color: IBColors.electricBlue.opacity(0.3), radius: 5, x: 0, y: 2)
             Image(systemName: "sparkles")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
@@ -1439,9 +1380,8 @@ struct StreamingMessageRow: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(IBGradient.accent)
+                    .fill(IBColors.electricBlue)
                     .frame(width: 30, height: 30)
-                    .shadow(color: IBColors.electricBlue.opacity(0.3), radius: 5, x: 0, y: 2)
                 Image(systemName: "sparkles")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
@@ -1456,8 +1396,8 @@ struct StreamingMessageRow: View {
                     .lineSpacing(4)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-                    .padding(14)
-                    .glassCard(cornerRadius: 16)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 6)
             }
             .frame(maxWidth: 760, alignment: .leading)
             Spacer()
@@ -1492,6 +1432,12 @@ struct FormattedMessageContent: View {
     @ViewBuilder
     private func sectionView(_ section: FormattedMessageSection) -> some View {
         switch section {
+        case .heading(let level, let heading):
+            Text(FormattedMessageFormatter.attributedMarkdown(from: heading) ?? AttributedString(heading))
+                .font(level == 1 ? .title3.weight(.semibold) : .headline.weight(.semibold))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
         case .markdown(let markdown):
             if let attributed = FormattedMessageFormatter.attributedMarkdown(from: markdown) {
                 Text(attributed)
@@ -1516,6 +1462,21 @@ struct FormattedMessageContent: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+        case .quote(let quote):
+            HStack(alignment: .top, spacing: 10) {
+                Rectangle()
+                    .fill(IBColors.cardBorder)
+                    .frame(width: 2)
+                Text(FormattedMessageFormatter.attributedMarkdown(from: quote) ?? AttributedString(quote))
+                    .foregroundStyle(IBColors.secondaryText)
+                    .lineSpacing(4)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+        case .divider:
+            Divider()
 
         case .mathBlock(let latex):
             MathJaxBlockView(latex: latex)
@@ -1775,8 +1736,11 @@ private struct NativeCasesMathView: View {
 }
 
 enum FormattedMessageSection: Equatable {
+    case heading(level: Int, text: String)
     case markdown(String)
     case listItem(marker: String, text: String)
+    case quote(String)
+    case divider
     case mathBlock(String)
     case codeBlock(code: String, language: String)
     case diagram(ARIADiagramSpec)
@@ -1899,7 +1863,7 @@ private struct ARIADiagramView: View {
             }
 
             if !diagram.isFlow, !diagram.isCanvas, !diagram.graphSeries.isEmpty {
-                HStack(spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), alignment: .leading)], alignment: .leading, spacing: 8) {
                     ForEach(Array(diagram.graphSeries.enumerated()), id: \.offset) { index, series in
                         HStack(spacing: 4) {
                             Circle()
@@ -1908,6 +1872,8 @@ private struct ARIADiagramView: View {
                             Text(series.label ?? "Series \(index + 1)")
                                 .font(.caption2)
                                 .foregroundStyle(IBColors.secondaryText)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
                     }
                 }
@@ -1938,7 +1904,7 @@ private struct ARIADiagramView: View {
         let yMax = (yValues.max() ?? 1).rounded(.up) + 1
         let safeXSpan = max(xMax - xMin, 1)
         let safeYSpan = max(yMax - yMin, 1)
-        let plot = CGRect(x: 38, y: 16, width: max(size.width - 54, 80), height: max(size.height - 50, 80))
+        let plot = CGRect(x: 44, y: 20, width: max(size.width - 66, 80), height: max(size.height - 58, 80))
         func point(_ value: [Double]) -> CGPoint {
             CGPoint(
                 x: plot.minX + CGFloat((value[0] - xMin) / safeXSpan) * plot.width,
@@ -1990,7 +1956,11 @@ private struct ARIADiagramView: View {
             context.draw(Text(xLabel).font(.caption2), at: CGPoint(x: plot.midX, y: size.height - 10))
         }
         if let yLabel = diagram.yLabel {
-            context.draw(Text(yLabel).font(.caption2), at: CGPoint(x: 14, y: plot.midY))
+            context.draw(
+                Text(shortDiagramLabel(yLabel, limit: 22)).font(.caption2),
+                at: CGPoint(x: plot.minX + 4, y: plot.minY + 6),
+                anchor: .topLeading
+            )
         }
     }
 
@@ -2000,13 +1970,16 @@ private struct ARIADiagramView: View {
             context.draw(Text("ARIA diagram data is empty").font(.caption), at: CGPoint(x: size.width / 2, y: size.height / 2))
             return
         }
+        let nodeInset = CGSize(width: 66, height: 30)
         let positions = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { index, node in
             let columns = max(Int(ceil(sqrt(Double(nodes.count)))), 1)
             let row = index / columns
             let column = index % columns
-            let x = node.x.map { CGFloat($0) * size.width } ?? (CGFloat(column + 1) / CGFloat(columns + 1) * size.width)
+            let rawX = node.x.map { CGFloat($0) * size.width } ?? (CGFloat(column + 1) / CGFloat(columns + 1) * size.width)
             let rows = max(Int(ceil(Double(nodes.count) / Double(columns))), 1)
-            let y = node.y.map { CGFloat($0) * size.height } ?? (CGFloat(row + 1) / CGFloat(rows + 1) * size.height)
+            let rawY = node.y.map { CGFloat($0) * size.height } ?? (CGFloat(row + 1) / CGFloat(rows + 1) * size.height)
+            let x = min(max(rawX, nodeInset.width), max(nodeInset.width, size.width - nodeInset.width))
+            let y = min(max(rawY, nodeInset.height), max(nodeInset.height, size.height - nodeInset.height))
             return (node.id, CGPoint(x: x, y: y))
         })
         for edge in diagram.flowEdges {
@@ -2024,17 +1997,17 @@ private struct ARIADiagramView: View {
             arrowPath.addLine(to: CGPoint(x: arrow.x - cos(angle + .pi / 5) * 7, y: arrow.y - sin(angle + .pi / 5) * 7))
             context.stroke(arrowPath, with: .color(IBColors.secondaryText.opacity(0.75)), lineWidth: 1.4)
             if let label = edge.label {
-                context.draw(Text(label).font(.caption2), at: CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 10))
+                context.draw(Text(shortDiagramLabel(label, limit: 22)).font(.caption2), at: CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 10))
             }
         }
         for (index, node) in nodes.enumerated() {
             guard let point = positions[node.id] else { continue }
-            let rect = CGRect(x: point.x - 54, y: point.y - 19, width: 108, height: 38)
+            let rect = CGRect(x: point.x - 58, y: point.y - 21, width: 116, height: 42)
             let color = node.color.map(Color.init(hex:)) ?? seriesColor(nil, index: index)
             context.fill(Path(roundedRect: rect, cornerRadius: 7), with: .color(color.opacity(0.14)))
             context.stroke(Path(roundedRect: rect, cornerRadius: 7), with: .color(color.opacity(0.75)), lineWidth: 1)
             context.draw(
-                Text(node.label).font(.caption.weight(.semibold)).foregroundColor(IBColors.ink),
+                Text(shortDiagramLabel(node.label, limit: 24)).font(.caption.weight(.semibold)).foregroundColor(IBColors.ink),
                 at: point,
                 anchor: .center
             )
@@ -2045,11 +2018,17 @@ private struct ARIADiagramView: View {
         if let hex = series?.color, !hex.isEmpty { return Color(hex: hex) }
         return [IBColors.electricBlue, IBColors.teal, IBColors.coral, IBColors.gold][index % 4]
     }
+
+    private func shortDiagramLabel(_ label: String, limit: Int) -> String {
+        guard label.count > limit else { return label }
+        return String(label.prefix(max(limit - 1, 1))) + "…"
+    }
 }
 
 private struct ARIAParticleSimulationView: View {
     let mode: String
     let particleCount: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isPlaying = true
     @State private var speed = 1.0
     @State private var pausedElapsed: TimeInterval = 0
@@ -2061,7 +2040,7 @@ private struct ARIAParticleSimulationView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isPlaying || reduceMotion)) { timeline in
                 Canvas { context, size in
                     let elapsed = pausedElapsed + (isPlaying ? timeline.date.timeIntervalSince(activeStartedAt) : 0)
                     let time = elapsed * speed
@@ -2153,6 +2132,7 @@ private struct ARIAParticleSimulationView: View {
 private struct ARIAGenerativeCanvasView: View {
     let scene: ARIADiagramSpec.CanvasScene
     let canvasHeight: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isPlaying = true
     @State private var masterSpeed = 1.0
     @State private var pausedElapsed: TimeInterval = 0
@@ -2187,7 +2167,7 @@ private struct ARIAGenerativeCanvasView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isPlaying || reduceMotion)) { timeline in
                 Canvas { context, size in
                     let elapsed = pausedElapsed + (isPlaying ? timeline.date.timeIntervalSince(activeStartedAt) : 0)
                     draw(in: &context, size: size, time: elapsed * masterSpeed)
@@ -2324,7 +2304,7 @@ private struct ARIAGenerativeCanvasView: View {
 
             case "text", "label":
                 context.draw(
-                    Text(element.label ?? "").font(.caption.weight(.semibold)).foregroundColor(color),
+                    Text(shortLabel(element.label ?? "", limit: 42)).font(.caption.weight(.semibold)).foregroundColor(color),
                     at: point,
                     anchor: .center
                 )
@@ -2334,7 +2314,7 @@ private struct ARIAGenerativeCanvasView: View {
                 context.fill(Path(ellipseIn: rect), with: .color(color.opacity(0.88)))
                 if let label = element.label {
                     context.draw(
-                        Text(label).font(.caption2.weight(.medium)).foregroundColor(IBColors.ink),
+                        Text(shortLabel(label, limit: 36)).font(.caption2.weight(.medium)).foregroundColor(IBColors.ink),
                         at: CGPoint(x: point.x, y: point.y + radius + 12),
                         anchor: .center
                     )
@@ -2369,7 +2349,18 @@ private struct ARIAGenerativeCanvasView: View {
     }
 
     private func pointFor(x: Double, y: Double, size: CGSize) -> CGPoint {
-        CGPoint(x: CGFloat(x) * size.width, y: CGFloat(y) * size.height)
+        let inset: CGFloat = 24
+        let contentWidth = max(size.width - inset * 2, 1)
+        let contentHeight = max(size.height - inset * 2, 1)
+        return CGPoint(
+            x: inset + CGFloat(min(max(x, 0), 1)) * contentWidth,
+            y: inset + CGFloat(min(max(y, 0), 1)) * contentHeight
+        )
+    }
+
+    private func shortLabel(_ value: String, limit: Int) -> String {
+        guard value.count > limit else { return value }
+        return String(value.prefix(max(limit - 1, 1))) + "…"
     }
 
     private func drawArrow(from start: CGPoint, to end: CGPoint, color: Color, context: inout GraphicsContext) {
@@ -2767,27 +2758,13 @@ enum FormattedMessageFormatter {
         var result = source.replacingOccurrences(of: "\r\n", with: "\n")
         result = normalizeMathDelimiters(in: result)
         result = replaceRegex(pattern: #"[-—]{3,}\s*(FRONT:|BACK:)"#, template: "\n\n$1", in: result)
-        result = replaceRegex(pattern: #"(?<=[.!?])(?=[A-Z])"#, template: " ", in: result)
         result = replaceRegex(pattern: #"(?m)^(#{1,6})([^ #\n])"#, template: "$1 $2", in: result)
         result = replaceRegex(pattern: #"(?m)(?<!\n)(#{1,6}\s)"#, template: "\n\n$1", in: result)
         result = replaceRegex(pattern: #"(?m)^\s*#{1,6}\s*$"#, template: "", in: result)
         result = replaceRegex(pattern: #"(?m)^\s*(?:[-*•]|\d+[.)])\s*$"#, template: "", in: result)
-        result = replaceRegex(pattern: #"(?<=[^\n])\s+((?:[*•]|\d+[.)])\s)"#, template: "\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s*(FRONT:)"#, template: "\n\n$1", in: result)
         result = replaceRegex(pattern: #"(?<=[^\n])\s*(BACK:)"#, template: "\n$1", in: result)
         result = replaceRegex(pattern: #"(?m)^(#{1,6}\s+.+)\n(#{1,6}\s+.+)$"#, template: "$1\n\n$2", in: result)
-        result = replaceRegex(pattern: #"(?m)(^\s*[*-]\s+\*\*[^*\n]+\*\*:)"#, template: "\n$1", in: result)
-        result = replaceRegex(
-            pattern: #"(?i)why it(?:'|\u2019)s critical for [^:]+:\s*"#,
-            template: "\n\n### Why It Matters\n",
-            in: result
-        )
-        result = replaceRegex(
-            pattern: #"(?i)how did you go\?\s*"#,
-            template: "\n\n### Check-in\nHow did you go?\n",
-            in: result
-        )
-        // Preserve code blocks - don't collapse newlines inside them
         result = collapseNewlinesPreservingCodeBlocks(in: result)
         result = replaceRegex(pattern: #"\n{3,}"#, template: "\n\n", in: result)
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2814,7 +2791,16 @@ enum FormattedMessageFormatter {
 
         for line in markdown.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if let item = listItem(from: trimmed) {
+            if let heading = heading(from: trimmed) {
+                flushParagraph()
+                sections.append(.heading(level: heading.level, text: heading.text))
+            } else if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+                flushParagraph()
+                sections.append(.divider)
+            } else if trimmed.hasPrefix("> ") {
+                flushParagraph()
+                sections.append(.quote(String(trimmed.dropFirst(2))))
+            } else if let item = listItem(from: trimmed) {
                 flushParagraph()
                 sections.append(.listItem(marker: item.marker, text: item.text))
             } else {
@@ -2823,6 +2809,15 @@ enum FormattedMessageFormatter {
         }
 
         flushParagraph()
+    }
+
+    private static func heading(from line: String) -> (level: Int, text: String)? {
+        let hashes = line.prefix { $0 == "#" }
+        guard !hashes.isEmpty, hashes.count <= 6 else { return nil }
+        let remainder = line.dropFirst(hashes.count)
+        guard remainder.first?.isWhitespace == true else { return nil }
+        let text = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : (hashes.count, text)
     }
 
     private static func listItem(from line: String) -> (marker: String, text: String)? {

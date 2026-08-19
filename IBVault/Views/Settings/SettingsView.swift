@@ -1,5 +1,7 @@
+import AppKit
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     private static let fixedTargetIBScore = 40
@@ -7,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
+    @Query(sort: \StudyPlan.scheduledDate, order: .forward) private var studyPlans: [StudyPlan]
     @State private var apiKey = ""
     @State private var junaliAPIKey = ""
     @State private var showAPIKey = false
@@ -47,6 +50,14 @@ struct SettingsView: View {
     @AppStorage("autoPlayNext") private var autoPlayNext = false
     @AppStorage("showDueCountBadge") private var showDueCountBadge = true
     @AppStorage("reviewOrder") private var reviewOrder = "spaced"
+    @AppStorage(CalendarSyncPreferences.isEnabledKey) private var calendarSyncEnabled = false
+    @AppStorage(CalendarSyncPreferences.calendarIdentifierKey) private var selectedCalendarIdentifier = ""
+
+    @State private var calendarOptions: [CalendarSyncOption] = []
+    @State private var calendarSyncStatus = ""
+    @State private var isConfiguringCalendar = false
+    @State private var isGoogleConfigured = false
+    @State private var isGoogleConnected = false
 
     @State private var adhdMedSettings: ADHDMedicationSettings = .default
     @State private var showMedicationPicker = false
@@ -54,12 +65,9 @@ struct SettingsView: View {
     /// The categorized left-hand navigation for Settings.
     private enum SettingsSection: String, CaseIterable, Identifiable {
         case general = "General"
-        case assistant = "AI & Assistant"
+        case assistant = "AI & Memory"
         case subjects = "Subjects"
         case study = "Study"
-        case focus = "Focus & Health"
-        case notifications = "Notifications"
-        case appearance = "Appearance"
         case data = "Data & Backup"
         case about = "About"
 
@@ -71,9 +79,6 @@ struct SettingsView: View {
             case .assistant: return "sparkles"
             case .subjects: return "books.vertical"
             case .study: return "calendar"
-            case .focus: return "heart.text.square"
-            case .notifications: return "bell"
-            case .appearance: return "paintbrush"
             case .data: return "externaldrive"
             case .about: return "info.circle"
             }
@@ -89,10 +94,7 @@ struct SettingsView: View {
         case .general: return "Your study identity, target, and report data"
         case .assistant: return "Provider, model, and response controls"
         case .subjects: return "Curriculum and subject configuration"
-        case .study: return "Review defaults and daily workload"
-        case .focus: return "Focus support and medication tracking"
-        case .notifications: return "Study reminders and warnings"
-        case .appearance: return "Interaction preferences"
+        case .study: return "Workload, calendar, focus, and reminders"
         case .data: return "Backups, recovery, and reset controls"
         case .about: return "Installed app and assistant details"
         }
@@ -145,9 +147,9 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("SETTINGS")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(IBColors.electricBlue)
+                Text("Settings")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(IBColors.secondaryText)
                     .padding(.horizontal, 12)
                     .padding(.top, 14)
 
@@ -157,13 +159,13 @@ struct SettingsView: View {
                     } label: {
                         Label(section.rawValue, systemImage: section.icon)
                             .font(.callout.weight(.medium))
-                            .foregroundStyle(selectedSection == section ? IBColors.electricBlue : IBColors.ink)
+                            .foregroundStyle(IBColors.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 11)
                             .frame(height: 34)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(selectedSection == section ? IBColors.electricBlue.opacity(0.11) : Color.clear)
+                                    .fill(selectedSection == section ? IBColors.surfaceHover : Color.clear)
                             )
                     }
                     .buttonStyle(.plain)
@@ -171,8 +173,8 @@ struct SettingsView: View {
                 Spacer()
             }
             .padding(.horizontal, 8)
-            .frame(width: 220)
-            .background(IBColors.surface)
+            .frame(width: 194)
+            .background(IBColors.canvasDeep)
 
             Divider()
 
@@ -180,7 +182,7 @@ struct SettingsView: View {
                 HStack(alignment: .center, spacing: 18) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(selectedSection.rawValue)
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.system(size: 22, weight: .semibold))
                             .foregroundStyle(IBColors.ink)
                         Text(sectionSummary)
                             .font(.callout)
@@ -198,12 +200,26 @@ struct SettingsView: View {
             }
         }
         .background(IBColors.canvas)
+        .navigationTitle("Settings")
         .sheet(isPresented: $showReportUpload) { ReportUploadView() }
         .sheet(isPresented: $showModelPicker) { GeminiModelPickerView(selectedModel: $selectedModel) }
         .onAppear {
             enforceFixedTarget()
+            if let profile, profile.dailyGoal > ReviewDailyLimitPolicy.maximumCards {
+                profile.dailyGoal = ReviewDailyLimitPolicy.maximumCards
+                persistChanges()
+            }
             refreshViewState()
             adhdMedSettings = ADHDMedicationSettings.loadFromDefaults()
+            refreshGoogleCalendarState()
+            if isGoogleConnected {
+                if let lastError = UserDefaults.standard.string(forKey: CalendarSyncPreferences.lastErrorKey) {
+                    calendarSyncStatus = lastError
+                } else if let lastSyncDate = UserDefaults.standard.object(forKey: CalendarSyncPreferences.lastSyncDateKey) as? Date {
+                    calendarSyncStatus = "Last synced \(lastSyncDate.formatted(date: .abbreviated, time: .shortened))."
+                }
+                Task { await loadCalendarOptions() }
+            }
         }
         .onDisappear {
             profileSaveTask?.cancel()
@@ -224,13 +240,14 @@ struct SettingsView: View {
         case .subjects:
             Form { curriculumSection }.formStyle(.grouped)
         case .study:
-            Form { studySection }.formStyle(.grouped)
-        case .focus:
-            Form { adhdSection }.formStyle(.grouped)
-        case .notifications:
-            Form { notificationSection }.formStyle(.grouped)
-        case .appearance:
-            Form { appearanceSection }.formStyle(.grouped)
+            Form {
+                studySection
+                calendarSyncSection
+                adhdSection
+                notificationSection
+                appearanceSection
+            }
+            .formStyle(.grouped)
         case .data:
             Form { backupSection; dataSection }.formStyle(.grouped)
         case .about:
@@ -337,7 +354,7 @@ struct SettingsView: View {
                             Stepper("Daily goal", value: Binding(
                                 get: { profile.dailyGoal },
                                 set: { profile.dailyGoal = $0; persistChanges() }
-                            ), in: 5...100, step: 5)
+                            ), in: 5...30, step: 5)
                             .padding(.vertical, 10)
                             HStack {
                                 Spacer()
@@ -729,7 +746,7 @@ struct SettingsView: View {
             if let p = profile {
                 Stepper("Daily Goal: \(p.dailyGoal) cards", value: Binding(
                     get: { p.dailyGoal }, set: { p.dailyGoal = $0; persistChanges() }
-                ), in: 5...100, step: 5)
+                ), in: 5...30, step: 5)
 
                 HStack {
                     Text("Streak Freezes"); Spacer()
@@ -761,6 +778,244 @@ struct SettingsView: View {
         } header: {
             Label("Study", systemImage: "book.fill")
         }
+    }
+
+    private var calendarSyncSection: some View {
+        Section {
+            HStack(spacing: 12) {
+                Image(systemName: isGoogleConnected ? "checkmark.circle.fill" : "calendar.badge.plus")
+                    .foregroundStyle(isGoogleConnected ? .green : IBColors.electricBlue)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isGoogleConnected ? "Google Calendar connected" : "Connect Google Calendar")
+                    Text(isGoogleConnected
+                         ? "Noot can keep your planned study sessions up to date"
+                         : "Sign in directly from Noot. No macOS account setup required.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if isConfiguringCalendar {
+                    ProgressView().controlSize(.small)
+                } else if isGoogleConnected {
+                    Button("Disconnect", role: .destructive) {
+                        disconnectGoogleCalendar()
+                    }
+                }
+            }
+
+            if !isGoogleConnected {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isGoogleConfigured ? "OAuth configuration ready" : "Google OAuth configuration")
+                        Text(isGoogleConfigured
+                             ? "Your Desktop app credentials are stored securely."
+                             : "Choose the Desktop app JSON downloaded from Google Cloud.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        chooseGoogleOAuthConfiguration()
+                    } label: {
+                        Label(isGoogleConfigured ? "Replace File" : "Choose File", systemImage: "doc.badge.plus")
+                    }
+                }
+
+                HStack {
+                    Link(destination: URL(string: "https://console.cloud.google.com/auth/clients")!) {
+                        Label("Open Google Cloud", systemImage: "arrow.up.right.square")
+                    }
+                    Spacer()
+                    Button {
+                        Task { await connectGoogleCalendar() }
+                    } label: {
+                        Label("Connect Google", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!isGoogleConfigured || isConfiguringCalendar)
+                }
+            } else {
+                Toggle(isOn: Binding(
+                    get: { calendarSyncEnabled },
+                    set: { newValue in
+                        calendarSyncEnabled = newValue
+                        if newValue {
+                            calendarSyncStatus = "Syncing study sessions..."
+                            Task { await syncCalendarsNow() }
+                        } else {
+                            calendarSyncStatus = "Sync paused. Existing Google Calendar events were kept."
+                        }
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Automatic sync")
+                        Text("Update Google Calendar when your study plan changes")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if calendarOptions.isEmpty {
+                    HStack {
+                        Text("Calendar")
+                        Spacer()
+                        Button("Load Calendars") {
+                            Task { await loadCalendarOptions() }
+                        }
+                        .disabled(isConfiguringCalendar)
+                    }
+                } else {
+                    Picker("Calendar", selection: $selectedCalendarIdentifier) {
+                        ForEach(calendarOptions) { option in
+                            Text(option.displayName).tag(option.id)
+                        }
+                    }
+                    .onChange(of: selectedCalendarIdentifier) { _, _ in
+                        guard calendarSyncEnabled else { return }
+                        calendarSyncStatus = "Calendar changed. Syncing..."
+                        Task { await syncCalendarsNow() }
+                    }
+
+                    HStack {
+                        Button {
+                            Task { await syncCalendarsNow() }
+                        } label: {
+                            Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(isConfiguringCalendar || selectedCalendarIdentifier.isEmpty)
+
+                        Spacer()
+                        if isConfiguringCalendar {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                }
+            }
+
+            if !calendarSyncStatus.isEmpty {
+                Text(calendarSyncStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Label("Calendar", systemImage: "calendar.badge.checkmark")
+        } footer: {
+            Text("Noot requests access only to read your calendar list and manage study events. Your Google password never enters the app.")
+        }
+    }
+
+    @MainActor
+    private func connectGoogleCalendar() async {
+        isConfiguringCalendar = true
+        calendarSyncStatus = "Waiting for Google sign-in..."
+        defer { isConfiguringCalendar = false }
+
+        do {
+            try await CalendarSyncService.shared.connect()
+            refreshGoogleCalendarState()
+            try await loadCalendarOptions(keepProgressVisible: true)
+            guard !calendarOptions.isEmpty else {
+                calendarSyncEnabled = false
+                calendarSyncStatus = "Connected, but Google returned no writable calendars."
+                return
+            }
+
+            if !calendarOptions.contains(where: { $0.id == selectedCalendarIdentifier }) {
+                selectedCalendarIdentifier = calendarOptions[0].id
+            }
+            calendarSyncEnabled = true
+            try await CalendarSyncService.shared.sync(plans: studyPlans)
+            calendarSyncStatus = syncSuccessMessage()
+            NotificationCenter.default.post(name: .calendarSyncRequested, object: nil)
+        } catch {
+            calendarSyncEnabled = false
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func chooseGoogleOAuthConfiguration() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Google OAuth Configuration"
+        panel.message = "Select the Desktop app JSON file downloaded from Google Cloud."
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try CalendarSyncService.shared.importConfiguration(from: url)
+            refreshGoogleCalendarState()
+            calendarSyncStatus = "Configuration saved securely. Connect Google to continue."
+        } catch {
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func disconnectGoogleCalendar() {
+        CalendarSyncService.shared.disconnect()
+        calendarSyncEnabled = false
+        calendarOptions = []
+        selectedCalendarIdentifier = ""
+        calendarSyncStatus = "Google Calendar disconnected. Existing events were kept."
+        refreshGoogleCalendarState()
+    }
+
+    @MainActor
+    private func refreshGoogleCalendarState() {
+        isGoogleConfigured = CalendarSyncService.shared.isConfigured
+        isGoogleConnected = CalendarSyncService.shared.isConnected
+        if !isGoogleConnected {
+            calendarSyncEnabled = false
+        }
+    }
+
+    @MainActor
+    private func loadCalendarOptions(keepProgressVisible: Bool = false) async throws {
+        if !keepProgressVisible { isConfiguringCalendar = true }
+        defer { if !keepProgressVisible { isConfiguringCalendar = false } }
+
+        calendarOptions = try await CalendarSyncService.shared.writableCalendars()
+        if calendarOptions.contains(where: { $0.id == selectedCalendarIdentifier }) == false,
+           let first = calendarOptions.first {
+            selectedCalendarIdentifier = first.id
+        }
+    }
+
+    @MainActor
+    private func loadCalendarOptions() async {
+        do {
+            try await loadCalendarOptions(keepProgressVisible: false)
+            calendarSyncStatus = calendarOptions.isEmpty
+                ? "No writable calendars found."
+                : "Choose the calendar that belongs to your Google account."
+        } catch {
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func syncCalendarsNow() async {
+        guard calendarSyncEnabled, !selectedCalendarIdentifier.isEmpty else { return }
+        isConfiguringCalendar = true
+        defer { isConfiguringCalendar = false }
+
+        do {
+            try await CalendarSyncService.shared.sync(plans: studyPlans)
+            calendarSyncStatus = syncSuccessMessage()
+        } catch {
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+        }
+    }
+
+    private func syncSuccessMessage() -> String {
+        "Synced \(studyPlans.count) study session\(studyPlans.count == 1 ? "" : "s") just now."
     }
 
     // MARK: - ADHD Section

@@ -34,9 +34,9 @@ jobs:
       - name: Archive App
         run: |
           cd build/Build/Products/Release
-          zip -r IBVault-macOS.zip IBVault.app
+          zip -r NootStudy-macOS.zip "Noot Study.app"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
-          files: build/Build/Products/Release/IBVault-macOS.zip
+          files: build/Build/Products/Release/NootStudy-macOS.zip

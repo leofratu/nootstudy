@@ -46,34 +46,23 @@ struct StudioPageHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: IBSpacing.lg) {
-            HStack(alignment: .center, spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 13)
-                        .fill(IBGradient.tint(tint))
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 13)
-                                .stroke(tint.opacity(0.16), lineWidth: 1)
-                        )
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
                     Image(systemName: symbol)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(tint)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
+                        .font(.system(size: 11, weight: .semibold))
                     Text(eyebrow.uppercased())
-                        .font(IBTypography.eyebrow())
-                        .tracking(0.8)
-                        .foregroundStyle(tint)
-                    Text(title)
-                        .font(.system(size: 27, weight: .bold))
-                        .foregroundStyle(IBColors.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(subtitle)
-                        .font(.callout)
-                        .foregroundStyle(IBColors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .font(IBTypography.eyebrow(size: 9.5))
                 }
+                .foregroundStyle(tint)
+
+                Text(title)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(IBColors.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(.callout)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 16)
             trailing
@@ -107,11 +96,7 @@ struct StudioSectionHeader<Trailing: View>: View {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 26, height: 26)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(tint.opacity(0.1))
-                )
+                .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.system(size: 15, weight: .bold))
@@ -136,28 +121,22 @@ struct StudioMetricTile: View {
     var detail: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(value)
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundStyle(IBColors.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
                 Image(systemName: symbol)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(tint)
-                    .frame(width: 26, height: 26)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(tint.opacity(0.11))
-                    )
-                Text(label.uppercased())
-                    .font(IBTypography.eyebrow(size: 9.5))
-                    .tracking(0.6)
-                    .foregroundStyle(IBColors.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
             }
-            Text(value)
-                .font(IBTypography.stat)
+            Text(label)
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(IBColors.ink)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
             if let detail {
                 Text(detail)
                     .font(.caption)
@@ -166,8 +145,7 @@ struct StudioMetricTile: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(14)
         .glassCard(cornerRadius: IBRadius.md)
     }
 }

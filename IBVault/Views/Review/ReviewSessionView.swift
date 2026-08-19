@@ -155,12 +155,9 @@ struct ReviewSessionView: View {
                     .tint(IBColors.electricBlue)
 
                 HStack(spacing: 8) {
-                    Label("\(cards.count) in today's queue", systemImage: "rectangle.stack")
-                    if queueManager.deferredDueCount > 0 {
-                        Text("\(queueManager.deferredDueCount) deferred")
-                    }
+                    Label("\(queueManager.totalDueBacklogCount) flashcards due", systemImage: "rectangle.stack")
                     Spacer()
-                    Text("Daily cap: \(ReviewDailyLimitPolicy.maximumCards)")
+                    Text("All due cards available")
                 }
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -583,17 +580,14 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateTitle: String {
-        if queueManager.remainingDailyAllowance == 0 { return "Daily Recall Complete" }
         return studySessions.isEmpty ? "No Revision Yet" : "All Caught Up"
     }
 
     private var emptyStateSymbol: String {
-        if queueManager.remainingDailyAllowance == 0 { return "checkmark.seal.fill" }
         return studySessions.isEmpty ? "book.closed.fill" : "checkmark.circle.fill"
     }
 
     private var emptyStateTint: Color {
-        if queueManager.remainingDailyAllowance == 0 { return IBColors.success }
         return studySessions.isEmpty ? IBColors.electricBlue : .green
     }
 
@@ -664,9 +658,6 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateMessage: String {
-        if queueManager.remainingDailyAllowance == 0 {
-            return "You reviewed \(queueManager.reviewedTodayCount) unique cards today. The remaining backlog stays saved for the next daily queue."
-        }
         if studySessions.isEmpty {
             return "No revision yet. Complete a study session first, then spaced repetition will use that material."
         }

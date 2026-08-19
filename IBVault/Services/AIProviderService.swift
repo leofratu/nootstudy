@@ -193,17 +193,26 @@ nonisolated enum AIProviderService {
     ) -> AsyncThrowingStream<String, any Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
-                try await AIRequestGate.shared.acquire()
+                var acquiredPermit = false
                 do {
+                    try await AIRequestGate.shared.acquire()
+                    acquiredPermit = true
                     for try await chunk in operation() {
                         try Task.checkCancellation()
                         continuation.yield(chunk)
                     }
                     await AIRequestGate.shared.release()
+                    acquiredPermit = false
                     continuation.finish()
                 } catch {
-                    await AIRequestGate.shared.release()
-                    continuation.finish(throwing: error)
+                    if acquiredPermit {
+                        await AIRequestGate.shared.release()
+                    }
+                    if error is CancellationError {
+                        continuation.finish()
+                    } else {
+                        continuation.finish(throwing: error)
+                    }
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
@@ -215,14 +224,23 @@ nonisolated enum AIProviderService {
     ) -> AsyncThrowingStream<String, any Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
-                try await AIRequestGate.shared.acquire()
+                var acquiredPermit = false
                 do {
+                    try await AIRequestGate.shared.acquire()
+                    acquiredPermit = true
                     continuation.yield(try await operation())
                     await AIRequestGate.shared.release()
+                    acquiredPermit = false
                     continuation.finish()
                 } catch {
-                    await AIRequestGate.shared.release()
-                    continuation.finish(throwing: error)
+                    if acquiredPermit {
+                        await AIRequestGate.shared.release()
+                    }
+                    if error is CancellationError {
+                        continuation.finish()
+                    } else {
+                        continuation.finish(throwing: error)
+                    }
                 }
             }
             continuation.onTermination = { _ in task.cancel() }

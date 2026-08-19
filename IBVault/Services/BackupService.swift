@@ -189,6 +189,32 @@ nonisolated struct BackupService {
         try restoreFrom(directory: latest, context: context)
     }
 
+    /// Recovers historical evidence without replacing the live subjects/cards.
+    /// Older full exports contain mastery and session history that predates the
+    /// current store; those records are safe to merge by UUID.
+    static func mergeHistoricalEvidence(from directory: URL, context: ModelContext) throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let subjectsByName = Dictionary((try context.fetch(FetchDescriptor<Subject>())).map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        let grades = try decodeOrNil([GradeBackup].self, fileName: "grades.json", from: directory, decoder: decoder) ?? []
+        let reviews = try decodeOrNil([SessionBackup].self, fileName: "review_sessions.json", from: directory, decoder: decoder) ?? []
+        let studySessions = try decodeOrNil([StudySessionBackup].self, fileName: "study_sessions.json", from: directory, decoder: decoder) ?? []
+        let curriculum = try decodeOrNil([CurriculumNodeBackup].self, fileName: "curriculum_progress.json", from: directory, decoder: decoder) ?? []
+        let reports = try decodeOrNil([AcademicReportSnapshotBackup].self, fileName: "academic_reports.json", from: directory, decoder: decoder) ?? []
+
+        let existingGrades = Set((try context.fetch(FetchDescriptor<Grade>())).map(\.id))
+        for backup in grades where !existingGrades.contains(backup.id) { context.insert(backup.toModel(subjectsByName: subjectsByName)) }
+        let existingReviews = Set((try context.fetch(FetchDescriptor<ReviewSession>())).map(\.id))
+        for backup in reviews where !existingReviews.contains(backup.id) { context.insert(backup.toModel()) }
+        let existingStudySessions = Set((try context.fetch(FetchDescriptor<StudySession>())).map(\.id))
+        for backup in studySessions where !existingStudySessions.contains(backup.id) { context.insert(backup.toModel()) }
+        let existingNodes = Set((try context.fetch(FetchDescriptor<CurriculumNode>())).map(\.id))
+        for backup in curriculum where !existingNodes.contains(backup.id) { context.insert(backup.toModel()) }
+        let existingReports = Set((try context.fetch(FetchDescriptor<AcademicReportSnapshot>())).map(\.id))
+        for backup in reports where !existingReports.contains(backup.id) { context.insert(backup.toModel()) }
+        try context.save()
+    }
+
     static func restoreFrom(directory: URL, context: ModelContext) throws {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

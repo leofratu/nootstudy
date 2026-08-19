@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		005152FD45FA2650C9795C10 /* SmartRecommendationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB8501D80DB14A3C686E56FD /* SmartRecommendationsView.swift */; };
+		02FD34A03442C41CE493C2FB /* ProgressHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA37BD9EE66D6631497A7841 /* ProgressHubView.swift */; };
 		03D03E613D9E1169F9371209 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C729E73BE8AAA09B5A1FA06B /* NotificationService.swift */; };
 		06C90D075EF16F41D104F04B /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 097E508F5709148582415B7B /* README.md */; };
 		06E28858193E70D583BC5CBD /* ADHDTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0CBD332FD598F687CAE0EEE /* ADHDTrackerView.swift */; };
@@ -41,7 +42,9 @@
 		45434FB663C699EED77D88D0 /* HeatmapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CBE422BE3736077D85F83C /* HeatmapView.swift */; };
 		46DA567E643175829DC0B7E3 /* CurriculumNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BC5408382187E921958667 /* CurriculumNode.swift */; };
 		4B1165A2CB486FA1561FE6F7 /* RankLadderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E12470134DF352846A1C65 /* RankLadderTests.swift */; };
+		4B89375ED4D5FF507DBCF253 /* GoogleCalendarSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F8F2CDF3C2038D02F3218F7 /* GoogleCalendarSyncTests.swift */; };
 		4EE359B5212AAD28F1FEE995 /* NewStudySessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 409B8A12578D6E3872B9C1FA /* NewStudySessionView.swift */; };
+		5037AAD926F042F7AC948464 /* CalendarSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C812EE55F9D81E1C5BDDDA /* CalendarSyncService.swift */; };
 		516BA94C13C65BF91F437613 /* UserProfileProgressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD42C0B0534AB6E78452E12D /* UserProfileProgressionTests.swift */; };
 		51A5C76B4FC9D8F91D4C75C9 /* AIProviderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED89DC549CFC92D3CC602B5 /* AIProviderService.swift */; };
 		5578BA0C7ABFA2BB8BFA742C /* StudySessionLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064639B44D2E11A0F608D188 /* StudySessionLogView.swift */; };
@@ -74,6 +77,7 @@
 		8C8382F7DB40BC3842F42288 /* MaterialsLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B48FD3453450F22FCB459C56 /* MaterialsLibraryView.swift */; };
 		91A938936F44803FE63A8926 /* SyllabusSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAFA961AFC5ABD8A57067A9 /* SyllabusSeeder.swift */; };
 		95B71E62ED20AFEA05AD737C /* SubjectKnowledgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5233D9FE11A99995314C6222 /* SubjectKnowledgeTests.swift */; };
+		95D3B082A771FAB4371CE241 /* CalendarSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA0B4023A285DCACC03E6EDC /* CalendarSyncCoordinator.swift */; };
 		9A7E2BAF03F3737E7D051984 /* SubjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */; };
 		9AD053EF7D6637FC4E100EA0 /* ReviewScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15D105C387E41396D66371BE /* ReviewScheduler.swift */; };
 		9D1F50FAE95AFD66C6E15506 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908ECDE117349ED5E8B3004B /* DesignSystem.swift */; };
@@ -195,6 +199,7 @@
 		9BBBB8B078687079BC5D9480 /* ARIAMemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAMemoryView.swift; sourceTree = "<group>"; };
 		9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryCalculatorTests.swift; sourceTree = "<group>"; };
 		9E66491824275CC8A051C341 /* AcademicImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicImportView.swift; sourceTree = "<group>"; };
+		9F8F2CDF3C2038D02F3218F7 /* GoogleCalendarSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarSyncTests.swift; sourceTree = "<group>"; };
 		A0CBD332FD598F687CAE0EEE /* ADHDTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADHDTrackerView.swift; sourceTree = "<group>"; };
 		A509D28E1909411F56D71D14 /* SnapshotBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotBuilder.swift; sourceTree = "<group>"; };
 		A60F4468CFA20381FDCC3484 /* AcademicMappingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicMappingService.swift; sourceTree = "<group>"; };
@@ -225,12 +230,15 @@
 		E4A21C149C9CDCC3E182E69C /* ProficiencyTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProficiencyTrackerTests.swift; sourceTree = "<group>"; };
 		E7D91CC409D22DBFA50EB73E /* ProgressionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionService.swift; sourceTree = "<group>"; };
 		E99CA23B168A79AF41359CF0 /* SubjectKnowledge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectKnowledge.swift; sourceTree = "<group>"; };
+		EA0B4023A285DCACC03E6EDC /* CalendarSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncCoordinator.swift; sourceTree = "<group>"; };
+		EA37BD9EE66D6631497A7841 /* ProgressHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressHubView.swift; sourceTree = "<group>"; };
 		EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiServiceTests.swift; sourceTree = "<group>"; };
 		ED97CD9D635EAE250C259E5F /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		F21E537CAF1636491C074A8A /* AcademicRecordImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicRecordImporter.swift; sourceTree = "<group>"; };
 		F2B3FD673726F5C6639FD59F /* SyllabusSeederTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllabusSeederTests.swift; sourceTree = "<group>"; };
 		F63A5FFC01907D815DF4632A /* SubjectTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectTrack.swift; sourceTree = "<group>"; };
 		F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectDetailView.swift; sourceTree = "<group>"; };
+		F6C812EE55F9D81E1C5BDDDA /* CalendarSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncService.swift; sourceTree = "<group>"; };
 		FBEF0F514FDAF02DADE26C08 /* ProgressionEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionEvent.swift; sourceTree = "<group>"; };
 		FD42C0B0534AB6E78452E12D /* UserProfileProgressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileProgressionTests.swift; sourceTree = "<group>"; };
 		FD7054635482B1FC324201C7 /* MasterySignals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasterySignals.swift; sourceTree = "<group>"; };
@@ -347,6 +355,8 @@
 				CED89DC549CFC92D3CC602B5 /* AIProviderService.swift */,
 				5B2DAFFA003DB6E67E0614B3 /* ARIAService.swift */,
 				56F393C55ED8372446273171 /* BackupService.swift */,
+				EA0B4023A285DCACC03E6EDC /* CalendarSyncCoordinator.swift */,
+				F6C812EE55F9D81E1C5BDDDA /* CalendarSyncService.swift */,
 				446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */,
 				27ABD428FFA80120ECFA4F39 /* GeminiService.swift */,
 				ED97CD9D635EAE250C259E5F /* KeychainService.swift */,
@@ -421,6 +431,7 @@
 			children = (
 				82D5C3D493F8E74D1A33CA70 /* AnalyticsView.swift */,
 				84CBE422BE3736077D85F83C /* HeatmapView.swift */,
+				EA37BD9EE66D6631497A7841 /* ProgressHubView.swift */,
 				064639B44D2E11A0F608D188 /* StudySessionLogView.swift */,
 			);
 			path = Analytics;
@@ -490,6 +501,7 @@
 				1255C79E6636C1720B49819F /* CardGeneratorServiceTests.swift */,
 				C74CAC7B208256AACF431A37 /* FSRSSchedulerTests.swift */,
 				EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */,
+				9F8F2CDF3C2038D02F3218F7 /* GoogleCalendarSyncTests.swift */,
 				379A1481BDF76445ADFE4363 /* GradeMappingTests.swift */,
 				99D5763D72BAAB509FA60995 /* IBVaultAppCommandTests.swift */,
 				1F8A505BBDBC11462DD6741E /* JSONLineBufferTests.swift */,
@@ -660,6 +672,8 @@
 				C8AB4A46E62DF86D13805CBD /* AnalyticsView.swift in Sources */,
 				14FC8AF088F886C4AFDAA596 /* BackupListView.swift in Sources */,
 				A6B9AC29737742396D3F7F19 /* BackupService.swift in Sources */,
+				95D3B082A771FAB4371CE241 /* CalendarSyncCoordinator.swift in Sources */,
+				5037AAD926F042F7AC948464 /* CalendarSyncService.swift in Sources */,
 				1C14D164525849C978E9410A /* CardGeneratorService.swift in Sources */,
 				FAB7006BDFEDD13413FBE915 /* Components.swift in Sources */,
 				257730CBAAE031461F3EB6AE /* ContentView.swift in Sources */,
@@ -686,6 +700,7 @@
 				E264EF0CA59F55FD71234BFD /* ProficiencyTracker.swift in Sources */,
 				F2715EEDDE42039EBD21DC06 /* ProfileView.swift in Sources */,
 				2001F4FD7F63976CBFCF8A08 /* ProgressEvidenceService.swift in Sources */,
+				02FD34A03442C41CE493C2FB /* ProgressHubView.swift in Sources */,
 				88C617B4923C1F3EEAF4EECA /* ProgressionEvent.swift in Sources */,
 				10BDA9F05429CA565BE2AA9A /* ProgressionService.swift in Sources */,
 				85E962C86D710F46AC69BE33 /* ProgressionSnapshots.swift in Sources */,
@@ -732,6 +747,7 @@
 				E672DA2CB1B64A1E5C43F1DF /* CardGeneratorServiceTests.swift in Sources */,
 				191EAB5615D9F2EAF1B780D0 /* FSRSSchedulerTests.swift in Sources */,
 				C9D8ED43FDE5725AB1813DC4 /* GeminiServiceTests.swift in Sources */,
+				4B89375ED4D5FF507DBCF253 /* GoogleCalendarSyncTests.swift in Sources */,
 				3FF6C224B9BE870D02042055 /* GradeMappingTests.swift in Sources */,
 				BE4BADD3C35B1DD876A58D08 /* IBVaultAppCommandTests.swift in Sources */,
 				CFCF1621185FCDCC1BBFC8E8 /* JSONLineBufferTests.swift in Sources */,
@@ -788,7 +804,7 @@
 				SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IBVault.app/Contents/MacOS/IBVault";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Noot Study.app/Contents/MacOS/Noot Study";
 			};
 			name = Debug;
 		};
@@ -812,6 +828,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.app;
+				PRODUCT_MODULE_NAME = IBVault;
+				PRODUCT_NAME = "Noot Study";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -842,6 +860,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.app;
+				PRODUCT_MODULE_NAME = IBVault;
+				PRODUCT_NAME = "Noot Study";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -876,7 +896,7 @@
 				SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IBVault.app/Contents/MacOS/IBVault";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Noot Study.app/Contents/MacOS/Noot Study";
 			};
 			name = Release;
 		};

@@ -2,14 +2,25 @@ import SwiftUI
 import SwiftData
 
 struct StudyPlannerView: View {
+    private enum PresentedSheet: Identifiable {
+        case newSession(Date?)
+        case plan(StudyPlan)
+        case review(StudySession)
+
+        var id: String {
+            switch self {
+            case .newSession: return "new-session"
+            case .plan(let plan): return "plan-\(plan.id.uuidString)"
+            case .review(let session): return "review-\(session.id.uuidString)"
+            }
+        }
+    }
     @Environment(\.modelContext) private var context
     @Query(sort: \StudyPlan.scheduledDate, order: .forward) private var allPlans: [StudyPlan]
     @Query(sort: \StudySession.startDate, order: .reverse) private var recentSessions: [StudySession]
     @Query private var subjects: [Subject]
-    @State private var showNewSession = false
     @State private var selectedScheduleSlot: Date?
-    @State private var selectedPlan: StudyPlan?
-    @State private var selectedReviewSession: StudySession?
+    @State private var presentedSheet: PresentedSheet?
     @State private var planPendingDeletion: StudyPlan?
 
     private var upcomingPlans: [StudyPlan] {
@@ -51,7 +62,7 @@ struct StudyPlannerView: View {
                     ) {
                         Button {
                             selectedScheduleSlot = nil
-                            showNewSession = true
+                            presentedSheet = .newSession(nil)
                             IBHaptics.medium()
                         } label: {
                             Label("New session", systemImage: "plus")
@@ -80,7 +91,7 @@ struct StudyPlannerView: View {
                         planPendingDeletion = plan
                     } onSchedule: { date in
                         selectedScheduleSlot = date
-                        showNewSession = true
+                        presentedSheet = .newSession(date)
                     }
 
                     // Upcoming
@@ -105,32 +116,22 @@ struct StudyPlannerView: View {
             }
             .background(IBColors.canvas)
             .navigationTitle("Study Planner")
-            .sheet(isPresented: $showNewSession, onDismiss: {
+            .sheet(item: $presentedSheet, onDismiss: {
+                presentedSheet = nil
                 selectedScheduleSlot = nil
-            }) {
-                NewStudySessionView(initialScheduledDate: selectedScheduleSlot)
-            }
-            .sheet(item: $selectedPlan, onDismiss: {
-                selectedPlan = nil
-            }) { plan in
-                if plan.isFollowUpReview {
-                    ReviewSessionView(filterSubject: subject(for: plan), filterPlan: plan)
-                } else {
-                    // Do NOT dismiss the sheet on completion: ActiveStudySessionView
-                    // flips into its own completion screen (stats, scheduled
-                    // reviews, rank), which the user closes with "Done". Dismissing
-                    // here would tear the sheet down the moment the session
-                    // finished, before that screen could ever appear.
-                    ActiveStudySessionView(plan: plan)
+            }) { sheet in
+                switch sheet {
+                case .newSession(let date):
+                    NewStudySessionView(initialScheduledDate: date)
+                case .plan(let plan):
+                    if plan.isFollowUpReview {
+                        ReviewSessionView(filterSubject: subject(for: plan), filterPlan: plan)
+                    } else {
+                        ActiveStudySessionView(plan: plan)
+                    }
+                case .review(let session):
+                    ReviewSessionView(filterSubject: subject(named: session.subjectName), reviewScopeSession: session)
                 }
-            }
-            .sheet(item: $selectedReviewSession, onDismiss: {
-                selectedReviewSession = nil
-            }) { session in
-                ReviewSessionView(
-                    filterSubject: subject(named: session.subjectName),
-                    reviewScopeSession: session
-                )
             }
             .confirmationDialog(
                 "Delete this study block?",
@@ -280,7 +281,7 @@ struct StudyPlannerView: View {
 
             ForEach(recentSessions.prefix(5), id: \.id) { session in
                 Button {
-                    selectedReviewSession = session
+                    presentedSheet = .review(session)
                     IBHaptics.light()
                 } label: {
                     HStack(spacing: 14) {
@@ -349,7 +350,7 @@ struct StudyPlannerView: View {
                 .lineSpacing(2)
 
             Button {
-                showNewSession = true
+                presentedSheet = .newSession(nil)
                 IBHaptics.medium()
             } label: {
                 HStack(spacing: 6) {
@@ -397,7 +398,7 @@ struct StudyPlannerView: View {
     }
 
     private func openPlan(_ plan: StudyPlan) {
-        selectedPlan = plan
+        presentedSheet = .plan(plan)
         IBHaptics.light()
     }
 

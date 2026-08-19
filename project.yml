@@ -67,6 +67,8 @@ targets:
       SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
       OTHER_SWIFT_FLAGS: -Xfrontend -warn-long-expression-type-checking=800
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      PRODUCT_NAME: Noot Study
+      PRODUCT_MODULE_NAME: IBVault
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.app
       INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 NootStudy. All rights reserved."
       INFOPLIST_KEY_NSPrincipalClass: NSApplication
@@ -91,5 +93,7 @@ targets:
       SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
       OTHER_SWIFT_FLAGS: -Xfrontend -warn-long-expression-type-checking=800
       PRODUCT_BUNDLE_IDENTIFIER: com.nootstudy.ibvault.tests
+      TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Noot Study.app/Contents/MacOS/Noot Study"
+      BUNDLE_LOADER: "$(TEST_HOST)"
       ENABLE_TESTING_SEARCH_PATHS: YES
       GENERATE_INFOPLIST_FILE: YES

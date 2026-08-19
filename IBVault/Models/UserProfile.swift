@@ -117,10 +117,10 @@ nonisolated enum StudyIntensity: String, Codable, CaseIterable, Sendable {
     
     var dailyCardSuggestion: Int {
         switch self {
-        case .belowAverage: return 10
+        case .belowAverage: return 15
         case .average: return 20
-        case .aboveAverage: return 35
-        case .intensive: return 50
+        case .aboveAverage: return 25
+        case .intensive: return 30
         }
     }
     

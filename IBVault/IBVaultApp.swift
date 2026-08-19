@@ -11,8 +11,20 @@ struct IBVaultApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .preferredColorScheme(.light)
         }
-        .modelContainer(for: [
+        .modelContainer(Self.makeModelContainer())
+        #if os(macOS)
+        .defaultSize(width: 1100, height: 750)
+        .windowResizability(.automatic)
+        .windowToolbarStyle(.unified)
+        .commands {
+            IBVaultCommands()
+        }
+        #endif
+    }
+
+    private static let schema = Schema([
             Subject.self,
             StudyCard.self,
             ReviewSession.self,
@@ -33,15 +45,35 @@ struct IBVaultApp: App {
             AcademicAssessment.self,
             AcademicAssessmentMapping.self,
             AcademicReportSnapshot.self
-        ], isAutosaveEnabled: true, isUndoEnabled: false)
-        #if os(macOS)
-        .defaultSize(width: 1100, height: 750)
-        .windowResizability(.automatic)
-        .windowToolbarStyle(.unified)
-        .commands {
-            IBVaultCommands()
+    ])
+
+    private static func makeModelContainer() -> ModelContainer {
+        let fileManager = FileManager.default
+        let legacyURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("default.store")
+        let containerURL = fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Containers/com.nootstudy.ibvault.app/Data/Library/Application Support/default.store")
+
+        // Older local builds opened the uncontainerized store. Prefer the
+        // existing app-container store when it is present so upgrades retain
+        // the user's cards and study history.
+        let url: URL
+        if fileManager.fileExists(atPath: containerURL.path) {
+            url = containerURL
+        } else {
+            url = legacyURL
         }
-        #endif
+
+        let configuration = ModelConfiguration(
+            schema: schema,
+            url: url,
+            cloudKitDatabase: .none
+        )
+        do {
+            return try ModelContainer(for: schema, configurations: [configuration])
+        } catch {
+            fatalError("Could not open Noot Study data store: \(error)")
+        }
     }
 }
 
@@ -152,6 +184,7 @@ struct RootView: View {
     @State private var hasSynchronizedCurriculum = false
     @State private var hasMigratedFSRS = false
     @State private var hasNormalizedLegacySessions = false
+    @State private var hasMergedHistoricalEvidence = false
     @State private var launchError: String?
 
     private var orderedProfiles: [UserProfile] {
@@ -184,6 +217,9 @@ struct RootView: View {
         .onAppear {
             preparePersistentStateIfNeeded()
         }
+        .overlay(alignment: .topLeading) {
+            CalendarSyncCoordinator()
+        }
         .alert(
             "Something went wrong",
             isPresented: Binding(
@@ -195,7 +231,6 @@ struct RootView: View {
         } message: {
             Text(launchError ?? "")
         }
-        .preferredColorScheme(.light)
     }
 
     private func migrateFSRSIfNeeded() {
@@ -270,11 +305,36 @@ struct RootView: View {
 
     private func preparePersistentStateIfNeeded() {
         guard triggerAutomaticBackupIfNeeded() else { return }
+        mergeHistoricalEvidenceIfNeeded()
         synchronizeCurriculumIfNeeded()
         migrateFSRSIfNeeded()
         normalizeLegacySessionsIfNeeded()
         reconcileAchievementsIfNeeded()
         recomputeProgressionIfNeeded()
+    }
+
+    private func mergeHistoricalEvidenceIfNeeded() {
+        guard !hasMergedHistoricalEvidence else { return }
+        hasMergedHistoricalEvidence = true
+        let backupRoot = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("IBVault Backups", isDirectory: true)
+        let directory = ((try? FileManager.default.contentsOfDirectory(
+            at: backupRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: .skipsHiddenFiles
+        )) ?? [])
+            .filter { $0.lastPathComponent.hasPrefix("backup_") }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            .first
+        guard let directory,
+              FileManager.default.fileExists(atPath: directory.appendingPathComponent("backup_meta.json").path),
+              !UserDefaults.standard.bool(forKey: "IBVaultHistoricalEvidenceMerged.v1") else { return }
+        do {
+            try BackupService.mergeHistoricalEvidence(from: directory, context: context)
+            UserDefaults.standard.set(true, forKey: "IBVaultHistoricalEvidenceMerged.v1")
+        } catch {
+            launchError = "Could not recover historical study evidence: \(error.localizedDescription)"
+        }
     }
 
     @discardableResult
@@ -296,10 +356,12 @@ struct RootView: View {
 #if os(macOS)
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Keep AppKit chrome, menus, sheets, and SwiftUI semantic controls in
+        // the same light appearance as the product palette.
+        NSApp.appearance = NSAppearance(named: .aqua)
+
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-
-        NotificationService.requestPermission()
 
         // A restored window frame can land off-screen or be taller than the
         // visible display, which makes the top (title bar, menus) unreachable.

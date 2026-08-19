@@ -5,12 +5,12 @@ import AppKit
 #endif
 
 enum NavigationTab: String, CaseIterable, Hashable {
-    case dashboard = "Dashboard"
+    case dashboard = "Today"
     case subjects = "Subjects"
-    case studySessions = "Study Sessions"
+    case studySessions = "Sessions"
     case review = "Review"
     case aria = "ARIA"
-    case analytics = "Analytics"
+    case analytics = "Progress"
     case recommendations = "Recommendations"
     case predictions = "Predictions"
     case profile = "Profile"
@@ -42,7 +42,7 @@ struct ContentView: View {
     @State private var progressionEvents = ProgressionEventCenter()
 
     private var dueCount: Int {
-        reviewQueueManager.totalDueCount
+        reviewQueueManager.totalDueBacklogCount
     }
 
     private func sidebarBadge(for tab: NavigationTab) -> Text? {
@@ -94,15 +94,17 @@ struct ContentView: View {
     }
 
     private func sidebarRow(_ tab: NavigationTab) -> some View {
-        Label {
-            Text(tab.rawValue)
-                .font(.system(size: 13, weight: .medium))
-        } icon: {
-            Image(systemName: tab.icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(selectedTab == tab ? IBColors.electricBlue : IBColors.secondaryText)
-        }
-        .overlay(alignment: .trailing) {
+        HStack(spacing: 9) {
+            Label {
+                Text(tab.rawValue)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+            } icon: {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(selectedTab == tab ? IBColors.electricBlue : IBColors.secondaryText)
+            }
+            Spacer(minLength: 4)
             if let badge = sidebarBadge(for: tab) {
                 badge
                     .font(.caption2.weight(.bold))
@@ -110,99 +112,66 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
-        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .frame(height: 34)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(selectedTab == tab ? IBColors.electricBlue.opacity(0.11) : Color.clear)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(selectedTab == tab ? IBColors.surfaceHover : Color.clear)
         )
         .contentShape(Rectangle())
     }
 
     private var sidebarList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+        List {
+            Section {
                 HStack(spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(IBGradient.accent)
-                            .frame(width: 34, height: 34)
-                            .shadow(color: IBColors.electricBlue.opacity(0.35), radius: 8, x: 0, y: 3)
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(IBColors.electricBlue)
+                            .frame(width: 30, height: 30)
                         Image(systemName: "books.vertical.fill")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(.white)
                     }
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("IB Vault")
+                        Text("Noot Study")
                             .font(.system(size: 14.5, weight: .bold))
                             .foregroundStyle(IBColors.ink)
-                        Text("Study studio")
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(IBColors.secondaryText)
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 14)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
 
-                sidebarSectionHeader("WORKSPACE")
                 ForEach([
                     NavigationTab.dashboard,
-                    .subjects,
                     .studySessions,
-                    .review
-                ], id: \.self) { tab in
-                    sidebarButton(tab)
-                }
-
-                sidebarSectionHeader("ASSISTANT")
-                sidebarButton(.aria)
-
-                sidebarSectionHeader("INSIGHTS")
-                ForEach([
-                    NavigationTab.analytics,
+                    .review,
+                    .subjects,
+                    .aria,
+                    .analytics,
                     .recommendations,
                     .predictions
                 ], id: \.self) { tab in
                     sidebarButton(tab)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
-
-                sidebarSectionHeader("SYSTEM")
-                sidebarButton(.settings)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
         }
-        .scrollIndicators(.hidden)
-        .background(IBColors.canvas.opacity(0.45))
+        .listStyle(.sidebar)
+        .background(IBColors.canvasDeep)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             sidebarFooter
         }
-        .navigationTitle("IB Vault")
+        .navigationTitle("Noot Study")
         #if os(macOS)
-        .navigationSplitViewColumnWidth(min: 210, ideal: 232, max: 300)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         #endif
-        .toolbar {
-            #if os(macOS)
-            ToolbarItem(placement: .navigation) {
-                Button(action: toggleSidebar) {
-                    Image(systemName: "sidebar.left")
-                }
-                .help("Toggle Sidebar")
-            }
-            #endif
-        }
-    }
-
-    private func sidebarSectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(IBTypography.eyebrow(size: 9.5))
-            .tracking(0.9)
-            .foregroundStyle(IBColors.tertiaryText)
-            .padding(.horizontal, 12)
-            .padding(.top, 14)
-            .padding(.bottom, 5)
     }
 
     private var sidebarFooter: some View {
@@ -212,6 +181,22 @@ struct ContentView: View {
         return VStack(spacing: 0) {
             Divider()
                 .opacity(0.6)
+            Button {
+                selectedTab = .settings
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(selectedTab == .settings ? IBColors.electricBlue : IBColors.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(selectedTab == .settings ? IBColors.surfaceHover : Color.clear)
+                    )
+            }
+            .buttonStyle(.plain)
+
             HStack(spacing: 10) {
                 Button {
                     selectedTab = .profile
@@ -219,8 +204,8 @@ struct ContentView: View {
                     HStack(spacing: 10) {
                         ZStack {
                             Circle()
-                                .fill(IBGradient.accent)
-                                .frame(width: 30, height: 30)
+                                .fill(IBColors.electricBlue)
+                                .frame(width: 28, height: 28)
                             Text(initial)
                                 .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
@@ -244,10 +229,10 @@ struct ContentView: View {
                 .buttonStyle(.plain)
 
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
         }
-        .background(.bar)
+        .padding(8)
+        .background(IBColors.canvasDeep)
     }
 
     private var detailPane: some View {
@@ -258,7 +243,7 @@ struct ContentView: View {
             case .studySessions: StudyPlannerView()
             case .review: ReviewLaunchView()
             case .aria: ARIAChatView()
-            case .analytics: AnalyticsView()
+            case .analytics: ProgressHubView()
             case .recommendations: SmartRecommendationsView()
             case .predictions: PredictiveGradeView()
             case .profile: ProfileView()
@@ -268,6 +253,11 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(IBColors.canvas)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.cardBorder, lineWidth: 1))
+        .padding(10)
+        .background(IBColors.canvasDeep)
     }
 
     #if os(macOS)
@@ -305,6 +295,10 @@ struct ReviewLaunchView: View {
         queueManager.dueCards.count
     }
 
+    private var dueBacklogCount: Int {
+        queueManager.totalDueBacklogCount
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -316,17 +310,17 @@ struct ReviewLaunchView: View {
                         symbol: "brain.head.profile",
                         tint: IBColors.electricBlue
                     ) {
-                        StudioPill(title: dueCardsCount == 0 ? "QUEUE CLEAR" : "\(dueCardsCount) DUE", tint: dueCardsCount == 0 ? IBColors.success : IBColors.coral)
+                        StudioPill(title: dueBacklogCount == 0 ? "QUEUE CLEAR" : "\(dueBacklogCount) FLASHCARDS DUE", tint: dueBacklogCount == 0 ? IBColors.success : IBColors.coral)
                     }
 
                     HStack(spacing: 12) {
-                        StudioMetricTile(value: "\(dueCardsCount)", label: "Today", symbol: "clock.badge.exclamationmark", tint: dueCardsCount == 0 ? IBColors.success : IBColors.coral, detail: "Daily cap \(ReviewDailyLimitPolicy.maximumCards)")
-                        StudioMetricTile(value: "\(queueManager.deferredDueCount)", label: "Deferred", symbol: "calendar.badge.clock", tint: IBColors.electricBlue, detail: "Saved for later queues")
+                        StudioMetricTile(value: "\(dueBacklogCount)", label: "Flashcards due", symbol: "clock.badge.exclamationmark", tint: dueBacklogCount == 0 ? IBColors.success : IBColors.coral, detail: "All available to review")
+                        StudioMetricTile(value: "\(queueManager.reviewedTodayCount)", label: "Reviewed today", symbol: "checkmark.circle.fill", tint: IBColors.electricBlue, detail: "Completed cards")
                         StudioMetricTile(value: "\(eligibleCount)", label: "Saved cards", symbol: "square.stack.fill", tint: IBColors.teal, detail: "From studied material")
                     }
 
                     VStack(alignment: .leading, spacing: 18) {
-                        StudioSectionHeader("Your next review", subtitle: dueCardsCount == 0 ? "There is nothing scheduled for immediate review." : "Work through cards while recall is still effortful.", symbol: "play.rectangle.fill", tint: IBColors.electricBlue) {
+                        StudioSectionHeader("Your next review", subtitle: dueBacklogCount == 0 ? "There are no flashcards due right now." : "All \(dueBacklogCount) due flashcards are available now.", symbol: "play.rectangle.fill", tint: IBColors.electricBlue) {
                             EmptyView()
                         }
 
@@ -381,6 +375,9 @@ struct ReviewLaunchView: View {
                 queueManager.refreshDueCards(context: context)
             }) { ReviewSessionView() }
             .sheet(isPresented: $showGuide) { StudyGuideView(subject: nil, mode: .preSession) }
+            .task {
+                queueManager.refreshDueCards(context: context)
+            }
         }
     }
 
@@ -388,9 +385,6 @@ struct ReviewLaunchView: View {
         if studySessions.isEmpty {
             return "Finish a study session first. Revision should only come from material you actually studied."
         }
-        if queueManager.remainingDailyAllowance == 0 {
-            return "Today's recall cap is complete. Your remaining cards stay saved for the next queue."
-        }
-        return "Review one bounded queue of saved cards. Extra due cards are deferred automatically."
+        return "Review every flashcard currently due for spaced repetition."
     }
 }

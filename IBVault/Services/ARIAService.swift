@@ -1751,8 +1751,9 @@ class ARIAService {
 
         var changes: [String] = []
         if let dailyGoal = action.dailyGoal, dailyGoal > 0 {
-            profile.dailyGoal = dailyGoal
-            changes.append("daily goal to \(dailyGoal) cards")
+            let boundedGoal = min(max(dailyGoal, 5), ReviewDailyLimitPolicy.maximumCards)
+            profile.dailyGoal = boundedGoal
+            changes.append("daily goal to \(boundedGoal) cards")
         }
         if let target = action.targetIBScore, (1...45).contains(target) {
             profile.targetIBScore = target
@@ -1809,6 +1810,7 @@ class ARIAService {
             tags: (action.topics ?? []) + (action.subtopics ?? [])
         )
         context.insert(memory)
+        try context.save()
         return "Saved that to ARIA memory under \(category.rawValue)."
     }
 
@@ -2815,7 +2817,7 @@ class ARIAService {
 
         EFFICIENCY INSTRUCTIONS:
         - Reference only the user's actual saved grades, session history, weak topics, and explicit goals
-        - If cards are overdue, mention it proactively with urgency proportional to count
+        - If cards are overdue, distinguish the backlog from today's humane review allowance; never pressure the learner to clear the entire backlog at once
         - Prioritize weak topics first, then user-entered exam dates and recent assessment evidence
         - Calculate trends from the supplied numbers before describing an improvement or decline
         - Do not claim an exam weighting or predicted score impact unless the app snapshot contains that evidence
@@ -2946,8 +2948,13 @@ class ARIAService {
     private func buildAppStateSnapshot(context: ModelContext, queryProfile: QueryProfile) async -> String {
         let now = Date()
         var lines: [String] = []
+        var dailyReviewLimit = ReviewDailyLimitPolicy.maximumCards(for: .average)
 
         if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first {
+            dailyReviewLimit = ReviewDailyLimitPolicy.maximumCards(
+                for: profile.studyIntensity,
+                dailyGoal: profile.dailyGoal
+            )
             let studentName = profile.studentName.isEmpty ? "Student" : profile.studentName
             lines.append("- Student: \(studentName), \(profile.ibYear.shortLabel), target \(profile.targetIBScore)/45, intensity \(profile.studyIntensity.rawValue)")
             lines.append("- Momentum: streak \(profile.currentStreak), total XP \(profile.totalXP), rank \(profile.achievedStep.displayName), daily goal \(profile.dailyGoal) cards")
@@ -2958,7 +2965,7 @@ class ARIAService {
         let overdueDate = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
         let overduePredicate = #Predicate<StudyCard> { $0.nextReviewDate < overdueDate }
         let overdueCount = (try? context.fetchCount(FetchDescriptor(predicate: overduePredicate))) ?? 0
-        lines.append("- Review load: \(dueCount) due cards, \(overdueCount) overdue")
+        lines.append("- Review backlog: \(dueCount) due cards, \(overdueCount) overdue; today's humane ceiling is \(dailyReviewLimit) cards")
 
         var sessionDescriptor = FetchDescriptor<ReviewSession>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
         sessionDescriptor.fetchLimit = maxSnapshotReviewSessions
@@ -3705,7 +3712,7 @@ class ARIAService {
 
     // MARK: - Greeting
 
-    func generateGreeting(context: ModelContext) -> String {
+    func generateGreeting(readyCount: Int, deferredCount: Int) -> String {
         let now = Date()
         let hour = Calendar.current.component(.hour, from: now)
         let timeGreeting: String
@@ -3713,21 +3720,17 @@ class ARIAService {
         else if hour < 18 { timeGreeting = "Good afternoon" }
         else { timeGreeting = "Good evening" }
 
-        let duePredicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
-        let dueCount = (try? context.fetchCount(FetchDescriptor(predicate: duePredicate))) ?? 0
-
-        if dueCount > 0 {
-            let overdueDate = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
-            let overduePredicate = #Predicate<StudyCard> { $0.nextReviewDate < overdueDate }
-            let overdueCount = (try? context.fetchCount(FetchDescriptor(predicate: overduePredicate))) ?? 0
-
-            if overdueCount > 0 {
-                return "\(timeGreeting)! You have \(dueCount) cards due today, \(overdueCount) of them are overdue — want to tackle those first?"
+        if readyCount > 0 {
+            if deferredCount > 0 {
+                return "\(timeGreeting). \(readyCount) cards are ready today; \(deferredCount) more are safely deferred."
             }
-            return "\(timeGreeting)! You have \(dueCount) cards due today. Ready to start your review? 📚"
+            return "\(timeGreeting). \(readyCount) cards are ready for a focused review."
         }
 
-        return "\(timeGreeting)! You're all caught up — no cards due right now. Want to explore a new topic or review your grades? 🎯"
+        if deferredCount > 0 {
+            return "\(timeGreeting). Today's review allowance is complete; the remaining backlog can wait."
+        }
+        return "\(timeGreeting). You're caught up, so there is no review pressure right now."
     }
 
     // MARK: - Review Session Recording

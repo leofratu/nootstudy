@@ -131,10 +131,53 @@ struct ReviewQueueManagerTests {
         #expect(manager.dueCount(for: subject2) == 2)
         #expect(manager.dueCountPerSubject()[subject2.id.uuidString] == 2)
     }
+
+    @MainActor
+    @Test("All due cards remain available regardless of the profile daily goal")
+    func allDueCardsRemainAvailable() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: StudyCard.self,
+            Subject.self,
+            StudySession.self,
+            ReviewSession.self,
+            UserProfile.self,
+            configurations: config
+        )
+        let context = container.mainContext
+        let profile = UserProfile()
+        profile.dailyGoal = 18
+        context.insert(profile)
+
+        let past = Date().addingTimeInterval(-3600)
+        for index in 0..<56 {
+            let card = StudyCard(topicName: "Topic", front: "Question \(index)", back: "Answer \(index)")
+            card.nextReviewDate = past
+            context.insert(card)
+        }
+        try context.save()
+
+        let manager = ReviewQueueManager()
+        manager.refreshDueCardsSynchronously(context: context)
+
+        #expect(manager.totalDueBacklogCount == 56)
+        #expect(manager.dueCards.count == 56)
+        #expect(manager.deferredDueCount == 0)
+    }
 }
 
 @Suite("Daily Review Limit Policy")
 struct ReviewDailyLimitPolicyTests {
+    @Test("Daily maximum adapts to study intensity and respects a lower personal goal")
+    func adaptsDailyMaximum() {
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage) == 15)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .average) == 20)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .aboveAverage) == 25)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .intensive) == 30)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .intensive, dailyGoal: 10) == 10)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage, dailyGoal: 30) == 15)
+    }
+
     @Test("Daily queue caps unique cards and excludes cards already reviewed today")
     func capsDailyQueue() {
         let cards = (0..<45).map { index in
@@ -147,5 +190,48 @@ struct ReviewDailyLimitPolicyTests {
         #expect(limited.count == 23)
         #expect(limited.allSatisfy { !alreadyReviewed.contains($0.id) })
         #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: alreadyReviewed) == 23)
+    }
+}
+
+@Suite("Review Queue Recovery")
+struct ReviewQueueRecoveryTests {
+    @MainActor
+    @Test("refresh exposes all due cards")
+    func refreshExposesAllDueCards() throws {
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: .init(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        for index in 0..<3 {
+            let card = StudyCard(topicName: "Topic", front: "Q\(index)", back: "A\(index)")
+            card.nextReviewDate = Date.distantPast
+            context.insert(card)
+        }
+        let manager = ReviewQueueManager()
+        manager.refreshDueCardsSynchronously(context: context)
+        #expect(manager.totalDueBacklogCount == 3)
+    }
+
+    @Test("daily allowance never hides backlog")
+    func dailyAllowancePreservesBacklog() {
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set(), maximum: 30) == 30)
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set(repeating: UUID(), count: 0), maximum: 30) == 30)
+    }
+
+    @Test("intensity caps remain bounded")
+    func intensityCapsRemainBounded() {
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .intensive) == 30)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage, dailyGoal: 100) == 15)
+    }
+
+    @Test("limited cards preserve source order")
+    func limitedCardsPreserveSourceOrder() {
+        let cards = (0..<3).map { StudyCard(topicName: "Topic", front: "Q\($0)", back: "A\($0)") }
+        let limited = ReviewDailyLimitPolicy.limitedCards(cards, reviewedCardIDs: [], maximum: 2)
+        #expect(limited.map(\.front) == ["Q0", "Q1"])
+    }
+
+    @Test("zero allowance returns no cards")
+    func zeroAllowanceReturnsNoCards() {
+        let card = StudyCard(topicName: "Topic", front: "Q", back: "A")
+        #expect(ReviewDailyLimitPolicy.limitedCards([card], reviewedCardIDs: [], maximum: 0).isEmpty)
     }
 }

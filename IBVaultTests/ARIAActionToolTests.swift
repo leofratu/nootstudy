@@ -586,7 +586,7 @@ nonisolated enum E2EScenarioLibrary {
             seed: standardSeed,
             verify: { ctx in
                 let profile = try ctx.fetch(FetchDescriptor<UserProfile>()).first
-                return profile?.dailyGoal == 35
+                return profile?.dailyGoal == 30
             },
             summaryContains: ["daily goal"]
         ))
