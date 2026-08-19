@@ -228,4 +228,10 @@ struct ReviewQueueRecoveryTests {
         let limited = ReviewDailyLimitPolicy.limitedCards(cards, reviewedCardIDs: [], maximum: 2)
         #expect(limited.map(\.front) == ["Q0", "Q1"])
     }
+
+    @Test("zero allowance returns no cards")
+    func zeroAllowanceReturnsNoCards() {
+        let card = StudyCard(topicName: "Topic", front: "Q", back: "A")
+        #expect(ReviewDailyLimitPolicy.limitedCards([card], reviewedCardIDs: [], maximum: 0).isEmpty)
+    }
 }

@@ -39,3 +39,9 @@ tmp/
 
 # Local agent run logs may contain machine paths or private task context.
 repo_plan/runs/*/
+
+# Local planning metadata
+repo_plan/file_index.json
+repo_plan/rpg.json
+repo_plan/runs/*/
+IBVault.xcodeproj/xcuserdata/
