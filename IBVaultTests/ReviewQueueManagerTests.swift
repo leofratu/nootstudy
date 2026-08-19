@@ -192,3 +192,21 @@ struct ReviewDailyLimitPolicyTests {
         #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: alreadyReviewed) == 23)
     }
 }
+
+@Suite("Review Queue Recovery")
+struct ReviewQueueRecoveryTests {
+    @MainActor
+    @Test("refresh exposes all due cards")
+    func refreshExposesAllDueCards() throws {
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: .init(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        for index in 0..<3 {
+            let card = StudyCard(topicName: "Topic", front: "Q\(index)", back: "A\(index)")
+            card.nextReviewDate = Date.distantPast
+            context.insert(card)
+        }
+        let manager = ReviewQueueManager()
+        manager.refreshDueCardsSynchronously(context: context)
+        #expect(manager.totalDueBacklogCount == 3)
+    }
+}
