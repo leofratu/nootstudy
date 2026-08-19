@@ -28,6 +28,8 @@ final class ReviewQueueManager {
     // MARK: - Published State
     private(set) var dueCards: [StudyCard] = []
     private(set) var totalDueCount: Int = 0
+    /// Due cards remaining after today's reviewed cards.
+    private(set) var totalDueBacklogCount: Int = 0
     private(set) var backlogDueCount: Int = 0
     private(set) var deferredDueCount: Int = 0
     private(set) var reviewedTodayCount: Int = 0
@@ -85,23 +87,19 @@ final class ReviewQueueManager {
         do {
             let studiedScopes = fetchStudiedScopes(in: context)
             let fetched = try context.fetch(descriptor)
-            let scopeIndex = ScopeIndex(scopes: studiedScopes)
-            let filtered = scopeIndex.isEmpty ? fetched : filterCardsToScopes(fetched, matching: scopeIndex)
+            // The global review queue is intentionally not limited to the
+            // topics of past study sessions. A card can become due after its
+            // originating session, and all due cards must remain reviewable.
+            // Explicit subject/plan sessions apply their own scope filters.
+            let filtered = fetched
             let reviewedIDs = reviewedCardIDsToday(in: context)
-            let dailyMaximum = dailyMaximum(in: context)
-            let available = ReviewDailyLimitPolicy.limitedCards(
-                filtered,
-                reviewedCardIDs: reviewedIDs,
-                maximum: dailyMaximum
-            )
+            let available = filtered.filter { !reviewedIDs.contains($0.id) }
             lastRefreshError = nil
             reviewedTodayCount = reviewedIDs.count
-            remainingDailyAllowance = ReviewDailyLimitPolicy.allowance(
-                reviewedCardIDs: reviewedIDs,
-                maximum: dailyMaximum
-            )
+            remainingDailyAllowance = available.count
             backlogDueCount = filtered.filter { !reviewedIDs.contains($0.id) }.count
-            deferredDueCount = max(0, backlogDueCount - available.count)
+            deferredDueCount = 0
+            totalDueBacklogCount = backlogDueCount
             applyDueCardsSnapshot(available)
 
             // Cache the eligible pool count here (once per refresh) instead of
@@ -110,7 +108,7 @@ final class ReviewQueueManager {
                 eligibleCardCount = (try? context.fetchCount(FetchDescriptor<StudyCard>())) ?? 0
             } else {
                 let all = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
-                eligibleCardCount = filterCardsToScopes(all, matching: scopeIndex).count
+                eligibleCardCount = all.count
             }
         } catch {
             // Do not clear the queue: the previous snapshot is a better answer
@@ -129,7 +127,6 @@ final class ReviewQueueManager {
     func dueCardsForSubject(_ subject: Subject, context: ModelContext) -> [StudyCard] {
         let now = Date()
         let reviewedIDs = reviewedCardIDsToday(in: context)
-        let dailyMaximum = dailyMaximum(in: context)
         let studiedScopes = fetchStudiedScopes(in: context).filter { $0.subjectName == subject.name }
         let scopeIndex = ScopeIndex(scopes: studiedScopes)
 
@@ -137,21 +134,13 @@ final class ReviewQueueManager {
             let due = subject.cards
                 .filter { $0.nextReviewDate <= now }
                 .sorted { $0.nextReviewDate < $1.nextReviewDate }
-            return ReviewDailyLimitPolicy.limitedCards(
-                due,
-                reviewedCardIDs: reviewedIDs,
-                maximum: dailyMaximum
-            )
+            return due.filter { !reviewedIDs.contains($0.id) }
         }
 
         let due = filterCardsToScopes(subject.cards, matching: scopeIndex)
             .filter { $0.nextReviewDate <= now }
             .sorted { $0.nextReviewDate < $1.nextReviewDate }
-        return ReviewDailyLimitPolicy.limitedCards(
-            due,
-            reviewedCardIDs: reviewedIDs,
-            maximum: dailyMaximum
-        )
+        return due.filter { !reviewedIDs.contains($0.id) }
     }
 
     func dueCountPerSubject() -> [String: Int] {
@@ -182,17 +171,6 @@ final class ReviewQueueManager {
         let predicate = #Predicate<ReviewSession> { $0.timestamp >= start }
         let reviews = (try? context.fetch(FetchDescriptor<ReviewSession>(predicate: predicate))) ?? []
         return Set(reviews.lazy.map(\.cardID))
-    }
-
-    private func dailyMaximum(in context: ModelContext) -> Int {
-        let profile = (try? context.fetch(FetchDescriptor<UserProfile>()))?.first
-        guard let profile else {
-            return ReviewDailyLimitPolicy.maximumCards(for: .average)
-        }
-        return ReviewDailyLimitPolicy.maximumCards(
-            for: profile.studyIntensity,
-            dailyGoal: profile.dailyGoal
-        )
     }
 
     private func applyDueCardsSnapshot(_ cards: [StudyCard]) {
