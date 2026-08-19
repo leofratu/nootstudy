@@ -138,9 +138,15 @@ enum NotificationService {
         
         let now = Date()
         let predicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
-        
-        guard let dueCards = try? context.fetch(FetchDescriptor(predicate: predicate)),
-              !dueCards.isEmpty else { return }
+
+        let startOfDay = IBLocalClock.calendar.startOfDay(for: IBLocalClock.now)
+        let reviewedPredicate = #Predicate<ReviewSession> { $0.timestamp >= startOfDay }
+        let reviewedIDs = Set((try? context.fetch(FetchDescriptor<ReviewSession>(predicate: reviewedPredicate)))?.map(\.cardID) ?? [])
+        let dueCards = (try? context.fetch(FetchDescriptor(predicate: predicate)))?.filter { !reviewedIDs.contains($0.id) } ?? []
+
+        guard !dueCards.isEmpty else {
+            return
+        }
         
         let grouped = Dictionary(grouping: dueCards) { $0.subject?.name ?? "Unknown" }
         let summary = grouped.map { "\($0.value.count) \($0.key)" }.joined(separator: ", ")
