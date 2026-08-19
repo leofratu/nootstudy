@@ -221,4 +221,11 @@ struct ReviewQueueRecoveryTests {
         #expect(ReviewDailyLimitPolicy.maximumCards(for: .intensive) == 30)
         #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage, dailyGoal: 100) == 15)
     }
+
+    @Test("limited cards preserve source order")
+    func limitedCardsPreserveSourceOrder() {
+        let cards = (0..<3).map { StudyCard(topicName: "Topic", front: "Q\($0)", back: "A\($0)") }
+        let limited = ReviewDailyLimitPolicy.limitedCards(cards, reviewedCardIDs: [], maximum: 2)
+        #expect(limited.map(\.front) == ["Q0", "Q1"])
+    }
 }
