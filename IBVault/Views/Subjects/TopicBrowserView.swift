@@ -340,14 +340,18 @@ struct TopicBrowserView: View {
                     .font(.caption)
                     .foregroundStyle(IBColors.secondaryText)
 
-                Picker("Cards per subunit", selection: $cardsPerSubtopic) {
-                    ForEach(coverageCardCounts, id: \.self) { count in
-                        Text("\(count)").tag(count)
+                VStack(alignment: .leading, spacing: 2) {
+                    Slider(value: Binding(get: { Double(cardsPerSubtopic) }, set: { cardsPerSubtopic = Int($0.rounded()) }), in: 2...5, step: 1)
+                    HStack {
+                        Text("2").font(.caption2)
+                        Spacer()
+                        Text("\(cardsPerSubtopic) cards").font(.caption.weight(.semibold))
+                        Spacer()
+                        Text("5").font(.caption2)
                     }
+                    .foregroundStyle(IBColors.secondaryText)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 132)
+                .frame(width: 170)
 
                 Spacer(minLength: 8)
 

@@ -113,6 +113,20 @@ struct SettingsView: View {
         )
     }
 
+    private var reasoningEffortSlider: Binding<Double> {
+        Binding(
+            get: {
+                let options = AIConfiguration.supportedReasoningEfforts(for: selectedProvider)
+                return Double(max(options.firstIndex(of: selectedReasoningEffort.wrappedValue) ?? 0, 0))
+            },
+            set: {
+                let options = AIConfiguration.supportedReasoningEfforts(for: selectedProvider)
+                guard !options.isEmpty else { return }
+                selectedReasoningEffort.wrappedValue = options[min(max(Int($0.rounded()), 0), options.count - 1)]
+            }
+        )
+    }
+
     private var selectedVerbosity: Binding<AIResponseVerbosity> {
         Binding(
             get: { AIResponseVerbosity(rawValue: verbosityRaw) ?? .medium },
@@ -303,16 +317,21 @@ struct SettingsView: View {
                             HStack(spacing: 14) {
                                 Label("Study intensity", systemImage: "gauge.with.dots.needle.67percent")
                                     .frame(width: 150, alignment: .leading)
-                                Picker("Study intensity", selection: Binding(
-                                    get: { profile.studyIntensity },
-                                    set: { profile.studyIntensity = $0; persistChanges() }
-                                )) {
-                                    ForEach(StudyIntensity.allCases, id: \.self) { intensity in
-                                        Text("\(intensity.emoji)  \(intensity.rawValue)").tag(intensity)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Slider(value: Binding(
+                                        get: { Double(StudyIntensity.allCases.firstIndex(of: profile.studyIntensity) ?? 1) },
+                                        set: { profile.studyIntensity = StudyIntensity.allCases[min(max(Int($0.rounded()), 0), StudyIntensity.allCases.count - 1)]; persistChanges() }
+                                    ), in: 0...Double(StudyIntensity.allCases.count - 1), step: 1)
+                                    HStack {
+                                        ForEach(StudyIntensity.allCases, id: \.self) { intensity in
+                                            Text("\(intensity.emoji) \(intensity.rawValue)")
+                                                .font(.caption2)
+                                                .foregroundStyle(profile.studyIntensity == intensity ? IBColors.ink : IBColors.secondaryText)
+                                                .frame(maxWidth: .infinity)
+                                        }
                                     }
                                 }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
+                                .frame(maxWidth: 360)
                                 Spacer()
                                 Text("\(profile.studyIntensity.dailyCardSuggestion) cards/day")
                                     .font(.caption)
@@ -648,12 +667,21 @@ struct SettingsView: View {
             }
 
             if selectedProvider != .gemini {
-                Picker("Reasoning effort", selection: selectedReasoningEffort) {
-                    ForEach(AIConfiguration.supportedReasoningEfforts(for: selectedProvider)) { effort in
-                        Text(effort.displayName).tag(effort)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text("Reasoning effort")
+                        Spacer()
+                        Text(selectedReasoningEffort.wrappedValue.displayName)
+                            .font(.caption.weight(.semibold))
+                    }
+                    let options = AIConfiguration.supportedReasoningEfforts(for: selectedProvider)
+                    Slider(value: reasoningEffortSlider, in: 0...Double(max(options.count - 1, 0)), step: 1)
+                    HStack {
+                        ForEach(options) { effort in
+                            Text(effort.displayName).font(.caption2).frame(maxWidth: .infinity)
+                        }
                     }
                 }
-                .pickerStyle(.menu)
 
                 Text(selectedReasoningEffort.wrappedValue.detail)
                     .font(.caption)
