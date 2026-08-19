@@ -28,6 +28,8 @@ struct SettingsView: View {
     @State private var latestBackupDate: Date?
     @State private var showResetConfirmation = false
     @State private var isResetting = false
+    @State private var showPlaceholderCleanupConfirmation = false
+    @State private var isCleaningPlaceholders = false
     @State private var profileSaveTask: Task<Void, Never>?
 
     // ARIA Settings
@@ -1269,6 +1271,21 @@ struct SettingsView: View {
     // MARK: - Data
     private var dataSection: some View {
         Section {
+            Button {
+                showPlaceholderCleanupConfirmation = true
+            } label: {
+                Label("Delete Generated Placeholder Cards", systemImage: "rectangle.stack.badge.minus")
+            }
+            .disabled(isCleaningPlaceholders || placeholderCardCount == 0)
+            .alert("Delete Generated Placeholder Cards?", isPresented: $showPlaceholderCleanupConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete \(placeholderCardCount) Cards", role: .destructive) {
+                    deletePlaceholderCards()
+                }
+            } message: {
+                Text("This removes only cards whose front starts with ‘What are the key concepts and learning objectives for’. A backup is saved first; custom and reviewed cards are not selected.")
+            }
+
             Button("Reset All Data", role: .destructive) {
                 showResetConfirmation = true
             }
@@ -1283,6 +1300,35 @@ struct SettingsView: View {
         } header: {
             Label("Data", systemImage: "trash")
         }
+    }
+
+    private var placeholderCardCount: Int {
+        subjects.flatMap(\.cards).filter { card in
+            card.front.hasPrefix("What are the key concepts and learning objectives for ")
+        }.count
+    }
+
+    private func deletePlaceholderCards() {
+        guard !isCleaningPlaceholders else { return }
+        isCleaningPlaceholders = true
+        do {
+            _ = try BackupService.exportBackup(context: context)
+            let cards = subjects.flatMap(\.cards).filter {
+                $0.front.hasPrefix("What are the key concepts and learning objectives for ")
+            }
+            for card in cards {
+                card.subject?.cards.removeAll { $0.id == card.id }
+                context.delete(card)
+            }
+            try context.save()
+            backupStatus = "Deleted \(cards.count) generated placeholder cards (backup saved first)."
+            IBHaptics.success()
+        } catch {
+            context.rollback()
+            backupStatus = "Placeholder cleanup failed: \(error.localizedDescription)"
+            IBHaptics.error()
+        }
+        isCleaningPlaceholders = false
     }
     
     private func resetAllData() {
