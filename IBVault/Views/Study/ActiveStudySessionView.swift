@@ -276,7 +276,7 @@ struct ActiveStudySessionView: View {
     }
 
     private func prepareFlashcardsIfRequested() {
-        guard plan.prepareFlashcards, !didPrepareFlashcards else { return }
+        guard plan.prepareFlashcards == true, !didPrepareFlashcards else { return }
         didPrepareFlashcards = true
         selectedTab = .flashcards
         generateFlashcards()
@@ -324,12 +324,12 @@ struct ActiveStudySessionView: View {
             FocusRhythmView()
 
             Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .frame(width: 22, height: 22)
+                Label("Close", systemImage: "xmark")
             }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("Close study session")
+                .keyboardShortcut(.cancelAction)
         }
     }
 
