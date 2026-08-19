@@ -37,6 +37,8 @@ struct DashboardView: View {
     /// disagree with the cards the review sheet could actually present.
     private var dueCards: [StudyCard] { queueManager.dueCards }
 
+    private var dueBacklogCount: Int { queueManager.totalDueBacklogCount }
+
     private var sortedSubjects: [Subject] {
         subjects.sorted { $0.name < $1.name }
     }
@@ -103,10 +105,9 @@ struct DashboardView: View {
 
     private func updateGreeting() {
         let readyCount: Int = queueManager.totalDueCount
-        let deferredCount: Int = queueManager.deferredDueCount
         let greeting: String = ariaService.generateGreeting(
             readyCount: readyCount,
-            deferredCount: deferredCount
+            deferredCount: 0
         )
         greetingText = greeting
     }
@@ -153,8 +154,8 @@ struct DashboardView: View {
     }
 
     private var headerSubtitle: String {
-        if !dueCards.isEmpty {
-            return "\(dueCards.count) report-based cards are ready for spaced review."
+        if dueBacklogCount > 0 {
+            return "\(dueBacklogCount) flashcards are due and available for review."
         }
         if studySessions.isEmpty {
             return "Your report baseline is loaded. Start with a focused study block or build more recall cards."
@@ -197,11 +198,11 @@ struct DashboardView: View {
     private var metricsGrid: some View {
         LazyVGrid(columns: metricColumns, spacing: 12) {
             StudioMetricTile(
-                value: "\(dueCards.count)",
-                label: "Due now",
+                value: "\(dueBacklogCount)",
+                label: "Flashcards due",
                 symbol: "clock.badge.exclamationmark",
-                tint: dueCards.isEmpty ? IBColors.success : IBColors.coral,
-                detail: dueCards.isEmpty ? "Queue clear" : "Ready to review"
+                tint: dueBacklogCount == 0 ? IBColors.success : IBColors.coral,
+                detail: dueBacklogCount == 0 ? "Queue clear" : "All available now"
             )
             StudioMetricTile(
                 value: "\(profile?.currentStreak ?? 0)d",
