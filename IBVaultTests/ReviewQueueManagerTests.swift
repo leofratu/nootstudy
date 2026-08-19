@@ -213,7 +213,7 @@ struct ReviewQueueRecoveryTests {
     @Test("daily allowance never hides backlog")
     func dailyAllowancePreservesBacklog() {
         #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set(), maximum: 30) == 30)
-        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set(repeating: UUID(), count: 0), maximum: 30) == 30)
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: Set<UUID>(), maximum: 30) == 30)
     }
 
     @Test("intensity caps remain bounded")
