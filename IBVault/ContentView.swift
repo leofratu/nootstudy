@@ -42,7 +42,7 @@ struct ContentView: View {
     @State private var progressionEvents = ProgressionEventCenter()
 
     private var dueCount: Int {
-        reviewQueueManager.totalDueCount
+        reviewQueueManager.totalDueBacklogCount
     }
 
     private func sidebarBadge(for tab: NavigationTab) -> Text? {
@@ -94,15 +94,17 @@ struct ContentView: View {
     }
 
     private func sidebarRow(_ tab: NavigationTab) -> some View {
-        Label {
-            Text(tab.rawValue)
-                .font(.system(size: 13, weight: .medium))
-        } icon: {
-            Image(systemName: tab.icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(selectedTab == tab ? IBColors.electricBlue : IBColors.secondaryText)
-        }
-        .overlay(alignment: .trailing) {
+        HStack(spacing: 9) {
+            Label {
+                Text(tab.rawValue)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+            } icon: {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(selectedTab == tab ? IBColors.electricBlue : IBColors.secondaryText)
+            }
+            Spacer(minLength: 4)
             if let badge = sidebarBadge(for: tab) {
                 badge
                     .font(.caption2.weight(.bold))
@@ -121,8 +123,8 @@ struct ContentView: View {
     }
 
     private var sidebarList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 4) {
+        List {
+            Section {
                 HStack(spacing: 12) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 6)
@@ -141,6 +143,8 @@ struct ContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
                 .padding(.bottom, 14)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
 
                 ForEach([
                     NavigationTab.dashboard,
@@ -148,33 +152,26 @@ struct ContentView: View {
                     .review,
                     .subjects,
                     .aria,
-                    .analytics
+                    .analytics,
+                    .recommendations,
+                    .predictions
                 ], id: \.self) { tab in
                     sidebarButton(tab)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
         }
-        .scrollIndicators(.hidden)
+        .listStyle(.sidebar)
         .background(IBColors.canvasDeep)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             sidebarFooter
         }
         .navigationTitle("Noot Study")
         #if os(macOS)
-        .navigationSplitViewColumnWidth(min: 188, ideal: 204, max: 232)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         #endif
-        .toolbar {
-            #if os(macOS)
-            ToolbarItem(placement: .navigation) {
-                Button(action: toggleSidebar) {
-                    Image(systemName: "sidebar.left")
-                }
-                .help("Toggle Sidebar")
-            }
-            #endif
-        }
     }
 
     private var sidebarFooter: some View {
@@ -298,6 +295,10 @@ struct ReviewLaunchView: View {
         queueManager.dueCards.count
     }
 
+    private var dueBacklogCount: Int {
+        queueManager.totalDueBacklogCount
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -309,17 +310,17 @@ struct ReviewLaunchView: View {
                         symbol: "brain.head.profile",
                         tint: IBColors.electricBlue
                     ) {
-                        StudioPill(title: dueCardsCount == 0 ? "QUEUE CLEAR" : "\(dueCardsCount) DUE", tint: dueCardsCount == 0 ? IBColors.success : IBColors.coral)
+                        StudioPill(title: dueBacklogCount == 0 ? "QUEUE CLEAR" : "\(dueBacklogCount) FLASHCARDS DUE", tint: dueBacklogCount == 0 ? IBColors.success : IBColors.coral)
                     }
 
                     HStack(spacing: 12) {
-                        StudioMetricTile(value: "\(dueCardsCount)", label: "Today", symbol: "clock.badge.exclamationmark", tint: dueCardsCount == 0 ? IBColors.success : IBColors.coral, detail: "Daily cap \(ReviewDailyLimitPolicy.maximumCards)")
-                        StudioMetricTile(value: "\(queueManager.deferredDueCount)", label: "Deferred", symbol: "calendar.badge.clock", tint: IBColors.electricBlue, detail: "Saved for later queues")
+                        StudioMetricTile(value: "\(dueBacklogCount)", label: "Flashcards due", symbol: "clock.badge.exclamationmark", tint: dueBacklogCount == 0 ? IBColors.success : IBColors.coral, detail: "All available to review")
+                        StudioMetricTile(value: "\(queueManager.reviewedTodayCount)", label: "Reviewed today", symbol: "checkmark.circle.fill", tint: IBColors.electricBlue, detail: "Completed cards")
                         StudioMetricTile(value: "\(eligibleCount)", label: "Saved cards", symbol: "square.stack.fill", tint: IBColors.teal, detail: "From studied material")
                     }
 
                     VStack(alignment: .leading, spacing: 18) {
-                        StudioSectionHeader("Your next review", subtitle: dueCardsCount == 0 ? "There is nothing scheduled for immediate review." : "Work through cards while recall is still effortful.", symbol: "play.rectangle.fill", tint: IBColors.electricBlue) {
+                        StudioSectionHeader("Your next review", subtitle: dueBacklogCount == 0 ? "There are no flashcards due right now." : "All \(dueBacklogCount) due flashcards are available now.", symbol: "play.rectangle.fill", tint: IBColors.electricBlue) {
                             EmptyView()
                         }
 
@@ -374,6 +375,9 @@ struct ReviewLaunchView: View {
                 queueManager.refreshDueCards(context: context)
             }) { ReviewSessionView() }
             .sheet(isPresented: $showGuide) { StudyGuideView(subject: nil, mode: .preSession) }
+            .task {
+                queueManager.refreshDueCards(context: context)
+            }
         }
     }
 
@@ -381,9 +385,6 @@ struct ReviewLaunchView: View {
         if studySessions.isEmpty {
             return "Finish a study session first. Revision should only come from material you actually studied."
         }
-        if queueManager.remainingDailyAllowance == 0 {
-            return "Today's recall cap is complete. Your remaining cards stay saved for the next queue."
-        }
-        return "Review one bounded queue of saved cards. Extra due cards are deferred automatically."
+        return "Review every flashcard currently due for spaced repetition."
     }
 }
