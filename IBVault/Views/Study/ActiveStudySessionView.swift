@@ -1482,6 +1482,12 @@ struct ActiveStudySessionView: View {
 
                 await MainActor.run {
                     generatedCards.append(contentsOf: generatedBatch)
+                    // Persist the generated batch immediately. A session can
+                    // be dismissed before the learner taps Save, so generated
+                    // cards must not exist only in transient view state.
+                    for card in generatedBatch where !savedCardIDs.contains(card.id) {
+                        _ = saveCardToSubject(card)
+                    }
                     isGeneratingCards = false
                 }
             } catch {

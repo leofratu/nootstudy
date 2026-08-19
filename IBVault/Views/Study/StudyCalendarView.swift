@@ -41,7 +41,10 @@ struct StudyCalendarView: View {
         let calendar = IBLocalClock.calendar
         let start = calendar.startOfDay(for: currentWeekStart)
         let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
-        return plans.filter { !$0.isCompleted && $0.scheduledDate >= start && $0.scheduledDate < end }
+        // Historical sessions remain part of the timeline. Completion is shown
+        // as state on the block; it must not make the session disappear when
+        // the learner navigates back to its week.
+        return plans.filter { $0.scheduledDate >= start && $0.scheduledDate < end }
     }
 
     private var totalMinutes: Int { weekPlans.reduce(0) { $0 + $1.durationMinutes } }
@@ -200,6 +203,11 @@ struct StudyCalendarView: View {
                     Text("\(plan.durationMinutes)m")
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(IBColors.secondaryText)
+                }
+                if plan.isCompleted {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(IBColors.success)
+                        .help("Completed session")
                 }
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
