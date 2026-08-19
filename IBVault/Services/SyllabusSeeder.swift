@@ -244,51 +244,9 @@ nonisolated struct SyllabusSeeder {
             context.delete(node)
         }
 
-        // Remove generic placeholder cards from early builds. They were topic
-        // indexes disguised as cards and distorted mastery and review queues.
-        let placeholderCards = ((try? context.fetch(FetchDescriptor<StudyCard>())) ?? []).filter {
-            $0.front.hasPrefix("What are the key concepts and learning objectives for ") &&
-                $0.back.hasPrefix("This topic covers:")
-        }
-        for card in placeholderCards {
-            card.subject?.cards.removeAll { $0.id == card.id }
-            context.delete(card)
-        }
-
-        // Early offline batches saved prompts whose backs were instructions
-        // ("draw a diagram", "define..."), not answers. Remove those generated
-        // artifacts and collapse exact repeated questions while preserving
-        // custom cards and the most-reviewed copy.
-        let allCards = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
-        let unusable = allCards.filter {
-            $0.generationSource == "Local syllabus starter" &&
-                !CardGeneratorService.isUsefulAnswer(front: $0.front, back: $0.back)
-        }
-        let unusableIDs = Set(unusable.map(\.id))
-        for card in unusable {
-            card.subject?.cards.removeAll { $0.id == card.id }
-            context.delete(card)
-        }
-
-        var keptByQuestion: [String: StudyCard] = [:]
-        for card in allCards where !card.isCustom && !unusableIDs.contains(card.id) {
-            let subjectID = card.subject?.id.uuidString ?? "unassigned"
-            let normalizedFront = card.front.lowercased()
-                .components(separatedBy: CharacterSet.alphanumerics.inverted)
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
-            let key = [subjectID, card.topicName.lowercased(), card.subtopic.lowercased(), normalizedFront]
-                .joined(separator: "|")
-            if let kept = keptByQuestion[key] {
-                let shouldReplace = card.totalReviewCount > kept.totalReviewCount
-                let duplicate = shouldReplace ? kept : card
-                if shouldReplace { keptByQuestion[key] = card }
-                duplicate.subject?.cards.removeAll { $0.id == duplicate.id }
-                context.delete(duplicate)
-            } else {
-                keptByQuestion[key] = card
-            }
-        }
+        // Existing cards are user data. Do not remove or deduplicate them
+        // during curriculum synchronization; older builds stored useful cards
+        // under generic prompts, and users must be able to recover that work.
 
         do {
             try context.save()
