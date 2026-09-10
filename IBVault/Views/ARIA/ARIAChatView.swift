@@ -250,7 +250,7 @@ struct ARIAChatView: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 7)
-                        .fill(IBColors.electricBlue)
+                        .fill(IBColors.accentFill)
                         .frame(width: 34, height: 34)
                     Image(systemName: "sparkles")
                         .font(.system(size: 13, weight: .bold))
@@ -262,12 +262,12 @@ struct ARIAChatView: View {
                     Text("STUDY COMPANION")
                         .font(.system(size: 9, weight: .bold, design: .rounded))
                         .tracking(0.6)
-                        .foregroundStyle(IBColors.teal)
+                        .foregroundStyle(IBColors.inkTertiary)
                 }
                 Spacer(minLength: 4)
                 Text("\(visibleSessions.count)")
                     .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(Capsule().fill(IBColors.canvas))
@@ -336,7 +336,7 @@ struct ARIAChatView: View {
 
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.electricBlue)
+                    .fill(IBColors.accentFill)
                     .frame(width: 50, height: 50)
                 Image(systemName: "sparkles")
                     .font(.system(size: 20, weight: .semibold))
@@ -1005,7 +1005,7 @@ private struct ARIAChatFailureRow: View {
 
                 Text(failure.message)
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 8) {
@@ -1022,7 +1022,7 @@ private struct ARIAChatFailureRow: View {
                             Label("Retry", systemImage: "arrow.clockwise")
                         }
                         .buttonStyle(.bordered)
-                        .tint(IBColors.electricBlue)
+                        .tint(IBColors.accentFill)
                         .controlSize(.small)
                     }
                 }
@@ -1051,11 +1051,11 @@ private struct ARIAThinkingIndicator: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(IBColors.electricBlue.opacity(0.12))
+                    .fill(IBColors.surfaceHover)
                     .frame(width: 30, height: 30)
                 Image(systemName: "sparkles")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accentFill)
             }
             HStack(spacing: 9) {
                 ProgressView().controlSize(.small)
@@ -1070,7 +1070,7 @@ private struct ARIAThinkingIndicator: View {
                     .fill(IBColors.surface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                            .stroke(IBColors.border, lineWidth: 1)
                     )
             )
             Spacer()
@@ -1085,26 +1085,26 @@ private struct ARIAChatSessionRow: View {
     var body: some View {
         HStack(spacing: 9) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(isSelected ? IBColors.electricBlue : Color.clear)
+                .fill(isSelected ? IBColors.accentFill : Color.clear)
                 .frame(width: 3, height: 44)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(session.title)
                         .font(.callout.weight(.semibold))
-                        .foregroundStyle(isSelected ? IBColors.electricBlue : IBColors.ink)
+                        .foregroundStyle(isSelected ? IBColors.accentFill : IBColors.ink)
                         .lineLimit(2)
                         .help(session.title)
                     Spacer(minLength: 4)
                     Text(RelativeTimeHelper.string(for: session.updatedAt))
                         .font(.caption2)
-                        .foregroundStyle(IBColors.tertiaryText)
+                        .foregroundStyle(IBColors.inkTertiary)
                         .lineLimit(1)
                 }
 
                 Text(session.lastMessagePreview.isEmpty ? "No messages yet" : session.lastMessagePreview)
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .lineLimit(2)
                     .help(session.lastMessagePreview)
             }
@@ -1114,7 +1114,7 @@ private struct ARIAChatSessionRow: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? IBColors.electricBlue.opacity(0.08) : Color.clear)
+                .fill(isSelected ? IBColors.accentFill.opacity(0.08) : Color.clear)
         )
     }
 }
@@ -1135,7 +1135,7 @@ struct MessageRow: View {
                             MessageCopyButton(text: message.content)
                             Text("You")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(IBColors.secondaryText)
+                                .foregroundStyle(IBColors.inkSecondary)
                         }
                         Text(message.content)
                             .lineSpacing(3)
@@ -1145,7 +1145,7 @@ struct MessageRow: View {
                             .padding(.vertical, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(IBColors.electricBlue)
+                                    .fill(IBColors.accentFill)
                             )
                     }
                     .frame(maxWidth: 590, alignment: .trailing)
@@ -1158,7 +1158,7 @@ struct MessageRow: View {
                         HStack(spacing: 6) {
                             Text("ARIA")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(IBColors.electricBlue)
+                                .foregroundStyle(IBColors.accentFill)
                             MessageCopyButton(text: message.content)
                         }
                         FormattedMessageContent(text: message.content, preferRichRendering: true)
@@ -1176,7 +1176,7 @@ struct MessageRow: View {
     private var ariaAvatar: some View {
         ZStack {
             Circle()
-                .fill(IBColors.electricBlue)
+                .fill(IBColors.accentFill)
                 .frame(width: 30, height: 30)
             Image(systemName: "sparkles")
                 .font(.system(size: 13, weight: .semibold))
@@ -1187,11 +1187,11 @@ struct MessageRow: View {
     private var userAvatar: some View {
         ZStack {
             Circle()
-                .fill(IBColors.ink.opacity(0.06))
+                .fill(IBColors.surfaceHover)
                 .frame(width: 30, height: 30)
             Image(systemName: "person.fill")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
         }
     }
 }
@@ -1223,7 +1223,7 @@ private struct MessageCopyButton: View {
                 .frame(width: 18, height: 18)
         }
         .buttonStyle(.borderless)
-        .foregroundStyle(copied ? IBColors.success : IBColors.secondaryText)
+        .foregroundStyle(copied ? IBColors.success : IBColors.inkSecondary)
         .help(copied ? "Copied" : "Copy message")
     }
 }
@@ -1325,10 +1325,10 @@ struct FormattedMessageContent: View {
         case .quote(let quote):
             HStack(alignment: .top, spacing: 10) {
                 Rectangle()
-                    .fill(IBColors.cardBorder)
+                    .fill(IBColors.border)
                     .frame(width: 2)
                 Text(FormattedMessageFormatter.attributedMarkdown(from: quote) ?? AttributedString(quote))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .lineSpacing(4)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1363,7 +1363,7 @@ struct StreamingMessageRow: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(IBColors.electricBlue)
+                    .fill(IBColors.accentFill)
                     .frame(width: 30, height: 30)
                 Image(systemName: "sparkles")
                     .font(.system(size: 13, weight: .semibold))
@@ -1373,7 +1373,7 @@ struct StreamingMessageRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("ARIA")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accent)
                     .padding(.horizontal, 4)
                 // Rich rendering during streaming, debounced off main thread
                 FormattedMessageContent(text: text, preferRichRendering: true)
@@ -1545,14 +1545,8 @@ private struct NativeMathBlockView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-        )
+        .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.codeBlockBackground))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
     }
 
     @ViewBuilder
@@ -1684,7 +1678,7 @@ private struct ARIADiagramView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: diagram.isSimulation ? "atom" : (diagram.isCanvas ? "rectangle.3.group.bubble" : (diagram.isFlow ? "point.3.connected.trianglepath.dotted" : "chart.xyaxis.line")))
-                    .foregroundStyle(IBColors.teal)
+                    .foregroundStyle(IBColors.inkTertiary)
                 Text(diagram.title ?? (diagram.isSimulation ? "Interactive simulation" : (diagram.isCanvas ? "Interactive canvas" : (diagram.isFlow ? "Concept diagram" : "Interactive graph"))))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(IBColors.ink)
@@ -1692,7 +1686,7 @@ private struct ARIADiagramView: View {
                 Spacer()
                 Text(modeTitle)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .padding(.horizontal, 7)
                     .frame(height: 24)
                     .background(IBColors.canvas, in: Capsule())
@@ -1786,7 +1780,7 @@ private struct ARIADiagramView: View {
                                 .frame(width: 7, height: 7)
                             Text(series.label ?? "Series \(index + 1)")
                                 .font(.caption2)
-                                .foregroundStyle(IBColors.secondaryText)
+                                .foregroundStyle(IBColors.inkSecondary)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
@@ -1800,7 +1794,7 @@ private struct ARIADiagramView: View {
                 .fill(IBColors.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(IBColors.cardBorder, lineWidth: 1)
+                        .stroke(IBColors.border, lineWidth: 1)
                 )
         )
     }
@@ -1833,25 +1827,25 @@ private struct ARIADiagramView: View {
             var vertical = Path()
             vertical.move(to: CGPoint(x: x, y: plot.minY))
             vertical.addLine(to: CGPoint(x: x, y: plot.maxY))
-            context.stroke(vertical, with: .color(IBColors.cardBorder.opacity(0.7)), lineWidth: 0.5)
+            context.stroke(vertical, with: .color(IBColors.border.opacity(0.7)), lineWidth: 0.5)
             var horizontal = Path()
             horizontal.move(to: CGPoint(x: plot.minX, y: y))
             horizontal.addLine(to: CGPoint(x: plot.maxX, y: y))
-            context.stroke(horizontal, with: .color(IBColors.cardBorder.opacity(0.7)), lineWidth: 0.5)
+            context.stroke(horizontal, with: .color(IBColors.border.opacity(0.7)), lineWidth: 0.5)
         }
         if xMin <= 0, xMax >= 0 {
             let x = point([0, yMin]).x
             var axis = Path()
             axis.move(to: CGPoint(x: x, y: plot.minY))
             axis.addLine(to: CGPoint(x: x, y: plot.maxY))
-            context.stroke(axis, with: .color(IBColors.secondaryText), lineWidth: 1)
+            context.stroke(axis, with: .color(IBColors.inkSecondary), lineWidth: 1)
         }
         if yMin <= 0, yMax >= 0 {
             let y = point([xMin, 0]).y
             var axis = Path()
             axis.move(to: CGPoint(x: plot.minX, y: y))
             axis.addLine(to: CGPoint(x: plot.maxX, y: y))
-            context.stroke(axis, with: .color(IBColors.secondaryText), lineWidth: 1)
+            context.stroke(axis, with: .color(IBColors.inkSecondary), lineWidth: 1)
         }
 
         for (index, series) in diagram.graphSeries.enumerated() {
@@ -1902,7 +1896,7 @@ private struct ARIADiagramView: View {
             var path = Path()
             path.move(to: start)
             path.addLine(to: end)
-            context.stroke(path, with: .color(IBColors.secondaryText.opacity(0.75)), lineWidth: 1.4)
+            context.stroke(path, with: .color(IBColors.inkSecondary.opacity(0.75)), lineWidth: 1.4)
             let angle = atan2(end.y - start.y, end.x - start.x)
             let arrow = CGPoint(x: end.x - cos(angle) * 18, y: end.y - sin(angle) * 18)
             var arrowPath = Path()
@@ -1910,7 +1904,7 @@ private struct ARIADiagramView: View {
             arrowPath.addLine(to: CGPoint(x: arrow.x - cos(angle - .pi / 5) * 7, y: arrow.y - sin(angle - .pi / 5) * 7))
             arrowPath.move(to: arrow)
             arrowPath.addLine(to: CGPoint(x: arrow.x - cos(angle + .pi / 5) * 7, y: arrow.y - sin(angle + .pi / 5) * 7))
-            context.stroke(arrowPath, with: .color(IBColors.secondaryText.opacity(0.75)), lineWidth: 1.4)
+            context.stroke(arrowPath, with: .color(IBColors.inkSecondary.opacity(0.75)), lineWidth: 1.4)
             if let label = edge.label {
                 context.draw(Text(shortDiagramLabel(label, limit: 22)).font(.caption2), at: CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 10))
             }
@@ -1931,7 +1925,7 @@ private struct ARIADiagramView: View {
 
     private func seriesColor(_ series: ARIADiagramSpec.Series?, index: Int) -> Color {
         if let hex = series?.color, !hex.isEmpty { return Color(hex: hex) }
-        return [IBColors.electricBlue, IBColors.teal, IBColors.coral, IBColors.gold][index % 4]
+        return [IBColors.accent, IBColors.inkSecondary, IBColors.inkTertiary, IBColors.borderStrong][index % 4]
     }
 
     private func shortDiagramLabel(_ label: String, limit: Int) -> String {
@@ -1988,11 +1982,11 @@ private struct ARIAParticleSimulationView: View {
                     .frame(maxWidth: 150)
                 Text("\(speed, format: .number.precision(.fractionLength(1)))x")
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Spacer()
                 Text(isAtomMode ? "Electron orbit model" : "Particle motion model")
                     .font(.caption2)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
         }
         .accessibilityLabel(isAtomMode ? "Interactive atom simulation" : "Interactive particle simulation")
@@ -2016,13 +2010,13 @@ private struct ARIAParticleSimulationView: View {
         for radius in radii {
             context.stroke(
                 Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
-                with: .color(IBColors.electricBlue.opacity(0.24)),
+                with: .color(IBColors.accentFill.opacity(0.24)),
                 lineWidth: 1
             )
         }
         context.fill(
             Path(ellipseIn: CGRect(x: center.x - 18, y: center.y - 18, width: 36, height: 36)),
-            with: .color(IBColors.coral)
+            with: .color(IBColors.inkTertiary)
         )
         for index in 0..<4 {
             let radius = radii[index % radii.count]
@@ -2030,7 +2024,7 @@ private struct ARIAParticleSimulationView: View {
             let point = CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
             context.fill(
                 Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6, width: 12, height: 12)),
-                with: .color(IBColors.electricBlue)
+                with: .color(IBColors.accentFill)
             )
         }
     }
@@ -2041,7 +2035,7 @@ private struct ARIAParticleSimulationView: View {
             let phase = Double(index) * 1.618
             let x = 14 + (sin(time * (0.35 + Double(index % 5) * 0.08) + phase) + 1) / 2 * max(size.width - 28, 1)
             let y = 14 + (cos(time * (0.48 + Double(index % 7) * 0.06) + phase * 0.7) + 1) / 2 * max(size.height - 28, 1)
-            let color = [IBColors.electricBlue, IBColors.teal, IBColors.coral, IBColors.gold][index % 4]
+            let color = [IBColors.accent, IBColors.inkSecondary, IBColors.inkTertiary, IBColors.borderStrong][index % 4]
             context.fill(
                 Path(ellipseIn: CGRect(x: x - 4, y: y - 4, width: 8, height: 8)),
                 with: .color(color.opacity(0.82))
@@ -2106,7 +2100,7 @@ private struct ARIAGenerativeCanvasView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 7))
                 .overlay(
                     RoundedRectangle(cornerRadius: 7)
-                        .stroke(IBColors.cardBorder.opacity(0.75), lineWidth: 1)
+                        .stroke(IBColors.border.opacity(0.75), lineWidth: 1)
                 )
             }
 
@@ -2122,12 +2116,12 @@ private struct ARIAGenerativeCanvasView: View {
 
                 Text("Speed")
                     .font(.caption2)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Slider(value: $masterSpeed, in: 0.1...3)
                     .frame(maxWidth: 130)
                 Text("\(masterSpeed, format: .number.precision(.fractionLength(1)))x")
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
 
             ForEach(validControls, id: \.id) { control in
@@ -2146,7 +2140,7 @@ private struct ARIAGenerativeCanvasView: View {
                     HStack(spacing: 10) {
                         Text(control.label)
                             .font(.caption2)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                             .frame(width: 104, alignment: .leading)
                         Slider(
                             value: Binding(
@@ -2157,7 +2151,7 @@ private struct ARIAGenerativeCanvasView: View {
                         )
                         Text(valueLabel(for: control))
                             .font(.caption2.monospacedDigit())
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                             .frame(width: 54, alignment: .trailing)
                     }
                 }
@@ -2195,7 +2189,7 @@ private struct ARIAGenerativeCanvasView: View {
                !(toggleValues[visibilityControl] ?? true) {
                 continue
             }
-            let color = element.color.map(Color.init(hex:)) ?? IBColors.electricBlue
+            let color = element.color.map(Color.init(hex:)) ?? IBColors.accentFill
             let point = animatedPoint(for: element, size: size, time: time)
             let kind = element.kind.lowercased()
             let minDimension = min(size.width, size.height)
@@ -2320,7 +2314,7 @@ private struct FlashcardMessageView: View {
             flashcardSide(
                 label: "Front",
                 icon: "questionmark.circle.fill",
-                tint: IBColors.electricBlue,
+                tint: IBColors.accentFill,
                 text: front
             )
 
@@ -2369,8 +2363,8 @@ private struct CodeBlockView: View {
             HStack {
                 if !language.isEmpty {
                     Text(language)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(IBColors.inkTertiary)
                         .textCase(.lowercase)
                 }
                 Spacer()
@@ -2381,33 +2375,30 @@ private struct CodeBlockView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                            .font(.caption)
+                            .font(.system(size: 11, weight: .semibold))
                         Text(copied ? "Copied" : "Copy")
-                            .font(.caption)
+                            .font(.system(size: 11, weight: .medium))
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(IBColors.inkSecondary)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.primary.opacity(0.06))
+            .background(IBColors.surfaceRaised)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(verbatim: code)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(IBColors.ink)
                     .textSelection(.enabled)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .background(IBColors.codeBlockBackground)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.primary.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
+        .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.codeBlockBackground))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

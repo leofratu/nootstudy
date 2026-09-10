@@ -51,12 +51,12 @@ struct ARIAChatInputBar: View {
                         .background(
                             Group {
                                 if canSend {
-                                    Circle().fill(IBGradient.accent)
+                                    Circle().fill(IBColors.accentFill)
                                 } else {
-                                    Circle().fill(IBColors.tertiaryText.opacity(0.45))
+                                    Circle().fill(IBColors.borderStrong)
                                 }
                             }
-                            .shadow(color: canSend ? IBColors.electricBlue.opacity(0.3) : .clear, radius: 6, x: 0, y: 2)
+                            
                         )
                 }
                 .buttonStyle(.plain)
@@ -69,7 +69,7 @@ struct ARIAChatInputBar: View {
                     .fill(IBColors.surface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                            .stroke(IBColors.border, lineWidth: 1)
                     )
             )
         }
@@ -178,7 +178,7 @@ struct ARIAChatInputBar: View {
                     systemImage: "slider.horizontal.3"
                 )
                 .font(.caption.weight(.medium))
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -189,7 +189,7 @@ struct ARIAChatInputBar: View {
             if streamStore.isLoading {
                 Text(streamStore.statusText)
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .lineLimit(1)
             }
         }
