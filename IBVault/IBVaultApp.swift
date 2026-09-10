@@ -4,6 +4,9 @@ import UserNotifications
 
 @main
 struct IBVaultApp: App {
+    @AppStorage("appAppearance") private var appAppearanceRaw = IBAppearance.dark.rawValue
+    private var appAppearance: IBAppearance { IBAppearance(rawValue: appAppearanceRaw) ?? .dark }
+
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     #endif
@@ -11,7 +14,7 @@ struct IBVaultApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .preferredColorScheme(.light)
+                .preferredColorScheme(appAppearance.colorScheme)
         }
         .modelContainer(Self.makeModelContainer())
         #if os(macOS)
@@ -381,9 +384,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Keep AppKit chrome, menus, sheets, and SwiftUI semantic controls in
-        // the same light appearance as the product palette.
-        NSApp.appearance = NSAppearance(named: .aqua)
+        // Appearance is driven by SwiftUI preferredColorScheme (AppStorage).
+        // Do not force NSApp.appearance; the AppStorage default is Dark.
 
         let center = UNUserNotificationCenter.current()
         center.delegate = self
