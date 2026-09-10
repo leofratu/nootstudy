@@ -28,6 +28,7 @@ struct ActiveStudySessionView: View {
     @State private var flashcardTopicName = ""
     @State private var flashcardSubtopicName = ""
     @State private var flashcardDifficulty: CardDifficulty = .exam
+    @State private var cardStudioOptions = CardGenerationOptions(count: 10, difficulty: .exam, style: .basic, tone: .exam, cognitiveSkills: [], useInternalTools: false)
     @State private var completedTaskIDs: Set<UUID> = []
     @State private var showRewardPulse = false
     @State private var previousStreak = 0
@@ -281,7 +282,11 @@ struct ActiveStudySessionView: View {
         didPrepareFlashcards = true
         selectedTab = .flashcards
         flashcardBatchSize = min(max(plan.flashcardTargetCount ?? 10, 5), 50)
-        if let raw = plan.flashcardDifficultyRaw, let value = CardDifficulty(rawValue: raw) { flashcardDifficulty = value }
+        cardStudioOptions.count = flashcardBatchSize
+        if let raw = plan.flashcardDifficultyRaw, let value = CardDifficulty(rawValue: raw) {
+            flashcardDifficulty = value
+            cardStudioOptions.difficulty = value
+        }
         generateFlashcards()
     }
 
@@ -348,7 +353,7 @@ struct ActiveStudySessionView: View {
 
             ForEach(SessionTab.allCases, id: \.self) { tab in
                 Button {
-                    withAnimation(.easeInOut(duration: 0.15)) { selectedTab = tab }
+                    withAnimation(IBAnimation.snappy) { selectedTab = tab }
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: tab.icon)
@@ -590,8 +595,9 @@ struct ActiveStudySessionView: View {
 
     private var flashcardsPanel: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 flashcardGenerationToolbar
+                cardStudioPanel
                 flashcardScopeSection
                 flashcardStatusSection
                 flashcardList
@@ -601,6 +607,14 @@ struct ActiveStudySessionView: View {
             .padding(.top, 10)
             .padding(.bottom, 60)
         }
+    }
+
+    private var cardStudioPanel: some View {
+        CardStudioOptionsView(options: $cardStudioOptions, showsCount: true)
+            .onChange(of: cardStudioOptions.count) { _, new in flashcardBatchSize = new }
+            .onChange(of: cardStudioOptions.difficulty) { _, new in flashcardDifficulty = new }
+            .onChange(of: flashcardBatchSize) { _, new in cardStudioOptions.count = new }
+            .onChange(of: flashcardDifficulty) { _, new in cardStudioOptions.difficulty = new }
     }
 
     private var flashcardGenerationToolbar: some View {
@@ -616,24 +630,9 @@ struct ActiveStudySessionView: View {
             if isGeneratingCards {
                 ProgressView().controlSize(.small)
             } else {
-                HStack(spacing: 5) {
-                    Text("Cards")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("Count", value: flashcardBatchBinding, format: .number)
-                        .textFieldStyle(.roundedBorder)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 46)
-                    Stepper("Card count", value: flashcardBatchBinding, in: 1...50)
-                        .labelsHidden()
-                    Picker("IB difficulty", selection: $flashcardDifficulty) {
-                        ForEach(CardDifficulty.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .frame(width: 110)
-                }
                 Button(action: generateFlashcards) {
                     Label(
-                        generatedCards.isEmpty ? "Generate \(flashcardBatchSize)" : "Add \(flashcardBatchSize) More",
+                        generatedCards.isEmpty ? "Generate \(cardStudioOptions.count)" : "Add \(cardStudioOptions.count) More",
                         systemImage: "sparkles"
                     )
                 }
@@ -1441,14 +1440,18 @@ struct ActiveStudySessionView: View {
                     )
                 }
 
+                // Ensure studio count sync
+                cardStudioOptions.count = flashcardBatchSize
+                cardStudioOptions.difficulty = flashcardDifficulty
                 let generatedCardsForScope = try await CardGeneratorService.generateCards(
                     subject: subject,
                     topicName: flashcardTopicName,
                     subtopic: flashcardSubtopicName,
-                    count: flashcardBatchSize,
+                    count: cardStudioOptions.count,
                     localStartingIndex: generatedCards.count,
                     context: context,
-                    preferredDifficulty: flashcardDifficulty
+                    preferredDifficulty: cardStudioOptions.difficulty,
+                    options: cardStudioOptions
                 )
                 generatedBatch.append(contentsOf: generatedCardsForScope.map {
                     GeneratedFlashcard(
@@ -1502,7 +1505,7 @@ struct ActiveStudySessionView: View {
     // MARK: - Exam Generation
 
     private func clearExamWorkspace() {
-        withAnimation(.easeInOut) {
+        withAnimation(IBAnimation.smooth) {
             examMarkdown = ""
             examResponse = ""
             examGradingMarkdown = ""

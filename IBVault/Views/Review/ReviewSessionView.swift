@@ -16,6 +16,8 @@ struct ReviewSessionView: View {
     var filterPlan: StudyPlan? = nil
     var reviewScopeSession: StudySession? = nil
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var cardFlipNamespace
     @State private var cards: [StudyCard] = []
     @State private var currentIndex = 0
     @State private var isFlipped = false
@@ -294,7 +296,8 @@ struct ReviewSessionView: View {
                     .padding(24)
                     .frame(maxWidth: 820, minHeight: 300, alignment: .leading)
                     .glassCard()
-                    .animation(IBAnimation.smooth, value: isFlipped)
+                    .matchedGeometryEffect(id: "card-\(card.id.uuidString)", in: cardFlipNamespace)
+                    .animation(reduceMotion ? nil : IBAnimation.snappy, value: isFlipped)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(24)
@@ -320,7 +323,7 @@ struct ReviewSessionView: View {
                 } else {
                     Spacer()
                     Button {
-                        withAnimation(IBAnimation.smooth) { isFlipped = true }
+                        if reduceMotion { isFlipped = true } else { withAnimation(IBAnimation.snappy) { isFlipped = true } }
                         IBHaptics.light()
                     } label: {
                         HStack {

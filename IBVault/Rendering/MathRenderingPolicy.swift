@@ -6,7 +6,8 @@ import SwiftUI
 /// mount the MathJax surface.
 nonisolated enum MathRenderingPolicy: Sendable {
     static func canonicalDisplayLatex(_ source: String) -> String {
-        var value = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        var value = source.replacingOccurrences(of: "\u{00A0}", with: " ")
+        value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         for delimiters in [("$$", "$$"), ("\\[", "\\]"), ("\\(", "\\)")] {
             if value.hasPrefix(delimiters.0), value.hasSuffix(delimiters.1), value.count >= delimiters.0.count + delimiters.1.count {
                 value.removeFirst(delimiters.0.count)
@@ -16,6 +17,7 @@ nonisolated enum MathRenderingPolicy: Sendable {
         }
         return value
             .replacingOccurrences(of: "−", with: "-")
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
