@@ -158,4 +158,49 @@ struct FormattedMessageFormatterTests {
         let attr = FormattedMessageFormatter.attributedMarkdown(from: "**bold** and *italic*")
         #expect(attr != nil)
     }
+
+    @Test("Inline latex arrow maps to unicode arrow not word arrow")
+    func latexArrowMapping() {
+        let eq = "6CO_2 + 6H_2O \\rightarrow C_6H_{12}O_6 + 6O_2"
+        let result = MathExpressionFormatter.inlineString(from: eq)
+        #expect(result.contains("→"))
+        #expect(!result.contains("arrow"))
+        #expect(!result.contains("rightarrow"))
+        // Prefix collision: \\rightarrow must not be truncated by \\right
+        let leftArrow = MathExpressionFormatter.inlineString(from: "A \\leftarrow B")
+        #expect(leftArrow.contains("←"))
+        let rightDouble = MathExpressionFormatter.inlineString(from: "A \\Rightarrow B")
+        #expect(rightDouble.contains("⇒"))
+        let leftDouble = MathExpressionFormatter.inlineString(from: "A \\Leftarrow B")
+        #expect(leftDouble.contains("⇐"))
+    }
+
+    @Test("Full command map coverage")
+    func commandMapCoverage() {
+        let cases: [(String, String)] = [
+            ("\\to", "→"), ("\\approx", "≈"), ("\\neq", "≠"), ("\\ne", "≠"),
+            ("\\leq", "≤"), ("\\le", "≤"), ("\\geq", "≥"), ("\\ge", "≥"),
+            ("\\times", "×"), ("\\cdot", "·"), ("\\pm", "±"), ("\\infty", "∞"),
+            ("\\sum", "Σ"), ("\\int", "∫"), ("\\partial", "∂"),
+            ("\\alpha", "α"), ("\\omega", "ω"), ("\\Gamma", "Γ")
+        ]
+        for (cmd, expected) in cases {
+            let out = MathExpressionFormatter.inlineString(from: cmd)
+            #expect(out.contains(expected), "\\(cmd) should map to \\(expected) got \\(out)")
+        }
+        // Unknown command degrades gracefully
+        let unknown = MathExpressionFormatter.inlineString(from: "\\unknowncmd")
+        #expect(unknown.contains("unknowncmd") || unknown == "unknowncmd")
+        #expect(!unknown.contains("\\"))
+    }
+
+    @Test("GFM pipe tables parse to table sections")
+    func pipeTables() {
+        let withPipes = "| Stage | Location |\n|---|---|\n| Light-dependent | Thylakoid |\n| Calvin cycle | Stroma |"
+        let sections = FormattedMessageFormatter.sections(from: withPipes)
+        #expect(sections.contains(where: { if case .table(let h, let rows) = $0 { return h.count == 2 && rows.count == 2 } else { return false } }))
+        let withoutOuterPipes = "Stage | Location\n---|---\nLight-dependent | Thylakoid\nCalvin cycle | Stroma"
+        let sections2 = FormattedMessageFormatter.sections(from: withoutOuterPipes)
+        #expect(sections2.contains(where: { if case .table = $0 { return true } else { return false } }))
+    }
 }

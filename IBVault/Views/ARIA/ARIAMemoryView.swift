@@ -80,7 +80,7 @@ struct ARIAMemoryView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.content)
-                        Text(item.timestamp, style: .relative)
+                        Text(RelativeTimeHelper.string(for: item.timestamp))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

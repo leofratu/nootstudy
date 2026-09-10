@@ -31,8 +31,7 @@ class ARIAService {
     private let maxCompactionMessages = 120
     private let minMessagesBeforeCompaction = 16
     private let minMessagesToKeepAfterCompaction = 8
-    private let streamUpdateCharacterStride = 384
-    private let streamUpdateInterval: TimeInterval = 0.22
+    private let streamCoalesceInterval: TimeInterval = 0.02
 
     /// The typed catalog of app tools ARIA can execute. A raw-string action
     /// type would let typos silently produce no-op actions; an exhaustive enum
@@ -410,6 +409,7 @@ class ARIAService {
         session: ARIAChatSession,
         persistUserMessage: Bool = true,
         onToken: @escaping (String) -> Void,
+        onStatus: (@Sendable (String) -> Void)? = nil,
         onComplete: @escaping (String) -> Void,
         onError: @escaping (any Error, UUID?) -> Void
     ) {
@@ -422,6 +422,7 @@ class ARIAService {
         activeRequestID = requestID
         isLoading = true
         currentStatus = "Preparing your study context"
+        onStatus?("Preparing your study context")
 
         if persistUserMessage {
             retryActionSummary = nil
@@ -446,6 +447,7 @@ class ARIAService {
                 let queryProfile = analyzeQuery(trimmedMessage)
                 let loggingContext = inferredLoggingContext(context: context, queryProfile: queryProfile)
                 self.currentStatus = "Checking requested app changes"
+                onStatus?("Checking requested app changes")
                 let actionSummary: ActionExecutionSummary
                 if !persistUserMessage {
                     if let cachedSummary = self.retryActionSummary,
@@ -475,6 +477,7 @@ class ARIAService {
 
                 // Build context
                 self.currentStatus = "Building your study context"
+                onStatus?("Building your study context")
                 var systemPrompt = await buildSystemPrompt(context: context, queryProfile: queryProfile)
                 if !actionSummary.isEmpty {
                     systemPrompt += "\n\n\(actionSummary.promptContext)\nReference these concrete changes in your reply briefly before giving any next-step guidance."
@@ -489,31 +492,32 @@ class ARIAService {
                     onStatus: { [weak self] status in
                         Task { @MainActor in
                             self?.currentStatus = status
+                            onStatus?(status)
                         }
                     }
                 )
 
-                var lastStreamUpdate = Date.distantPast
-                var pendingStreamCharacters = 0
-
-                for try await token in stream {
-                    try Task.checkCancellation()
-                    Self.appendStreamChunk(token, to: &fullResponse)
-                    pendingStreamCharacters += token.count
-
-                    let now = Date()
-                    guard pendingStreamCharacters >= self.streamUpdateCharacterStride ||
-                            now.timeIntervalSince(lastStreamUpdate) >= self.streamUpdateInterval else {
-                        continue
+                let coalescer = ARIAStreamCoalescer(interval: self.streamCoalesceInterval, onEmit: onToken)
+                var didFlush = false
+                defer { if !didFlush { coalescer.cancel() } }
+                do {
+                    for try await token in stream {
+                        try Task.checkCancellation()
+                        Self.appendStreamChunk(token, to: &fullResponse)
+                        coalescer.enqueue(fullResponse)
                     }
-
-                    pendingStreamCharacters = 0
-                    lastStreamUpdate = now
-                    onToken(fullResponse)
+                    try Task.checkCancellation()
+                    coalescer.flush(fullResponse)
+                    didFlush = true
+                } catch is CancellationError {
+                    coalescer.cancel()
+                    didFlush = true
+                    throw CancellationError()
+                } catch {
+                    coalescer.cancel()
+                    didFlush = true
+                    throw error
                 }
-
-                try Task.checkCancellation()
-                onToken(fullResponse)
 
                 let finalizedResponse = Self.finalizeAssistantResponse(fullResponse)
                 guard !finalizedResponse.isEmpty else {

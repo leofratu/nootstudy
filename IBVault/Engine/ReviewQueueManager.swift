@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 nonisolated enum ReviewDailyLimitPolicy: Sendable {
@@ -68,6 +69,8 @@ final class ReviewQueueManager {
 
     // MARK: - Refresh
     func refreshDueCards(context: ModelContext) {
+        let state = PerformanceSignposts.signposter.beginInterval("reviewQueue.refresh")
+        defer { PerformanceSignposts.signposter.endInterval("reviewQueue.refresh", state) }
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
@@ -207,8 +210,15 @@ final class ReviewQueueManager {
             hasher.combine(card.id)
             hasher.combine(card.nextReviewDate.timeIntervalSince1970)
         }
-        hasher.combine(reviewedIDs.count)
+        for id in reviewedIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+            hasher.combine(id)
+        }
         hasher.combine(eligibleCount)
         return String(hasher.finalize())
+    }
+
+    /// Exposed for testing: allows resetting memoization between isolated containers.
+    func resetFingerprintForTesting() {
+        lastFingerprint = nil
     }
 }

@@ -59,18 +59,18 @@ struct AcademicImportView: View {
             HStack(alignment: .top, spacing: 16) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(IBColors.teal.opacity(0.13))
+                        .fill(IBColors.inkTertiary.opacity(0.13))
                         .frame(width: 46, height: 46)
                     Image(systemName: "chart.bar.doc.horizontal")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(IBColors.teal)
+                        .foregroundStyle(IBColors.inkTertiary)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Calibrate progress from school evidence")
                         .font(.title3.bold())
                     Text("Import a folder containing the ManageBac workbook and school reports. Source files stay in place; only normalized records are saved.")
                         .font(.callout)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 12)
@@ -80,7 +80,7 @@ struct AcademicImportView: View {
                     Label("Choose Folder", systemImage: "folder.badge.plus")
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(IBColors.electricBlue)
+                .tint(IBColors.accent)
                 .disabled(isLoading || isImporting)
             }
 
@@ -108,10 +108,10 @@ struct AcademicImportView: View {
             } else {
                 Image(systemName: "folder")
                     .font(.system(size: 28, weight: .light))
-                    .foregroundStyle(IBColors.tertiaryText)
+                    .foregroundStyle(IBColors.inkTertiary)
                 Text("Choose a school-record folder to preview its import.")
                     .font(.callout)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 170)
@@ -126,7 +126,7 @@ struct AcademicImportView: View {
                         .font(.headline)
                     Text(preview.sourceFiles.joined(separator: " · "))
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .lineLimit(2)
                 }
                 Spacer()
@@ -134,21 +134,21 @@ struct AcademicImportView: View {
             }
 
             HStack(spacing: 12) {
-                importMetric("Assessments", value: "\(preview.assessments.count)", tint: IBColors.electricBlue)
-                importMetric("Curriculum units", value: "\(preview.curriculumUnits.count)", tint: IBColors.teal)
-                importMetric("Report snapshots", value: "\(preview.reportSnapshots.count)", tint: IBColors.gold)
-                importMetric("Warnings", value: "\(preview.warnings.count)", tint: preview.warnings.isEmpty ? IBColors.success : IBColors.coral)
+                importMetric("Assessments", value: "\(preview.assessments.count)", tint: IBColors.accent)
+                importMetric("Curriculum units", value: "\(preview.curriculumUnits.count)", tint: IBColors.inkTertiary)
+                importMetric("Report snapshots", value: "\(preview.reportSnapshots.count)", tint: IBColors.inkTertiary)
+                importMetric("Warnings", value: "\(preview.warnings.count)", tint: preview.warnings.isEmpty ? IBColors.success : IBColors.inkTertiary)
             }
 
             if !preview.warnings.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Import notes")
                         .font(.caption.bold())
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                     ForEach(preview.warnings.prefix(4), id: \.self) { warning in
                         Text(warning)
                             .font(.caption)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                     }
                 }
                 .padding(12)
@@ -158,7 +158,7 @@ struct AcademicImportView: View {
             HStack {
                 Text("Unassessed and pending work is retained for coverage, but never counted as numeric evidence.")
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Spacer()
                 Button {
                     commit(preview)
@@ -166,7 +166,7 @@ struct AcademicImportView: View {
                     Label("Import Records", systemImage: "arrow.down.doc.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(IBColors.teal)
+                .tint(IBColors.inkTertiary)
                 .disabled(isImporting || preview.assessments.isEmpty)
             }
         }
@@ -187,12 +187,12 @@ struct AcademicImportView: View {
                             .font(.callout.weight(.medium))
                         Text("\(record.assessmentCount) assessments · \(record.curriculumUnitCount) units · \(record.reportCount) report snapshots")
                             .font(.caption)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                     }
                     Spacer()
                     Text(record.importedAt, style: .date)
                         .font(.caption)
-                        .foregroundStyle(IBColors.tertiaryText)
+                        .foregroundStyle(IBColors.inkTertiary)
                 }
                 .padding(.vertical, 5)
             }
@@ -208,7 +208,7 @@ struct AcademicImportView: View {
                 .foregroundStyle(tint)
             Text(label)
                 .font(.caption)
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -321,7 +321,7 @@ struct AcademicMappingReviewView: View {
                     .font(.headline)
                 Text("Only approved mappings contribute to evidence and blended mastery.")
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
             Spacer()
             Button {
@@ -338,7 +338,7 @@ struct AcademicMappingReviewView: View {
                 Label("Ask ARIA", systemImage: "sparkles")
             }
             .buttonStyle(.borderedProminent)
-            .tint(IBColors.electricBlue)
+            .tint(IBColors.accent)
             .disabled(isProposing || subjectAssessments.isEmpty)
         }
         .padding(16)
@@ -350,24 +350,24 @@ struct AcademicMappingReviewView: View {
         let assessment = subjectAssessments.first(where: { $0.id == mapping.assessmentID })
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: mapping.status == .approved ? "checkmark.seal.fill" : "questionmark.diamond.fill")
-                .foregroundStyle(mapping.status == .approved ? IBColors.success : IBColors.gold)
+                .foregroundStyle(mapping.status == .approved ? IBColors.success : IBColors.inkTertiary)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 4) {
                 Text(assessment?.title ?? "Imported assessment")
                     .font(.callout.weight(.semibold))
                 Text("\(mapping.unitName) > \(mapping.topicName) > \(mapping.subtopicName)")
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 if !mapping.rationale.isEmpty {
                     Text(mapping.rationale)
                         .font(.caption2)
-                        .foregroundStyle(IBColors.tertiaryText)
+                        .foregroundStyle(IBColors.inkTertiary)
                 }
             }
             Spacer(minLength: 8)
             Text("\(Int(mapping.confidence * 100))%")
                 .font(.caption.weight(.bold))
-                .foregroundStyle(IBColors.electricBlue)
+                .foregroundStyle(IBColors.accent)
             Menu {
                 Button("Approve") { update(mapping, to: .approved) }
                 Button("Reject", role: .destructive) { update(mapping, to: .rejected) }

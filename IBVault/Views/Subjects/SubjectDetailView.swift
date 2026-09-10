@@ -17,7 +17,7 @@ struct SubjectDetailView: View {
     // breakdown is visible without clicking into every topic.
     @State private var expandedUnits: Set<String> = []
 
-    private var color: Color { Color(hex: subject.accentColorHex) }
+    private var color: Color { IBColors.inkTertiary }
     private var sortedGrades: [Grade] { subject.grades.sorted { $0.date > $1.date } }
     private var curriculum: [CurriculumUnit] {
         SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
@@ -146,7 +146,7 @@ struct SubjectDetailView: View {
     var body: some View {
         let dueCount = reviewableDueCount
         return ScrollView {
-            VStack(spacing: 16) {
+            LazyVStack(spacing: 16) {
                 // Hero with ring
                 heroCard(dueCount: dueCount)
                     .padding(.horizontal, 24)
@@ -246,10 +246,10 @@ struct SubjectDetailView: View {
                     Label("\(curriculumSubunitCount) subunits", systemImage: "list.bullet.indent")
                     if dueCount > 0 {
                         Label("\(dueCount) due now", systemImage: "clock.badge.exclamationmark")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(IBColors.warning)
                     } else {
                         Label("All caught up", systemImage: "checkmark.circle")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(IBColors.success)
                     }
                 }
                 .font(.callout)
@@ -337,11 +337,11 @@ struct SubjectDetailView: View {
         HStack(spacing: 0) {
             progressSignal("Recall", value: subjectProgress.recallMastery, detail: subject.cards.isEmpty ? "No cards yet" : "\(subject.cards.count) FSRS cards", tint: color)
             Divider().frame(height: 42)
-            progressSignal("Evidence", value: subjectProgress.assessmentEvidence, detail: subjectProgress.scoredAssessmentCount == 0 ? "Import results" : "\(subjectProgress.scoredAssessmentCount) scored", tint: IBColors.teal)
+            progressSignal("Evidence", value: subjectProgress.assessmentEvidence, detail: subjectProgress.scoredAssessmentCount == 0 ? "Import results" : "\(subjectProgress.scoredAssessmentCount) scored", tint: IBColors.inkTertiary)
             Divider().frame(height: 42)
-            progressSignal("Mappings", value: nil, detail: "\(subjectProgress.approvedMappingCount) approved", tint: IBColors.gold)
+            progressSignal("Mappings", value: nil, detail: "\(subjectProgress.approvedMappingCount) approved", tint: IBColors.inkTertiary)
             Divider().frame(height: 42)
-            progressSignal("Risk", value: nil, detail: subjectProgress.isAtRisk ? "Needs attention" : "On track", tint: subjectProgress.isAtRisk ? IBColors.coral : IBColors.success)
+            progressSignal("Risk", value: nil, detail: subjectProgress.isAtRisk ? "Needs attention" : "On track", tint: subjectProgress.isAtRisk ? IBColors.inkTertiary : IBColors.success)
         }
         .padding(14)
         .glassCard()
@@ -351,13 +351,13 @@ struct SubjectDetailView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
             Text(value.map { "\(Int($0 * 100))%" } ?? "--")
                 .font(.callout.weight(.bold))
                 .foregroundStyle(tint)
             Text(detail)
                 .font(.caption2)
-                .foregroundStyle(IBColors.tertiaryText)
+                .foregroundStyle(IBColors.inkTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
@@ -383,7 +383,7 @@ struct SubjectDetailView: View {
                             .font(.callout.weight(.bold))
                         Text("Generate a focused set from the curriculum or import assessment evidence first.")
                             .font(.caption)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                     }
                 }
                 .padding(.vertical, 6)
@@ -417,7 +417,7 @@ struct SubjectDetailView: View {
         switch level {
         case .novice: return IBColors.danger
         case .developing: return IBColors.warning
-        case .proficient: return IBColors.electricBlue
+        case .proficient: return IBColors.accent
         case .mastered: return IBColors.success
         }
     }

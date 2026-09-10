@@ -68,7 +68,7 @@ struct StudyCalendarView: View {
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(IBColors.surface)
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(IBColors.cardBorder, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(IBColors.border, lineWidth: 1))
         )
         .task {
             now = IBLocalClock.now
@@ -83,12 +83,12 @@ struct StudyCalendarView: View {
         HStack(spacing: 12) {
             Image(systemName: "calendar.badge.clock")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(IBColors.electricBlue)
+                .foregroundStyle(IBColors.accent)
                 .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Week board").font(.callout.weight(.bold))
-                Text(weekRange).font(.caption).foregroundStyle(IBColors.secondaryText)
+                Text(weekRange).font(.caption).foregroundStyle(IBColors.inkSecondary)
             }
 
             Spacer(minLength: 12)
@@ -109,7 +109,7 @@ struct StudyCalendarView: View {
                 Button("Today") { withAnimation(.snappy) { selectedWeekOffset = 0 } }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .tint(IBColors.electricBlue)
+                    .tint(IBColors.accent)
 
                 Button { withAnimation(.snappy) { selectedWeekOffset += 1 } } label: {
                     Image(systemName: "chevron.right")
@@ -125,7 +125,7 @@ struct StudyCalendarView: View {
     private func calendarStat(value: String, label: String) -> some View {
         VStack(alignment: .trailing, spacing: 1) {
             Text(value).font(.caption.weight(.bold).monospacedDigit()).foregroundStyle(IBColors.ink)
-            Text(label).font(.caption2).foregroundStyle(IBColors.secondaryText)
+            Text(label).font(.caption2).foregroundStyle(IBColors.inkSecondary)
         }
         .frame(minWidth: 48, alignment: .trailing)
     }
@@ -139,10 +139,10 @@ struct StudyCalendarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(isToday ? IBColors.electricBlue : IBColors.secondaryText)
+                    .foregroundStyle(isToday ? IBColors.accent : IBColors.inkSecondary)
                 Text(day.formatted(.dateTime.day()))
                     .font(.system(size: 18, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(isToday ? IBColors.electricBlue : IBColors.ink)
+                    .foregroundStyle(isToday ? IBColors.accent : IBColors.ink)
             }
             .frame(width: 54, alignment: .leading)
 
@@ -150,7 +150,7 @@ struct StudyCalendarView: View {
                 if dayPlans.isEmpty {
                     Text(isToday ? "No session planned today" : "Open for a focused session")
                         .font(.callout)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
                 } else {
                     ForEach(dayPlans) { plan in
@@ -168,23 +168,22 @@ struct StudyCalendarView: View {
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
                 .help("Schedule a study block on this day")
             }
         }
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(isToday ? IBColors.electricBlue.opacity(0.04) : Color.clear)
+                .fill(isToday ? IBColors.accent.opacity(0.04) : Color.clear)
         )
     }
 
     private func planBlock(_ plan: StudyPlan) -> some View {
-        let tint = subjectColor(plan.subjectName)
         return Button { onTapPlan(plan) } label: {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(tint)
+                    .fill(IBColors.inkTertiary)
                     .frame(width: 3, height: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(plan.subjectName)
@@ -193,7 +192,7 @@ struct StudyCalendarView: View {
                         .lineLimit(1)
                     Text(plan.selectionSummary)
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
@@ -202,7 +201,7 @@ struct StudyCalendarView: View {
                         .font(.caption.weight(.semibold).monospacedDigit())
                     Text("\(plan.durationMinutes)m")
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                 }
                 if plan.isCompleted {
                     Image(systemName: "checkmark.circle.fill")
@@ -211,13 +210,13 @@ struct StudyCalendarView: View {
                 }
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 6).fill(IBColors.surface))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(IBColors.cardBorder, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(IBColors.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -273,16 +272,16 @@ struct StudyCalendarView: View {
 
     private func subjectColor(_ name: String) -> Color {
         switch name {
-        case "English B": return IBColors.englishColor
-        case "Russian A Literature": return IBColors.russianColor
-        case "Biology": return IBColors.biologyColor
-        case "Mathematics AA": return IBColors.mathColor
-        case "Economics": return IBColors.economicsColor
-        case "Business Management": return IBColors.businessColor
-        case "Life": return Color(hex: "0EA5E9")
-        case "Advanced Mathematics": return Color(hex: "8B5CF6")
-        case "Fundamentals of the Universe": return Color(hex: "6366F1")
-        default: return IBColors.secondaryText
+        case "English B": return IBColors.inkTertiary
+        case "Russian A Literature": return IBColors.inkTertiary
+        case "Biology": return IBColors.inkTertiary
+        case "Mathematics AA": return IBColors.inkTertiary
+        case "Economics": return IBColors.inkTertiary
+        case "Business Management": return IBColors.inkTertiary
+        case "Life": return IBColors.inkTertiary
+        case "Advanced Mathematics": return IBColors.inkTertiary
+        case "Fundamentals of the Universe": return IBColors.inkTertiary
+        default: return IBColors.inkSecondary
         }
     }
 }

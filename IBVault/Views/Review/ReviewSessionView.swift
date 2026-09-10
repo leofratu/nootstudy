@@ -138,23 +138,23 @@ struct ReviewSessionView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("ACTIVE RECALL")
                             .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(IBColors.electricBlue)
+                            .foregroundStyle(IBColors.accent)
                         Text("Card \(currentIndex + 1) of \(cards.count)")
                             .font(.callout.weight(.bold))
                     }
                     Spacer()
                     HStack(spacing: 4) {
                         Image(systemName: "star.fill")
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(IBColors.inkTertiary)
                             .font(.caption)
                         Text("+\(liveSessionXP) XP")
                             .font(.callout.bold())
-                            .foregroundStyle(IBColors.electricBlue)
+                            .foregroundStyle(IBColors.accent)
                     }
                 }
 
                 ProgressView(value: progress)
-                    .tint(IBColors.electricBlue)
+                    .tint(IBColors.accent)
 
                 HStack(spacing: 8) {
                     Label("\(queueManager.totalDueBacklogCount) flashcards due", systemImage: "rectangle.stack")
@@ -162,34 +162,34 @@ struct ReviewSessionView: View {
                     Text("All due cards available")
                 }
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(IBColors.inkSecondary)
 
                 if let subject = card.subject {
                     HStack(spacing: 8) {
                         Circle()
-                            .fill(Color(hex: subject.accentColorHex))
+                            .fill(IBColors.inkTertiary)
                             .frame(width: 8, height: 8)
                         Text(subject.name)
                             .font(.caption.weight(.medium))
                         Text("•")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(IBColors.inkTertiary)
                         Text(subject.level)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(IBColors.inkSecondary)
                         Spacer()
-                        Text(card.proficiency.emoji + " " + card.proficiency.rawValue)
+                        HStack(spacing: 4) { Circle().fill(proficiencyDotColor(card.proficiency)).frame(width: 6, height: 6); Text(card.proficiency.rawValue) }
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(IBColors.inkSecondary)
                     }
                 }
                 if let scopeSummary {
                     HStack(spacing: 6) {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                             .font(.caption2)
-                            .foregroundStyle(IBColors.electricBlue)
+                            .foregroundStyle(IBColors.accent)
                         Text(scopeSummary)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(IBColors.inkSecondary)
                             .lineLimit(2)
                         Spacer()
                     }
@@ -206,19 +206,19 @@ struct ReviewSessionView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         // Topic name
                         HStack(spacing: 8) {
-                            Image(systemName: "lightbulb.fill")
-                                .foregroundStyle(.yellow)
+                            Image(systemName: "lightbulb")
+                                .foregroundStyle(IBColors.inkTertiary)
                             Text(card.topicName)
                                 .font(.headline)
                             Text(card.difficulty.rawValue)
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
-                                .background(Capsule().fill(IBColors.electricBlue.opacity(0.1)))
-                                .foregroundStyle(IBColors.electricBlue)
+                                .background(Capsule().fill(IBColors.surfaceHover))
+                                .foregroundStyle(IBColors.accent)
                             Text(card.cognitiveSkill.rawValue)
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(IBColors.inkSecondary)
                         }
 
                         Divider()
@@ -228,10 +228,10 @@ struct ReviewSessionView: View {
                             VStack(alignment: .leading, spacing: 16) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "questionmark.circle.fill")
-                                        .foregroundStyle(.tint)
+                                        .foregroundStyle(IBColors.inkTertiary)
                                     Text("Question")
                                         .font(.caption.bold())
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(IBColors.inkSecondary)
                                 }
                                 FormattedMessageContent(text: card.front)
                                     .font(.system(size: 20, weight: .medium, design: .serif))
@@ -241,10 +241,10 @@ struct ReviewSessionView: View {
 
                                 HStack(spacing: 6) {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
+                                        .foregroundStyle(IBColors.success)
                                     Text("Answer")
                                         .font(.caption.bold())
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(IBColors.inkSecondary)
                                 }
                                 FormattedMessageContent(text: card.back)
                                     .font(.system(size: 19, weight: .regular, design: .serif))
@@ -257,7 +257,7 @@ struct ReviewSessionView: View {
                                         Image(systemName: "lightbulb")
                                     }
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(IBColors.inkSecondary)
                                 }
 
                                 if let sourceTitle = card.sourceTitle, !sourceTitle.isEmpty {
@@ -274,7 +274,7 @@ struct ReviewSessionView: View {
                                         }
                                     }
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(IBColors.inkSecondary)
                                 }
                             }
                         } else {
@@ -282,10 +282,10 @@ struct ReviewSessionView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "questionmark.circle.fill")
-                                        .foregroundStyle(.tint)
+                                        .foregroundStyle(IBColors.inkTertiary)
                                     Text("Question")
                                         .font(.caption.bold())
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(IBColors.inkSecondary)
                                 }
                                 FormattedMessageContent(text: card.front)
                                     .font(.system(size: 28, weight: .medium, design: .serif))
@@ -310,13 +310,13 @@ struct ReviewSessionView: View {
                 if isFlipped {
                     Text("How well did you recall?")
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(IBColors.inkSecondary)
                     Spacer()
                     QualityButton(label: "Again", color: IBColors.danger, detail: fsrsPreviews[.again]?.intervalLabel) { rateCard(.again) }
                         .keyboardShortcut("1", modifiers: [])
                     QualityButton(label: "Hard", color: IBColors.warning, detail: fsrsPreviews[.hard]?.intervalLabel) { rateCard(.hard) }
                         .keyboardShortcut("2", modifiers: [])
-                    QualityButton(label: "Good", color: IBColors.electricBlue, detail: fsrsPreviews[.good]?.intervalLabel) { rateCard(.good) }
+                    QualityButton(label: "Good", color: IBColors.accent, detail: fsrsPreviews[.good]?.intervalLabel) { rateCard(.good) }
                         .keyboardShortcut("3", modifiers: [])
                     QualityButton(label: "Easy", color: IBColors.success, detail: fsrsPreviews[.easy]?.intervalLabel) { rateCard(.easy) }
                         .keyboardShortcut("4", modifiers: [])
@@ -572,7 +572,7 @@ struct ReviewSessionView: View {
             Text(emptyStateTitle)
                 .font(.title2.bold())
             Text(emptyStateMessage)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(IBColors.inkSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 350)
             Button("Close") { dismiss() }
@@ -591,7 +591,7 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateTint: Color {
-        return studySessions.isEmpty ? IBColors.electricBlue : .green
+        return studySessions.isEmpty ? IBColors.accent : IBColors.success
     }
 
     // MARK: - Completion View
@@ -606,22 +606,22 @@ struct ReviewSessionView: View {
 
             ZStack {
                 Circle()
-                    .fill(IBColors.electricBlue.opacity(0.08))
+                    .fill(IBColors.accent.opacity(0.08))
                     .frame(width: 100, height: 100)
                 Image(systemName: "trophy.fill")
                     .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(IBColors.inkTertiary)
             }
-            .glow(color: .yellow, radius: 20)
+            .glow(color: IBColors.inkTertiary, radius: 20)
 
             Text("Session Complete!")
                 .font(.title.bold())
 
             // Stats
             HStack(spacing: 0) {
-                StatCard(value: "\(completedCardCount)", label: "Cards", color: IBColors.electricBlue, icon: "square.stack.fill")
+                StatCard(value: "\(completedCardCount)", label: "Cards", color: IBColors.accent, icon: "square.stack.fill")
                 Divider().frame(height: 50)
-                StatCard(value: "+\(sessionXP)", label: "XP Earned", color: .yellow, icon: "star.fill")
+                StatCard(value: "+\(sessionXP)", label: "XP Earned", color: IBColors.inkTertiary, icon: "star.fill")
                 Divider().frame(height: 50)
                 StatCard(value: "\(completedRetentionPercent)%", label: "Retention", color: IBColors.success, icon: "brain.head.profile")
             }
@@ -670,19 +670,28 @@ struct ReviewSessionView: View {
         return "No studied flashcards are due for review right now. Come back after your next study session or when those cards become due."
     }
 
+    private func proficiencyDotColor(_ p: ProficiencyLevel) -> Color {
+        switch p {
+        case .mastered: return IBColors.success
+        case .proficient: return IBColors.accent
+        case .developing: return IBColors.warning
+        case .novice: return IBColors.danger
+        }
+    }
+
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(IBColors.danger)
             Text(message)
                 .font(.callout)
-                .foregroundStyle(.red)
+                .foregroundStyle(IBColors.danger)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.red.opacity(0.06))
+                .fill(IBColors.danger.opacity(0.06))
         )
         .padding(.horizontal, 24)
     }

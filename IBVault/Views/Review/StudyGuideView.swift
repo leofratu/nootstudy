@@ -126,10 +126,10 @@ struct StudyGuideView: View {
             } else {
                 ZStack {
                     Circle()
-                        .fill(IBColors.electricBlue.opacity(0.1))
+                        .fill(IBColors.accent.opacity(0.1))
                         .frame(width: 48, height: 48)
                     Image(systemName: "books.vertical.fill")
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("All Subjects")
@@ -164,8 +164,8 @@ struct StudyGuideView: View {
     private func errorCard(_ err: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
-            Text(err).foregroundStyle(.red)
+                .foregroundStyle(IBColors.danger)
+            Text(err).foregroundStyle(IBColors.danger)
         }
         .padding(16)
         .glassCard()
@@ -177,7 +177,7 @@ struct StudyGuideView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "book.closed.fill")
-                        .foregroundStyle(subject.map { Color(hex: $0.accentColorHex) } ?? IBColors.electricBlue)
+                        .foregroundStyle(subject.map { Color(hex: $0.accentColorHex) } ?? IBColors.accent)
                     Text(mode.rawValue)
                         .font(.headline)
                 }
@@ -210,9 +210,9 @@ struct StudyGuideView: View {
                 .padding(.horizontal, 4)
 
             let modes: [(mode: GuideMode, icon: String, color: Color, title: String, desc: String)] = [
-                (.preSession, "bolt.fill", .orange, "Pre-Session Brief", "Quick summary of what to focus on right now"),
-                (.fullGuide, "book.fill", IBColors.electricBlue, "Full Study Guide", "Comprehensive topic-by-topic review guide"),
-                (.weakTopics, "target", .red, "Weak Topics Focus", "Target the areas with the biggest payoff"),
+                (.preSession, "bolt.fill", IBColors.warning, "Pre-Session Brief", "Quick summary of what to focus on right now"),
+                (.fullGuide, "book.fill", IBColors.accent, "Full Study Guide", "Comprehensive topic-by-topic review guide"),
+                (.weakTopics, "target", IBColors.danger, "Weak Topics Focus", "Target the areas with the biggest payoff"),
                 (.examPrep, "flame.fill", .purple, "Exam Prep Sprint", "Maximum score improvement in minimum time")
             ]
 

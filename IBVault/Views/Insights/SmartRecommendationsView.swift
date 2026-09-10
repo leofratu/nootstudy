@@ -38,9 +38,9 @@ struct SmartRecommendationsView: View {
                     title: "What to study",
                     subtitle: "A practical sequence based on due cards, current mastery, and the work most likely to move you forward.",
                     symbol: "lightbulb.fill",
-                    tint: IBColors.gold
+                    tint: IBColors.inkTertiary
                 ) {
-                    StudioPill(title: "\(recs.count) ACTIONS", tint: IBColors.gold)
+                    StudioPill(title: "\(recs.count) ACTIONS", tint: IBColors.inkTertiary)
                 }
 
                 LazyVGrid(
@@ -48,9 +48,9 @@ struct SmartRecommendationsView: View {
                     alignment: .leading,
                     spacing: 12
                 ) {
-                    StudioMetricTile(value: "\(dueCards.count)", label: "Due cards", symbol: "clock.badge.exclamationmark", tint: dueCards.count > 0 ? IBColors.coral : IBColors.success, detail: dueCards.count > 0 ? "Schedule first" : "Queue clear")
+                    StudioMetricTile(value: "\(dueCards.count)", label: "Due cards", symbol: "clock.badge.exclamationmark", tint: dueCards.count > 0 ? IBColors.inkTertiary : IBColors.success, detail: dueCards.count > 0 ? "Schedule first" : "Queue clear")
                     StudioMetricTile(value: "\(weakSubjectCount)", label: "Focus areas", symbol: "scope", tint: IBColors.englishColor, detail: "Below 40% mastery")
-                    StudioMetricTile(value: profiles.first.map { "\($0.targetIBScore)" } ?? "-", label: "IB target", symbol: "target", tint: IBColors.electricBlue, detail: "Your current goal")
+                    StudioMetricTile(value: profiles.first.map { "\($0.targetIBScore)" } ?? "-", label: "IB target", symbol: "target", tint: IBColors.accent, detail: "Your current goal")
                 }
 
                 if recs.isEmpty {
@@ -94,7 +94,7 @@ struct SmartRecommendationsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "lightbulb.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(IBColors.inkTertiary)
                 Text("Recommended Actions")
                     .font(.headline)
             }
@@ -158,7 +158,7 @@ struct SmartRecommendationsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "clock.badge.exclamationmark")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(IBColors.warning)
                 Text("Due for Review")
                     .font(.headline)
                 Spacer()
@@ -172,11 +172,9 @@ struct SmartRecommendationsView: View {
                 
                 ForEach(bySubject.keys.sorted(), id: \.self) { subjectName in
                     let cards = bySubject[subjectName] ?? []
-                    let subject = subjects.first { $0.name == subjectName }
-                    
                     HStack(spacing: 10) {
                         Circle()
-                            .fill(Color(hex: subject?.accentColorHex ?? "#888888"))
+                            .fill(IBColors.inkTertiary)
                             .frame(width: 8, height: 8)
                         
                         Text(subjectName)
@@ -188,8 +186,8 @@ struct SmartRecommendationsView: View {
                             .font(.caption.bold())
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Capsule().fill(.orange.opacity(0.15)))
-                            .foregroundStyle(.orange)
+                            .background(Capsule().fill(IBColors.warning.opacity(0.15)))
+                            .foregroundStyle(IBColors.warning)
                     }
                     .padding(.vertical, 4)
                 }
@@ -198,7 +196,7 @@ struct SmartRecommendationsView: View {
                     Spacer()
                     Label("All caught up!", systemImage: "checkmark.circle")
                         .font(.callout)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(IBColors.success)
                     Spacer()
                 }
                 .padding(.vertical, 12)
@@ -213,7 +211,7 @@ struct SmartRecommendationsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(IBColors.danger)
                 Text("Focus Areas")
                     .font(.headline)
             }
@@ -245,7 +243,7 @@ struct SmartRecommendationsView: View {
     }
     
     private func weakTopicRow(_ subject: Subject, mastery: Double) -> some View {
-        let color = Color(hex: subject.accentColorHex)
+        let color = IBColors.inkTertiary
         
         return VStack(spacing: 8) {
             HStack(spacing: 10) {
@@ -274,7 +272,7 @@ struct SmartRecommendationsView: View {
                     Spacer()
                     Text("\(Int(weakestTopic.mastery * 100))%")
                         .font(.caption2)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(IBColors.danger)
                 }
             }
         }
@@ -403,9 +401,9 @@ struct StudyRecommendation: Identifiable {
     
     var priorityColor: Color {
         switch priority {
-        case .critical: return .red
-        case .high: return .orange
-        case .medium: return IBColors.electricBlue
+        case .critical: return IBColors.danger
+        case .high: return IBColors.warning
+        case .medium: return IBColors.accent
         case .low: return .secondary
         }
     }

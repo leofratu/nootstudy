@@ -4,6 +4,9 @@ import UserNotifications
 
 @main
 struct IBVaultApp: App {
+    @AppStorage("appAppearance") private var appAppearanceRaw = IBAppearance.dark.rawValue
+    private var appAppearance: IBAppearance { IBAppearance(rawValue: appAppearanceRaw) ?? .dark }
+
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     #endif
@@ -11,7 +14,7 @@ struct IBVaultApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .preferredColorScheme(.light)
+                .preferredColorScheme(appAppearance.colorScheme)
         }
         .modelContainer(Self.makeModelContainer())
         #if os(macOS)
@@ -203,11 +206,14 @@ struct RootView: View {
             if let profile = primaryProfile {
                 if profile.onboardingCompleted {
                     ContentView()
+                        .environment(bridgeController)
                 } else {
                     OnboardingView()
+                        .environment(bridgeController)
                 }
             } else {
                 OnboardingView()
+                    .environment(bridgeController)
                     .onAppear {
                         let profile = UserProfile()
                         context.insert(profile)
@@ -217,7 +223,9 @@ struct RootView: View {
         // Deliberately outside the branches above: an upgrading user already
         // has a profile, so anything hung off the "no profile yet" path never
         // runs for them.
-        .onAppear {
+        .task {
+            // Let the window draw its first frame before touching the store.
+            await Task.yield()
             preparePersistentStateIfNeeded()
             startBridgeIfNeeded()
         }
@@ -361,7 +369,6 @@ struct RootView: View {
     private func startBridgeIfNeeded() {
         guard !hasStartedBridge else { return }
         hasStartedBridge = true
-        guard BridgeAuthService.isEnabled else { return }
         let controller = IntegrationBridgeController(container: context.container)
         bridgeController = controller
         controller.start()
@@ -377,9 +384,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Keep AppKit chrome, menus, sheets, and SwiftUI semantic controls in
-        // the same light appearance as the product palette.
-        NSApp.appearance = NSAppearance(named: .aqua)
+        // Appearance is driven by SwiftUI preferredColorScheme (AppStorage).
+        // Do not force NSApp.appearance; the AppStorage default is Dark.
 
         let center = UNUserNotificationCenter.current()
         center.delegate = self

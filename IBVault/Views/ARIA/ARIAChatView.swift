@@ -61,15 +61,12 @@ struct ARIAChatView: View {
     @AppStorage("codexModel") private var codexModel = AIConfiguration.codexDefaultModel
     @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
     @State private var ariaService: ARIAService
+    @State private var streamStore = ARIAStreamStore()
     @State private var inputText = ""
-    @State private var streamingText = ""
     @State private var showMemory = false
     @State private var showChatCleanupConfirmation = false
     @State private var chatFailure: ARIAChatFailure?
     @State private var selectedSessionID: UUID?
-    @State private var activeSessionID: UUID?
-    @State private var activePrompt: String?
-    @State private var activeProvider = AIProviderKind.gemini
 
     private var visibleSessions: [ARIAChatSession] {
         sessions.filter { !$0.isArchived }
@@ -138,9 +135,7 @@ struct ARIAChatView: View {
                         if let selectedSession {
                             ARIASessionConversationView(
                                 sessionID: selectedSession.id,
-                                isLoading: ariaService.isLoading && activeSessionID == selectedSession.id,
-                                currentStatus: ariaService.currentStatus,
-                                streamingText: activeSessionID == selectedSession.id ? streamingText : "",
+                                streamStore: streamStore,
                                 failure: visibleFailure(for: selectedSession.id),
                                 onRetry: retryFailure,
                                 onReconnectCodex: reconnectCodex,
@@ -187,7 +182,7 @@ struct ARIAChatView: View {
                         } label: {
                             Image(systemName: "square.and.pencil")
                         }
-                        .disabled(ariaService.isLoading)
+                        .disabled(streamStore.isLoading)
                         .keyboardShortcut("n", modifiers: .command)
                         .help("New chat")
                     }
@@ -227,7 +222,7 @@ struct ARIAChatView: View {
             ForEach(visibleSessions, id: \.id) { session in
                 Button {
                     selectedSessionID = session.id
-                    streamingText = ""
+                    streamStore.streamingText = ""
                 } label: {
                     Label(
                         session.title,
@@ -247,7 +242,7 @@ struct ARIAChatView: View {
             Image(systemName: "bubble.left.and.bubble.right")
         }
         .help("Switch chat")
-        .disabled(ariaService.isLoading)
+        .disabled(streamStore.isLoading)
     }
 
     private var sessionSidebar: some View {
@@ -255,7 +250,7 @@ struct ARIAChatView: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 7)
-                        .fill(IBColors.electricBlue)
+                        .fill(IBColors.accentFill)
                         .frame(width: 34, height: 34)
                     Image(systemName: "sparkles")
                         .font(.system(size: 13, weight: .bold))
@@ -267,12 +262,12 @@ struct ARIAChatView: View {
                     Text("STUDY COMPANION")
                         .font(.system(size: 9, weight: .bold, design: .rounded))
                         .tracking(0.6)
-                        .foregroundStyle(IBColors.teal)
+                        .foregroundStyle(IBColors.inkTertiary)
                 }
                 Spacer(minLength: 4)
                 Text("\(visibleSessions.count)")
                     .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(Capsule().fill(IBColors.canvas))
@@ -283,7 +278,7 @@ struct ARIAChatView: View {
                         .font(.system(size: 13, weight: .bold))
                 }
                 .buttonStyle(.borderless)
-                .disabled(ariaService.isLoading)
+                .disabled(streamStore.isLoading)
                 .help("New Chat")
                 Menu {
                     Button(role: .destructive) {
@@ -296,7 +291,7 @@ struct ARIAChatView: View {
                         .font(.system(size: 13, weight: .bold))
                 }
                 .menuStyle(.borderlessButton)
-                .disabled(ariaService.isLoading)
+                .disabled(streamStore.isLoading)
                 .help("Chat actions")
             }
             .padding(.horizontal, 14)
@@ -309,7 +304,7 @@ struct ARIAChatView: View {
                     ForEach(visibleSessions, id: \.id) { session in
                         Button {
                             selectedSessionID = session.id
-                            streamingText = ""
+                            streamStore.streamingText = ""
                         } label: {
                             ARIAChatSessionRow(
                                 session: session,
@@ -341,7 +336,7 @@ struct ARIAChatView: View {
 
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.electricBlue)
+                    .fill(IBColors.accentFill)
                     .frame(width: 50, height: 50)
                 Image(systemName: "sparkles")
                     .font(.system(size: 20, weight: .semibold))
@@ -370,177 +365,26 @@ struct ARIAChatView: View {
         }
     }
 
-    // MARK: - Input Bar
+    // MARK: - Input Bar (isolated so streaming token writes don't invalidate the chat parent)
     private var inputBar: some View {
-        VStack(spacing: 9) {
-            configurationRail
-
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Ask ARIA…", text: $inputText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...5)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 9)
-                    .onSubmit { sendMessage(inputText) }
-                    .disabled(ariaService.isLoading)
-
-                Button {
-                    if ariaService.isLoading {
-                        cancelGeneration()
-                    } else {
-                        sendMessage(inputText)
-                    }
-                } label: {
-                    let canSend = !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading
-                    Image(systemName: ariaService.isLoading ? "stop.fill" : "arrow.up")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .background(
-                            Group {
-                                if canSend {
-                                    Circle().fill(IBGradient.accent)
-                                } else {
-                                    Circle().fill(IBColors.tertiaryText.opacity(0.45))
-                                }
-                            }
-                            .shadow(color: canSend ? IBColors.electricBlue.opacity(0.3) : .clear, radius: 6, x: 0, y: 2)
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !ariaService.isLoading)
-                .help(ariaService.isLoading ? "Stop response" : "Send message")
-            }
-            .padding(4)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.cardBorder, lineWidth: 1)
-                    )
-            )
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 11)
-        .background(IBColors.canvas)
-    }
-
-    private var configurationRail: some View {
-        HStack(spacing: 8) {
-            Menu {
-                Section("Provider") {
-                    ForEach(AIProviderKind.allCases) { provider in
-                        Button {
-                            selectProvider(provider)
-                        } label: {
-                            Label(
-                                provider.displayName,
-                                systemImage: provider == selectedProvider ? "checkmark" : provider.symbolName
-                            )
-                        }
-                    }
-                }
-
-                Section("Model") {
-                    ForEach(AIConfiguration.knownModels[selectedProvider] ?? []) { option in
-                        Button {
-                            setSelectedModel(option.id)
-                        } label: {
-                            Label(
-                                "\(option.name) · \(option.role)",
-                                systemImage: option.id == selectedModel ? "checkmark" : "cpu"
-                            )
-                        }
-                    }
-
-                    if !(AIConfiguration.knownModels[selectedProvider] ?? []).contains(where: { $0.id == selectedModel }) {
-                        Text("Custom: \(selectedModel)")
-                    }
-                }
-
-                if selectedProvider == .gemini {
-                    Section("Response style") {
-                        Button {
-                            ariaTemperature = 0.2
-                        } label: {
-                            Label("Precise", systemImage: geminiCreativityName == "Precise" ? "checkmark" : "scope")
-                        }
-                        Button {
-                            ariaTemperature = 0.7
-                        } label: {
-                            Label("Balanced", systemImage: geminiCreativityName == "Balanced" ? "checkmark" : "dial.medium")
-                        }
-                        Button {
-                            ariaTemperature = 1.1
-                        } label: {
-                            Label("Exploratory", systemImage: geminiCreativityName == "Exploratory" ? "checkmark" : "wand.and.stars")
-                        }
-                    }
-                } else {
-                    Section("Reasoning") {
-                        ForEach(AIConfiguration.supportedReasoningEfforts(for: selectedProvider)) { effort in
-                            Button {
-                                reasoningEffortRaw = effort.rawValue
-                            } label: {
-                                Label(
-                                    effort.displayName,
-                                    systemImage: effort == selectedReasoningEffort ? "checkmark" : "brain.head.profile"
-                                )
-                            }
-                        }
-                    }
-
-                    Section("Answer detail") {
-                        ForEach(AIResponseVerbosity.allCases) { verbosity in
-                            Button {
-                                verbosityRaw = verbosity.rawValue
-                            } label: {
-                                Label(
-                                    verbosity.displayName,
-                                    systemImage: verbosity == selectedVerbosity ? "checkmark" : "text.alignleft"
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if selectedProvider == .codexCLI {
-                    Section("Web search") {
-                        ForEach(AIWebSearchMode.allCases) { mode in
-                            Button {
-                                webSearchModeRaw = mode.rawValue
-                            } label: {
-                                Label(
-                                    mode.displayName,
-                                    systemImage: mode == selectedWebSearchMode ? "checkmark" : "globe"
-                                )
-                            }
-                        }
-                    }
-                }
-            } label: {
-                Label(
-                    "\(selectedProvider.shortName) · \(AIConfiguration.modelDisplayName(selectedModel, for: selectedProvider))",
-                    systemImage: "slider.horizontal.3"
-                )
-                .font(.caption.weight(.medium))
-                .foregroundStyle(IBColors.secondaryText)
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Response settings")
-
-            Spacer()
-
-            if ariaService.isLoading {
-                Text(ariaService.currentStatus)
-                    .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
-                    .lineLimit(1)
-            }
-        }
-        .disabled(ariaService.isLoading)
+        ARIAChatInputBar(
+            streamStore: streamStore,
+            inputText: $inputText,
+            selectedProvider: selectedProvider,
+            selectedModel: selectedModel,
+            selectedReasoningEffort: selectedReasoningEffort,
+            selectedVerbosity: selectedVerbosity,
+            selectedWebSearchMode: selectedWebSearchMode,
+            geminiCreativityName: geminiCreativityName,
+            reasoningEffortRaw: $reasoningEffortRaw,
+            verbosityRaw: $verbosityRaw,
+            webSearchModeRaw: $webSearchModeRaw,
+            ariaTemperature: $ariaTemperature,
+            onSend: { sendMessage($0) },
+            onCancel: { cancelGeneration() },
+            onSelectProvider: { selectProvider($0) },
+            onSetModel: { setSelectedModel($0) }
+        )
     }
 
     private func sendMessage(_ text: String) {
@@ -548,7 +392,7 @@ struct ARIAChatView: View {
         guard !message.isEmpty else { return }
         // Guard before clearing inputText or persisting anything so a send
         // attempted while a response is streaming is never silently dropped.
-        guard !ariaService.isLoading else { return }
+        guard !streamStore.isLoading else { return }
         guard let selectedSession else {
             guard let bootstrappedSession = bootstrapSessionsIfNeeded() else { return }
             persistSelectedConfiguration()
@@ -566,43 +410,43 @@ struct ARIAChatView: View {
         in session: ARIAChatSession,
         persistUserMessage: Bool
     ) {
-        guard !ariaService.isLoading else { return }
+        guard !streamStore.isLoading else { return }
         let provider = selectedProvider
-        streamingText = ""
+        streamStore.begin(sessionID: session.id, prompt: message, provider: provider)
         chatFailure = nil
-        activeSessionID = session.id
-        activePrompt = message
-        activeProvider = provider
         IBHaptics.light()
         ariaService.sendMessage(
             message,
             context: context,
             session: session,
             persistUserMessage: persistUserMessage,
-            onToken: { partial in streamingText = partial },
-            onComplete: { _ in
-                streamingText = ""
-                activeSessionID = nil
-                activePrompt = nil
+            onToken: { [store = streamStore] partial in
+                Task { @MainActor in store.streamingText = partial }
             },
-            onError: { error, persistedFailureID in
-                if persistedFailureID == nil {
-                    chatFailure = ARIAChatFailure(
-                        error: error,
-                        sessionID: session.id,
-                        prompt: message,
-                        provider: provider
-                    )
+            onStatus: { [store = streamStore] status in
+                Task { @MainActor in store.statusText = status }
+            },
+            onComplete: { [store = streamStore] _ in
+                Task { @MainActor in store.reset() }
+            },
+            onError: { [store = streamStore] error, persistedFailureID in
+                Task { @MainActor in
+                    if persistedFailureID == nil {
+                        self.chatFailure = ARIAChatFailure(
+                            error: error,
+                            sessionID: session.id,
+                            prompt: message,
+                            provider: provider
+                        )
+                    }
+                    store.reset()
                 }
-                streamingText = ""
-                activeSessionID = nil
-                activePrompt = nil
             }
         )
     }
 
     private func retryFailure(_ failure: ARIAChatFailure) {
-        guard !ariaService.isLoading,
+        guard !streamStore.isLoading,
               let prompt = failure.prompt,
               let sessionID = failure.sessionID,
               let session = visibleSessions.first(where: { $0.id == sessionID }) else {
@@ -617,19 +461,17 @@ struct ARIAChatView: View {
     }
 
     private func cancelGeneration() {
-        guard ariaService.isLoading else { return }
-        let sessionID = activeSessionID
-        let prompt = activePrompt
-        let provider = activeProvider
+        guard streamStore.isLoading else { return }
+        let sessionID = streamStore.activeSessionID
+        let prompt = streamStore.activePrompt
+        let provider = streamStore.activeProvider
         let session = sessionID.flatMap { id in visibleSessions.first(where: { $0.id == id }) }
         let persistedFailureID = ariaService.cancelCurrentRequest(
             context: context,
             session: session,
             provider: provider
         )
-        streamingText = ""
-        activeSessionID = nil
-        activePrompt = nil
+        streamStore.reset()
         if persistedFailureID == nil {
             chatFailure = ARIAChatFailure(
                 message: "Response stopped. Your message is saved and can be retried.",
@@ -839,7 +681,7 @@ struct ARIAChatView: View {
         }
         selectedSessionID = session.id
         inputText = ""
-        streamingText = ""
+        streamStore.streamingText = ""
         chatFailure = nil
     }
 
@@ -848,15 +690,15 @@ struct ARIAChatView: View {
         // If a request is streaming into this session, stop it first. Writing to
         // a deleted SwiftData model raises an uncatchable exception, so we must
         // never delete a session that an in-flight task may still touch.
-        if ariaService.isLoading && session.id == activeSessionID {
+        if streamStore.isLoading && session.id == streamStore.activeSessionID {
             ariaService.cancelCurrentRequest(context: context, session: session, provider: selectedProvider)
         }
         // The cancelled request no longer owns any active streaming state; keep
         // it from leaking into the next selected session.
-        if session.id == activeSessionID {
-            activeSessionID = nil
-            activePrompt = nil
-            streamingText = ""
+        if session.id == streamStore.activeSessionID {
+            streamStore.activeSessionID = nil
+            streamStore.activePrompt = nil
+            streamStore.streamingText = ""
         }
 
         let sessionID = session.id
@@ -944,9 +786,7 @@ struct ARIAChatView: View {
 
 private struct ARIASessionConversationView<EmptyContent: View>: View {
     @Query private var messages: [ChatMessage]
-    let isLoading: Bool
-    let currentStatus: String
-    let streamingText: String
+    let streamStore: ARIAStreamStore
     let failure: ARIAChatFailure?
     let onRetry: (ARIAChatFailure) -> Void
     let onReconnectCodex: (ARIAChatFailure) -> Void
@@ -955,6 +795,10 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
     @State private var lastStreamingScrollTime: ContinuousClock.Instant?
     @State private var dismissedRecoveredFailureID: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isLoading: Bool { streamStore.isLoading }
+    private var currentStatus: String { streamStore.statusText }
+    private var streamingText: String { streamStore.streamingText }
 
     private var displayedFailure: ARIAChatFailure? {
         if let failure { return failure }
@@ -982,9 +826,7 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
 
     init(
         sessionID: UUID,
-        isLoading: Bool,
-        currentStatus: String,
-        streamingText: String,
+        streamStore: ARIAStreamStore,
         failure: ARIAChatFailure?,
         onRetry: @escaping (ARIAChatFailure) -> Void,
         onReconnectCodex: @escaping (ARIAChatFailure) -> Void,
@@ -996,9 +838,7 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
             filter: #Predicate<ChatMessage> { $0.sessionID == selectedSessionID },
             sort: \ChatMessage.timestamp
         )
-        self.isLoading = isLoading
-        self.currentStatus = currentStatus
-        self.streamingText = streamingText
+        self.streamStore = streamStore
         self.failure = failure
         self.onRetry = onRetry
         self.onReconnectCodex = onReconnectCodex
@@ -1165,7 +1005,7 @@ private struct ARIAChatFailureRow: View {
 
                 Text(failure.message)
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 8) {
@@ -1182,7 +1022,7 @@ private struct ARIAChatFailureRow: View {
                             Label("Retry", systemImage: "arrow.clockwise")
                         }
                         .buttonStyle(.bordered)
-                        .tint(IBColors.electricBlue)
+                        .tint(IBColors.accentFill)
                         .controlSize(.small)
                     }
                 }
@@ -1211,11 +1051,11 @@ private struct ARIAThinkingIndicator: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(IBColors.electricBlue.opacity(0.12))
+                    .fill(IBColors.surfaceHover)
                     .frame(width: 30, height: 30)
                 Image(systemName: "sparkles")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accentFill)
             }
             HStack(spacing: 9) {
                 ProgressView().controlSize(.small)
@@ -1230,7 +1070,7 @@ private struct ARIAThinkingIndicator: View {
                     .fill(IBColors.surface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                            .stroke(IBColors.border, lineWidth: 1)
                     )
             )
             Spacer()
@@ -1245,26 +1085,26 @@ private struct ARIAChatSessionRow: View {
     var body: some View {
         HStack(spacing: 9) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(isSelected ? IBColors.electricBlue : Color.clear)
+                .fill(isSelected ? IBColors.accentFill : Color.clear)
                 .frame(width: 3, height: 44)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(session.title)
                         .font(.callout.weight(.semibold))
-                        .foregroundStyle(isSelected ? IBColors.electricBlue : IBColors.ink)
+                        .foregroundStyle(isSelected ? IBColors.accentFill : IBColors.ink)
                         .lineLimit(2)
                         .help(session.title)
                     Spacer(minLength: 4)
-                    Text(session.updatedAt, style: .relative)
+                    Text(RelativeTimeHelper.string(for: session.updatedAt))
                         .font(.caption2)
-                        .foregroundStyle(IBColors.tertiaryText)
+                        .foregroundStyle(IBColors.inkTertiary)
                         .lineLimit(1)
                 }
 
                 Text(session.lastMessagePreview.isEmpty ? "No messages yet" : session.lastMessagePreview)
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .lineLimit(2)
                     .help(session.lastMessagePreview)
             }
@@ -1274,7 +1114,7 @@ private struct ARIAChatSessionRow: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? IBColors.electricBlue.opacity(0.08) : Color.clear)
+                .fill(isSelected ? IBColors.accentFill.opacity(0.08) : Color.clear)
         )
     }
 }
@@ -1295,7 +1135,7 @@ struct MessageRow: View {
                             MessageCopyButton(text: message.content)
                             Text("You")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(IBColors.secondaryText)
+                                .foregroundStyle(IBColors.inkSecondary)
                         }
                         Text(message.content)
                             .lineSpacing(3)
@@ -1305,7 +1145,7 @@ struct MessageRow: View {
                             .padding(.vertical, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(IBColors.electricBlue)
+                                    .fill(IBColors.accentFill)
                             )
                     }
                     .frame(maxWidth: 590, alignment: .trailing)
@@ -1318,7 +1158,7 @@ struct MessageRow: View {
                         HStack(spacing: 6) {
                             Text("ARIA")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(IBColors.electricBlue)
+                                .foregroundStyle(IBColors.accentFill)
                             MessageCopyButton(text: message.content)
                         }
                         FormattedMessageContent(text: message.content, preferRichRendering: true)
@@ -1336,7 +1176,7 @@ struct MessageRow: View {
     private var ariaAvatar: some View {
         ZStack {
             Circle()
-                .fill(IBColors.electricBlue)
+                .fill(IBColors.accentFill)
                 .frame(width: 30, height: 30)
             Image(systemName: "sparkles")
                 .font(.system(size: 13, weight: .semibold))
@@ -1347,11 +1187,11 @@ struct MessageRow: View {
     private var userAvatar: some View {
         ZStack {
             Circle()
-                .fill(IBColors.ink.opacity(0.06))
+                .fill(IBColors.surfaceHover)
                 .frame(width: 30, height: 30)
             Image(systemName: "person.fill")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
         }
     }
 }
@@ -1383,7 +1223,7 @@ private struct MessageCopyButton: View {
                 .frame(width: 18, height: 18)
         }
         .buttonStyle(.borderless)
-        .foregroundStyle(copied ? IBColors.success : IBColors.secondaryText)
+        .foregroundStyle(copied ? IBColors.success : IBColors.inkSecondary)
         .help(copied ? "Copied" : "Copy message")
     }
 }
@@ -1398,7 +1238,13 @@ struct FormattedMessageContent: View {
     init(text: String, preferRichRendering: Bool = false) {
         self.text = text
         self.preferRichRendering = preferRichRendering
-        _sections = State(initialValue: FormattedMessageFormatter.sections(from: text))
+        if let cached = FormattedMessageCache.shared.cachedSections(for: text) {
+            _sections = State(initialValue: cached)
+        } else {
+            let initial = FormattedMessageFormatter.sections(from: text)
+            FormattedMessageCache.shared.store(sections: initial, for: text)
+            _sections = State(initialValue: initial)
+        }
     }
 
     var body: some View {
@@ -1418,18 +1264,24 @@ struct FormattedMessageContent: View {
     }
 
     private func debouncedParse(_ newText: String) async {
+        if let cached = FormattedMessageCache.shared.cachedSections(for: newText) {
+            sections = cached
+            return
+        }
         parseTask?.cancel()
         // Debounce 80ms, then parse off main thread
         let task = Task.detached(priority: .userInitiated) {
             try? await Task.sleep(nanoseconds: 80_000_000)
             if Task.isCancelled { return [FormattedMessageSection]() }
-            return FormattedMessageFormatter.sections(from: newText)
+            let parsed = FormattedMessageFormatter.sections(from: newText)
+            FormattedMessageCache.shared.store(sections: parsed, for: newText)
+            return parsed
         }
         parseTask = Task {
             let result = await task.value
             if Task.isCancelled { return }
+            if result.isEmpty { return }
             await MainActor.run {
-                // Only update if text still matches (avoid stale)
                 sections = result
             }
         }
@@ -1473,10 +1325,10 @@ struct FormattedMessageContent: View {
         case .quote(let quote):
             HStack(alignment: .top, spacing: 10) {
                 Rectangle()
-                    .fill(IBColors.cardBorder)
+                    .fill(IBColors.border)
                     .frame(width: 2)
                 Text(FormattedMessageFormatter.attributedMarkdown(from: quote) ?? AttributedString(quote))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .lineSpacing(4)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1496,6 +1348,9 @@ struct FormattedMessageContent: View {
 
         case .flashcard(let front, let back):
             FlashcardMessageView(front: front, back: back)
+
+        case .table(let headers, let rows):
+            FormattedTableView(headers: headers, rows: rows)
         }
     }
 }
@@ -1508,7 +1363,7 @@ struct StreamingMessageRow: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(IBColors.electricBlue)
+                    .fill(IBColors.accentFill)
                     .frame(width: 30, height: 30)
                 Image(systemName: "sparkles")
                     .font(.system(size: 13, weight: .semibold))
@@ -1518,7 +1373,7 @@ struct StreamingMessageRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("ARIA")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accent)
                     .padding(.horizontal, 4)
                 // Rich rendering during streaming, debounced off main thread
                 FormattedMessageContent(text: text, preferRichRendering: true)
@@ -1560,8 +1415,10 @@ private struct MathJaxBlockView: View {
         }
         .padding(.vertical, 4)
         .overlay(alignment: .topTrailing) {
-            MessageCopyButton(text: latex)
-                .opacity(0.72)
+            if !usesFallback {
+                MessageCopyButton(text: latex)
+                    .opacity(0.72)
+            }
         }
         .task(id: latex) {
             // Show native first, then upgrade to MathJax after brief delay to avoid flash
@@ -1683,18 +1540,13 @@ private struct NativeMathBlockView: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             blockBody
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.primary.opacity(0.05))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
+        .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.codeBlockBackground))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
     }
 
     @ViewBuilder
@@ -1717,9 +1569,10 @@ private struct NativeMathText: View {
 
     var body: some View {
         Text(verbatim: text)
-            .font(.system(size: 16, weight: .medium, design: .serif))
-            .multilineTextAlignment(.leading)
+            .font(.system(size: 16, weight: .regular, design: .serif).italic())
+            .multilineTextAlignment(.center)
             .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
@@ -1825,7 +1678,7 @@ private struct ARIADiagramView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: diagram.isSimulation ? "atom" : (diagram.isCanvas ? "rectangle.3.group.bubble" : (diagram.isFlow ? "point.3.connected.trianglepath.dotted" : "chart.xyaxis.line")))
-                    .foregroundStyle(IBColors.teal)
+                    .foregroundStyle(IBColors.inkTertiary)
                 Text(diagram.title ?? (diagram.isSimulation ? "Interactive simulation" : (diagram.isCanvas ? "Interactive canvas" : (diagram.isFlow ? "Concept diagram" : "Interactive graph"))))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(IBColors.ink)
@@ -1833,7 +1686,7 @@ private struct ARIADiagramView: View {
                 Spacer()
                 Text(modeTitle)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .padding(.horizontal, 7)
                     .frame(height: 24)
                     .background(IBColors.canvas, in: Capsule())
@@ -1927,7 +1780,7 @@ private struct ARIADiagramView: View {
                                 .frame(width: 7, height: 7)
                             Text(series.label ?? "Series \(index + 1)")
                                 .font(.caption2)
-                                .foregroundStyle(IBColors.secondaryText)
+                                .foregroundStyle(IBColors.inkSecondary)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
@@ -1941,7 +1794,7 @@ private struct ARIADiagramView: View {
                 .fill(IBColors.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(IBColors.cardBorder, lineWidth: 1)
+                        .stroke(IBColors.border, lineWidth: 1)
                 )
         )
     }
@@ -1974,25 +1827,25 @@ private struct ARIADiagramView: View {
             var vertical = Path()
             vertical.move(to: CGPoint(x: x, y: plot.minY))
             vertical.addLine(to: CGPoint(x: x, y: plot.maxY))
-            context.stroke(vertical, with: .color(IBColors.cardBorder.opacity(0.7)), lineWidth: 0.5)
+            context.stroke(vertical, with: .color(IBColors.border.opacity(0.7)), lineWidth: 0.5)
             var horizontal = Path()
             horizontal.move(to: CGPoint(x: plot.minX, y: y))
             horizontal.addLine(to: CGPoint(x: plot.maxX, y: y))
-            context.stroke(horizontal, with: .color(IBColors.cardBorder.opacity(0.7)), lineWidth: 0.5)
+            context.stroke(horizontal, with: .color(IBColors.border.opacity(0.7)), lineWidth: 0.5)
         }
         if xMin <= 0, xMax >= 0 {
             let x = point([0, yMin]).x
             var axis = Path()
             axis.move(to: CGPoint(x: x, y: plot.minY))
             axis.addLine(to: CGPoint(x: x, y: plot.maxY))
-            context.stroke(axis, with: .color(IBColors.secondaryText), lineWidth: 1)
+            context.stroke(axis, with: .color(IBColors.inkSecondary), lineWidth: 1)
         }
         if yMin <= 0, yMax >= 0 {
             let y = point([xMin, 0]).y
             var axis = Path()
             axis.move(to: CGPoint(x: plot.minX, y: y))
             axis.addLine(to: CGPoint(x: plot.maxX, y: y))
-            context.stroke(axis, with: .color(IBColors.secondaryText), lineWidth: 1)
+            context.stroke(axis, with: .color(IBColors.inkSecondary), lineWidth: 1)
         }
 
         for (index, series) in diagram.graphSeries.enumerated() {
@@ -2043,7 +1896,7 @@ private struct ARIADiagramView: View {
             var path = Path()
             path.move(to: start)
             path.addLine(to: end)
-            context.stroke(path, with: .color(IBColors.secondaryText.opacity(0.75)), lineWidth: 1.4)
+            context.stroke(path, with: .color(IBColors.inkSecondary.opacity(0.75)), lineWidth: 1.4)
             let angle = atan2(end.y - start.y, end.x - start.x)
             let arrow = CGPoint(x: end.x - cos(angle) * 18, y: end.y - sin(angle) * 18)
             var arrowPath = Path()
@@ -2051,7 +1904,7 @@ private struct ARIADiagramView: View {
             arrowPath.addLine(to: CGPoint(x: arrow.x - cos(angle - .pi / 5) * 7, y: arrow.y - sin(angle - .pi / 5) * 7))
             arrowPath.move(to: arrow)
             arrowPath.addLine(to: CGPoint(x: arrow.x - cos(angle + .pi / 5) * 7, y: arrow.y - sin(angle + .pi / 5) * 7))
-            context.stroke(arrowPath, with: .color(IBColors.secondaryText.opacity(0.75)), lineWidth: 1.4)
+            context.stroke(arrowPath, with: .color(IBColors.inkSecondary.opacity(0.75)), lineWidth: 1.4)
             if let label = edge.label {
                 context.draw(Text(shortDiagramLabel(label, limit: 22)).font(.caption2), at: CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 10))
             }
@@ -2072,7 +1925,7 @@ private struct ARIADiagramView: View {
 
     private func seriesColor(_ series: ARIADiagramSpec.Series?, index: Int) -> Color {
         if let hex = series?.color, !hex.isEmpty { return Color(hex: hex) }
-        return [IBColors.electricBlue, IBColors.teal, IBColors.coral, IBColors.gold][index % 4]
+        return [IBColors.accent, IBColors.inkSecondary, IBColors.inkTertiary, IBColors.borderStrong][index % 4]
     }
 
     private func shortDiagramLabel(_ label: String, limit: Int) -> String {
@@ -2129,11 +1982,11 @@ private struct ARIAParticleSimulationView: View {
                     .frame(maxWidth: 150)
                 Text("\(speed, format: .number.precision(.fractionLength(1)))x")
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Spacer()
                 Text(isAtomMode ? "Electron orbit model" : "Particle motion model")
                     .font(.caption2)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
         }
         .accessibilityLabel(isAtomMode ? "Interactive atom simulation" : "Interactive particle simulation")
@@ -2157,13 +2010,13 @@ private struct ARIAParticleSimulationView: View {
         for radius in radii {
             context.stroke(
                 Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
-                with: .color(IBColors.electricBlue.opacity(0.24)),
+                with: .color(IBColors.accentFill.opacity(0.24)),
                 lineWidth: 1
             )
         }
         context.fill(
             Path(ellipseIn: CGRect(x: center.x - 18, y: center.y - 18, width: 36, height: 36)),
-            with: .color(IBColors.coral)
+            with: .color(IBColors.inkTertiary)
         )
         for index in 0..<4 {
             let radius = radii[index % radii.count]
@@ -2171,7 +2024,7 @@ private struct ARIAParticleSimulationView: View {
             let point = CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
             context.fill(
                 Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6, width: 12, height: 12)),
-                with: .color(IBColors.electricBlue)
+                with: .color(IBColors.accentFill)
             )
         }
     }
@@ -2182,7 +2035,7 @@ private struct ARIAParticleSimulationView: View {
             let phase = Double(index) * 1.618
             let x = 14 + (sin(time * (0.35 + Double(index % 5) * 0.08) + phase) + 1) / 2 * max(size.width - 28, 1)
             let y = 14 + (cos(time * (0.48 + Double(index % 7) * 0.06) + phase * 0.7) + 1) / 2 * max(size.height - 28, 1)
-            let color = [IBColors.electricBlue, IBColors.teal, IBColors.coral, IBColors.gold][index % 4]
+            let color = [IBColors.accent, IBColors.inkSecondary, IBColors.inkTertiary, IBColors.borderStrong][index % 4]
             context.fill(
                 Path(ellipseIn: CGRect(x: x - 4, y: y - 4, width: 8, height: 8)),
                 with: .color(color.opacity(0.82))
@@ -2247,7 +2100,7 @@ private struct ARIAGenerativeCanvasView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 7))
                 .overlay(
                     RoundedRectangle(cornerRadius: 7)
-                        .stroke(IBColors.cardBorder.opacity(0.75), lineWidth: 1)
+                        .stroke(IBColors.border.opacity(0.75), lineWidth: 1)
                 )
             }
 
@@ -2263,12 +2116,12 @@ private struct ARIAGenerativeCanvasView: View {
 
                 Text("Speed")
                     .font(.caption2)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Slider(value: $masterSpeed, in: 0.1...3)
                     .frame(maxWidth: 130)
                 Text("\(masterSpeed, format: .number.precision(.fractionLength(1)))x")
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
 
             ForEach(validControls, id: \.id) { control in
@@ -2287,7 +2140,7 @@ private struct ARIAGenerativeCanvasView: View {
                     HStack(spacing: 10) {
                         Text(control.label)
                             .font(.caption2)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                             .frame(width: 104, alignment: .leading)
                         Slider(
                             value: Binding(
@@ -2298,7 +2151,7 @@ private struct ARIAGenerativeCanvasView: View {
                         )
                         Text(valueLabel(for: control))
                             .font(.caption2.monospacedDigit())
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                             .frame(width: 54, alignment: .trailing)
                     }
                 }
@@ -2336,7 +2189,7 @@ private struct ARIAGenerativeCanvasView: View {
                !(toggleValues[visibilityControl] ?? true) {
                 continue
             }
-            let color = element.color.map(Color.init(hex:)) ?? IBColors.electricBlue
+            let color = element.color.map(Color.init(hex:)) ?? IBColors.accentFill
             let point = animatedPoint(for: element, size: size, time: time)
             let kind = element.kind.lowercased()
             let minDimension = min(size.width, size.height)
@@ -2461,7 +2314,7 @@ private struct FlashcardMessageView: View {
             flashcardSide(
                 label: "Front",
                 icon: "questionmark.circle.fill",
-                tint: IBColors.electricBlue,
+                tint: IBColors.accentFill,
                 text: front
             )
 
@@ -2510,8 +2363,8 @@ private struct CodeBlockView: View {
             HStack {
                 if !language.isEmpty {
                     Text(language)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(IBColors.inkTertiary)
                         .textCase(.lowercase)
                 }
                 Spacer()
@@ -2522,33 +2375,30 @@ private struct CodeBlockView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                            .font(.caption)
+                            .font(.system(size: 11, weight: .semibold))
                         Text(copied ? "Copied" : "Copy")
-                            .font(.caption)
+                            .font(.system(size: 11, weight: .medium))
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(IBColors.inkSecondary)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.primary.opacity(0.06))
+            .background(IBColors.surfaceRaised)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(verbatim: code)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(IBColors.ink)
                     .textSelection(.enabled)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .background(IBColors.codeBlockBackground)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.primary.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
+        .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.codeBlockBackground))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
