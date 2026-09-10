@@ -93,6 +93,7 @@
 		9A7E2BAF03F3737E7D051984 /* SubjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */; };
 		9AD053EF7D6637FC4E100EA0 /* ReviewScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15D105C387E41396D66371BE /* ReviewScheduler.swift */; };
 		9D1F50FAE95AFD66C6E15506 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 908ECDE117349ED5E8B3004B /* DesignSystem.swift */; };
+		A341AEE2C7D9381AF8F5F38E /* VisualSnapshotHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F77CFAEEC1B8F79CB3A759 /* VisualSnapshotHarness.swift */; };
 		A6B9AC29737742396D3F7F19 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F393C55ED8372446273171 /* BackupService.swift */; };
 		A6E69C8F0FA70F2E4FA8FA9A /* AcademicRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117AA30D7289CCE3008C9065 /* AcademicRecord.swift */; };
 		AA3E53D96ABC17D25927D643 /* ADHDMedicationTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64457DA4883197D2A87251A1 /* ADHDMedicationTrackerTests.swift */; };
@@ -253,6 +254,7 @@
 		BEAF214C9BEFEF30058DBB45 /* ExternalActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalActivityView.swift; sourceTree = "<group>"; };
 		C00F19D61E9A4E3BB2B6C0BE /* ARIAActionToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAActionToolTests.swift; sourceTree = "<group>"; };
 		C181DD379612F56FEB4EB918 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C4F77CFAEEC1B8F79CB3A759 /* VisualSnapshotHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualSnapshotHarness.swift; sourceTree = "<group>"; };
 		C5D9C160A12D3DD94F6B217B /* ProgressionEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionEventTests.swift; sourceTree = "<group>"; };
 		C6CE8EAB80FB636A55EE5742 /* tex-svg.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "tex-svg.js"; sourceTree = "<group>"; };
 		C729E73BE8AAA09B5A1FA06B /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
@@ -600,6 +602,7 @@
 				5233D9FE11A99995314C6222 /* SubjectKnowledgeTests.swift */,
 				F2B3FD673726F5C6639FD59F /* SyllabusSeederTests.swift */,
 				FD42C0B0534AB6E78452E12D /* UserProfileProgressionTests.swift */,
+				C4F77CFAEEC1B8F79CB3A759 /* VisualSnapshotHarness.swift */,
 				23E6259966D0700049C34520 /* XPCalculatorTests.swift */,
 			);
 			path = IBVaultTests;
@@ -869,6 +872,7 @@
 				95B71E62ED20AFEA05AD737C /* SubjectKnowledgeTests.swift in Sources */,
 				74F907BB6FD0CE9CFE7B5731 /* SyllabusSeederTests.swift in Sources */,
 				516BA94C13C65BF91F437613 /* UserProfileProgressionTests.swift in Sources */,
+				A341AEE2C7D9381AF8F5F38E /* VisualSnapshotHarness.swift in Sources */,
 				CFD87C7AC43C98573EFE0E67 /* XPCalculatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
