@@ -58,7 +58,7 @@ struct StudyPlannerView: View {
                         title: "Study sessions",
                         subtitle: todayPlans.isEmpty ? "Plan a focused block, then turn the work into a review path you can trust." : (todayPlans.count == 1 ? "1 session is lined up for today." : "\(todayPlans.count) sessions are lined up for today."),
                         symbol: "calendar.badge.clock",
-                        tint: IBColors.electricBlue
+                        tint: IBColors.accent
                     ) {
                         Button {
                             selectedScheduleSlot = nil
@@ -69,14 +69,14 @@ struct StudyPlannerView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        .tint(IBColors.electricBlue)
+                        .tint(IBColors.accent)
                         .keyboardShortcut("n", modifiers: .command)
                     }
 
                     HStack(spacing: 12) {
-                        StudioMetricTile(value: "\(todayPlans.count)", label: "Today", symbol: "calendar", tint: IBColors.coral, detail: todayPlans.isEmpty ? "Open space" : "Scheduled blocks")
-                        StudioMetricTile(value: "\(upcomingPlans.count)", label: "Upcoming", symbol: "clock.arrow.circlepath", tint: IBColors.electricBlue, detail: "On your horizon")
-                        StudioMetricTile(value: "\(weekSessionsCount)", label: "This week", symbol: "checkmark.seal.fill", tint: IBColors.teal, detail: "Completed sessions")
+                        StudioMetricTile(value: "\(todayPlans.count)", label: "Today", symbol: "calendar", tint: IBColors.inkTertiary, detail: todayPlans.isEmpty ? "Open space" : "Scheduled blocks")
+                        StudioMetricTile(value: "\(upcomingPlans.count)", label: "Upcoming", symbol: "clock.arrow.circlepath", tint: IBColors.accent, detail: "On your horizon")
+                        StudioMetricTile(value: "\(weekSessionsCount)", label: "This week", symbol: "checkmark.seal.fill", tint: IBColors.inkTertiary, detail: "Completed sessions")
                     }
 
                     // Today's Sessions
@@ -159,7 +159,7 @@ struct StudyPlannerView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(.orange)
+                    .fill(IBColors.warning)
                     .frame(width: 7, height: 7)
                 Text("Today")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -180,7 +180,7 @@ struct StudyPlannerView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(IBColors.electricBlue)
+                    .fill(IBColors.accent)
                     .frame(width: 7, height: 7)
                 Text("Upcoming")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -192,8 +192,8 @@ struct StudyPlannerView: View {
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(IBColors.electricBlue.opacity(0.1)))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .background(Capsule().fill(IBColors.accent.opacity(0.1)))
+                    .foregroundStyle(IBColors.accent)
             }
             .padding(.leading, 4)
 
@@ -210,7 +210,7 @@ struct StudyPlannerView: View {
         } label: {
             HStack(spacing: 14) {
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(subjectColor(plan.subjectName))
+                    .fill(IBColors.inkTertiary)
                     .frame(width: 3, height: 40)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -230,8 +230,8 @@ struct StudyPlannerView: View {
                                 .font(.system(size: 9, weight: .bold, design: .rounded))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
-                                .background(Capsule().fill(IBColors.electricBlue.opacity(0.1)))
-                                .foregroundStyle(IBColors.electricBlue)
+                                .background(Capsule().fill(IBColors.accent.opacity(0.1)))
+                                .foregroundStyle(IBColors.accent)
                         }
                     }
                 }
@@ -252,8 +252,8 @@ struct StudyPlannerView: View {
                         .font(.system(size: 9, weight: .heavy, design: .rounded))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
-                        .background(Capsule().fill(.green.opacity(0.12)))
-                        .foregroundStyle(.green)
+                        .background(Capsule().fill(IBColors.success.opacity(0.12)))
+                        .foregroundStyle(IBColors.success)
                 } else {
                     Image(systemName: "chevron.right")
                         .foregroundStyle(.quaternary)
@@ -289,7 +289,7 @@ struct StudyPlannerView: View {
                 } label: {
                     HStack(spacing: 14) {
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(subjectColor(session.subjectName))
+                            .fill(IBColors.inkTertiary)
                             .frame(width: 3, height: 44)
 
                         VStack(alignment: .leading, spacing: 3) {
@@ -317,10 +317,10 @@ struct StudyPlannerView: View {
 
                         VStack(spacing: 4) {
                             Image(systemName: "arrow.clockwise.circle.fill")
-                                .foregroundStyle(IBColors.electricBlue)
+                                .foregroundStyle(IBColors.accent)
                             Text("Revise")
                                 .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(IBColors.electricBlue)
+                                .foregroundStyle(IBColors.accent)
                         }
                     }
                     .padding(10)
@@ -376,7 +376,7 @@ struct StudyPlannerView: View {
     }
 
     private func retentionBadge(_ percent: Int) -> some View {
-        let color: Color = percent >= 80 ? .green : percent >= 50 ? .orange : .red
+        let color: Color = percent >= 80 ? IBColors.success : percent >= 50 ? IBColors.warning : IBColors.danger
         return Text("\(percent)%")
             .font(.system(size: 11, weight: .bold, design: .rounded))
             .padding(.horizontal, 7)

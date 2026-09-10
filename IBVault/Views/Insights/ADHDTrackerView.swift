@@ -86,9 +86,9 @@ struct ADHDTrackerView: View {
     
     private var statusColor: Color {
         switch currentStatus.colorName {
-        case "green": return .green
+        case "green": return IBColors.success
         case "blue": return .blue
-        case "orange": return .orange
+        case "orange": return IBColors.warning
         default: return .gray
         }
     }
@@ -305,7 +305,7 @@ struct ADHDTrackerView: View {
                     }
                     
                     RuleMark(y: .value("Min", therapeuticMin))
-                        .foregroundStyle(Color.orange.opacity(0.8))
+                        .foregroundStyle(IBColors.inkTertiary.opacity(0.8))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
                     
                     if let currentHourOffset {
@@ -374,7 +374,7 @@ struct ADHDTrackerView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(IBColors.success)
                 Text("Privacy Notice")
                     .font(.caption.bold())
             }

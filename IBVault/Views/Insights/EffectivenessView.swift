@@ -95,11 +95,11 @@ struct EffectivenessView: View {
         HStack(spacing: 20) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.electricBlue.opacity(0.12))
+                    .fill(IBColors.accent.opacity(0.12))
                     .frame(width: 58, height: 58)
                 Image(systemName: "chart.line.uptrend.xyaxis")
                     .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accent)
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -111,7 +111,7 @@ struct EffectivenessView: View {
                 if let profile, profile.currentStreak > 0 {
                     Label("\(profile.currentStreak)-day current streak", systemImage: "flame.fill")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(IBColors.warning)
                 }
             }
 
@@ -120,7 +120,7 @@ struct EffectivenessView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(activeDays)")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accent)
                 Text("active days")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -149,7 +149,7 @@ struct EffectivenessView: View {
                         x: .value("Day", row.date),
                         y: .value("Minutes", row.minutes)
                     )
-                    .foregroundStyle(IBColors.electricBlue.opacity(0.28))
+                    .foregroundStyle(IBColors.accent.opacity(0.28))
                     .cornerRadius(5)
 
                     LineMark(
@@ -197,9 +197,9 @@ struct EffectivenessView: View {
 
                     Spacer()
 
-                    metric(value: "\(Int(selectedMomentumRow.minutes))m", label: "Study", color: IBColors.electricBlue)
+                    metric(value: "\(Int(selectedMomentumRow.minutes))m", label: "Study", color: IBColors.accent)
                     metric(value: "\(selectedMomentumRow.cards)", label: "Cards", color: IBColors.success)
-                    metric(value: "+\(selectedMomentumRow.xp)", label: "XP", color: .yellow)
+                    metric(value: "+\(selectedMomentumRow.xp)", label: "XP", color: IBColors.inkTertiary)
                 }
             }
         }
@@ -225,7 +225,7 @@ struct EffectivenessView: View {
                 title: "Active study days",
                 value: "\(activeDays) of 14",
                 progress: activeDayProgress,
-                color: IBColors.electricBlue
+                color: IBColors.accent
             )
             progressRow(
                 icon: "rectangle.stack.badge.play.fill",

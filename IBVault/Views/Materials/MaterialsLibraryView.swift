@@ -41,7 +41,7 @@ struct MaterialFile: Identifiable, Hashable, Sendable {
     var iconColor: Color {
         switch ext.lowercased() {
         case "pdf": return IBColors.danger
-        case "pptx", "ppt": return IBColors.streakOrange
+        case "pptx", "ppt": return IBColors.inkTertiary
         case "js": return IBColors.warning
         default: return .gray
         }
@@ -88,7 +88,7 @@ struct MaterialsLibraryView: View {
         MaterialCategory(name: "LitLearn", icon: "book.fill", color: IBColors.russianColor,
                          subject: "Russian A Literature", subfolder: "LitLearn",
                          description: "Full study guides for Language A Literature"),
-        MaterialCategory(name: "Grade Boundaries", icon: "chart.line.uptrend.xyaxis", color: IBColors.electricBlue,
+        MaterialCategory(name: "Grade Boundaries", icon: "chart.line.uptrend.xyaxis", color: IBColors.accent,
                          subject: "All Subjects", subfolder: "IB DOCUMENTS/Grade Boundaries",
                          description: "Official IB grade boundaries 2011–2025"),
         MaterialCategory(name: "Formula Booklets", icon: "function", color: IBColors.mathColor,
@@ -151,11 +151,11 @@ struct MaterialsLibraryView: View {
 
     private var librarySummary: some View {
         HStack(spacing: 0) {
-            StatCard(value: "\(categories.count)", label: "Collections", color: IBColors.electricBlue, icon: "folder.fill")
+            StatCard(value: "\(categories.count)", label: "Collections", color: IBColors.accent, icon: "folder.fill")
             Divider().frame(height: 40)
-            StatCard(value: hasLoadedLibraryStats ? "\(libraryStats.totalFileCount)" : "…", label: "Files", color: .orange, icon: "doc.fill")
+            StatCard(value: hasLoadedLibraryStats ? "\(libraryStats.totalFileCount)" : "…", label: "Files", color: IBColors.warning, icon: "doc.fill")
             Divider().frame(height: 40)
-            StatCard(value: hasLoadedLibraryStats ? "\(libraryStats.totalBytes / 1_000_000) MB" : "…", label: "Total Size", color: .green, icon: "externaldrive.fill")
+            StatCard(value: hasLoadedLibraryStats ? "\(libraryStats.totalBytes / 1_000_000) MB" : "…", label: "Total Size", color: IBColors.success, icon: "externaldrive.fill")
         }
         .padding(.vertical, 12)
         .glassCard()

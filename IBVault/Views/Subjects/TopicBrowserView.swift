@@ -40,7 +40,7 @@ struct TopicBrowserView: View {
     }
 
     private var metadata: CurriculumMetadata { SyllabusSeeder.metadata(for: subject.name) }
-    private var accent: Color { Color(hex: subject.accentColorHex) }
+    private var accent: Color { IBColors.inkTertiary }
     private var topicCount: Int { curriculum.flatMap(\.topics).count }
     private var subtopicCount: Int { curriculum.flatMap(\.topics).flatMap(\.subtopics).count }
     private var subjectCurriculumNodes: [CurriculumNode] {
@@ -119,14 +119,14 @@ struct TopicBrowserView: View {
                 }
                 Text("\(topicCount) topics · \(subtopicCount) subunits · \(metadata.catalogVersion)")
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
 
             Spacer(minLength: 18)
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(IBColors.tertiaryText)
+                    .foregroundStyle(IBColors.inkTertiary)
                 TextField("Search topics and subunits", text: $searchText)
                     .textFieldStyle(.plain)
             }
@@ -137,7 +137,7 @@ struct TopicBrowserView: View {
                     .fill(IBColors.canvas)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.cardBorder, lineWidth: 1)
+                            .stroke(IBColors.border, lineWidth: 1)
                     )
             )
 
@@ -166,7 +166,7 @@ struct TopicBrowserView: View {
                             HStack(spacing: 10) {
                                 Image(systemName: selectedUnit?.name == unit.name ? "folder.fill" : "folder")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(selectedUnit?.name == unit.name ? accent : IBColors.secondaryText)
+                                    .foregroundStyle(selectedUnit?.name == unit.name ? accent : IBColors.inkSecondary)
                                     .frame(width: 18)
 
                                 VStack(alignment: .leading, spacing: 3) {
@@ -177,7 +177,7 @@ struct TopicBrowserView: View {
                                         .lineLimit(2)
                                     Text("\(unit.topics.count) topics")
                                         .font(.caption2)
-                                        .foregroundStyle(IBColors.secondaryText)
+                                        .foregroundStyle(IBColors.inkSecondary)
                                 }
                                 Spacer(minLength: 4)
                             }
@@ -240,7 +240,7 @@ struct TopicBrowserView: View {
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(isSelected ? accent : IBColors.tertiaryText)
+                        .foregroundStyle(isSelected ? accent : IBColors.inkTertiary)
                 }
 
                 HStack(spacing: 7) {
@@ -252,7 +252,7 @@ struct TopicBrowserView: View {
                         .foregroundStyle(accent)
                 }
                 .font(.caption2)
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
 
                 MasteryBar(progress: mastery, height: 3, color: accent)
             }
@@ -292,7 +292,7 @@ struct TopicBrowserView: View {
                             .foregroundStyle(accent)
                         Text(cardStudioSummary)
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                             .lineLimit(1)
                         Spacer()
                         Text(isCardStudioExpanded ? "Hide" : "Customize")
@@ -343,7 +343,7 @@ struct TopicBrowserView: View {
                     Label("\(cardCount(for: topic.name, in: index)) cards", systemImage: "rectangle.stack.fill")
                 }
                 .font(.caption)
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
             }
             Spacer()
         }
@@ -369,7 +369,7 @@ struct TopicBrowserView: View {
                         .foregroundStyle(IBColors.ink)
                     Text("Fill every subunit to a consistent adaptive baseline.")
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .lineLimit(1)
                 }
             }
@@ -377,7 +377,7 @@ struct TopicBrowserView: View {
             HStack(spacing: 10) {
                 Text("Cards per subunit")
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
 
                 Slider(value: Binding(get: { Double(cardsPerSubtopic) }, set: { cardsPerSubtopic = Int($0.rounded()) }), in: 2...5, step: 1)
                     .frame(maxWidth: 140)
@@ -387,7 +387,7 @@ struct TopicBrowserView: View {
                     .frame(width: 22, alignment: .trailing)
                 Text("cards")
                     .font(.caption2)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
 
                 Spacer(minLength: 8)
 
@@ -417,7 +417,7 @@ struct TopicBrowserView: View {
                         ProgressView().controlSize(.small)
                     }
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 }
 
                 if let message = generationSuccessMessage {
@@ -467,7 +467,7 @@ struct TopicBrowserView: View {
                 } else {
                     Text("\(index + 1)")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                 }
             }
 
@@ -489,7 +489,7 @@ struct TopicBrowserView: View {
                     }
                 }
                 .font(.caption2)
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
             }
 
             Spacer(minLength: 8)
@@ -522,7 +522,7 @@ struct TopicBrowserView: View {
         switch level {
         case .novice: return IBColors.danger
         case .developing: return IBColors.warning
-        case .proficient: return IBColors.electricBlue
+        case .proficient: return IBColors.accent
         case .mastered: return IBColors.success
         }
     }
@@ -584,12 +584,12 @@ struct TopicBrowserView: View {
         HStack {
             Text(title)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
                 .lineLimit(1)
             Spacer()
             Text(detail)
                 .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(IBColors.tertiaryText)
+                .foregroundStyle(IBColors.inkTertiary)
         }
         .textCase(.uppercase)
         .padding(.horizontal, 14)
@@ -600,10 +600,10 @@ struct TopicBrowserView: View {
         VStack(spacing: 10) {
             Image(systemName: symbol)
                 .font(.system(size: 28, weight: .light))
-                .foregroundStyle(IBColors.tertiaryText)
+                .foregroundStyle(IBColors.inkTertiary)
             Text(title)
                 .font(.callout.weight(.semibold))
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

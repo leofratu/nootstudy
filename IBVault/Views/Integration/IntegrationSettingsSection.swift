@@ -40,9 +40,9 @@ struct IntegrationSettingsSection: View {
     }
 
     private var statusColor: Color {
-        guard let bridge else { return IBColors.secondaryText }
+        guard let bridge else { return IBColors.inkSecondary }
         switch bridge.state {
-        case .stopped: return IBColors.secondaryText
+        case .stopped: return IBColors.inkSecondary
         case .running: return IBColors.success
         case .failed: return IBColors.danger
         }
@@ -66,7 +66,7 @@ struct IntegrationSettingsSection: View {
                 title: "Local integration bridge",
                 subtitle: "Expose your library to Codex, ChatGPT, and Claude on this Mac only.",
                 symbol: "link",
-                tint: IBColors.electricBlue
+                tint: IBColors.accent
             ) {
                 VStack(spacing: 0) {
                     HStack(spacing: 14) {
@@ -75,7 +75,7 @@ struct IntegrationSettingsSection: View {
                         Toggle("", isOn: isBridgeEnabled)
                             .labelsHidden()
                             .toggleStyle(.switch)
-                            .tint(IBColors.electricBlue)
+                            .tint(IBColors.accent)
                     }
                     .padding(.vertical, 10)
 
@@ -95,7 +95,7 @@ struct IntegrationSettingsSection: View {
                         } else if case .failed = bridge?.state {
                             StudioPill(title: "ERROR", tint: IBColors.danger)
                         } else {
-                            StudioPill(title: "OFF", tint: IBColors.secondaryText)
+                            StudioPill(title: "OFF", tint: IBColors.inkSecondary)
                         }
                     }
                     .padding(.vertical, 10)
@@ -111,7 +111,7 @@ struct IntegrationSettingsSection: View {
                         Spacer()
                         Text("127.0.0.1 only")
                             .font(.caption)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                     }
                     .padding(.vertical, 10)
 
@@ -167,13 +167,13 @@ struct IntegrationSettingsSection: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
-                            .tint(IBColors.electricBlue)
+                            .tint(IBColors.accent)
                             .accessibilityLabel("Copy MCP Setup")
                         }
                         ScrollView(.horizontal, showsIndicators: true) {
                             Text(mcpSetupSnippet)
                                 .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(IBColors.secondaryText)
+                                .foregroundStyle(IBColors.inkSecondary)
                                 .textSelection(.enabled)
                                 .lineLimit(nil)
                                 .fixedSize(horizontal: false, vertical: false)
@@ -182,7 +182,7 @@ struct IntegrationSettingsSection: View {
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
                                         .fill(IBColors.canvasDeep)
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(IBColors.cardBorder, lineWidth: 1))
+                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(IBColors.border, lineWidth: 1))
                                 )
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,7 +194,7 @@ struct IntegrationSettingsSection: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Data stays local. The bridge only listens on 127.0.0.1 and requires the bearer token. Integration is off by default.")
                             .font(.caption)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                         NavigationLink {
                             ExternalActivityView()
@@ -211,12 +211,12 @@ struct IntegrationSettingsSection: View {
                 title: "Recent activity",
                 subtitle: "Last requests handled by the bridge (up to 100).",
                 symbol: "waveform.path.ecg",
-                tint: IBColors.teal
+                tint: IBColors.inkTertiary
             ) {
                 if recentLogs.isEmpty {
                     Text("No requests yet. When Codex or ChatGPT calls the bridge, method, path, and status appear here.")
                         .font(.callout)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 10)
                 } else {
@@ -240,7 +240,7 @@ struct IntegrationSettingsSection: View {
                                     .frame(width: 28, alignment: .trailing)
                                 Text(RelativeTimeHelper.string(for: log.timestamp))
                                     .font(.caption2)
-                                    .foregroundStyle(IBColors.secondaryText)
+                                    .foregroundStyle(IBColors.inkSecondary)
                                     .frame(width: 80, alignment: .trailing)
                                     .lineLimit(1)
                             }
@@ -257,12 +257,12 @@ struct IntegrationSettingsSection: View {
                 title: "NotebookLM pack",
                 subtitle: "Export a markdown source + cards JSON to upload into NotebookLM.",
                 symbol: "doc.richtext.fill",
-                tint: IBColors.gold
+                tint: IBColors.inkTertiary
             ) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("NotebookLM has no public API, so this pack is meant to be uploaded as a notebook source, and Codex/ChatGPT can query the same data through the bridge.")
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 12) {
@@ -286,7 +286,7 @@ struct IntegrationSettingsSection: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.regular)
-                        .tint(IBColors.electricBlue)
+                        .tint(IBColors.accent)
                         .disabled(selectedSubjectName.isEmpty || isExporting)
                         .accessibilityLabel("Export NotebookLM Pack")
 
@@ -317,12 +317,12 @@ struct IntegrationSettingsSection: View {
                 title: "External work",
                 subtitle: "Add work you did elsewhere back into your study history.",
                 symbol: "tray.and.arrow.down.fill",
-                tint: IBColors.coral
+                tint: IBColors.inkTertiary
             ) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Use the activity bridge or add work manually. Merged work becomes a real study session.")
                         .font(.callout)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                     NavigationLink {
                         ExternalActivityView()
                     } label: {
@@ -330,7 +330,7 @@ struct IntegrationSettingsSection: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .tint(IBColors.coral)
+                    .tint(IBColors.inkTertiary)
                 }
                 .padding(.vertical, 4)
             }
@@ -498,7 +498,7 @@ struct IntegrationSettingsSection: View {
                         .foregroundStyle(IBColors.ink)
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                 }
             }
             content()

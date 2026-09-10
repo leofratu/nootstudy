@@ -53,6 +53,7 @@ struct SettingsView: View {
     @AppStorage("showDueCountBadge") private var showDueCountBadge = true
     @AppStorage("reviewOrder") private var reviewOrder = "spaced"
     @AppStorage(CalendarSyncPreferences.isEnabledKey) private var calendarSyncEnabled = false
+    @AppStorage("appAppearance") private var appAppearanceRaw = IBAppearance.dark.rawValue
     @AppStorage(CalendarSyncPreferences.calendarIdentifierKey) private var selectedCalendarIdentifier = ""
 
     @State private var calendarOptions: [CalendarSyncOption] = []
@@ -168,7 +169,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Settings")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .padding(.horizontal, 12)
                     .padding(.top, 14)
 
@@ -205,7 +206,7 @@ struct SettingsView: View {
                             .foregroundStyle(IBColors.ink)
                         Text(sectionSummary)
                             .font(.callout)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                     }
                     Spacer(minLength: 20)
                 }
@@ -290,7 +291,7 @@ struct SettingsView: View {
                     title: "Study profile",
                     subtitle: "The settings ARIA uses to shape your study plan.",
                     symbol: "person.crop.circle",
-                    tint: IBColors.electricBlue
+                    tint: IBColors.accent
                 ) {
                     if let profile {
                         VStack(spacing: 0) {
@@ -336,9 +337,9 @@ struct SettingsView: View {
                                     ), in: 0...Double(StudyIntensity.allCases.count - 1), step: 1)
                                     HStack(spacing: 4) {
                                         ForEach(StudyIntensity.allCases, id: \.self) { intensity in
-                                            Text("\(intensity.emoji) \(intensity.rawValue)")
+                                            Text("\("") \(intensity.rawValue)")
                                                 .font(.caption2.weight(.medium))
-                                                .foregroundStyle(profile.studyIntensity == intensity ? IBColors.ink : IBColors.secondaryText)
+                                                .foregroundStyle(profile.studyIntensity == intensity ? IBColors.ink : IBColors.inkSecondary)
                                                 .lineLimit(1)
                                                 .minimumScaleFactor(0.85)
                                         }
@@ -348,7 +349,7 @@ struct SettingsView: View {
                                 Spacer(minLength: 12)
                                 Text("\(profile.studyIntensity.dailyCardSuggestion) cards/day")
                                     .font(.caption.weight(.medium))
-                                    .foregroundStyle(IBColors.secondaryText)
+                                    .foregroundStyle(IBColors.inkSecondary)
                                     .frame(width: 90, alignment: .trailing)
                             }
                             .padding(.vertical, 10)
@@ -357,10 +358,32 @@ struct SettingsView: View {
                 }
 
                 workspaceBand(
+                    title: "Appearance",
+                    subtitle: "Choose how Noot Study matches your system.",
+                    symbol: "moon.circle",
+                    tint: IBColors.inkTertiary
+                ) {
+                    HStack(spacing: 14) {
+                        Label("Theme", systemImage: "paintbrush")
+                            .frame(width: 150, alignment: .leading)
+                        Picker("Appearance", selection: $appAppearanceRaw) {
+                            ForEach(IBAppearance.allCases) { mode in
+                                Text(mode.rawValue).tag(mode.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 320)
+                        Spacer()
+                    }
+                    .padding(.vertical, 10)
+                }
+
+                workspaceBand(
                     title: "IB target",
                     subtitle: "Your saved diploma target is fixed for this workspace.",
                     symbol: "target",
-                    tint: IBColors.teal
+                    tint: IBColors.inkTertiary
                 ) {
                     HStack(alignment: .center, spacing: 18) {
                         Text("40 / 45")
@@ -369,10 +392,10 @@ struct SettingsView: View {
                             .frame(width: 118, alignment: .leading)
                         VStack(alignment: .leading, spacing: 7) {
                             ProgressView(value: Double(Self.fixedTargetIBScore), total: 45)
-                                .tint(IBColors.teal)
+                                .tint(IBColors.inkTertiary)
                             Text("Saved to your profile and used by prediction and planning surfaces.")
                                 .font(.caption)
-                                .foregroundStyle(IBColors.secondaryText)
+                                .foregroundStyle(IBColors.inkSecondary)
                         }
                     }
                     .padding(.vertical, 8)
@@ -382,7 +405,7 @@ struct SettingsView: View {
                     title: "Study behavior",
                     subtitle: "Keep the review flow predictable and low-friction.",
                     symbol: "rectangle.stack.badge.play",
-                    tint: IBColors.gold
+                    tint: IBColors.inkTertiary
                 ) {
                     VStack(spacing: 0) {
                         if let profile {
@@ -395,7 +418,7 @@ struct SettingsView: View {
                                 ), in: 5...30, step: 5) {
                                     Text("\(profile.dailyGoal) cards")
                                         .font(.caption.weight(.semibold))
-                                        .foregroundStyle(IBColors.secondaryText)
+                                        .foregroundStyle(IBColors.inkSecondary)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .trailing)
                             }
@@ -432,7 +455,7 @@ struct SettingsView: View {
                     title: "Report and grades",
                     subtitle: "Bring your current subject results into the evidence model.",
                     symbol: "chart.bar.doc.horizontal",
-                    tint: IBColors.coral
+                    tint: IBColors.inkTertiary
                 ) {
                     Button {
                         showReportUpload = true
@@ -440,21 +463,21 @@ struct SettingsView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "doc.badge.plus")
                                 .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(IBColors.coral)
+                                .foregroundStyle(IBColors.inkTertiary)
                                 .frame(width: 34, height: 34)
-                                .background(IBColors.coral.opacity(0.1))
+                                .background(IBColors.inkTertiary.opacity(0.1))
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Update report results")
                                     .font(.callout.weight(.bold))
                                 Text(profile?.reportLastUploaded.map { "Last updated \($0.formatted(date: .abbreviated, time: .omitted))" } ?? "Enter current grades across subjects")
                                     .font(.caption)
-                                    .foregroundStyle(IBColors.secondaryText)
+                                    .foregroundStyle(IBColors.inkSecondary)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(IBColors.tertiaryText)
+                                .foregroundStyle(IBColors.inkTertiary)
                         }
                     }
                     .buttonStyle(.plain)
@@ -487,7 +510,7 @@ struct SettingsView: View {
                         .foregroundStyle(IBColors.ink)
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                 }
             }
             content()
@@ -540,7 +563,7 @@ struct SettingsView: View {
                         systemImage: providerStatus.isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                     )
                     .font(.caption)
-                    .foregroundStyle(providerStatus.isReady ? .green : .orange)
+                    .foregroundStyle(providerStatus.isReady ? IBColors.success : IBColors.warning)
                     .lineLimit(3)
                 }
             }
@@ -654,7 +677,7 @@ struct SettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 if savedConfirmation {
-                    Text("Saved").font(.caption).foregroundStyle(.green)
+                    Text("Saved").font(.caption).foregroundStyle(IBColors.success)
                 }
                 Spacer()
                 if hasCredential {
@@ -760,7 +783,7 @@ struct SettingsView: View {
             ForEach(subjects.sorted { $0.name < $1.name }, id: \.id) { subject in
                 HStack(spacing: 12) {
                     Circle()
-                        .fill(Color(hex: subject.accentColorHex))
+                        .fill(IBColors.inkTertiary)
                         .frame(width: 8, height: 8)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(subject.name)
@@ -814,7 +837,7 @@ struct SettingsView: View {
                     Text("\(p.streakFreezes)")
                         .foregroundStyle(.secondary)
                     Image(systemName: "snowflake")
-                        .foregroundStyle(.cyan)
+                        .foregroundStyle(IBColors.inkTertiary)
                 }
             }
 
@@ -845,7 +868,7 @@ struct SettingsView: View {
         Section {
             HStack(spacing: 12) {
                 Image(systemName: isGoogleConnected ? "checkmark.circle.fill" : "calendar.badge.plus")
-                    .foregroundStyle(isGoogleConnected ? .green : IBColors.electricBlue)
+                    .foregroundStyle(isGoogleConnected ? IBColors.success : IBColors.accent)
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isGoogleConnected ? "Google Calendar connected" : "Connect Google Calendar")
@@ -1154,7 +1177,7 @@ struct SettingsView: View {
             Button { restoreBackup() } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "arrow.up.doc.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(IBColors.success)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Restore from Backup")
                         Text("Restore your most recent backup")
@@ -1167,7 +1190,7 @@ struct SettingsView: View {
             Button { showBackups = true } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "folder.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(IBColors.warning)
                     Text("View All Backups")
                     Spacer()
                     Text("\(backupCount)")
@@ -1181,7 +1204,7 @@ struct SettingsView: View {
             if !backupStatus.isEmpty {
                 Text(backupStatus)
                     .font(.caption)
-                    .foregroundStyle(backupStatus.hasPrefix("✓") ? .green : .red)
+                    .foregroundStyle(backupStatus.hasPrefix("✓") ? IBColors.success : IBColors.danger)
             }
         } header: {
             Label("Backup & Recovery", systemImage: "externaldrive.fill")
@@ -1526,7 +1549,7 @@ struct GeminiModelPickerView: View {
                     }
                 } else if let error = errorMessage {
                     Section("Error") {
-                        Text(error).foregroundStyle(.red)
+                        Text(error).foregroundStyle(IBColors.danger)
                         Button("Retry") { loadModels() }
                     }
                 } else {
@@ -1680,7 +1703,7 @@ struct ReportUploadView: View {
     }
 
     private func subjectGradeCard(_ subject: Subject) -> some View {
-        let color = Color(hex: subject.accentColorHex)
+        let color = IBColors.inkTertiary
         return GroupBox {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {

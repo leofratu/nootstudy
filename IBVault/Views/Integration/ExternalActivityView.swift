@@ -40,7 +40,7 @@ struct ExternalActivityView: View {
                     title: "External work",
                     subtitle: "Add work you did elsewhere — tutoring, Anki, reading — back into your study history.",
                     symbol: "tray.and.arrow.down.fill",
-                    tint: IBColors.coral
+                    tint: IBColors.inkTertiary
                 ) {
                     Button {
                         withAnimation { showAddForm.toggle() }
@@ -49,7 +49,7 @@ struct ExternalActivityView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .tint(IBColors.coral)
+                    .tint(IBColors.inkTertiary)
                 }
 
                 if showAddForm {
@@ -79,7 +79,7 @@ struct ExternalActivityView: View {
 
     private var addWorkForm: some View {
         VStack(alignment: .leading, spacing: 16) {
-            StudioSectionHeader("Add work", subtitle: "Manual entry becomes a pending activity", symbol: "plus.app.fill", tint: IBColors.coral) {
+            StudioSectionHeader("Add work", subtitle: "Manual entry becomes a pending activity", symbol: "plus.app.fill", tint: IBColors.inkTertiary) {
                 EmptyView()
             }
 
@@ -185,7 +185,7 @@ struct ExternalActivityView: View {
                     Label("Save pending work", systemImage: "tray.and.arrow.down.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(IBColors.coral)
+                .tint(IBColors.inkTertiary)
 
                 Button("Clear") { clearForm() }
                     .buttonStyle(.bordered)
@@ -249,7 +249,7 @@ struct ExternalActivityView: View {
                 "Pending",
                 subtitle: pending.isEmpty ? "Nothing waiting to be merged" : "\(pending.count) awaiting merge",
                 symbol: "clock.badge.exclamationmark",
-                tint: pending.isEmpty ? IBColors.success : IBColors.coral
+                tint: pending.isEmpty ? IBColors.success : IBColors.inkTertiary
             ) {
                 HStack(spacing: 8) {
                     if !pending.isEmpty {
@@ -264,7 +264,7 @@ struct ExternalActivityView: View {
                         Button("Merge Selected") { merge(ids: Array(selectedIDs)) }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
-                            .tint(IBColors.electricBlue)
+                            .tint(IBColors.accent)
                             .accessibilityLabel("Merge Selected")
                     }
                     if !pending.isEmpty {
@@ -286,7 +286,7 @@ struct ExternalActivityView: View {
                     .frame(maxWidth: .infinity)
                     Button("Add work") { withAnimation { showAddForm = true } }
                         .buttonStyle(.borderedProminent)
-                        .tint(IBColors.coral)
+                        .tint(IBColors.inkTertiary)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .glassCard()
@@ -312,7 +312,7 @@ struct ExternalActivityView: View {
                 "Merged",
                 subtitle: merged.isEmpty ? "Merged work becomes a study session" : "\(merged.count) merged",
                 symbol: "checkmark.circle.fill",
-                tint: IBColors.teal
+                tint: IBColors.inkTertiary
             ) {
                 EmptyView()
             }
@@ -320,7 +320,7 @@ struct ExternalActivityView: View {
             if merged.isEmpty {
                 Text("Merged entries are stored as study sessions and count toward streaks and analytics.")
                     .font(.callout)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .padding(18)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .glassCard()
@@ -349,7 +349,7 @@ struct ExternalActivityView: View {
                     }
                 } label: {
                     Image(systemName: selectedIDs.contains(activity.id) ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(selectedIDs.contains(activity.id) ? IBColors.electricBlue : IBColors.secondaryText)
+                        .foregroundStyle(selectedIDs.contains(activity.id) ? IBColors.accent : IBColors.inkSecondary)
                         .font(.system(size: 18, weight: .medium))
                 }
                 .buttonStyle(.plain)
@@ -372,12 +372,12 @@ struct ExternalActivityView: View {
                     } else {
                         Text("Unassigned")
                             .font(.caption)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                     }
                     if let topic = activity.topicName, !topic.isEmpty {
                         Text("· \(topic)")
                             .font(.caption)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .foregroundStyle(IBColors.inkSecondary)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 4)
@@ -388,26 +388,26 @@ struct ExternalActivityView: View {
                     Label("\(activity.cardsReviewed) cards", systemImage: "rectangle.stack.fill")
                     Label("\(activity.correctCount) correct", systemImage: "checkmark.circle")
                     Text(activity.occurredAt, style: .date)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                 }
                 .font(.caption)
-                .foregroundStyle(IBColors.secondaryText)
+                .foregroundStyle(IBColors.inkSecondary)
                 .lineLimit(1)
 
                 if let details = activity.details, !details.isEmpty {
                     Text(details)
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 HStack(spacing: 6) {
                     Text(activity.source)
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(IBColors.tertiaryText)
+                        .foregroundStyle(IBColors.inkTertiary)
                     Text(activity.externalID)
                         .font(.caption2)
-                        .foregroundStyle(IBColors.tertiaryText)
+                        .foregroundStyle(IBColors.inkTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if activity.statusRaw == "merged", let sid = activity.mergedStudySessionID {
@@ -423,7 +423,7 @@ struct ExternalActivityView: View {
                     Button("Merge") { merge(ids: [activity.id]) }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
-                        .tint(IBColors.electricBlue)
+                        .tint(IBColors.accent)
                         .accessibilityLabel("Merge")
                     Button("Delete", role: .destructive) {
                         delete(activity)
@@ -447,10 +447,10 @@ struct ExternalActivityView: View {
 
     private func kindTint(_ kind: String) -> Color {
         switch kind.lowercased() {
-        case "review": return IBColors.electricBlue
-        case "study": return IBColors.teal
-        case "notes": return IBColors.gold
-        default: return IBColors.secondaryText
+        case "review": return IBColors.accent
+        case "study": return IBColors.inkTertiary
+        case "notes": return IBColors.inkTertiary
+        default: return IBColors.inkSecondary
         }
     }
 
