@@ -93,6 +93,7 @@
 		BF5194E1E6D7D7A7F90EAA97 /* AcademicProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE97B7A69191C889194AA1CF /* AcademicProgressTests.swift */; };
 		C2A0CD45FFEC4EFF8BC95B35 /* RankLadder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80E12FA09B76D5980E7D972 /* RankLadder.swift */; };
 		C3E188C183BC70CF0BAA868C /* RankProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6144D151DC4BD2A57D019DFE /* RankProgressTests.swift */; };
+		C8128B877A19E67DEDA06D86 /* CardGenerationOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E6A912641FACB15A48B1764 /* CardGenerationOptions.swift */; };
 		C8AB4A46E62DF86D13805CBD /* AnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D5C3D493F8E74D1A33CA70 /* AnalyticsView.swift */; };
 		C9D8ED43FDE5725AB1813DC4 /* GeminiServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */; };
 		CB14102F60B00C86F69F0803 /* MasteryCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */; };
@@ -199,6 +200,7 @@
 		9BBBB8B078687079BC5D9480 /* ARIAMemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAMemoryView.swift; sourceTree = "<group>"; };
 		9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryCalculatorTests.swift; sourceTree = "<group>"; };
 		9E66491824275CC8A051C341 /* AcademicImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicImportView.swift; sourceTree = "<group>"; };
+		9E6A912641FACB15A48B1764 /* CardGenerationOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardGenerationOptions.swift; sourceTree = "<group>"; };
 		9F8F2CDF3C2038D02F3218F7 /* GoogleCalendarSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCalendarSyncTests.swift; sourceTree = "<group>"; };
 		A0CBD332FD598F687CAE0EEE /* ADHDTrackerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADHDTrackerView.swift; sourceTree = "<group>"; };
 		A509D28E1909411F56D71D14 /* SnapshotBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotBuilder.swift; sourceTree = "<group>"; };
@@ -357,6 +359,7 @@
 				56F393C55ED8372446273171 /* BackupService.swift */,
 				EA0B4023A285DCACC03E6EDC /* CalendarSyncCoordinator.swift */,
 				F6C812EE55F9D81E1C5BDDDA /* CalendarSyncService.swift */,
+				9E6A912641FACB15A48B1764 /* CardGenerationOptions.swift */,
 				446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */,
 				27ABD428FFA80120ECFA4F39 /* GeminiService.swift */,
 				ED97CD9D635EAE250C259E5F /* KeychainService.swift */,
@@ -674,6 +677,7 @@
 				A6B9AC29737742396D3F7F19 /* BackupService.swift in Sources */,
 				95D3B082A771FAB4371CE241 /* CalendarSyncCoordinator.swift in Sources */,
 				5037AAD926F042F7AC948464 /* CalendarSyncService.swift in Sources */,
+				C8128B877A19E67DEDA06D86 /* CardGenerationOptions.swift in Sources */,
 				1C14D164525849C978E9410A /* CardGeneratorService.swift in Sources */,
 				FAB7006BDFEDD13413FBE915 /* Components.swift in Sources */,
 				257730CBAAE031461F3EB6AE /* ContentView.swift in Sources */,
