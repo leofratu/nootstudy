@@ -159,8 +159,9 @@ struct VisualSnapshotHarness {
     @MainActor
     private func render<V: View>(_ view: V, size: CGSize, name: String, directory: URL) throws {
         let wrapped = view
+            .preferredColorScheme(.dark)
             .frame(width: size.width, height: size.height)
-            .background(Color.white)
+            .background(IBColors.canvasDeep)
             .clipShape(Rectangle())
 
         // Prefer NSHostingView for AppKit-backed views (NavigationSplitView,
@@ -189,7 +190,9 @@ struct VisualSnapshotHarness {
 
     @MainActor
     private func hostingPNG<V: View>(for view: V, size: CGSize) throws -> Data {
-        let hosting = NSHostingView(rootView: view)
+        let darkView = view.preferredColorScheme(.dark)
+        let hosting = NSHostingView(rootView: darkView)
+        hosting.appearance = NSAppearance(named: .darkAqua)
         hosting.frame = NSRect(origin: .zero, size: size)
         hosting.wantsLayer = true
         // Allow SwiftData queries to resolve
