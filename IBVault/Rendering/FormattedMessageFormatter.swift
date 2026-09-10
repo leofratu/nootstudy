@@ -23,7 +23,7 @@ nonisolated enum FormattedMessageFormatter: Sendable {
 
     nonisolated static let frontBackDashRegex = try! NSRegularExpression(pattern: #"[-—]{3,}\s*(FRONT:|BACK:)"#)
     nonisolated static let headingMissingSpaceRegex = try! NSRegularExpression(pattern: #"(?m)^(#{1,6})([^ #\n])"#)
-    nonisolated static let headingPrefixNewlineRegex = try! NSRegularExpression(pattern: #"(?m)(?<!\n)(#{1,6}\s)"#)
+    nonisolated static let headingPrefixNewlineRegex = try! NSRegularExpression(pattern: #"(?m)(?<![\n#])(#{1,6}\s)"#)
     nonisolated static let emptyHeadingRegex = try! NSRegularExpression(pattern: #"(?m)^\s*#{1,6}\s*$"#)
     nonisolated static let emptyBulletRegex = try! NSRegularExpression(pattern: #"(?m)^\s*(?:[-*•]|\d+[.)])\s*$"#)
     nonisolated static let frontInlineRegex = try! NSRegularExpression(pattern: #"(?<=[^\n])\s*(FRONT:)"#)
