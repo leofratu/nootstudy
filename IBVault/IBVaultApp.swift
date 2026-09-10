@@ -44,7 +44,8 @@ struct IBVaultApp: App {
             AcademicImport.self,
             AcademicAssessment.self,
             AcademicAssessmentMapping.self,
-            AcademicReportSnapshot.self
+            AcademicReportSnapshot.self,
+            ExternalActivity.self
     ])
 
     private static func makeModelContainer() -> ModelContainer {
@@ -185,6 +186,8 @@ struct RootView: View {
     @State private var hasMigratedFSRS = false
     @State private var hasNormalizedLegacySessions = false
     @State private var hasMergedHistoricalEvidence = false
+    @State private var hasStartedBridge = false
+    @State private var bridgeController: IntegrationBridgeController?
     @State private var launchError: String?
 
     private var orderedProfiles: [UserProfile] {
@@ -216,6 +219,10 @@ struct RootView: View {
         // runs for them.
         .onAppear {
             preparePersistentStateIfNeeded()
+            startBridgeIfNeeded()
+        }
+        .onDisappear {
+            bridgeController?.stop()
         }
         .overlay(alignment: .topLeading) {
             CalendarSyncCoordinator()
@@ -351,10 +358,24 @@ struct RootView: View {
         }
     }
 
+    private func startBridgeIfNeeded() {
+        guard !hasStartedBridge else { return }
+        hasStartedBridge = true
+        guard BridgeAuthService.isEnabled else { return }
+        let controller = IntegrationBridgeController(container: context.container)
+        bridgeController = controller
+        controller.start()
+    }
+
 }
 
 #if os(macOS)
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        // Bridge stops on quit; the listener is tied to the process lifecycle.
+        // Persisted port remains for next launch.
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Keep AppKit chrome, menus, sheets, and SwiftUI semantic controls in
         // the same light appearance as the product palette.
