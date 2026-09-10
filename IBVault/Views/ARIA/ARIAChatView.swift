@@ -61,15 +61,12 @@ struct ARIAChatView: View {
     @AppStorage("codexModel") private var codexModel = AIConfiguration.codexDefaultModel
     @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
     @State private var ariaService: ARIAService
+    @State private var streamStore = ARIAStreamStore()
     @State private var inputText = ""
-    @State private var streamingText = ""
     @State private var showMemory = false
     @State private var showChatCleanupConfirmation = false
     @State private var chatFailure: ARIAChatFailure?
     @State private var selectedSessionID: UUID?
-    @State private var activeSessionID: UUID?
-    @State private var activePrompt: String?
-    @State private var activeProvider = AIProviderKind.gemini
 
     private var visibleSessions: [ARIAChatSession] {
         sessions.filter { !$0.isArchived }
@@ -138,9 +135,7 @@ struct ARIAChatView: View {
                         if let selectedSession {
                             ARIASessionConversationView(
                                 sessionID: selectedSession.id,
-                                isLoading: ariaService.isLoading && activeSessionID == selectedSession.id,
-                                currentStatus: ariaService.currentStatus,
-                                streamingText: activeSessionID == selectedSession.id ? streamingText : "",
+                                streamStore: streamStore,
                                 failure: visibleFailure(for: selectedSession.id),
                                 onRetry: retryFailure,
                                 onReconnectCodex: reconnectCodex,
@@ -187,7 +182,7 @@ struct ARIAChatView: View {
                         } label: {
                             Image(systemName: "square.and.pencil")
                         }
-                        .disabled(ariaService.isLoading)
+                        .disabled(streamStore.isLoading)
                         .keyboardShortcut("n", modifiers: .command)
                         .help("New chat")
                     }
@@ -227,7 +222,7 @@ struct ARIAChatView: View {
             ForEach(visibleSessions, id: \.id) { session in
                 Button {
                     selectedSessionID = session.id
-                    streamingText = ""
+                    streamStore.streamingText = ""
                 } label: {
                     Label(
                         session.title,
@@ -247,7 +242,7 @@ struct ARIAChatView: View {
             Image(systemName: "bubble.left.and.bubble.right")
         }
         .help("Switch chat")
-        .disabled(ariaService.isLoading)
+        .disabled(streamStore.isLoading)
     }
 
     private var sessionSidebar: some View {
@@ -283,7 +278,7 @@ struct ARIAChatView: View {
                         .font(.system(size: 13, weight: .bold))
                 }
                 .buttonStyle(.borderless)
-                .disabled(ariaService.isLoading)
+                .disabled(streamStore.isLoading)
                 .help("New Chat")
                 Menu {
                     Button(role: .destructive) {
@@ -296,7 +291,7 @@ struct ARIAChatView: View {
                         .font(.system(size: 13, weight: .bold))
                 }
                 .menuStyle(.borderlessButton)
-                .disabled(ariaService.isLoading)
+                .disabled(streamStore.isLoading)
                 .help("Chat actions")
             }
             .padding(.horizontal, 14)
@@ -309,7 +304,7 @@ struct ARIAChatView: View {
                     ForEach(visibleSessions, id: \.id) { session in
                         Button {
                             selectedSessionID = session.id
-                            streamingText = ""
+                            streamStore.streamingText = ""
                         } label: {
                             ARIAChatSessionRow(
                                 session: session,
@@ -370,177 +365,26 @@ struct ARIAChatView: View {
         }
     }
 
-    // MARK: - Input Bar
+    // MARK: - Input Bar (isolated so streaming token writes don't invalidate the chat parent)
     private var inputBar: some View {
-        VStack(spacing: 9) {
-            configurationRail
-
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Ask ARIA…", text: $inputText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...5)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 9)
-                    .onSubmit { sendMessage(inputText) }
-                    .disabled(ariaService.isLoading)
-
-                Button {
-                    if ariaService.isLoading {
-                        cancelGeneration()
-                    } else {
-                        sendMessage(inputText)
-                    }
-                } label: {
-                    let canSend = !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ariaService.isLoading
-                    Image(systemName: ariaService.isLoading ? "stop.fill" : "arrow.up")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .background(
-                            Group {
-                                if canSend {
-                                    Circle().fill(IBGradient.accent)
-                                } else {
-                                    Circle().fill(IBColors.tertiaryText.opacity(0.45))
-                                }
-                            }
-                            .shadow(color: canSend ? IBColors.electricBlue.opacity(0.3) : .clear, radius: 6, x: 0, y: 2)
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !ariaService.isLoading)
-                .help(ariaService.isLoading ? "Stop response" : "Send message")
-            }
-            .padding(4)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.cardBorder, lineWidth: 1)
-                    )
-            )
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 11)
-        .background(IBColors.canvas)
-    }
-
-    private var configurationRail: some View {
-        HStack(spacing: 8) {
-            Menu {
-                Section("Provider") {
-                    ForEach(AIProviderKind.allCases) { provider in
-                        Button {
-                            selectProvider(provider)
-                        } label: {
-                            Label(
-                                provider.displayName,
-                                systemImage: provider == selectedProvider ? "checkmark" : provider.symbolName
-                            )
-                        }
-                    }
-                }
-
-                Section("Model") {
-                    ForEach(AIConfiguration.knownModels[selectedProvider] ?? []) { option in
-                        Button {
-                            setSelectedModel(option.id)
-                        } label: {
-                            Label(
-                                "\(option.name) · \(option.role)",
-                                systemImage: option.id == selectedModel ? "checkmark" : "cpu"
-                            )
-                        }
-                    }
-
-                    if !(AIConfiguration.knownModels[selectedProvider] ?? []).contains(where: { $0.id == selectedModel }) {
-                        Text("Custom: \(selectedModel)")
-                    }
-                }
-
-                if selectedProvider == .gemini {
-                    Section("Response style") {
-                        Button {
-                            ariaTemperature = 0.2
-                        } label: {
-                            Label("Precise", systemImage: geminiCreativityName == "Precise" ? "checkmark" : "scope")
-                        }
-                        Button {
-                            ariaTemperature = 0.7
-                        } label: {
-                            Label("Balanced", systemImage: geminiCreativityName == "Balanced" ? "checkmark" : "dial.medium")
-                        }
-                        Button {
-                            ariaTemperature = 1.1
-                        } label: {
-                            Label("Exploratory", systemImage: geminiCreativityName == "Exploratory" ? "checkmark" : "wand.and.stars")
-                        }
-                    }
-                } else {
-                    Section("Reasoning") {
-                        ForEach(AIConfiguration.supportedReasoningEfforts(for: selectedProvider)) { effort in
-                            Button {
-                                reasoningEffortRaw = effort.rawValue
-                            } label: {
-                                Label(
-                                    effort.displayName,
-                                    systemImage: effort == selectedReasoningEffort ? "checkmark" : "brain.head.profile"
-                                )
-                            }
-                        }
-                    }
-
-                    Section("Answer detail") {
-                        ForEach(AIResponseVerbosity.allCases) { verbosity in
-                            Button {
-                                verbosityRaw = verbosity.rawValue
-                            } label: {
-                                Label(
-                                    verbosity.displayName,
-                                    systemImage: verbosity == selectedVerbosity ? "checkmark" : "text.alignleft"
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if selectedProvider == .codexCLI {
-                    Section("Web search") {
-                        ForEach(AIWebSearchMode.allCases) { mode in
-                            Button {
-                                webSearchModeRaw = mode.rawValue
-                            } label: {
-                                Label(
-                                    mode.displayName,
-                                    systemImage: mode == selectedWebSearchMode ? "checkmark" : "globe"
-                                )
-                            }
-                        }
-                    }
-                }
-            } label: {
-                Label(
-                    "\(selectedProvider.shortName) · \(AIConfiguration.modelDisplayName(selectedModel, for: selectedProvider))",
-                    systemImage: "slider.horizontal.3"
-                )
-                .font(.caption.weight(.medium))
-                .foregroundStyle(IBColors.secondaryText)
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Response settings")
-
-            Spacer()
-
-            if ariaService.isLoading {
-                Text(ariaService.currentStatus)
-                    .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
-                    .lineLimit(1)
-            }
-        }
-        .disabled(ariaService.isLoading)
+        ARIAChatInputBar(
+            streamStore: streamStore,
+            inputText: $inputText,
+            selectedProvider: selectedProvider,
+            selectedModel: selectedModel,
+            selectedReasoningEffort: selectedReasoningEffort,
+            selectedVerbosity: selectedVerbosity,
+            selectedWebSearchMode: selectedWebSearchMode,
+            geminiCreativityName: geminiCreativityName,
+            reasoningEffortRaw: $reasoningEffortRaw,
+            verbosityRaw: $verbosityRaw,
+            webSearchModeRaw: $webSearchModeRaw,
+            ariaTemperature: $ariaTemperature,
+            onSend: { sendMessage($0) },
+            onCancel: { cancelGeneration() },
+            onSelectProvider: { selectProvider($0) },
+            onSetModel: { setSelectedModel($0) }
+        )
     }
 
     private func sendMessage(_ text: String) {
@@ -548,7 +392,7 @@ struct ARIAChatView: View {
         guard !message.isEmpty else { return }
         // Guard before clearing inputText or persisting anything so a send
         // attempted while a response is streaming is never silently dropped.
-        guard !ariaService.isLoading else { return }
+        guard !streamStore.isLoading else { return }
         guard let selectedSession else {
             guard let bootstrappedSession = bootstrapSessionsIfNeeded() else { return }
             persistSelectedConfiguration()
@@ -566,43 +410,43 @@ struct ARIAChatView: View {
         in session: ARIAChatSession,
         persistUserMessage: Bool
     ) {
-        guard !ariaService.isLoading else { return }
+        guard !streamStore.isLoading else { return }
         let provider = selectedProvider
-        streamingText = ""
+        streamStore.begin(sessionID: session.id, prompt: message, provider: provider)
         chatFailure = nil
-        activeSessionID = session.id
-        activePrompt = message
-        activeProvider = provider
         IBHaptics.light()
         ariaService.sendMessage(
             message,
             context: context,
             session: session,
             persistUserMessage: persistUserMessage,
-            onToken: { partial in streamingText = partial },
-            onComplete: { _ in
-                streamingText = ""
-                activeSessionID = nil
-                activePrompt = nil
+            onToken: { [store = streamStore] partial in
+                Task { @MainActor in store.streamingText = partial }
             },
-            onError: { error, persistedFailureID in
-                if persistedFailureID == nil {
-                    chatFailure = ARIAChatFailure(
-                        error: error,
-                        sessionID: session.id,
-                        prompt: message,
-                        provider: provider
-                    )
+            onStatus: { [store = streamStore] status in
+                Task { @MainActor in store.statusText = status }
+            },
+            onComplete: { [store = streamStore] _ in
+                Task { @MainActor in store.reset() }
+            },
+            onError: { [store = streamStore] error, persistedFailureID in
+                Task { @MainActor in
+                    if persistedFailureID == nil {
+                        self.chatFailure = ARIAChatFailure(
+                            error: error,
+                            sessionID: session.id,
+                            prompt: message,
+                            provider: provider
+                        )
+                    }
+                    store.reset()
                 }
-                streamingText = ""
-                activeSessionID = nil
-                activePrompt = nil
             }
         )
     }
 
     private func retryFailure(_ failure: ARIAChatFailure) {
-        guard !ariaService.isLoading,
+        guard !streamStore.isLoading,
               let prompt = failure.prompt,
               let sessionID = failure.sessionID,
               let session = visibleSessions.first(where: { $0.id == sessionID }) else {
@@ -617,19 +461,17 @@ struct ARIAChatView: View {
     }
 
     private func cancelGeneration() {
-        guard ariaService.isLoading else { return }
-        let sessionID = activeSessionID
-        let prompt = activePrompt
-        let provider = activeProvider
+        guard streamStore.isLoading else { return }
+        let sessionID = streamStore.activeSessionID
+        let prompt = streamStore.activePrompt
+        let provider = streamStore.activeProvider
         let session = sessionID.flatMap { id in visibleSessions.first(where: { $0.id == id }) }
         let persistedFailureID = ariaService.cancelCurrentRequest(
             context: context,
             session: session,
             provider: provider
         )
-        streamingText = ""
-        activeSessionID = nil
-        activePrompt = nil
+        streamStore.reset()
         if persistedFailureID == nil {
             chatFailure = ARIAChatFailure(
                 message: "Response stopped. Your message is saved and can be retried.",
@@ -839,7 +681,7 @@ struct ARIAChatView: View {
         }
         selectedSessionID = session.id
         inputText = ""
-        streamingText = ""
+        streamStore.streamingText = ""
         chatFailure = nil
     }
 
@@ -848,15 +690,15 @@ struct ARIAChatView: View {
         // If a request is streaming into this session, stop it first. Writing to
         // a deleted SwiftData model raises an uncatchable exception, so we must
         // never delete a session that an in-flight task may still touch.
-        if ariaService.isLoading && session.id == activeSessionID {
+        if streamStore.isLoading && session.id == streamStore.activeSessionID {
             ariaService.cancelCurrentRequest(context: context, session: session, provider: selectedProvider)
         }
         // The cancelled request no longer owns any active streaming state; keep
         // it from leaking into the next selected session.
-        if session.id == activeSessionID {
-            activeSessionID = nil
-            activePrompt = nil
-            streamingText = ""
+        if session.id == streamStore.activeSessionID {
+            streamStore.activeSessionID = nil
+            streamStore.activePrompt = nil
+            streamStore.streamingText = ""
         }
 
         let sessionID = session.id
@@ -944,9 +786,7 @@ struct ARIAChatView: View {
 
 private struct ARIASessionConversationView<EmptyContent: View>: View {
     @Query private var messages: [ChatMessage]
-    let isLoading: Bool
-    let currentStatus: String
-    let streamingText: String
+    let streamStore: ARIAStreamStore
     let failure: ARIAChatFailure?
     let onRetry: (ARIAChatFailure) -> Void
     let onReconnectCodex: (ARIAChatFailure) -> Void
@@ -955,6 +795,10 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
     @State private var lastStreamingScrollTime: ContinuousClock.Instant?
     @State private var dismissedRecoveredFailureID: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isLoading: Bool { streamStore.isLoading }
+    private var currentStatus: String { streamStore.statusText }
+    private var streamingText: String { streamStore.streamingText }
 
     private var displayedFailure: ARIAChatFailure? {
         if let failure { return failure }
@@ -982,9 +826,7 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
 
     init(
         sessionID: UUID,
-        isLoading: Bool,
-        currentStatus: String,
-        streamingText: String,
+        streamStore: ARIAStreamStore,
         failure: ARIAChatFailure?,
         onRetry: @escaping (ARIAChatFailure) -> Void,
         onReconnectCodex: @escaping (ARIAChatFailure) -> Void,
@@ -996,9 +838,7 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
             filter: #Predicate<ChatMessage> { $0.sessionID == selectedSessionID },
             sort: \ChatMessage.timestamp
         )
-        self.isLoading = isLoading
-        self.currentStatus = currentStatus
-        self.streamingText = streamingText
+        self.streamStore = streamStore
         self.failure = failure
         self.onRetry = onRetry
         self.onReconnectCodex = onReconnectCodex
@@ -1256,7 +1096,7 @@ private struct ARIAChatSessionRow: View {
                         .lineLimit(2)
                         .help(session.title)
                     Spacer(minLength: 4)
-                    Text(session.updatedAt, style: .relative)
+                    Text(RelativeTimeHelper.string(for: session.updatedAt))
                         .font(.caption2)
                         .foregroundStyle(IBColors.tertiaryText)
                         .lineLimit(1)
@@ -1398,7 +1238,13 @@ struct FormattedMessageContent: View {
     init(text: String, preferRichRendering: Bool = false) {
         self.text = text
         self.preferRichRendering = preferRichRendering
-        _sections = State(initialValue: FormattedMessageFormatter.sections(from: text))
+        if let cached = FormattedMessageCache.shared.cachedSections(for: text) {
+            _sections = State(initialValue: cached)
+        } else {
+            let initial = FormattedMessageFormatter.sections(from: text)
+            FormattedMessageCache.shared.store(sections: initial, for: text)
+            _sections = State(initialValue: initial)
+        }
     }
 
     var body: some View {
@@ -1418,18 +1264,24 @@ struct FormattedMessageContent: View {
     }
 
     private func debouncedParse(_ newText: String) async {
+        if let cached = FormattedMessageCache.shared.cachedSections(for: newText) {
+            sections = cached
+            return
+        }
         parseTask?.cancel()
         // Debounce 80ms, then parse off main thread
         let task = Task.detached(priority: .userInitiated) {
             try? await Task.sleep(nanoseconds: 80_000_000)
             if Task.isCancelled { return [FormattedMessageSection]() }
-            return FormattedMessageFormatter.sections(from: newText)
+            let parsed = FormattedMessageFormatter.sections(from: newText)
+            FormattedMessageCache.shared.store(sections: parsed, for: newText)
+            return parsed
         }
         parseTask = Task {
             let result = await task.value
             if Task.isCancelled { return }
+            if result.isEmpty { return }
             await MainActor.run {
-                // Only update if text still matches (avoid stale)
                 sections = result
             }
         }
@@ -1496,6 +1348,9 @@ struct FormattedMessageContent: View {
 
         case .flashcard(let front, let back):
             FlashcardMessageView(front: front, back: back)
+
+        case .table(let headers, let rows):
+            FormattedTableView(headers: headers, rows: rows)
         }
     }
 }
@@ -1560,8 +1415,10 @@ private struct MathJaxBlockView: View {
         }
         .padding(.vertical, 4)
         .overlay(alignment: .topTrailing) {
-            MessageCopyButton(text: latex)
-                .opacity(0.72)
+            if !usesFallback {
+                MessageCopyButton(text: latex)
+                    .opacity(0.72)
+            }
         }
         .task(id: latex) {
             // Show native first, then upgrade to MathJax after brief delay to avoid flash
@@ -1683,17 +1540,18 @@ private struct NativeMathBlockView: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             blockBody
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.primary.opacity(0.05))
+                .fill(Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
     }
 
@@ -1717,9 +1575,10 @@ private struct NativeMathText: View {
 
     var body: some View {
         Text(verbatim: text)
-            .font(.system(size: 16, weight: .medium, design: .serif))
-            .multilineTextAlignment(.leading)
+            .font(.system(size: 16, weight: .regular, design: .serif).italic())
+            .multilineTextAlignment(.center)
             .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 

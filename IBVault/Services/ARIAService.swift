@@ -410,6 +410,7 @@ class ARIAService {
         session: ARIAChatSession,
         persistUserMessage: Bool = true,
         onToken: @escaping (String) -> Void,
+        onStatus: (@Sendable (String) -> Void)? = nil,
         onComplete: @escaping (String) -> Void,
         onError: @escaping (any Error, UUID?) -> Void
     ) {
@@ -422,6 +423,7 @@ class ARIAService {
         activeRequestID = requestID
         isLoading = true
         currentStatus = "Preparing your study context"
+        onStatus?("Preparing your study context")
 
         if persistUserMessage {
             retryActionSummary = nil
@@ -446,6 +448,7 @@ class ARIAService {
                 let queryProfile = analyzeQuery(trimmedMessage)
                 let loggingContext = inferredLoggingContext(context: context, queryProfile: queryProfile)
                 self.currentStatus = "Checking requested app changes"
+                onStatus?("Checking requested app changes")
                 let actionSummary: ActionExecutionSummary
                 if !persistUserMessage {
                     if let cachedSummary = self.retryActionSummary,
@@ -475,6 +478,7 @@ class ARIAService {
 
                 // Build context
                 self.currentStatus = "Building your study context"
+                onStatus?("Building your study context")
                 var systemPrompt = await buildSystemPrompt(context: context, queryProfile: queryProfile)
                 if !actionSummary.isEmpty {
                     systemPrompt += "\n\n\(actionSummary.promptContext)\nReference these concrete changes in your reply briefly before giving any next-step guidance."
@@ -489,6 +493,7 @@ class ARIAService {
                     onStatus: { [weak self] status in
                         Task { @MainActor in
                             self?.currentStatus = status
+                            onStatus?(status)
                         }
                     }
                 )
