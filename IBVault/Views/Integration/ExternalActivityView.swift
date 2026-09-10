@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftData
 
+// External / unrecorded work: pending + merged, manual add, merge, delete.
+
 struct ExternalActivityView: View {
     @Environment(\.modelContext) private var context
     @Query private var subjects: [Subject]
