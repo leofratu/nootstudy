@@ -361,6 +361,10 @@ struct IntegrationSettingsSection: View {
         Bridge URL: \(url)
         Token: \(token)
 
+        # Connector lives in this repository at integrations/nootstudy-mcp.
+        # Published builds: npx -y nootstudy-mcp
+        # From a checkout: node /path/to/nootstudy/integrations/nootstudy-mcp/dist/index.js
+
         Codex CLI:
         codex mcp add nootstudy --env NOOTSTUDY_BRIDGE_URL=\(url) --env NOOTSTUDY_BRIDGE_TOKEN=\(token) -- npx -y nootstudy-mcp
 
