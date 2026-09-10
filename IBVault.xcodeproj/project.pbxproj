@@ -883,7 +883,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=1500";
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.tests;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
@@ -914,7 +914,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=1500";
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.app;
 				PRODUCT_MODULE_NAME = IBVault;
 				PRODUCT_NAME = "Noot Study";
@@ -946,7 +946,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=1500";
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.app;
 				PRODUCT_MODULE_NAME = IBVault;
 				PRODUCT_NAME = "Noot Study";
@@ -975,7 +975,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=1500";
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.tests;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
