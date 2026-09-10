@@ -31,8 +31,7 @@ class ARIAService {
     private let maxCompactionMessages = 120
     private let minMessagesBeforeCompaction = 16
     private let minMessagesToKeepAfterCompaction = 8
-    private let streamUpdateCharacterStride = 384
-    private let streamUpdateInterval: TimeInterval = 0.22
+    private let streamCoalesceInterval: TimeInterval = 0.02
 
     /// The typed catalog of app tools ARIA can execute. A raw-string action
     /// type would let typos silently produce no-op actions; an exhaustive enum
@@ -498,27 +497,27 @@ class ARIAService {
                     }
                 )
 
-                var lastStreamUpdate = Date.distantPast
-                var pendingStreamCharacters = 0
-
-                for try await token in stream {
-                    try Task.checkCancellation()
-                    Self.appendStreamChunk(token, to: &fullResponse)
-                    pendingStreamCharacters += token.count
-
-                    let now = Date()
-                    guard pendingStreamCharacters >= self.streamUpdateCharacterStride ||
-                            now.timeIntervalSince(lastStreamUpdate) >= self.streamUpdateInterval else {
-                        continue
+                let coalescer = ARIAStreamCoalescer(interval: self.streamCoalesceInterval, onEmit: onToken)
+                var didFlush = false
+                defer { if !didFlush { coalescer.cancel() } }
+                do {
+                    for try await token in stream {
+                        try Task.checkCancellation()
+                        Self.appendStreamChunk(token, to: &fullResponse)
+                        coalescer.enqueue(fullResponse)
                     }
-
-                    pendingStreamCharacters = 0
-                    lastStreamUpdate = now
-                    onToken(fullResponse)
+                    try Task.checkCancellation()
+                    coalescer.flush(fullResponse)
+                    didFlush = true
+                } catch is CancellationError {
+                    coalescer.cancel()
+                    didFlush = true
+                    throw CancellationError()
+                } catch {
+                    coalescer.cancel()
+                    didFlush = true
+                    throw error
                 }
-
-                try Task.checkCancellation()
-                onToken(fullResponse)
 
                 let finalizedResponse = Self.finalizeAssistantResponse(fullResponse)
                 guard !finalizedResponse.isEmpty else {

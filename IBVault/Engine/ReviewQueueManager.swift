@@ -210,8 +210,15 @@ final class ReviewQueueManager {
             hasher.combine(card.id)
             hasher.combine(card.nextReviewDate.timeIntervalSince1970)
         }
-        hasher.combine(reviewedIDs.count)
+        for id in reviewedIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+            hasher.combine(id)
+        }
         hasher.combine(eligibleCount)
         return String(hasher.finalize())
+    }
+
+    /// Exposed for testing: allows resetting memoization between isolated containers.
+    func resetFingerprintForTesting() {
+        lastFingerprint = nil
     }
 }
