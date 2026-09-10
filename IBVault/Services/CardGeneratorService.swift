@@ -40,6 +40,18 @@ struct CardGeneratorService {
         let hint: String?
         let difficulty: String?
         let skill: String?
+        let cardStyle: String?
+        let choices: [String]?
+
+        enum CodingKeys: String, CodingKey {
+            case front
+            case back
+            case hint
+            case difficulty
+            case skill
+            case cardStyle
+            case choices
+        }
     }
 
     /// Generate flashcards for a specific topic using ARIA/Gemini.
@@ -86,6 +98,16 @@ struct CardGeneratorService {
         } else {
             profile = adaptive
         }
+        let effectiveOptions = options ?? CardGenerationOptions(
+            count: count,
+            difficulty: profile.difficulty,
+            style: .basic,
+            tone: .exam,
+            cognitiveSkills: profile.skillMix,
+            useInternalTools: false
+        )
+        // options.count overrides the direct count parameter when options is provided
+        let requestedCount = options?.count ?? count
         let metadata = SyllabusSeeder.metadata(for: subject.name)
         let remoteAvailable: Bool = switch AIConfiguration.provider {
         case .gemini: KeychainService.hasAPIKey
@@ -97,9 +119,10 @@ struct CardGeneratorService {
                 subject: subject,
                 topicName: topicName,
                 subtopic: subtopic,
-                count: min(max(count, 1), 50),
+                count: min(max(requestedCount, 1), 50),
                 startingIndex: localStartingIndex,
-                profile: profile
+                profile: profile,
+                options: effectiveOptions
             )
         }
         let isPersonalCourse = subject.name == SyllabusSeeder.lifeCourseName ||
@@ -129,7 +152,7 @@ struct CardGeneratorService {
         }
         // Bounded regardless of what the caller passes, so a rogue or stale
         // cardCount can never trigger an unbounded generation loop.
-        let targetCount = min(max(count, 1), 50)
+        let targetCount = min(max(requestedCount, 1), 50)
         var collectedCards: [StudyCard] = []
         var lastError: (any Error)?
 
@@ -148,7 +171,8 @@ struct CardGeneratorService {
                     excludingFronts: collectedCards.map(\.front),
                     profile: profile,
                     syllabusVersion: metadata.catalogVersion,
-                    performanceContext: performanceContext
+                    performanceContext: performanceContext,
+                    options: effectiveOptions
                 )
 
                 do {
@@ -163,7 +187,8 @@ struct CardGeneratorService {
                         subject: subject,
                         topicName: topicName,
                         subtopic: subtopic,
-                        profile: profile
+                        profile: profile,
+                        options: effectiveOptions
                     )
                     let merged = mergeUnique(existing: collectedCards, incoming: parsed)
                     let addedCount = merged.count - collectedCards.count
@@ -191,13 +216,15 @@ struct CardGeneratorService {
         // syllabus-grounded starter cards are intentionally explicit about
         // the learner's task, so they are still useful as retrieval prompts
         // and can be replaced by richer ARIA cards on the next batch.
+        let localOptions = effectiveOptions
         let localCards = localStarterCards(
             subject: subject,
             topicName: topicName,
             subtopic: subtopic,
             count: targetCount,
             startingIndex: localStartingIndex,
-            profile: adaptiveProfile(for: subject, topicName: topicName, subtopic: subtopic)
+            profile: adaptiveProfile(for: subject, topicName: topicName, subtopic: subtopic),
+            options: localOptions
         )
         if !localCards.isEmpty {
             return localCards
@@ -214,6 +241,27 @@ struct CardGeneratorService {
         startingIndex: Int = 0,
         profile: AdaptiveProfile
     ) -> [StudyCard] {
+        localStarterCards(
+            subject: subject,
+            topicName: topicName,
+            subtopic: subtopic,
+            count: count,
+            startingIndex: startingIndex,
+            profile: profile,
+            options: nil
+        )
+    }
+
+    @MainActor
+    static func localStarterCards(
+        subject: Subject,
+        topicName: String,
+        subtopic: String,
+        count: Int,
+        startingIndex: Int = 0,
+        profile: AdaptiveProfile,
+        options: CardGenerationOptions?
+    ) -> [StudyCard] {
         guard let knowledge = SubjectKnowledge.knowledge(for: subject.name) else { return [] }
         let facts = knowledge.keyConcepts.map { statement in
             let label = statement.components(separatedBy: ":").first?
@@ -227,22 +275,79 @@ struct CardGeneratorService {
         guard !facts.isEmpty else { return [] }
         let metadata = SyllabusSeeder.metadata(for: subject.name)
         let safeCount = min(max(count, 1), min(50, max(0, facts.count - max(startingIndex, 0))))
+        let requestedStyle = options?.style ?? .basic
         return (0..<safeCount).map { index in
             let absoluteIndex = max(startingIndex, 0) + index
             let fact = facts[absoluteIndex]
             let skill = profile.skillMix.isEmpty ? CardCognitiveSkill.recall : profile.skillMix[absoluteIndex % profile.skillMix.count]
+            let difficulty = options?.difficulty ?? profile.difficulty
+            let factBack = fact.answer
+            let factFront: String
+            let cardStyle: CardStyle
+            let choices: [String]
+            switch requestedStyle {
+            case .basic:
+                factFront = fact.front
+                cardStyle = .basic
+                choices = []
+            case .cloze:
+                // Simple cloze from the fact's answer as the deletion.
+                // Front uses {{c1::answer}} with deletion equal to back.
+                factFront = "Complete: {{c1::\(factBack)}}"
+                cardStyle = .cloze
+                choices = []
+            case .multipleChoice:
+                factFront = fact.front
+                cardStyle = .multipleChoice
+                // Build 3 distractors from other facts + generic fallbacks
+                var distractors: [String] = []
+                let otherFacts = facts.filter { $0.answer != factBack }
+                // Deterministic shuffle by absoluteIndex
+                if !otherFacts.isEmpty {
+                    let start = absoluteIndex % otherFacts.count
+                    for offset in 0..<min(3, otherFacts.count) {
+                        let idx = (start + offset) % otherFacts.count
+                        let candidate = otherFacts[idx].answer
+                        let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty, trimmed.lowercased() != factBack.lowercased() {
+                            distractors.append(trimmed)
+                        }
+                    }
+                }
+                let fallbacks = ["Not applicable", "Insufficient data", "Depends on context"]
+                var fallbackIndex = 0
+                while distractors.count < 3, fallbackIndex < fallbacks.count {
+                    let fb = fallbacks[fallbackIndex]
+                    if fb.lowercased() != factBack.lowercased(),
+                       !distractors.contains(where: { $0.lowercased() == fb.lowercased() }) {
+                        distractors.append(fb)
+                    }
+                    fallbackIndex += 1
+                }
+                var allChoices = [factBack] + distractors.prefix(3)
+                // Deterministic rotation instead of random
+                let rotate = absoluteIndex % allChoices.count
+                if rotate > 0 {
+                    let prefix = Array(allChoices.prefix(rotate))
+                    let suffix = Array(allChoices.suffix(from: rotate))
+                    allChoices = suffix + prefix
+                }
+                choices = Array(allChoices.prefix(4))
+            }
             let card = StudyCard(
                 topicName: topicName,
                 subtopic: subtopic,
-                front: fact.front,
-                back: fact.answer,
+                front: factFront,
+                back: factBack,
                 subject: subject,
                 isCustom: false,
                 isAIGenerated: false,
                 generationSource: "Local syllabus starter",
                 hint: fact.hint,
-                difficulty: profile.difficulty,
+                difficulty: difficulty,
                 cognitiveSkill: skill,
+                cardStyle: cardStyle,
+                choices: choices,
                 sourceTitle: metadata.sourceTitle,
                 sourceURLString: metadata.sourceURL.absoluteString,
                 syllabusReference: syllabusReference(subject: subject, topicName: topicName, subtopic: subtopic),
@@ -315,6 +420,17 @@ struct CardGeneratorService {
         subtopic: String,
         profile: AdaptiveProfile? = nil
     ) throws -> [StudyCard] {
+        try parseFlashcards(from: response, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile, options: nil)
+    }
+
+    static func parseFlashcards(
+        from response: String,
+        subject: Subject,
+        topicName: String,
+        subtopic: String,
+        profile: AdaptiveProfile? = nil,
+        options: CardGenerationOptions?
+    ) throws -> [StudyCard] {
         // Clean response — strip markdown code fences if present
         var cleaned = response
             .replacingOccurrences(of: "```json", with: "")
@@ -335,7 +451,8 @@ struct CardGeneratorService {
                 subject: subject,
                 topicName: topicName,
                 subtopic: subtopic,
-                profile: profile ?? adaptiveProfile(for: subject, topicName: topicName, subtopic: subtopic)
+                profile: profile ?? adaptiveProfile(for: subject, topicName: topicName, subtopic: subtopic),
+                options: options
             )
             if !cards.isEmpty {
                 return cards
@@ -361,30 +478,72 @@ struct CardGeneratorService {
         subtopic: String,
         profile: AdaptiveProfile
     ) -> [StudyCard] {
+        cardsFromPayloads(payloads, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile, options: nil)
+    }
+
+    private static func cardsFromPayloads(
+        _ payloads: [GeneratedCardPayload],
+        subject: Subject,
+        topicName: String,
+        subtopic: String,
+        profile: AdaptiveProfile,
+        options: CardGenerationOptions?
+    ) -> [StudyCard] {
         let metadata = SyllabusSeeder.metadata(for: subject.name)
-        return deduplicated(payloads.compactMap { payload in
+        let rawCards: [StudyCard] = payloads.compactMap { payload in
             let front = normalizedMath(payload.front).trimmingCharacters(in: .whitespacesAndNewlines)
             let back = normalizedMath(payload.back).trimmingCharacters(in: .whitespacesAndNewlines)
             guard isUsefulAnswer(front: front, back: back) else { return nil }
+            let requestedStyle = parsedCardStyle(payload.cardStyle) ?? options?.style ?? .basic
+            let difficulty = clampDifficulty(parsedDifficulty(payload.difficulty) ?? profile.difficulty, options: options, profile: profile)
+            let skill = parsedSkill(payload.skill) ?? profile.skillMix.first ?? .explain
+            let finalFront = front
+            var finalStyle = requestedStyle
+            var finalChoices: [String] = []
+            switch requestedStyle {
+            case .basic:
+                finalChoices = []
+            case .cloze:
+                if isValidCloze(front: front, back: back) {
+                    finalChoices = []
+                } else {
+                    // Repair invalid cloze to basic rather than saving broken
+                    finalStyle = .basic
+                    finalChoices = []
+                }
+            case .multipleChoice:
+                if let validated = validatedChoices(back: back, choices: payload.choices) {
+                    finalChoices = validated
+                } else {
+                    finalStyle = .basic
+                    finalChoices = []
+                }
+            }
+            // useInternalTools deterministic enforcement: correct syllabusReference already applied, difficulty clamped, dedup handled downstream
+            let syllabusRef = syllabusReference(subject: subject, topicName: topicName, subtopic: subtopic)
             return StudyCard(
                 topicName: topicName,
                 subtopic: subtopic,
-                front: front,
+                front: finalFront,
                 back: back,
                 subject: subject,
                 isCustom: false,
                 isAIGenerated: true,
                 generationSource: AIConfiguration.provider.displayName,
                 hint: payload.hint.map(normalizedMath),
-                difficulty: parsedDifficulty(payload.difficulty) ?? profile.difficulty,
-                cognitiveSkill: parsedSkill(payload.skill) ?? profile.skillMix.first ?? .explain,
+                difficulty: difficulty,
+                cognitiveSkill: skill,
+                cardStyle: finalStyle,
+                choices: finalChoices,
                 sourceTitle: metadata.sourceTitle,
                 sourceURLString: metadata.sourceURL.absoluteString,
-                syllabusReference: syllabusReference(subject: subject, topicName: topicName, subtopic: subtopic),
+                syllabusReference: syllabusRef,
                 adaptationReason: profile.reason,
                 generationPromptVersion: promptVersion
             )
-        })
+        }
+        // When useInternalTools is true, the generationPrompt tells the model the app handles dedup, but we also enforce it deterministically.
+        return deduplicated(rawCards)
     }
 
     private static func cardsFromPairs(
@@ -431,6 +590,30 @@ struct CardGeneratorService {
         syllabusVersion: String,
         performanceContext: AcademicPerformanceContext
     ) -> String {
+        generationPrompt(
+            subject: subject,
+            topicName: topicName,
+            subtopic: subtopic,
+            count: count,
+            excludingFronts: excludingFronts,
+            profile: profile,
+            syllabusVersion: syllabusVersion,
+            performanceContext: performanceContext,
+            options: nil
+        )
+    }
+
+    private static func generationPrompt(
+        subject: Subject,
+        topicName: String,
+        subtopic: String,
+        count: Int,
+        excludingFronts: [String],
+        profile: AdaptiveProfile,
+        syllabusVersion: String,
+        performanceContext: AcademicPerformanceContext,
+        options: CardGenerationOptions?
+    ) -> String {
         let unitPart = SyllabusSeeder.unitName(for: subject.name, level: subject.level, topicName: topicName).map { "\nUnit: \($0)" } ?? ""
         let subtopicPart = subtopic.isEmpty ? "" : "\nSubtopic: \(subtopic)"
         let validSubtopics = SyllabusSeeder.subtopics(for: subject.name, level: subject.level, topicName: topicName)
@@ -445,6 +628,39 @@ struct CardGeneratorService {
         let levelRules = isPersonalCourse
             ? "- Treat this as a practical personal curriculum; do not invent IB exams, mark schemes, or assessment rules"
             : "- Match IB exam style where useful and do not include HL-only content for an SL subject"
+        let effectiveOptions = options ?? CardGenerationOptions(count: count, difficulty: profile.difficulty, style: .basic, tone: .exam, cognitiveSkills: profile.skillMix, useInternalTools: false)
+        let styleLine: String = switch effectiveOptions.style {
+        case .basic: "- Card style: basic — front is a clear question, back is the answer."
+        case .cloze: "- Card style: cloze — front must contain a single deletion as {{c1::answer}} where the deletion text equals the back exactly (trimmed). Example: front \"The {{c1::mitochondrion}} is the powerhouse...\" with back \"mitochondrion\"."
+        case .multipleChoice: "- Card style: multiple_choice — front is the stem, back is the correct answer, and choices must be 3-4 unique options with exactly one equal to the back (case-insensitive trimmed)."
+        }
+        let toneLine = "- Tone: \(effectiveOptions.tone.rawValue) — adapt phrasing to this voice while keeping accuracy."
+        let internalToolsLine = effectiveOptions.useInternalTools
+            ? "- The app performs curriculum-reference lookup, duplicate detection, and scheduling with its internal tools. Focus on content quality; the app will assign syllabusReference, deduplicate by normalized front, and clamp difficulty to \(effectiveOptions.difficulty.rawValue)."
+            : ""
+        let jsonExample: String = switch effectiveOptions.style {
+        case .basic:
+            """
+            [
+              {"front": "question text here", "back": "answer text here", "hint": "small cue", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.first?.rawValue ?? CardCognitiveSkill.explain.rawValue)", "cardStyle": "basic"},
+              {"front": "question text here", "back": "answer text here", "hint": "small cue", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.last?.rawValue ?? CardCognitiveSkill.apply.rawValue)", "cardStyle": "basic"}
+            ]
+            """
+        case .cloze:
+            """
+            [
+              {"front": "The {{c1::mitochondrion}} produces ATP via cellular respiration.", "back": "mitochondrion", "hint": "powerhouse of the cell", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.first?.rawValue ?? CardCognitiveSkill.recall.rawValue)", "cardStyle": "cloze"},
+              {"front": "Photosynthesis converts {{c1::carbon dioxide}} and water into glucose.", "back": "carbon dioxide", "hint": "reactant from air", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.last?.rawValue ?? CardCognitiveSkill.apply.rawValue)", "cardStyle": "cloze"}
+            ]
+            """
+        case .multipleChoice:
+            """
+            [
+              {"front": "Which organelle produces ATP?", "back": "Mitochondrion", "hint": "powerhouse", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.first?.rawValue ?? CardCognitiveSkill.recall.rawValue)", "cardStyle": "multiple_choice", "choices": ["Mitochondrion", "Chloroplast", "Nucleus", "Ribosome"]},
+              {"front": "What is opportunity cost?", "back": "Value of the next best alternative foregone", "hint": "choice trade-off", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.last?.rawValue ?? CardCognitiveSkill.explain.rawValue)", "cardStyle": "multiple_choice", "choices": ["Value of the next best alternative foregone", "Total revenue minus cost", "Price times quantity", "Marginal benefit"]}
+            ]
+            """
+        }
 
         return """
         Generate exactly \(count) high-quality flashcards for this \(courseLabel):
@@ -468,14 +684,14 @@ struct CardGeneratorService {
         - For humanities: include precise concepts, application, counterarguments, and evaluation where relevant
         \(levelRules)
         - Use $...$ for inline equations and $$...$$ for display equations; never use Unicode-only equation substitutes when LaTeX is clearer
+        \(styleLine)
+        \(toneLine)
+        \(internalToolsLine)
         - Every card must be materially distinct from the others\(excludingFronts.isEmpty ? "" : " and must not repeat the excluded question fronts")
         \(exclusionLines)
 
         RESPOND IN EXACTLY THIS JSON FORMAT (no markdown, no code fences, just raw JSON):
-        [
-          {"front": "question text here", "back": "answer text here", "hint": "small cue", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.first?.rawValue ?? CardCognitiveSkill.explain.rawValue)"},
-          {"front": "question text here", "back": "answer text here", "hint": "small cue", "difficulty": "\(profile.difficulty.rawValue)", "skill": "\(profile.skillMix.last?.rawValue ?? CardCognitiveSkill.apply.rawValue)"}
-        ]
+        \(jsonExample)
         """
     }
 
@@ -577,12 +793,75 @@ struct CardGeneratorService {
         return CardCognitiveSkill.allCases.first { $0.rawValue.caseInsensitiveCompare(rawValue) == .orderedSame }
     }
 
+    private static func parsedCardStyle(_ rawValue: String?) -> CardStyle? {
+        guard let rawValue else { return nil }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        let lower = trimmed.lowercased()
+        // Support both "multiple_choice" and "multipleChoice" spellings
+        if lower == "multiplechoice" || lower == "multiple_choice" || lower == "multiple-choice" {
+            return .multipleChoice
+        }
+        return CardStyle.allCases.first { $0.rawValue.lowercased() == lower }
+    }
+
     private static func normalizedMath(_ value: String) -> String {
         value
             .replacingOccurrences(of: "\\(", with: "$")
             .replacingOccurrences(of: "\\)", with: "$")
             .replacingOccurrences(of: "\\[", with: "$$")
             .replacingOccurrences(of: "\\]", with: "$$")
+    }
+
+    // MARK: - Card style validation (P0)
+
+    nonisolated static func isValidCloze(front: String, back: String) -> Bool {
+        let trimmedBack = back.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBack.isEmpty else { return false }
+        // Front must contain exactly {{c1::back}} with trimmed equality
+        // Use regex to extract deletion
+        let pattern = #"\{\{c1::(.*?)\}\}"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return false }
+        let nsFront = front as NSString
+        let matches = regex.matches(in: front, options: [], range: NSRange(location: 0, length: nsFront.length))
+        guard matches.count == 1,
+              let range = Range(matches[0].range(at: 1), in: front) else { return false }
+        let deletion = String(front[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return deletion == trimmedBack
+    }
+
+    nonisolated static func validatedChoices(back: String, choices: [String]?) -> [String]? {
+        guard let choices, choices.count >= 3, choices.count <= 4 else { return nil }
+        let trimmedBack = back.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBack.isEmpty else { return nil }
+        let trimmedChoices = choices.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard trimmedChoices.count >= 3, trimmedChoices.count <= 4 else { return nil }
+        // Unique case-insensitive trimmed
+        var seenLower = Set<String>()
+        var unique: [String] = []
+        for choice in trimmedChoices {
+            let lower = choice.lowercased()
+            if seenLower.contains(lower) { return nil }
+            seenLower.insert(lower)
+            unique.append(choice)
+        }
+        // Exactly one must equal back case-insensitive trimmed
+        let matchingCount = unique.filter { $0.lowercased() == trimmedBack.lowercased() }.count
+        guard matchingCount == 1 else { return nil }
+        return unique
+    }
+
+    nonisolated static func clampDifficulty(_ difficulty: CardDifficulty, options: CardGenerationOptions?, profile: AdaptiveProfile) -> CardDifficulty {
+        // When useInternalTools is true, clamp to the options-chosen difficulty if provided.
+        if let options, options.useInternalTools {
+            return options.difficulty
+        }
+        // Otherwise ensure difficulty is a valid enum case (already guaranteed) — no clamp needed.
+        // But also respect options difficulty when it differs from profile.
+        if let options {
+            return options.difficulty
+        }
+        return difficulty
     }
 
     private static func syllabusReference(subject: Subject, topicName: String, subtopic: String) -> String {
