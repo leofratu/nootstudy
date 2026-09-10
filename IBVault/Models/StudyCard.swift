@@ -102,6 +102,10 @@ nonisolated final class StudyCard {
     var hint: String?
     var difficultyRaw: String?
     var cognitiveSkillRaw: String?
+    // Card studio format metadata. Optional so stores written before the card
+    // studio release upgrade in place via lightweight migration.
+    var cardStyleRaw: String?
+    var choicesJSON: String?
     var sourceTitle: String?
     var sourceURLString: String?
     var syllabusReference: String?
@@ -145,6 +149,29 @@ nonisolated final class StudyCard {
         set { cognitiveSkillRaw = newValue.rawValue }
     }
 
+    var cardStyle: CardStyle {
+        get { cardStyleRaw.flatMap(CardStyle.init(rawValue:)) ?? .basic }
+        set { cardStyleRaw = newValue.rawValue }
+    }
+
+    var choices: [String] {
+        get {
+            guard let choicesJSON, let data = choicesJSON.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        }
+        set {
+            guard !newValue.isEmpty else {
+                choicesJSON = nil
+                return
+            }
+            guard let data = try? JSONEncoder().encode(newValue) else {
+                choicesJSON = nil
+                return
+            }
+            choicesJSON = String(data: data, encoding: .utf8)
+        }
+    }
+
     var sourceURL: URL? {
         guard let sourceURLString, !sourceURLString.isEmpty else { return nil }
         return URL(string: sourceURLString)
@@ -170,6 +197,8 @@ nonisolated final class StudyCard {
         hint: String? = nil,
         difficulty: CardDifficulty = .standard,
         cognitiveSkill: CardCognitiveSkill = .recall,
+        cardStyle: CardStyle = .basic,
+        choices: [String] = [],
         sourceTitle: String? = nil,
         sourceURLString: String? = nil,
         syllabusReference: String? = nil,
@@ -208,6 +237,14 @@ nonisolated final class StudyCard {
         self.hint = hint
         self.difficultyRaw = difficulty.rawValue
         self.cognitiveSkillRaw = cognitiveSkill.rawValue
+        self.cardStyleRaw = cardStyle.rawValue
+        if choices.isEmpty {
+            self.choicesJSON = nil
+        } else if let data = try? JSONEncoder().encode(choices) {
+            self.choicesJSON = String(data: data, encoding: .utf8)
+        } else {
+            self.choicesJSON = nil
+        }
         self.sourceTitle = sourceTitle
         self.sourceURLString = sourceURLString
         self.syllabusReference = syllabusReference
