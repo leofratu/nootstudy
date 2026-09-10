@@ -56,7 +56,7 @@ struct StudyPlannerView: View {
                     StudioPageHeader(
                         eyebrow: "Study cadence",
                         title: "Study sessions",
-                        subtitle: todayPlans.isEmpty ? "Plan a focused block, then turn the work into a review path you can trust." : "\(todayPlans.count) sessions are lined up for today.",
+                        subtitle: todayPlans.isEmpty ? "Plan a focused block, then turn the work into a review path you can trust." : (todayPlans.count == 1 ? "1 session is lined up for today." : "\(todayPlans.count) sessions are lined up for today."),
                         symbol: "calendar.badge.clock",
                         tint: IBColors.electricBlue
                     ) {

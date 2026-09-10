@@ -19,6 +19,7 @@ struct TopicBrowserView: View {
     @State private var hoveredSubtopic: String?
     @State private var masteryError: String?
     @State private var cardStudioOptions = CardGenerationOptions(count: 10, difficulty: .exam, style: .basic, tone: .exam, cognitiveSkills: [], useInternalTools: false)
+    @State private var isCardStudioExpanded = false
 
     private var curriculum: [CurriculumUnit] {
         let full = SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
@@ -49,6 +50,18 @@ struct TopicBrowserView: View {
         }
     }
     private let coverageCardCounts = [2, 3, 5]
+
+    private var cardStudioSummary: String {
+        let style = cardStudioOptions.style.label
+        let diff = cardStudioOptions.difficulty.rawValue
+        let skills: String
+        if cardStudioOptions.cognitiveSkills.isEmpty {
+            skills = "adaptive skills"
+        } else {
+            skills = cardStudioOptions.cognitiveSkills.map(\.rawValue).joined(separator: ", ")
+        }
+        return "\(style) · \(diff) · \(skills) · \(cardsPerSubtopic) per subunit"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -267,10 +280,31 @@ struct TopicBrowserView: View {
                 topicHeader(topic, index: index)
                 Divider()
                 coverageToolbar(topic)
-                CardStudioOptionsView(options: $cardStudioOptions, showsCount: false, compact: true)
+                DisclosureGroup(isExpanded: $isCardStudioExpanded) {
+                    CardStudioOptionsView(options: $cardStudioOptions, showsCount: false, compact: true)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .onChange(of: cardStudioOptions.count) { _, v in generationCount = v }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(accent)
+                        Text(cardStudioSummary)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(IBColors.secondaryText)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(isCardStudioExpanded ? "Hide" : "Customize")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(accent)
+                    }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .onChange(of: cardStudioOptions.count) { _, v in generationCount = v }
+                    .contentShape(Rectangle())
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
                 generationStatus
                 Divider()
 
@@ -345,18 +379,15 @@ struct TopicBrowserView: View {
                     .font(.caption)
                     .foregroundStyle(IBColors.secondaryText)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Slider(value: Binding(get: { Double(cardsPerSubtopic) }, set: { cardsPerSubtopic = Int($0.rounded()) }), in: 2...5, step: 1)
-                    HStack {
-                        Text("2").font(.caption2)
-                        Spacer()
-                        Text("\(cardsPerSubtopic) cards").font(.caption.weight(.semibold))
-                        Spacer()
-                        Text("5").font(.caption2)
-                    }
+                Slider(value: Binding(get: { Double(cardsPerSubtopic) }, set: { cardsPerSubtopic = Int($0.rounded()) }), in: 2...5, step: 1)
+                    .frame(maxWidth: 140)
+                Text("\(cardsPerSubtopic)")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(IBColors.ink)
+                    .frame(width: 22, alignment: .trailing)
+                Text("cards")
+                    .font(.caption2)
                     .foregroundStyle(IBColors.secondaryText)
-                }
-                .frame(width: 170)
 
                 Spacer(minLength: 8)
 

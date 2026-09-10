@@ -329,25 +329,27 @@ struct SettingsView: View {
                             HStack(spacing: 14) {
                                 Label("Study intensity", systemImage: "gauge.with.dots.needle.67percent")
                                     .frame(width: 150, alignment: .leading)
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: 6) {
                                     Slider(value: Binding(
                                         get: { Double(StudyIntensity.allCases.firstIndex(of: profile.studyIntensity) ?? 1) },
                                         set: { profile.studyIntensity = StudyIntensity.allCases[min(max(Int($0.rounded()), 0), StudyIntensity.allCases.count - 1)]; persistChanges() }
                                     ), in: 0...Double(StudyIntensity.allCases.count - 1), step: 1)
-                                    HStack {
+                                    HStack(spacing: 4) {
                                         ForEach(StudyIntensity.allCases, id: \.self) { intensity in
                                             Text("\(intensity.emoji) \(intensity.rawValue)")
-                                                .font(.caption2)
+                                                .font(.caption2.weight(.medium))
                                                 .foregroundStyle(profile.studyIntensity == intensity ? IBColors.ink : IBColors.secondaryText)
-                                                .frame(maxWidth: .infinity)
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.85)
                                         }
                                     }
                                 }
-                                .frame(maxWidth: 360)
-                                Spacer()
+                                .frame(maxWidth: 380)
+                                Spacer(minLength: 12)
                                 Text("\(profile.studyIntensity.dailyCardSuggestion) cards/day")
-                                    .font(.caption)
+                                    .font(.caption.weight(.medium))
                                     .foregroundStyle(IBColors.secondaryText)
+                                    .frame(width: 90, alignment: .trailing)
                             }
                             .padding(.vertical, 10)
                         }
@@ -384,28 +386,45 @@ struct SettingsView: View {
                 ) {
                     VStack(spacing: 0) {
                         if let profile {
-                            Stepper("Daily goal", value: Binding(
-                                get: { profile.dailyGoal },
-                                set: { profile.dailyGoal = $0; persistChanges() }
-                            ), in: 5...30, step: 5)
-                            .padding(.vertical, 10)
-                            HStack {
-                                Spacer()
-                                Text("\(profile.dailyGoal) cards")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(IBColors.secondaryText)
+                            HStack(spacing: 14) {
+                                Label("Daily goal", systemImage: "target")
+                                    .frame(width: 150, alignment: .leading)
+                                Stepper(value: Binding(
+                                    get: { profile.dailyGoal },
+                                    set: { profile.dailyGoal = $0; persistChanges() }
+                                ), in: 5...30, step: 5) {
+                                    Text("\(profile.dailyGoal) cards")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(IBColors.secondaryText)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .trailing)
                             }
-                            .padding(.bottom, 10)
+                            .padding(.vertical, 10)
                             Divider()
                         }
-                        Toggle("Start the next card automatically", isOn: $autoPlayNext)
-                            .padding(.vertical, 10)
+                        HStack(spacing: 14) {
+                            Label("Start the next card automatically", systemImage: "play.circle")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Toggle("", isOn: $autoPlayNext)
+                                .labelsHidden()
+                        }
+                        .padding(.vertical, 10)
                         Divider()
-                        Toggle("Show due-card count in navigation", isOn: $showDueCountBadge)
-                            .padding(.vertical, 10)
+                        HStack(spacing: 14) {
+                            Label("Show due-card count in navigation", systemImage: "number.circle")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Toggle("", isOn: $showDueCountBadge)
+                                .labelsHidden()
+                        }
+                        .padding(.vertical, 10)
                         Divider()
-                        Toggle("Show mastery on recall cards", isOn: $showMasteryPercent)
-                            .padding(.vertical, 10)
+                        HStack(spacing: 14) {
+                            Label("Show mastery on recall cards", systemImage: "percent")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Toggle("", isOn: $showMasteryPercent)
+                                .labelsHidden()
+                        }
+                        .padding(.vertical, 10)
                     }
                 }
 
