@@ -3,17 +3,26 @@ import SwiftUI
 
 nonisolated enum MathExpressionFormatter: Sendable {
     private nonisolated static let commandMap: [String: String] = [
-        "\\alpha": "α", "\\beta": "β", "\\gamma": "γ", "\\delta": "δ", "\\epsilon": "ϵ",
-        "\\theta": "θ", "\\lambda": "λ", "\\mu": "μ", "\\pi": "π", "\\sigma": "σ",
-        "\\phi": "φ", "\\omega": "ω", "\\Delta": "Δ", "\\Gamma": "Γ", "\\Lambda": "Λ",
-        "\\Pi": "Π", "\\Sigma": "Σ", "\\Omega": "Ω", "\\times": "×", "\\cdot": "·",
-        "\\pm": "±", "\\neq": "≠", "\\leq": "≤", "\\geq": "≥", "\\approx": "≈",
-        "\\infty": "∞", "\\to": "→", "\\rightarrow": "→", "\\left": "", "\\right": "",
-        "\\sum": "Σ", "\\prod": "∏", "\\int": "∫", "\\cdots": "⋯", "\\ldots": "…",
+        "\\alpha": "α", "\\beta": "β", "\\gamma": "γ", "\\delta": "δ", "\\epsilon": "ϵ", "\\varepsilon": "ε",
+        "\\zeta": "ζ", "\\eta": "η", "\\theta": "θ", "\\vartheta": "ϑ", "\\iota": "ι", "\\kappa": "κ",
+        "\\lambda": "λ", "\\mu": "μ", "\\nu": "ν", "\\xi": "ξ", "\\omicron": "ο",
+        "\\pi": "π", "\\varpi": "ϖ", "\\rho": "ρ", "\\varrho": "ϱ", "\\sigma": "σ", "\\varsigma": "ς",
+        "\\tau": "τ", "\\upsilon": "υ", "\\phi": "φ", "\\varphi": "ϕ", "\\chi": "χ", "\\psi": "ψ", "\\omega": "ω",
+        "\\Delta": "Δ", "\\Gamma": "Γ", "\\Lambda": "Λ", "\\Pi": "Π", "\\Sigma": "Σ", "\\Phi": "Φ", "\\Psi": "Ψ", "\\Omega": "Ω", "\\Theta": "Θ", "\\Xi": "Ξ",
+        "\\times": "×", "\\cdot": "·", "\\pm": "±", "\\neq": "≠", "\\ne": "≠", "\\leq": "≤", "\\le": "≤", "\\geq": "≥", "\\ge": "≥", "\\approx": "≈",
+        "\\infty": "∞", "\\partial": "∂", "\\to": "→", "\\rightarrow": "→", "\\leftarrow": "←", "\\Rightarrow": "⇒", "\\Leftarrow": "⇐", "\\leftrightarrow": "↔", "\\Leftrightarrow": "⇔",
+        "\\sum": "Σ", "\\prod": "∏", "\\int": "∫", "\\oint": "∮", "\\nabla": "∇",
+        "\\cdots": "⋯", "\\ldots": "…", "\\vdots": "⋮", "\\ddots": "⋱",
         "\\sin": "sin", "\\cos": "cos", "\\tan": "tan", "\\sec": "sec", "\\csc": "csc",
-        "\\cot": "cot", "\\log": "log", "\\ln": "ln",
-        "\\lim": "lim"
+        "\\cot": "cot", "\\log": "log", "\\ln": "ln", "\\exp": "exp",
+        "\\lim": "lim", "\\max": "max", "\\min": "min",
+        "\\left": "", "\\right": "",
     ]
+
+    /// Sorted by descending key length so ``\\rightarrow`` is replaced before ``\\right`` (which maps to empty and would otherwise truncate the arrow).
+    private nonisolated static var sortedCommandPairs: [(String, String)] {
+        commandMap.sorted { $0.key.count > $1.key.count }
+    }
 
     private nonisolated static let superscripts: [Character: String] = [
         "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
@@ -90,20 +99,17 @@ nonisolated enum MathExpressionFormatter: Sendable {
         result = replaceCommandWithOneArg(command: "\\mathrm", in: result) { $0 }
         result = replaceCommandWithOneArg(command: "\\operatorname", in: result) { $0 }
 
-        for (command, symbol) in commandMap {
+        for (command, symbol) in sortedCommandPairs {
             result = result.replacingOccurrences(of: command, with: symbol)
         }
 
-        // Do not blindly strip braces — only remove braces that are not part of depth-counted groups?
-        // We keep braces removal but after depth-counted replacements, remaining braces are safe to strip
-        // except when they enclose content with nested structure. The depth-counting already handled
-        // \\frac and \\text etc. For remaining, we strip single-level braces carefully.
+        result = applyScript(marker: "^", mapping: superscripts, to: result)
+        result = applyScript(marker: "_", mapping: subscripts, to: result)
+
+        // Strip grouping braces after scripts have consumed their braced groups. Remaining braces are layout-only.
         result = stripOuterBracesPreservingDepth(in: result)
 
         result = result.replacingOccurrences(of: "\\", with: "")
-
-        result = applyScript(marker: "^", mapping: superscripts, to: result)
-        result = applyScript(marker: "_", mapping: subscripts, to: result)
 
         return result
             .replacingOccurrences(of: "  ", with: " ")

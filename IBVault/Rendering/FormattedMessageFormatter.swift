@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import os
 
 // MARK: - Section Model
 
@@ -13,6 +14,7 @@ nonisolated enum FormattedMessageSection: Equatable, Sendable {
     case codeBlock(code: String, language: String)
     case diagram(ARIADiagramSpec)
     case flashcard(front: String, back: String)
+    case table(headers: [String], rows: [[String]])
 }
 
 // MARK: - Formatter
@@ -37,6 +39,8 @@ nonisolated enum FormattedMessageFormatter: Sendable {
     // MARK: Public API
 
     nonisolated static func sections(from source: String) -> [FormattedMessageSection] {
+        let state = PerformanceSignposts.signposter.beginInterval("formatter.parse")
+        defer { PerformanceSignposts.signposter.endInterval("formatter.parse", state) }
         let normalized = normalizeResponseText(source)
         var sections: [FormattedMessageSection] = []
         var markdownLines: [String] = []
@@ -244,26 +248,84 @@ nonisolated enum FormattedMessageFormatter: Sendable {
             paragraphLines.removeAll()
         }
 
-        for line in markdown.components(separatedBy: .newlines) {
+        let lines = markdown.components(separatedBy: .newlines)
+        var idx = 0
+        while idx < lines.count {
+            let line = lines[idx]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if let heading = heading(from: trimmed) {
                 flushParagraph()
                 sections.append(.heading(level: heading.level, text: heading.text))
+                idx += 1
+                continue
             } else if trimmed == "---" || trimmed == "***" || trimmed == "___" {
                 flushParagraph()
                 sections.append(.divider)
+                idx += 1
+                continue
             } else if trimmed.hasPrefix("> ") {
                 flushParagraph()
                 sections.append(.quote(String(trimmed.dropFirst(2))))
+                idx += 1
+                continue
             } else if let item = listItem(from: trimmed) {
                 flushParagraph()
                 sections.append(.listItem(marker: item.marker, text: item.text))
+                idx += 1
+                continue
+            } else if let parsed = parseGFMTable(at: idx, lines: lines) {
+                flushParagraph()
+                sections.append(.table(headers: parsed.headers, rows: parsed.rows))
+                idx += parsed.consumed
+                continue
             } else {
                 paragraphLines.append(line)
+                idx += 1
             }
         }
 
         flushParagraph()
+    }
+
+    private nonisolated static func parseGFMTable(at index: Int, lines: [String]) -> (headers: [String], rows: [[String]], consumed: Int)? {
+        guard let headerCells = tableCells(in: lines[index]) else { return nil }
+        guard index + 1 < lines.count, let sepCells = tableCells(in: lines[index + 1]), isSeparatorRow(sepCells) else { return nil }
+        var rows: [[String]] = []
+        var consumed = 2
+        for offset in 2... {
+            let lineIdx = index + offset
+            guard lineIdx < lines.count else { break }
+            guard let cells = tableCells(in: lines[lineIdx]) else { break }
+            if isSeparatorRow(cells) { break }
+            // Normalize column count to header width
+            var normalized = cells
+            if normalized.count < headerCells.count {
+                normalized.append(contentsOf: Array(repeating: "", count: headerCells.count - normalized.count))
+            } else if normalized.count > headerCells.count {
+                normalized = Array(normalized.prefix(headerCells.count))
+            }
+            rows.append(normalized)
+            consumed += 1
+        }
+        guard !rows.isEmpty else { return nil }
+        return (headerCells, rows, consumed)
+    }
+
+    private nonisolated static func tableCells(in line: String) -> [String]? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.contains("|") else { return nil }
+        var inner = trimmed
+        if inner.hasPrefix("|") { inner.removeFirst() }
+        if inner.hasSuffix("|") { inner.removeLast() }
+        let cells = inner.split(separator: "|", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard cells.count >= 2 else { return nil }
+        return cells
+    }
+
+    private nonisolated static func isSeparatorRow(_ cells: [String]) -> Bool {
+        !cells.isEmpty && cells.allSatisfy { cell in
+            !cell.isEmpty && cell.allSatisfy { $0 == "-" || $0 == ":" || $0.isWhitespace }
+        }
     }
 
     private nonisolated static func heading(from line: String) -> (level: Int, text: String)? {
