@@ -60,15 +60,15 @@ struct SubjectsGridView: View {
 
                     HStack(spacing: 12) {
                         StudioMetricTile(value: "\(subjects.count)", label: "Enrolled", symbol: "books.vertical.fill", tint: IBColors.englishColor, detail: "Your IB syllabus")
-                        StudioMetricTile(value: "\(averageMastery)%", label: "Average mastery", symbol: "chart.bar.fill", tint: IBColors.teal, detail: "Across active subjects")
-                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + (dueCounts[$1.id] ?? 0) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.coral, detail: "Within studied scopes")
+                        StudioMetricTile(value: "\(averageMastery)%", label: "Average mastery", symbol: "chart.bar.fill", tint: IBColors.inkTertiary, detail: "Across active subjects")
+                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + (dueCounts[$1.id] ?? 0) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.inkTertiary, detail: "Within studied scopes")
                     }
 
                     StudioSectionHeader(
                         searchText.isEmpty ? "Subject portfolio" : "Search results",
                         subtitle: searchText.isEmpty ? "Mastery reflects recall and imported assessment results." : "\(sortedSubjects.count) matching subjects",
                         symbol: "square.grid.2x2.fill",
-                        tint: IBColors.electricBlue
+                        tint: IBColors.accent
                     ) {
                         EmptyView()
                     }
@@ -136,7 +136,7 @@ struct SubjectWorkspaceRow: View {
     let dueCount: Int
     let mastery: Double
 
-    private var tint: Color { Color(hex: subject.accentColorHex) }
+    private var tint: Color { IBColors.inkTertiary }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -165,7 +165,7 @@ struct SubjectWorkspaceRow: View {
                     StudioPill(title: subject.level, tint: tint)
                     Text(subject.cards.isEmpty ? "No recall cards" : "\(subject.cards.count) cards")
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                         .lineLimit(1)
                 }
             }
@@ -175,7 +175,7 @@ struct SubjectWorkspaceRow: View {
                 HStack {
                     Text("Mastery")
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                     Spacer()
                     Text("\(Int(mastery * 100))%")
                         .font(.caption.weight(.bold))
@@ -188,18 +188,18 @@ struct SubjectWorkspaceRow: View {
             VStack(alignment: .trailing, spacing: 3) {
                 Text(dueCount == 0 ? "Clear" : "\(dueCount) due")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(dueCount == 0 ? IBColors.success : IBColors.coral)
+                    .foregroundStyle(dueCount == 0 ? IBColors.success : IBColors.inkTertiary)
                     .lineLimit(1)
                     .fixedSize()
                 Text(masteryLabel)
                     .font(.caption2)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .lineLimit(1)
             }
 
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.bold))
-                .foregroundStyle(IBColors.tertiaryText)
+                .foregroundStyle(IBColors.inkTertiary)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 13)

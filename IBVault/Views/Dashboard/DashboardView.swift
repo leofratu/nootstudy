@@ -18,9 +18,6 @@ struct DashboardView: View {
     @State private var showReview = false
     @State private var selectedSubjectForReview: Subject?
     @State private var greetingText = ""
-    // Queue-health ratio cached alongside the due snapshot; computing it here
-    // would re-scan every card in the store on every body evaluation.
-    @State private var reviewProgress = 0.0
     @State private var cachedEvidence: [EvidenceRow] = []
     @State private var evidenceFingerprint = ""
     @State private var dueRefreshTask: Task<Void, Never>?
@@ -30,17 +27,12 @@ struct DashboardView: View {
     private struct EvidenceRow: Identifiable {
         let subject: Subject
         let evidence: ProgressEvidence
-
         var id: UUID { subject.id }
         var mastery: Double { evidence.blendedMastery ?? evidence.assessmentEvidence ?? 0 }
     }
 
     private var profile: UserProfile? { profiles.first }
-    /// A single review-queue snapshot is shared with the sidebar and global
-    /// review flow. Dashboard-local filtering previously allowed its count to
-    /// disagree with the cards the review sheet could actually present.
     private var dueCards: [StudyCard] { queueManager.dueCards }
-
     private var dueBacklogCount: Int { queueManager.totalDueBacklogCount }
 
     private var sortedSubjects: [Subject] {
@@ -54,18 +46,19 @@ struct DashboardView: View {
         return "Good evening"
     }
 
+    private var newCardsCount: Int {
+        allCards.filter { $0.totalReviewCount == 0 }.count
+    }
+
     init() {
         _ariaService = State(initialValue: ARIAServiceFactory.make())
     }
 
     var body: some View {
-        // Scored once per render: ProgressEvidenceService.score walks cards,
-        // assessments, mappings, reports, and sessions per subject, so letting
-        // each section derive its own copy quadrupled that work per body pass.
         let evidence = evidenceRows
         return NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 24) {
                     dashboardHeader
                     metricsGrid
                     externalWorkPrompt
@@ -82,9 +75,6 @@ struct DashboardView: View {
             .navigationTitle("Today")
             .sheet(isPresented: $showReview, onDismiss: {
                 reviewScheduler.analyze(context: context)
-                // A completed review consumed the due queue; refresh the shared
-                // queue snapshot so the sidebar badge is not stale until the
-                // next tab change.
                 recomputeDueCards()
             }) {
                 ReviewSessionView(filterSubject: selectedSubjectForReview)
@@ -94,12 +84,8 @@ struct DashboardView: View {
                 recomputeDueCards()
                 refreshEvidenceIfNeeded()
             }
-            .onChange(of: allCards) { _, _ in
-                scheduleDueRefresh()
-            }
-            .onChange(of: studySessions) { _, _ in
-                scheduleDueRefresh()
-            }
+            .onChange(of: allCards) { _, _ in scheduleDueRefresh() }
+            .onChange(of: studySessions) { _, _ in scheduleDueRefresh() }
             .onChange(of: subjects) { _, _ in refreshEvidenceIfNeeded() }
             .onChange(of: academicAssessments) { _, _ in refreshEvidenceIfNeeded() }
             .onChange(of: academicMappings) { _, _ in refreshEvidenceIfNeeded() }
@@ -109,26 +95,13 @@ struct DashboardView: View {
 
     private func recomputeDueCards() {
         queueManager.refreshDueCards(context: context)
-        recomputeReviewProgress()
         updateGreeting()
     }
 
     private func updateGreeting() {
         let readyCount: Int = queueManager.totalDueCount
-        let greeting: String = ariaService.generateGreeting(
-            readyCount: readyCount,
-            deferredCount: 0
-        )
+        let greeting: String = ariaService.generateGreeting(readyCount: readyCount, deferredCount: 0)
         greetingText = greeting
-    }
-
-    private func recomputeReviewProgress() {
-        guard !allCards.isEmpty else {
-            reviewProgress = 0
-            return
-        }
-        let readyCount = allCards.filter { !$0.isDue }.count
-        reviewProgress = min(1.0, max(0.0, Double(readyCount) / Double(allCards.count)))
     }
 
     private var dashboardHeader: some View {
@@ -136,7 +109,7 @@ struct DashboardView: View {
             eyebrow: "Today",
             title: "\(greeting), \(profile?.studentName.isEmpty == false ? profile?.studentName ?? "" : "there")",
             subtitle: headerSubtitle,
-            symbol: "rectangle.3.group.fill"
+            symbol: "rectangle.3.group"
         ) {
             if dueCards.isEmpty {
                 NavigationLink {
@@ -145,9 +118,8 @@ struct DashboardView: View {
                     Label("Plan a session", systemImage: "calendar.badge.plus")
                         .frame(minWidth: 132)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
                 .controlSize(.large)
-                .tint(IBColors.electricBlue)
             } else {
                 Button {
                     selectedSubjectForReview = nil
@@ -156,9 +128,8 @@ struct DashboardView: View {
                     Label("Start review", systemImage: "play.fill")
                         .frame(minWidth: 132)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
                 .controlSize(.large)
-                .tint(IBColors.electricBlue)
             }
         }
     }
@@ -178,7 +149,6 @@ struct DashboardView: View {
     }
 
     private var evidenceRows: [EvidenceRow] {
-        // Cached snapshot keyed by fingerprint of (subjects, assessments, mappings, workSessions).
         if !cachedEvidence.isEmpty { return cachedEvidence }
         if sortedSubjects.isEmpty { return [] }
         let state = PerformanceSignposts.signposter.beginInterval("dashboard.evidence")
@@ -237,37 +207,33 @@ struct DashboardView: View {
 
     private var externalWorkPrompt: some View {
         HStack(spacing: 12) {
-            Image(systemName: "tray.and.arrow.down.fill")
+            Image(systemName: "tray.and.arrow.down")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(IBColors.coral)
+                .foregroundStyle(IBColors.inkTertiary)
                 .frame(width: 30, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(IBColors.coral.opacity(0.12))
-                )
+                .background(RoundedRectangle(cornerRadius: 7).fill(IBColors.surfaceHover).overlay(RoundedRectangle(cornerRadius: 7).stroke(IBColors.border, lineWidth: 1)))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Worked outside Noot?")
-                    .font(.callout.weight(.bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(IBColors.ink)
                 Text("Add tutoring, Anki, or reading so it counts toward your history.")
-                    .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .font(IBTypography.caption11)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
             NavigationLink {
                 ExternalActivityView()
             } label: {
-                Label("Add work", systemImage: "plus.circle.fill")
+                Label("Add work", systemImage: "plus")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(SecondaryButtonStyle())
             .controlSize(.small)
-            .tint(IBColors.coral)
             .accessibilityLabel("Add external work")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .glassCard(cornerRadius: IBRadius.md)
+        .surfaceCard(cornerRadius: IBRadius.md)
     }
 
     private func scoredEvidenceCount(evidence: [EvidenceRow]) -> Int {
@@ -285,24 +251,21 @@ struct DashboardView: View {
         LazyVGrid(columns: metricColumns, spacing: 12) {
             StudioMetricTile(
                 value: "\(dueBacklogCount)",
-                label: "Flashcards due",
-                symbol: "clock.badge.exclamationmark",
-                tint: dueBacklogCount == 0 ? IBColors.success : IBColors.coral,
-                detail: dueBacklogCount == 0 ? "Queue clear" : "All available now"
+                label: "Due today",
+                symbol: "rectangle.stack",
+                detail: dueBacklogCount == 0 ? "No cards due" : "\(dueBacklogCount) to review"
             )
             StudioMetricTile(
                 value: "\(profile?.currentStreak ?? 0)d",
                 label: "Study streak",
-                symbol: "flame.fill",
-                tint: IBColors.gold,
-                detail: "\(profile?.longestStreak ?? 0)d personal best"
+                symbol: "flame",
+                detail: "\(profile?.longestStreak ?? 0)d best"
             )
             StudioMetricTile(
-                value: "\(Int(reviewProgress * 100))%",
-                label: "Queue health",
-                symbol: "checkmark.seal.fill",
-                tint: IBColors.teal,
-                detail: "Cards outside review"
+                value: "\(newCardsCount)",
+                label: "New cards",
+                symbol: "sparkles",
+                detail: newCardsCount == 0 ? "No new cards" : "Not yet studied"
             )
         }
     }
@@ -310,52 +273,42 @@ struct DashboardView: View {
     private func assessmentCalibration(evidence: [EvidenceRow]) -> some View {
         let scoredCount = scoredEvidenceCount(evidence: evidence)
         let subjectCount = evidence.filter { $0.evidence.assessmentEvidence != nil }.count
+        let isEmpty = scoredCount == 0
         return HStack(alignment: .center, spacing: 16) {
             Image(systemName: "chart.bar.doc.horizontal")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(IBColors.teal)
+                .foregroundStyle(IBColors.inkTertiary)
                 .frame(width: 44, height: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(IBGradient.tint(IBColors.teal))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(IBColors.teal.opacity(0.16), lineWidth: 1)
-                        )
-                )
+                .background(RoundedRectangle(cornerRadius: 10).fill(IBColors.surfaceHover).overlay(RoundedRectangle(cornerRadius: 10).stroke(IBColors.border, lineWidth: 1)))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Assessment baseline")
-                    .font(.callout.weight(.bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(IBColors.ink)
-                Text(scoredCount == 0 ? "Add a report or assessment to calibrate subject mastery." : "Current subject mastery includes your scored reports and assessments.")
-                    .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                Text(isEmpty ? "Add a report or assessment to calibrate subject mastery." : "Current subject mastery includes your scored reports and assessments.")
+                    .font(IBTypography.caption11)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
-
             Spacer(minLength: 12)
-
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(averageEvidenceMastery(evidence: evidence))%")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundStyle(IBColors.teal)
-                Text("\(scoredCount) scored across \(subjectCount) subjects")
-                    .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .font(.system(size: 24, weight: .bold).monospacedDigit())
+                    .foregroundStyle(isEmpty ? IBColors.inkSecondary : IBColors.ink)
+                Text("\(scoredCount) scored · \(subjectCount) subjects")
+                    .font(IBTypography.caption11)
+                    .foregroundStyle(IBColors.inkTertiary)
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
-        .glassCard(cornerRadius: IBRadius.md)
+        .surfaceCard(cornerRadius: IBRadius.md)
     }
 
     private var focusGrid: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 16) {
-                reviewFocus
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                workspaceSignal
-                    .frame(width: 330, alignment: .topLeading)
+                reviewFocus.frame(maxWidth: .infinity, alignment: .topLeading)
+                workspaceSignal.frame(width: 330, alignment: .topLeading)
             }
             VStack(spacing: 16) {
                 reviewFocus
@@ -369,23 +322,23 @@ struct DashboardView: View {
             StudioSectionHeader(
                 "Review queue",
                 subtitle: dueCards.isEmpty ? "Nothing urgent right now" : "Prioritized by schedule",
-                symbol: "brain.head.profile",
-                tint: IBColors.electricBlue
+                symbol: "brain.head.profile"
             ) {
-                StudioPill(title: dueCards.isEmpty ? "CLEAR" : "\(dueCards.count) DUE", tint: dueCards.isEmpty ? IBColors.success : IBColors.coral)
+                StudioPill(title: dueCards.isEmpty ? "CLEAR" : "\(dueCards.count) DUE", semantic: .neutral)
             }
 
             if dueCards.isEmpty {
                 HStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: "checkmark.circle")
                         .font(.system(size: 26))
-                        .foregroundStyle(IBColors.success)
+                        .foregroundStyle(IBColors.inkTertiary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("You are caught up")
-                            .font(.callout.weight(.bold))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(IBColors.ink)
                         Text("New cards will appear here when they are ready for review.")
-                            .font(.caption)
-                            .foregroundStyle(IBColors.secondaryText)
+                            .font(IBTypography.caption11)
+                            .foregroundStyle(IBColors.inkSecondary)
                     }
                 }
                 .padding(.vertical, 8)
@@ -399,13 +352,11 @@ struct DashboardView: View {
                             DashboardQueueRow(schedule: schedule)
                         }
                         .buttonStyle(.plain)
-
                         if index < min(reviewScheduler.schedules.count, 4) - 1 {
-                            Divider().padding(.leading, 28)
+                            Rectangle().fill(IBColors.border).frame(height: 1).padding(.leading, 28)
                         }
                     }
                 }
-
                 Button {
                     selectedSubjectForReview = nil
                     showReview = true
@@ -413,12 +364,12 @@ struct DashboardView: View {
                     Label("Review all due cards", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryButtonStyle())
                 .controlSize(.large)
             }
         }
         .padding(18)
-        .glassCard()
+        .surfaceCard()
     }
 
     private var workspaceSignal: some View {
@@ -426,21 +377,19 @@ struct DashboardView: View {
             StudioSectionHeader(
                 "Study signal",
                 subtitle: "ARIA's next suggestion",
-                symbol: "sparkles",
-                tint: IBColors.teal
+                symbol: "sparkles"
             ) {
                 EmptyView()
             }
-
             Text(studySignalText)
-                .font(.callout)
-                .foregroundStyle(IBColors.ink)
+                .font(IBTypography.body13)
+                .foregroundStyle(IBColors.inkSecondary)
                 .lineSpacing(2)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(18)
-        .glassCard()
+        .surfaceCard()
     }
 
     private var studySignalText: String {
@@ -472,16 +421,15 @@ struct DashboardView: View {
             StudioSectionHeader(
                 "Your subjects",
                 subtitle: "Mastery and review readiness at a glance",
-                symbol: "books.vertical.fill",
-                tint: IBColors.englishColor
+                symbol: "books.vertical"
             ) {
                 HStack(spacing: 10) {
-                    StudioPill(title: "\(sortedSubjects.count) ENROLLED", tint: IBColors.englishColor)
+                    StudioPill(title: "\(sortedSubjects.count) ENROLLED", semantic: .neutral)
                     NavigationLink("View all") {
                         SubjectsGridView()
                     }
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(IBColors.accent)
                 }
             }
 
@@ -489,12 +437,7 @@ struct DashboardView: View {
                 EmptyStateView(icon: "books.vertical", title: "No subjects yet", message: "Complete onboarding or add subjects to begin building a study plan.")
                     .frame(maxWidth: .infinity)
             } else {
-                // Mastery comes from recall and imported assessment results;
-                // legacy curriculum flags do not represent current evidence.
-                // Reuse the render's single evidence pass instead of re-scoring.
-                let masteryBySubject = Dictionary(
-                    uniqueKeysWithValues: evidence.map { ($0.subject.id, $0.evidence.blendedMastery ?? 0) }
-                )
+                let masteryBySubject = Dictionary(uniqueKeysWithValues: evidence.map { ($0.subject.id, $0.evidence.blendedMastery ?? 0) })
                 LazyVStack(spacing: 0) {
                     ForEach(sortedSubjects, id: \.id) { subject in
                         NavigationLink {
@@ -504,11 +447,11 @@ struct DashboardView: View {
                         }
                         .buttonStyle(.plain)
                         if subject.id != sortedSubjects.last?.id {
-                            Divider().padding(.leading, 72)
+                            Rectangle().fill(IBColors.border).frame(height: 1).padding(.leading, 72)
                         }
                     }
                 }
-                .glassCard()
+                .surfaceCard()
             }
         }
     }
@@ -520,32 +463,29 @@ struct DashboardView: View {
 
 private struct DashboardQueueRow: View {
     let schedule: SubjectReviewSchedule
-
-    private var tint: Color { Color(hex: schedule.subject.accentColorHex) }
-
     var body: some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(tint)
-                .frame(width: 9, height: 9)
+                .fill(IBColors.inkTertiary)
+                .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
                 Text(schedule.subject.name)
-                    .font(.callout.weight(.bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(IBColors.ink)
-                Text("\(schedule.subject.level) study queue")
-                    .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                Text("\(schedule.subject.level) · study queue")
+                    .font(IBTypography.caption11)
+                    .foregroundStyle(IBColors.inkTertiary)
             }
             Spacer()
             Text("\(schedule.dueCards)")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .semibold).monospacedDigit())
                 .foregroundStyle(IBColors.ink)
             Text("due")
-                .font(.caption)
-                .foregroundStyle(IBColors.secondaryText)
+                .font(IBTypography.caption11)
+                .foregroundStyle(IBColors.inkTertiary)
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(IBColors.tertiaryText)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(IBColors.inkTertiary)
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
