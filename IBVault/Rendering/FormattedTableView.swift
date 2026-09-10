@@ -18,10 +18,10 @@ struct FormattedTableView: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(IBColors.canvasDeep)
+                            .background(IBColors.surfaceRaised)
                     }
                 }
-                .background(IBColors.canvasDeep)
+                .background(IBColors.surfaceRaised)
 
                 Divider()
                     .gridCellUnsizedAxes(.horizontal)
@@ -38,7 +38,7 @@ struct FormattedTableView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 7)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(rowIdx % 2 == 1 ? IBColors.canvas.opacity(0.6) : Color.clear)
+                                .background(rowIdx % 2 == 1 ? IBColors.surfaceHover.opacity(0.6) : Color.clear)
                         }
                     }
                     if rowIdx < rows.count - 1 {
@@ -50,7 +50,7 @@ struct FormattedTableView: View {
             }
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(IBColors.cardBorder, lineWidth: 1)
+                    .stroke(IBColors.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
