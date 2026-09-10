@@ -103,6 +103,7 @@
 		BF5194E1E6D7D7A7F90EAA97 /* AcademicProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE97B7A69191C889194AA1CF /* AcademicProgressTests.swift */; };
 		C2A0CD45FFEC4EFF8BC95B35 /* RankLadder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80E12FA09B76D5980E7D972 /* RankLadder.swift */; };
 		C3E188C183BC70CF0BAA868C /* RankProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6144D151DC4BD2A57D019DFE /* RankProgressTests.swift */; };
+		C808A6338A93963239F5D457 /* ExternalActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEAF214C9BEFEF30058DBB45 /* ExternalActivityView.swift */; };
 		C8128B877A19E67DEDA06D86 /* CardGenerationOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E6A912641FACB15A48B1764 /* CardGenerationOptions.swift */; };
 		C8AB4A46E62DF86D13805CBD /* AnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D5C3D493F8E74D1A33CA70 /* AnalyticsView.swift */; };
 		C9D8ED43FDE5725AB1813DC4 /* GeminiServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */; };
@@ -111,6 +112,7 @@
 		CE96FB3C86DF1E355C6233BF /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32D17D7E917936131C22F2ED /* OnboardingView.swift */; };
 		CFCF1621185FCDCC1BBFC8E8 /* JSONLineBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8A505BBDBC11462DD6741E /* JSONLineBufferTests.swift */; };
 		CFD87C7AC43C98573EFE0E67 /* XPCalculatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23E6259966D0700049C34520 /* XPCalculatorTests.swift */; };
+		D198E1A3A95757A395C9DCA7 /* IntegrationSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0AD0CB222EFBF14223F2F50 /* IntegrationSettingsSection.swift */; };
 		D1B4F94E70DE26FC4291CC4B /* ARIAMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D455212D8B12319B3E8CAF7 /* ARIAMemory.swift */; };
 		D5BCB7BE7029C541495D2A96 /* ExternalActivityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37683C18AEEFB21C70A982F3 /* ExternalActivityService.swift */; };
 		D69B4E578CAE184497E4E4AF /* AcademicRecordImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21E537CAF1636491C074A8A /* AcademicRecordImporter.swift */; };
@@ -241,6 +243,7 @@
 		BA3766217A4DF2A9F432C8EB /* ExternalActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalActivityTests.swift; sourceTree = "<group>"; };
 		BA7DC620D4E249543FFB3F63 /* ExternalActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalActivity.swift; sourceTree = "<group>"; };
 		BB9713AFE0115FF39ABB53ED /* Materials */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Materials; path = IBVault/Materials; sourceTree = SOURCE_ROOT; };
+		BEAF214C9BEFEF30058DBB45 /* ExternalActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalActivityView.swift; sourceTree = "<group>"; };
 		C00F19D61E9A4E3BB2B6C0BE /* ARIAActionToolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAActionToolTests.swift; sourceTree = "<group>"; };
 		C181DD379612F56FEB4EB918 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C5D9C160A12D3DD94F6B217B /* ProgressionEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionEventTests.swift; sourceTree = "<group>"; };
@@ -254,6 +257,7 @@
 		CB8501D80DB14A3C686E56FD /* SmartRecommendationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartRecommendationsView.swift; sourceTree = "<group>"; };
 		CE97B7A69191C889194AA1CF /* AcademicProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicProgressTests.swift; sourceTree = "<group>"; };
 		CED89DC549CFC92D3CC602B5 /* AIProviderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProviderService.swift; sourceTree = "<group>"; };
+		D0AD0CB222EFBF14223F2F50 /* IntegrationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationSettingsSection.swift; sourceTree = "<group>"; };
 		D3BCAD49D131C5FE4122185C /* StudyPlanFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlanFormatterTests.swift; sourceTree = "<group>"; };
 		D57E3D57A20801A4F58606C9 /* MessageRenderingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRenderingPolicy.swift; sourceTree = "<group>"; };
 		DEAFA961AFC5ABD8A57067A9 /* SyllabusSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllabusSeeder.swift; sourceTree = "<group>"; };
@@ -439,6 +443,15 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		B1309AE2DBBFAF561708FB00 /* Integration */ = {
+			isa = PBXGroup;
+			children = (
+				BEAF214C9BEFEF30058DBB45 /* ExternalActivityView.swift */,
+				D0AD0CB222EFBF14223F2F50 /* IntegrationSettingsSection.swift */,
+			);
+			path = Integration;
+			sourceTree = "<group>";
+		};
 		B3FA2135BB201DAECA8EB957 /* IBVault */ = {
 			isa = PBXGroup;
 			children = (
@@ -495,6 +508,7 @@
 				B5034AD93EA2C870DB6A6F74 /* ARIA */,
 				FDF4453FF4D1D5B18462FFC9 /* Dashboard */,
 				7278CEF463762FAC7508F76E /* Insights */,
+				B1309AE2DBBFAF561708FB00 /* Integration */,
 				8EB7098890A7EFA7A82CAD79 /* Materials */,
 				3B9837E207068F0C2821472F /* Onboarding */,
 				EE104CF1D164EC5D139E2B82 /* Profile */,
@@ -745,12 +759,14 @@
 				2E6108F8EA41CFBF27907F37 /* EffectivenessView.swift in Sources */,
 				E53965391F212764D5B52A58 /* ExternalActivity.swift in Sources */,
 				D5BCB7BE7029C541495D2A96 /* ExternalActivityService.swift in Sources */,
+				C808A6338A93963239F5D457 /* ExternalActivityView.swift in Sources */,
 				B9B83E012895E86B34D79E17 /* FSRSScheduler.swift in Sources */,
 				EB08D3857E24FAAA8B7B7A08 /* GeminiService.swift in Sources */,
 				16D34B93155925547CF27576 /* Grade.swift in Sources */,
 				45434FB663C699EED77D88D0 /* HeatmapView.swift in Sources */,
 				5B101A4BDFFA73E0ECEEF03C /* IBVaultApp.swift in Sources */,
 				FCB6777BB813CD1BD2894EA8 /* IntegrationBridgeController.swift in Sources */,
+				D198E1A3A95757A395C9DCA7 /* IntegrationSettingsSection.swift in Sources */,
 				10CC766826E31BEB74A6A705 /* KeychainService.swift in Sources */,
 				DAC573DD8DDF1CA7B838B50C /* LearningAnalyticsView.swift in Sources */,
 				F63E1A8458A7D7B76BF9D3CD /* LocalBridgeServer.swift in Sources */,
@@ -867,7 +883,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=1500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.tests;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
@@ -898,7 +914,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=1500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.app;
 				PRODUCT_MODULE_NAME = IBVault;
 				PRODUCT_NAME = "Noot Study";
@@ -930,7 +946,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=1500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.app;
 				PRODUCT_MODULE_NAME = IBVault;
 				PRODUCT_NAME = "Noot Study";
@@ -959,7 +975,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=1500";
 				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.tests;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;

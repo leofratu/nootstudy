@@ -64,4 +64,9 @@ final class IntegrationBridgeController {
             }
         }
     }
+
+    func recentRequests() -> [LocalBridgeServer.RequestLog] {
+        guard let server else { return [] }
+        return server.recentRequests()
+    }
 }

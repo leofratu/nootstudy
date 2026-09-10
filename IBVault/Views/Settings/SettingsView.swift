@@ -70,6 +70,7 @@ struct SettingsView: View {
         case assistant = "AI & Memory"
         case subjects = "Subjects"
         case study = "Study"
+        case integrations = "Integrations"
         case data = "Data & Backup"
         case about = "About"
 
@@ -81,6 +82,7 @@ struct SettingsView: View {
             case .assistant: return "sparkles"
             case .subjects: return "books.vertical"
             case .study: return "calendar"
+            case .integrations: return "link"
             case .data: return "externaldrive"
             case .about: return "info.circle"
             }
@@ -97,6 +99,7 @@ struct SettingsView: View {
         case .assistant: return "Provider, model, and response controls"
         case .subjects: return "Curriculum and subject configuration"
         case .study: return "Workload, calendar, focus, and reminders"
+        case .integrations: return "Local bridge, external work, and NotebookLM pack"
         case .data: return "Backups, recovery, and reset controls"
         case .about: return "Installed app and assistant details"
         }
@@ -264,6 +267,15 @@ struct SettingsView: View {
                 appearanceSection
             }
             .formStyle(.grouped)
+        case .integrations:
+            ScrollView {
+                IntegrationSettingsSection()
+                    .frame(maxWidth: 880, alignment: .leading)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 24)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .background(IBColors.canvas)
         case .data:
             Form { backupSection; dataSection }.formStyle(.grouped)
         case .about:

@@ -203,11 +203,14 @@ struct RootView: View {
             if let profile = primaryProfile {
                 if profile.onboardingCompleted {
                     ContentView()
+                        .environment(bridgeController)
                 } else {
                     OnboardingView()
+                        .environment(bridgeController)
                 }
             } else {
                 OnboardingView()
+                    .environment(bridgeController)
                     .onAppear {
                         let profile = UserProfile()
                         context.insert(profile)
@@ -361,7 +364,6 @@ struct RootView: View {
     private func startBridgeIfNeeded() {
         guard !hasStartedBridge else { return }
         hasStartedBridge = true
-        guard BridgeAuthService.isEnabled else { return }
         let controller = IntegrationBridgeController(container: context.container)
         bridgeController = controller
         controller.start()

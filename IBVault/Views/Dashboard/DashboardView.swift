@@ -64,6 +64,7 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     dashboardHeader
                     metricsGrid
+                    externalWorkPrompt
                     assessmentCalibration(evidence: evidence)
                     focusGrid
                     subjectPortfolio(evidence: evidence)
@@ -182,6 +183,41 @@ struct DashboardView: View {
                 )
             )
         }
+    }
+
+    private var externalWorkPrompt: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "tray.and.arrow.down.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(IBColors.coral)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(IBColors.coral.opacity(0.12))
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Worked outside Noot?")
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(IBColors.ink)
+                Text("Add tutoring, Anki, or reading so it counts toward your history.")
+                    .font(.caption)
+                    .foregroundStyle(IBColors.secondaryText)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            NavigationLink {
+                ExternalActivityView()
+            } label: {
+                Label("Add work", systemImage: "plus.circle.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(IBColors.coral)
+            .accessibilityLabel("Add external work")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .glassCard(cornerRadius: IBRadius.md)
     }
 
     private func scoredEvidenceCount(evidence: [EvidenceRow]) -> Int {
