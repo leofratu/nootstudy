@@ -3,6 +3,7 @@ import SwiftData
 
 struct OnboardingView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \Subject.name) private var seededSubjects: [Subject]
     @Query private var academicAssessments: [AcademicAssessment]
     @Query private var academicMappings: [AcademicAssessmentMapping]
@@ -10,6 +11,8 @@ struct OnboardingView: View {
     @State private var currentPage = 0
     @State private var isCompleting = false
     @State private var onboardingError: String?
+
+    private var pageAnimation: Animation? { reduceMotion ? nil : IBAnimation.smooth }
 
     private var safePageIndex: Int {
         min(max(currentPage, 0), pages.count - 1)
@@ -65,7 +68,6 @@ struct OnboardingView: View {
                     .foregroundStyle(.white)
             }
             .padding(.bottom, 24)
-            .animation(IBAnimation.smooth, value: currentPage)
 
             // Title
             VStack(spacing: 8) {
@@ -77,12 +79,10 @@ struct OnboardingView: View {
 
                 Text(pages[safePageIndex].title)
                     .font(.system(size: 32, weight: .bold))
-                    .animation(IBAnimation.smooth, value: currentPage)
 
                 Text(pages[safePageIndex].subtitle)
                     .font(.title3)
                     .foregroundStyle(.secondary)
-                    .animation(IBAnimation.smooth, value: currentPage)
             }
             .padding(.bottom, 32)
 
@@ -97,7 +97,6 @@ struct OnboardingView: View {
             }
             .frame(maxWidth: 560)
             .padding(.horizontal, 40)
-            .animation(IBAnimation.smooth, value: currentPage)
 
             Spacer()
 
@@ -109,14 +108,14 @@ struct OnboardingView: View {
                         Circle()
                             .fill(index == currentPage ? IBColors.electricBlue : Color.secondary.opacity(0.3))
                             .frame(width: index == currentPage ? 10 : 7, height: index == currentPage ? 10 : 7)
-                            .animation(IBAnimation.snappy, value: currentPage)
+                            .animation(reduceMotion ? nil : IBAnimation.snappy, value: currentPage)
                     }
                 }
 
                 HStack(spacing: 12) {
                     if currentPage > 0 {
                         Button("Back") {
-                            withAnimation(IBAnimation.smooth) { currentPage -= 1 }
+                            if reduceMotion { currentPage -= 1 } else { withAnimation(IBAnimation.smooth) { currentPage -= 1 } }
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
@@ -124,7 +123,7 @@ struct OnboardingView: View {
 
                     Button(currentPage < pages.count - 1 ? "Continue" : "Start Studying") {
                         if currentPage < pages.count - 1 {
-                            withAnimation(IBAnimation.smooth) { currentPage += 1 }
+                            if reduceMotion { currentPage += 1 } else { withAnimation(IBAnimation.smooth) { currentPage += 1 } }
                             IBHaptics.light()
                         } else {
                             completeOnboarding()
