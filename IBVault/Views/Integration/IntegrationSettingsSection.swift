@@ -3,6 +3,8 @@ import Combine
 import SwiftUI
 import SwiftData
 
+// NotebookLM export: subject picker + pack generation via NotebookPackService.
+
 // MARK: - Integration Settings Section
 
 struct IntegrationSettingsSection: View {
