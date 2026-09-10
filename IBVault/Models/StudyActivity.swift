@@ -9,10 +9,14 @@ nonisolated final class StudyActivity {
     var minutesStudied: Double
     var xpEarned: Int
 
+    private static let dateOnlyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
     var dateString: String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd"
-        return fmt.string(from: date)
+        Self.dateOnlyFormatter.string(from: date)
     }
 
     var intensity: Int {

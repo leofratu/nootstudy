@@ -9,13 +9,28 @@ nonisolated enum IBLocalClock: Sendable {
     static var timeZone: TimeZone { TimeZone.autoupdatingCurrent }
     static var locale: Locale { Locale.autoupdatingCurrent }
 
+    private static let formatterCache = FormatterCache()
+
     static func formatter(dateFormat: String) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.timeZone = timeZone
-        formatter.calendar = calendar
-        formatter.dateFormat = dateFormat
-        return formatter
+        formatterCache.formatter(for: dateFormat, locale: locale, timeZone: timeZone, calendar: calendar)
+    }
+
+    private final class FormatterCache: @unchecked Sendable {
+        private var cache: [String: DateFormatter] = [:]
+        private let lock = NSLock()
+        func formatter(for format: String, locale: Locale, timeZone: TimeZone, calendar: Calendar) -> DateFormatter {
+            let key = "\(format)|\(locale.identifier)|\(timeZone.identifier)"
+            lock.lock()
+            defer { lock.unlock() }
+            if let cached = cache[key] { return cached }
+            let formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.timeZone = timeZone
+            formatter.calendar = calendar
+            formatter.dateFormat = format
+            cache[key] = formatter
+            return formatter
+        }
     }
 
     static func nextQuarterHour(after date: Date = now) -> Date {

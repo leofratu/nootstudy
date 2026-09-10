@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 nonisolated enum ReviewDailyLimitPolicy: Sendable {
@@ -68,6 +69,8 @@ final class ReviewQueueManager {
 
     // MARK: - Refresh
     func refreshDueCards(context: ModelContext) {
+        let state = PerformanceSignposts.signposter.beginInterval("reviewQueue.refresh")
+        defer { PerformanceSignposts.signposter.endInterval("reviewQueue.refresh", state) }
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }

@@ -479,7 +479,7 @@ struct ActiveStudySessionView: View {
         VStack(spacing: 0) {
             // Messages
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: 10) {
                     if chatMessages.isEmpty {
                         emptyChat
                     }

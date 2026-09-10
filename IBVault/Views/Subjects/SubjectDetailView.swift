@@ -146,7 +146,7 @@ struct SubjectDetailView: View {
     var body: some View {
         let dueCount = reviewableDueCount
         return ScrollView {
-            VStack(spacing: 16) {
+            LazyVStack(spacing: 16) {
                 // Hero with ring
                 heroCard(dueCount: dueCount)
                     .padding(.horizontal, 24)
