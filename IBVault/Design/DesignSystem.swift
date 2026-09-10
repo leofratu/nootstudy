@@ -2,7 +2,9 @@ import SwiftUI
 import AppKit
 
 nonisolated enum IBLocalClock: Sendable {
-    static var now: Date { Date() }
+    static var now: Date {
+        Date()
+    }
     static var calendar: Calendar { Calendar.autoupdatingCurrent }
     static var timeZone: TimeZone { TimeZone.autoupdatingCurrent }
     static var locale: Locale { Locale.autoupdatingCurrent }

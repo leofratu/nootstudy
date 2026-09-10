@@ -16,6 +16,7 @@ struct NewStudySessionView: View {
     @State private var flashcardOnly = false
     @State private var flashcardTargetCount = 10
     @State private var flashcardDifficulty: CardDifficulty = .exam
+    @State private var cardStudioOptions = CardGenerationOptions(count: 10, difficulty: .exam, style: .basic, tone: .exam, cognitiveSkills: [], useInternalTools: false)
     @State private var planMarkdown = ""
     @State private var planTasks: [StudyPlanTask] = []
     @State private var isGeneratingPlan = false
@@ -179,7 +180,7 @@ struct NewStudySessionView: View {
                         chatMessages.removeAll()
                         invalidatePlanGeneration()
                         IBHaptics.light()
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(IBAnimation.smooth) {
                             step = 1
                         }
                     } label: {
@@ -424,29 +425,19 @@ struct NewStudySessionView: View {
                 .toggleStyle(.switch)
                 .onChange(of: flashcardOnly) { _, enabled in if enabled { prepareFlashcards = true } }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Label("Flashcards for this scope", systemImage: "slider.horizontal.3")
-                            .font(.subheadline.weight(.medium))
-                        Spacer()
-                        Text("\(flashcardTargetCount)").font(.subheadline.monospacedDigit().weight(.semibold))
-                    }
-                    Slider(value: Binding(get: { Double(flashcardTargetCount) }, set: { flashcardTargetCount = Int($0.rounded()) }), in: 5...50, step: 1)
-                    HStack {
-                        Text("5").font(.caption2).foregroundStyle(.tertiary)
-                        Spacer()
-                        Button("Use \(recommendedFlashcardCount) recommended") { flashcardTargetCount = recommendedFlashcardCount }
-                            .buttonStyle(.borderless).font(.caption)
-                        Spacer()
-                        Text("50").font(.caption2).foregroundStyle(.tertiary)
-                    }
-                    Picker("IB difficulty", selection: $flashcardDifficulty) {
-                        ForEach(CardDifficulty.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    Text("ARIA spreads this target across the selected sub-unit at the chosen IB level.")
-                        .font(.caption).foregroundStyle(.secondary)
+                CardStudioOptionsView(options: $cardStudioOptions)
+                    .onChange(of: cardStudioOptions.count) { _, v in flashcardTargetCount = v }
+                    .onChange(of: cardStudioOptions.difficulty) { _, v in flashcardDifficulty = v }
+                    .onChange(of: flashcardTargetCount) { _, v in cardStudioOptions.count = v }
+                    .onChange(of: flashcardDifficulty) { _, v in cardStudioOptions.difficulty = v }
+                HStack {
+                    Spacer()
+                    Button("Use \(recommendedFlashcardCount) recommended") { cardStudioOptions.count = recommendedFlashcardCount; flashcardTargetCount = recommendedFlashcardCount }
+                        .buttonStyle(.borderless).font(.caption)
+                    Spacer()
                 }
+                Text("ARIA spreads this target across the selected sub-unit at the chosen IB level.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             .padding(16)
             .glassCard()
@@ -569,7 +560,7 @@ struct NewStudySessionView: View {
         HStack {
             if step > 0 {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { step -= 1 }
+                    withAnimation(IBAnimation.smooth) { step -= 1 }
                 } label: {
                     HStack {
                         Image(systemName: "chevron.left")
@@ -587,7 +578,7 @@ struct NewStudySessionView: View {
                     // moves to the Plan step, which shows the spinner while the
                     // plan streams in — instead of advancing to an empty plan.
                     if step == 2 { generatePlan() }
-                    withAnimation(.easeInOut(duration: 0.2)) { step += 1 }
+                    withAnimation(IBAnimation.smooth) { step += 1 }
                 } label: {
                     HStack {
                         Text(step == 2 ? "Generate Plan" : "Next")

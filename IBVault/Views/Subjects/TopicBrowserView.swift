@@ -18,6 +18,7 @@ struct TopicBrowserView: View {
     @State private var searchText = ""
     @State private var hoveredSubtopic: String?
     @State private var masteryError: String?
+    @State private var cardStudioOptions = CardGenerationOptions(count: 10, difficulty: .exam, style: .basic, tone: .exam, cognitiveSkills: [], useInternalTools: false)
 
     private var curriculum: [CurriculumUnit] {
         let full = SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
@@ -266,6 +267,10 @@ struct TopicBrowserView: View {
                 topicHeader(topic, index: index)
                 Divider()
                 coverageToolbar(topic)
+                CardStudioOptionsView(options: $cardStudioOptions, showsCount: false, compact: true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .onChange(of: cardStudioOptions.count) { _, v in generationCount = v }
                 generationStatus
                 Divider()
 
@@ -674,12 +679,14 @@ struct TopicBrowserView: View {
 
         Task {
             do {
+                let opts = cardStudioOptions
                 let cards = try await CardGeneratorService.generateCards(
                     subject: subject,
                     topicName: topic,
                     subtopic: subtopic,
-                    count: generationCount,
-                    context: context
+                    count: opts.count,
+                    context: context,
+                    options: opts
                 )
 
                 await MainActor.run {
