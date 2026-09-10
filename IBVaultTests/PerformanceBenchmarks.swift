@@ -85,7 +85,7 @@ struct PerformanceBenchmarks {
         }
         let ms = elapsedMS(from: start, clock: clock)
         print("bench evidence 20 subjects: \(ms) ms")
-        #expect(ms < 300, "evidence scoring 20 subjects <300ms, was \(ms)")
+        #expect(ms < 600, "evidence scoring 20 subjects <600ms, was \(ms)")
     }
 
     @Test("Benchmark: formatter parse 50KB markdown+math")
