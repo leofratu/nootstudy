@@ -34,7 +34,7 @@ struct CardGeneratorService {
         }
     }
 
-    private struct GeneratedCardPayload: Decodable {
+    private struct GeneratedCardPayload: Decodable, Sendable {
         let front: String
         let back: String
         let hint: String?
@@ -52,6 +52,62 @@ struct CardGeneratorService {
             case cardStyle
             case choices
         }
+    }
+
+    /// Sendable DTO extracted off-main before StudyCard construction.
+    struct CardParseDTO: Sendable {
+        let front: String
+        let back: String
+        let hint: String?
+        let difficulty: String?
+        let skill: String?
+        let cardStyle: String?
+        let choices: [String]?
+    }
+
+    /// Pure, nonisolated extraction of payloads from raw model JSON.
+    /// Runs off-main via Task.detached so JSON parsing and string scrubbing
+    /// never block the MainActor.
+    nonisolated static func extractCardDTOs(from response: String) throws -> [CardParseDTO] {
+        var cleaned = response
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let startIdx = cleaned.firstIndex(of: "["),
+           let endIdx = cleaned.lastIndex(of: "]") {
+            cleaned = String(cleaned[startIdx...endIdx])
+            if let data = cleaned.data(using: .utf8),
+               let payloads = try? JSONDecoder().decode([GeneratedCardPayload].self, from: data),
+               !payloads.isEmpty {
+                return payloads.map {
+                    CardParseDTO(front: $0.front, back: $0.back, hint: $0.hint, difficulty: $0.difficulty, skill: $0.skill, cardStyle: $0.cardStyle, choices: $0.choices)
+                }
+            }
+        }
+        let pairs = parseFrontBackBlocks(from: response)
+        guard !pairs.isEmpty else { throw CardGeneratorError.invalidFormat }
+        return pairs.map { CardParseDTO(front: $0.0, back: $0.1, hint: nil, difficulty: nil, skill: nil, cardStyle: nil, choices: nil) }
+    }
+
+    /// MainActor mapping from Sendable DTOs to StudyCard models. Preserves
+    /// dedup, repair-to-basic, and useInternalTools post-processing.
+    @MainActor
+    static func cardsFromDTOs(
+        _ dtos: [CardParseDTO],
+        subject: Subject,
+        topicName: String,
+        subtopic: String,
+        profile: AdaptiveProfile,
+        options: CardGenerationOptions?
+    ) -> [StudyCard] {
+        let payloads = dtos.map {
+            GeneratedCardPayload(front: $0.front, back: $0.back, hint: $0.hint, difficulty: $0.difficulty, skill: $0.skill, cardStyle: $0.cardStyle, choices: $0.choices)
+        }
+        let cards = cardsFromPayloads(payloads, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile, options: options)
+        if !cards.isEmpty { return cards }
+        // Fallback when payloads produced no useful cards but DTOs came from FRONT/BACK blocks.
+        let pairs = dtos.map { ($0.front, $0.back) }
+        return cardsFromPairs(pairs, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile)
     }
 
     /// Generate flashcards for a specific topic using ARIA/Gemini.
@@ -182,14 +238,11 @@ struct CardGeneratorService {
                         modelOverride: model,
                         timeout: model == AIConfiguration.selectedModel ? 120 : 90
                     )
-                    let parsed = try parseFlashcards(
-                        from: response,
-                        subject: subject,
-                        topicName: topicName,
-                        subtopic: subtopic,
-                        profile: profile,
-                        options: effectiveOptions
-                    )
+                    let dtos = try await Task.detached(priority: .userInitiated) {
+                        try Self.extractCardDTOs(from: response)
+                    }.value
+                    let parsed = cardsFromDTOs(dtos, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile, options: effectiveOptions)
+                    guard !parsed.isEmpty else { throw CardGeneratorError.invalidFormat }
                     let merged = mergeUnique(existing: collectedCards, incoming: parsed)
                     let addedCount = merged.count - collectedCards.count
                     collectedCards = merged
@@ -874,7 +927,7 @@ struct CardGeneratorService {
         return parts.joined(separator: " > ")
     }
 
-    private static func parseFrontBackBlocks(from response: String) -> [(String, String)] {
+    nonisolated private static func parseFrontBackBlocks(from response: String) -> [(String, String)] {
         let normalized = response.replacingOccurrences(of: "\r\n", with: "\n")
         let pattern = #"FRONT:\s*(.*?)\nBACK:\s*(.*?)(?=\n\s*FRONT:|\z)"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators, .caseInsensitive]) else {
