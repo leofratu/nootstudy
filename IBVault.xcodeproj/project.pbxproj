@@ -10,6 +10,7 @@
 		005152FD45FA2650C9795C10 /* SmartRecommendationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB8501D80DB14A3C686E56FD /* SmartRecommendationsView.swift */; };
 		02FD34A03442C41CE493C2FB /* ProgressHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA37BD9EE66D6631497A7841 /* ProgressHubView.swift */; };
 		03D03E613D9E1169F9371209 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C729E73BE8AAA09B5A1FA06B /* NotificationService.swift */; };
+		048C5D59CE730788327D6FCC /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A053DD9D3F0980025D8A3C /* AppEnvironment.swift */; };
 		06C90D075EF16F41D104F04B /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 097E508F5709148582415B7B /* README.md */; };
 		06E28858193E70D583BC5CBD /* ADHDTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0CBD332FD598F687CAE0EEE /* ADHDTrackerView.swift */; };
 		08A1B11EAB0B6F9F0E5B71F4 /* ARIAContentContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1E5E2E369BCEE329EE4F90 /* ARIAContentContract.swift */; };
@@ -216,6 +217,7 @@
 		908ECDE117349ED5E8B3004B /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		909162F38CAE7020F7B6A53F /* BridgeAuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeAuthServiceTests.swift; sourceTree = "<group>"; };
 		90C12E8304F72A610E04B382 /* CardGenerationOptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardGenerationOptionsTests.swift; sourceTree = "<group>"; };
+		94A053DD9D3F0980025D8A3C /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		967852FAB1BFC2229E6856AF /* ReviewQueueManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewQueueManagerTests.swift; sourceTree = "<group>"; };
 		97A440310E8DA6021B68587A /* RankProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankProgress.swift; sourceTree = "<group>"; };
 		998605218B33DF3291D5649D /* ReviewSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSession.swift; sourceTree = "<group>"; };
@@ -397,6 +399,7 @@
 				F21E537CAF1636491C074A8A /* AcademicRecordImporter.swift */,
 				3B3D4F61BB1E0B086E7C6333 /* AIConfiguration.swift */,
 				CED89DC549CFC92D3CC602B5 /* AIProviderService.swift */,
+				94A053DD9D3F0980025D8A3C /* AppEnvironment.swift */,
 				5B2DAFFA003DB6E67E0614B3 /* ARIAService.swift */,
 				56F393C55ED8372446273171 /* BackupService.swift */,
 				EA0B4023A285DCACC03E6EDC /* CalendarSyncCoordinator.swift */,
@@ -723,6 +726,7 @@
 				6FF95C5BFE1FBBF4E953D44C /* AchievementRule.swift in Sources */,
 				61A24BEE0A32B0B5D5453734 /* ActiveStudySessionView.swift in Sources */,
 				C8AB4A46E62DF86D13805CBD /* AnalyticsView.swift in Sources */,
+				048C5D59CE730788327D6FCC /* AppEnvironment.swift in Sources */,
 				14FC8AF088F886C4AFDAA596 /* BackupListView.swift in Sources */,
 				A6B9AC29737742396D3F7F19 /* BackupService.swift in Sources */,
 				91CC9EE15C72050991085224 /* BridgeAuthService.swift in Sources */,

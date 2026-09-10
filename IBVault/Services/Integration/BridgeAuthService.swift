@@ -108,6 +108,9 @@ nonisolated enum BridgeAuthService: Sendable {
     }
 
     private static func saveToKeychain(_ token: String) -> Bool {
+        // Test hosts must never touch the real Keychain; the token remains in
+        // the in-memory cache for the lifetime of the test process.
+        if AppEnvironment.isRunningTests { return true }
         guard let data = token.data(using: .utf8) else { return false }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -123,6 +126,7 @@ nonisolated enum BridgeAuthService: Sendable {
     }
 
     private static func loadFromKeychain() -> String? {
+        if AppEnvironment.isRunningTests { return nil }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

@@ -32,6 +32,11 @@ nonisolated enum KeychainService {
     private static let googleOAuthTokenAccount = "google_calendar_oauth_token"
     private static let userDefaultsFallbackKey = "gemini_api_key_fallback"
 
+    // Test hosts are rebuilt every run, so touching the real Keychain would
+    // prompt for the login password. Tests get an isolated in-memory store.
+    private static let testStoreLock = NSLock()
+    nonisolated(unsafe) private static var testStore: [String: String] = [:]
+
     static func saveAPIKey(_ key: String) -> Bool {
         saveSecret(key, account: apiKeyAccount)
     }
@@ -108,6 +113,13 @@ nonisolated enum KeychainService {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return false }
 
+        if AppEnvironment.isRunningTests {
+            testStoreLock.lock()
+            defer { testStoreLock.unlock() }
+            testStore[account] = trimmed
+            return true
+        }
+
         let lookup: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -126,6 +138,12 @@ nonisolated enum KeychainService {
     }
 
     private static func loadSecret(account: String) -> String? {
+        if AppEnvironment.isRunningTests {
+            testStoreLock.lock()
+            defer { testStoreLock.unlock() }
+            return testStore[account]
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -146,6 +164,13 @@ nonisolated enum KeychainService {
     }
 
     private static func deleteSecret(account: String) -> Bool {
+        if AppEnvironment.isRunningTests {
+            testStoreLock.lock()
+            defer { testStoreLock.unlock() }
+            testStore.removeValue(forKey: account)
+            return true
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
