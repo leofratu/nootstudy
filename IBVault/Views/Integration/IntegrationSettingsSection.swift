@@ -105,7 +105,7 @@ struct IntegrationSettingsSection: View {
                     HStack(spacing: 14) {
                         Label("Port", systemImage: "number")
                             .frame(width: 120, alignment: .leading)
-                        Text("\(currentPort)")
+                        Text(verbatim: "\(currentPort)")
                             .font(.system(.callout, design: .monospaced))
                             .foregroundStyle(IBColors.ink)
                         Spacer()
@@ -170,11 +170,14 @@ struct IntegrationSettingsSection: View {
                             .tint(IBColors.electricBlue)
                             .accessibilityLabel("Copy MCP Setup")
                         }
-                        ScrollView(.horizontal, showsIndicators: false) {
+                        ScrollView(.horizontal, showsIndicators: true) {
                             Text(mcpSetupSnippet)
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(IBColors.secondaryText)
                                 .textSelection(.enabled)
+                                .lineLimit(nil)
+                                .fixedSize(horizontal: false, vertical: false)
+                                .multilineTextAlignment(.leading)
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
@@ -182,6 +185,7 @@ struct IntegrationSettingsSection: View {
                                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(IBColors.cardBorder, lineWidth: 1))
                                 )
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.vertical, 10)
 
@@ -234,7 +238,7 @@ struct IntegrationSettingsSection: View {
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(log.status < 400 ? IBColors.success : IBColors.danger)
                                     .frame(width: 28, alignment: .trailing)
-                                Text(log.timestamp, style: .relative)
+                                Text(RelativeTimeHelper.string(for: log.timestamp))
                                     .font(.caption2)
                                     .foregroundStyle(IBColors.secondaryText)
                                     .frame(width: 80, alignment: .trailing)

@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import SwiftData
 
 struct DashboardView: View {
@@ -20,6 +21,9 @@ struct DashboardView: View {
     // Queue-health ratio cached alongside the due snapshot; computing it here
     // would re-scan every card in the store on every body evaluation.
     @State private var reviewProgress = 0.0
+    @State private var cachedEvidence: [EvidenceRow] = []
+    @State private var evidenceFingerprint = ""
+    @State private var dueRefreshTask: Task<Void, Never>?
 
     private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
 
@@ -88,13 +92,18 @@ struct DashboardView: View {
             .task {
                 reviewScheduler.analyze(context: context)
                 recomputeDueCards()
+                refreshEvidenceIfNeeded()
             }
             .onChange(of: allCards) { _, _ in
-                recomputeDueCards()
+                scheduleDueRefresh()
             }
             .onChange(of: studySessions) { _, _ in
-                recomputeDueCards()
+                scheduleDueRefresh()
             }
+            .onChange(of: subjects) { _, _ in refreshEvidenceIfNeeded() }
+            .onChange(of: academicAssessments) { _, _ in refreshEvidenceIfNeeded() }
+            .onChange(of: academicMappings) { _, _ in refreshEvidenceIfNeeded() }
+            .onChange(of: academicReports) { _, _ in refreshEvidenceIfNeeded() }
         }
     }
 
@@ -169,7 +178,12 @@ struct DashboardView: View {
     }
 
     private var evidenceRows: [EvidenceRow] {
-        sortedSubjects.map { subject in
+        // Cached snapshot keyed by fingerprint of (subjects, assessments, mappings, workSessions).
+        if !cachedEvidence.isEmpty { return cachedEvidence }
+        if sortedSubjects.isEmpty { return [] }
+        let state = PerformanceSignposts.signposter.beginInterval("dashboard.evidence")
+        defer { PerformanceSignposts.signposter.endInterval("dashboard.evidence", state) }
+        return sortedSubjects.map { subject in
             EvidenceRow(
                 subject: subject,
                 evidence: ProgressEvidenceService.score(
@@ -182,6 +196,42 @@ struct DashboardView: View {
                     workSessions: studySessions
                 )
             )
+        }
+    }
+
+    private var evidenceFingerprintValue: String {
+        let subjectKey = sortedSubjects.map { "\($0.id.uuidString)-\($0.cards.count)-\($0.level)" }.joined(separator: "|")
+        return "\(subjectKey)#\(academicAssessments.count)#\(academicMappings.count)#\(academicReports.count)#\(studySessions.count)"
+    }
+
+    private func refreshEvidenceIfNeeded() {
+        let fingerprint = evidenceFingerprintValue
+        guard fingerprint != evidenceFingerprint else { return }
+        evidenceFingerprint = fingerprint
+        let state = PerformanceSignposts.signposter.beginInterval("dashboard.evidence")
+        defer { PerformanceSignposts.signposter.endInterval("dashboard.evidence", state) }
+        cachedEvidence = sortedSubjects.map { subject in
+            EvidenceRow(
+                subject: subject,
+                evidence: ProgressEvidenceService.score(
+                    subjectName: subject.name,
+                    courseLevel: subject.level,
+                    cards: subject.cards,
+                    assessments: academicAssessments,
+                    mappings: academicMappings,
+                    reports: academicReports,
+                    workSessions: studySessions
+                )
+            )
+        }
+    }
+
+    private func scheduleDueRefresh() {
+        dueRefreshTask?.cancel()
+        dueRefreshTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            if Task.isCancelled { return }
+            recomputeDueCards()
         }
     }
 
@@ -382,14 +432,39 @@ struct DashboardView: View {
                 EmptyView()
             }
 
-            Text(greetingText)
+            Text(studySignalText)
                 .font(.callout)
                 .foregroundStyle(IBColors.ink)
                 .lineSpacing(2)
                 .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(18)
         .glassCard()
+    }
+
+    private var studySignalText: String {
+        let trimmed = greetingText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        if let fallback = fallbackStudySignal { return fallback }
+        return "You're making steady progress — pick a subject below to keep the momentum."
+    }
+
+    private var fallbackStudySignal: String? {
+        if dueBacklogCount > 0 {
+            let subjectCount = subjectCountWithDue
+            if subjectCount > 1 {
+                return "You have \(dueBacklogCount) cards due across \(subjectCount) subjects. Start with the top queue item to clear the most urgent cards first."
+            }
+            return "You have \(dueBacklogCount) cards due. A quick 15-minute review now will keep your queue healthy."
+        }
+        if let weakest = evidenceRows.min(by: { $0.mastery < $1.mastery }), weakest.mastery < 0.7 {
+            return "\(weakest.subject.name) is your current focus (\(Int(weakest.mastery*100))% mastery). Generate a few fresh cards or review its weakest subunit."
+        }
+        if let first = sortedSubjects.first {
+            return "\(first.name) is ready for a deeper dive. Create a focused session to build new recall breadth."
+        }
+        return nil
     }
 
     private func subjectPortfolio(evidence: [EvidenceRow]) -> some View {

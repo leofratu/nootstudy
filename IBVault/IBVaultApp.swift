@@ -220,7 +220,9 @@ struct RootView: View {
         // Deliberately outside the branches above: an upgrading user already
         // has a profile, so anything hung off the "no profile yet" path never
         // runs for them.
-        .onAppear {
+        .task {
+            // Let the window draw its first frame before touching the store.
+            await Task.yield()
             preparePersistentStateIfNeeded()
             startBridgeIfNeeded()
         }
