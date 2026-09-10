@@ -7,18 +7,11 @@ struct FormattedMessageFormatterTests {
 
     @Test("Headings parsed correctly")
     func headings() {
-        // Use blank lines as the formatter expects; consecutive headings without blank lines are normalized.
-        let input = "# Title\n\n## Subtitle\n\n### Third"
-        let normalized = FormattedMessageFormatter.normalizeResponseText(input)
-        print("normalized headings: [\(normalized)]")
-        let sections = FormattedMessageFormatter.sections(from: input)
-        print("sections: \(sections)")
+        let sections = FormattedMessageFormatter.sections(from: "# Title\n\n## Subtitle\n\n### Third")
         #expect(sections.contains(.heading(level: 1, text: "Title")))
         #expect(sections.contains(.heading(level: 2, text: "Subtitle")))
         #expect(sections.contains(.heading(level: 3, text: "Third")))
-        // Also verify compact form is normalized to headings
         let compact = FormattedMessageFormatter.sections(from: "# Title\n## Subtitle\n### Third")
-        print("compact sections: \(compact)")
         #expect(compact.contains(where: { if case .heading(_, let t) = $0 { return t == "Title" } else { return false } }))
         #expect(compact.contains(where: { if case .heading(_, let t) = $0 { return t == "Subtitle" } else { return false } }))
         #expect(compact.contains(where: { if case .heading(_, let t) = $0 { return t == "Third" } else { return false } }))
