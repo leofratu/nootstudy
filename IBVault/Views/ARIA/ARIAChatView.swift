@@ -169,7 +169,7 @@ struct ARIAChatView: View {
                     ToolbarItem(placement: .navigation) {
                         if usesExpandedChatLayout {
                             Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
+                                withAnimation(IBAnimation.smooth) {
                                     isSidebarVisible.toggle()
                                 }
                             } label: {
@@ -820,7 +820,7 @@ struct ARIAChatView: View {
     @MainActor
     private func createNewChat() {
         if !isSidebarVisible {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(IBAnimation.smooth) {
                 isSidebarVisible = true
             }
         }
@@ -952,8 +952,9 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
     let onReconnectCodex: (ARIAChatFailure) -> Void
     let onDismissFailure: (ARIAChatFailure) -> Void
     let emptyContent: EmptyContent
-    @State private var lastStreamingScrollCount = 0
+    @State private var lastStreamingScrollTime: ContinuousClock.Instant?
     @State private var dismissedRecoveredFailureID: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var displayedFailure: ARIAChatFailure? {
         if let failure { return failure }
@@ -1064,23 +1065,36 @@ private struct ARIASessionConversationView<EmptyContent: View>: View {
                 guard let newValue else { return }
                 Task { @MainActor in
                     await Task.yield()
-                    withAnimation(.easeOut(duration: 0.18)) {
+                    withAnimation(IBAnimation.gentle) {
                         proxy.scrollTo(newValue, anchor: .bottom)
                     }
                 }
             }
-            .onChange(of: streamingText.count) { _, newValue in
-                if newValue == 0 {
-                    lastStreamingScrollCount = 0
+            .onChange(of: streamingText) { oldValue, newValue in
+                if newValue.isEmpty {
+                    lastStreamingScrollTime = nil
                     return
                 }
-                guard isLoading,
-                      lastStreamingScrollCount == 0 || newValue - lastStreamingScrollCount >= 192 else { return }
-                lastStreamingScrollCount = newValue
+                guard isLoading else { return }
+                // Time-based throttle ~16ms, reset per session via id change
+                let now = ContinuousClock.now
+                if let last = lastStreamingScrollTime, now - last < .milliseconds(16), !oldValue.isEmpty {
+                    return
+                }
+                lastStreamingScrollTime = now
                 Task { @MainActor in
                     await Task.yield()
-                    proxy.scrollTo("streaming", anchor: .bottom)
+                    if reduceMotion {
+                        proxy.scrollTo("streaming", anchor: .bottom)
+                    } else {
+                        withAnimation(IBAnimation.snappy) {
+                            proxy.scrollTo("streaming", anchor: .bottom)
+                        }
+                    }
                 }
+            }
+            .onChange(of: isLoading) { _, loading in
+                if !loading { lastStreamingScrollTime = nil }
             }
             .onChange(of: displayedFailure?.id) { _, failureID in
                 guard let failureID else { return }
@@ -1239,7 +1253,8 @@ private struct ARIAChatSessionRow: View {
                     Text(session.title)
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(isSelected ? IBColors.electricBlue : IBColors.ink)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .help(session.title)
                     Spacer(minLength: 4)
                     Text(session.updatedAt, style: .relative)
                         .font(.caption2)
@@ -1250,7 +1265,8 @@ private struct ARIAChatSessionRow: View {
                 Text(session.lastMessagePreview.isEmpty ? "No messages yet" : session.lastMessagePreview)
                     .font(.caption)
                     .foregroundStyle(IBColors.secondaryText)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .help(session.lastMessagePreview)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1372,43 +1388,12 @@ private struct MessageCopyButton: View {
     }
 }
 
-// MARK: - Streaming Message Row
-struct StreamingMessageRow: View {
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(IBColors.electricBlue)
-                    .frame(width: 30, height: 30)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("ARIA")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.electricBlue)
-                    .padding(.horizontal, 4)
-                Text(text)
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 6)
-            }
-            .frame(maxWidth: 760, alignment: .leading)
-            Spacer()
-        }
-    }
-}
 
 struct FormattedMessageContent: View {
     let text: String
     var preferRichRendering = false
-    @State private var sections: [FormattedMessageSection]
+    @State private var sections: [FormattedMessageSection] = []
+    @State private var parseTask: Task<Void, Never>?
 
     init(text: String, preferRichRendering: Bool = false) {
         self.text = text
@@ -1424,9 +1409,31 @@ struct FormattedMessageContent: View {
         }
         .foregroundStyle(IBColors.ink)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onChange(of: text) { _, newText in
-            sections = FormattedMessageFormatter.sections(from: newText)
+        .task(id: text) {
+            await debouncedParse(text)
         }
+        .onDisappear {
+            parseTask?.cancel()
+        }
+    }
+
+    private func debouncedParse(_ newText: String) async {
+        parseTask?.cancel()
+        // Debounce 80ms, then parse off main thread
+        let task = Task.detached(priority: .userInitiated) {
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            if Task.isCancelled { return [FormattedMessageSection]() }
+            return FormattedMessageFormatter.sections(from: newText)
+        }
+        parseTask = Task {
+            let result = await task.value
+            if Task.isCancelled { return }
+            await MainActor.run {
+                // Only update if text still matches (avoid stale)
+                sections = result
+            }
+        }
+        await parseTask?.value
     }
 
     @ViewBuilder
@@ -1493,16 +1500,53 @@ struct FormattedMessageContent: View {
     }
 }
 
+// MARK: - Streaming rich row (uses same formatter, not plain Text)
+struct StreamingMessageRow: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(IBColors.electricBlue)
+                    .frame(width: 30, height: 30)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("ARIA")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(IBColors.electricBlue)
+                    .padding(.horizontal, 4)
+                // Rich rendering during streaming, debounced off main thread
+                FormattedMessageContent(text: text, preferRichRendering: true)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 6)
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            Spacer()
+        }
+    }
+}
+
 private struct MathJaxBlockView: View {
     let latex: String
     @Environment(\.colorScheme) private var colorScheme
-    @State private var contentHeight: CGFloat = 48
-    @State private var usesFallback = false
+    @State private var contentHeight: CGFloat = 44
+    @State private var usesFallback = true
+    @State private var isMathJaxReady = false
 
     var body: some View {
         Group {
             if usesFallback {
                 NativeMathBlockView(latex: latex)
+                    .overlay(alignment: .topTrailing) {
+                        if isMathJaxReady {
+                            ProgressView().controlSize(.mini).opacity(0.6)
+                        }
+                    }
             } else {
                 OfflineMathJaxView(
                     latex: latex,
@@ -1519,6 +1563,17 @@ private struct MathJaxBlockView: View {
             MessageCopyButton(text: latex)
                 .opacity(0.72)
         }
+        .task(id: latex) {
+            // Show native first, then upgrade to MathJax after brief delay to avoid flash
+            usesFallback = true
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            if Task.isCancelled { return }
+            // Trigger MathJax load by toggling fallback off; view will report height when ready
+            usesFallback = false
+        }
+        .onChange(of: latex) { _, _ in
+            usesFallback = true
+        }
     }
 }
 
@@ -1533,15 +1588,14 @@ private struct OfflineMathJaxView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        let controller = WKUserContentController()
-        controller.add(context.coordinator, name: "mathHeight")
-        controller.add(context.coordinator, name: "mathError")
-        configuration.userContentController = controller
-
+        let configuration = MathJaxPool.shared.configuration(for: context.coordinator)
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.setValue(false, forKey: "drawsBackground")
+        webView.underPageBackgroundColor = .clear
         webView.navigationDelegate = context.coordinator
+        if #available(macOS 13, *) {
+            webView.isInspectable = false
+        }
         return webView
     }
 
@@ -1550,17 +1604,14 @@ private struct OfflineMathJaxView: NSViewRepresentable {
         context.coordinator.lastLatex = latex
         context.coordinator.lastColorScheme = colorScheme
         context.coordinator.didFail.wrappedValue = false
-        guard let scriptURL = Bundle.main.url(forResource: "tex-svg", withExtension: "js") else {
-            context.coordinator.didFail.wrappedValue = true
-            return
-        }
         let html = MathRenderingPolicy.htmlDocument(latex: latex, colorScheme: colorScheme)
-        webView.loadHTMLString(html, baseURL: scriptURL.deletingLastPathComponent())
+        // Use shared baseURL for tex-svg.js
+        let baseURL = Bundle.main.url(forResource: "tex-svg", withExtension: "js")?.deletingLastPathComponent()
+        webView.loadHTMLString(html, baseURL: baseURL)
     }
 
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "mathHeight")
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "mathError")
+        // Do not remove global handlers; pool is shared.
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
@@ -1577,6 +1628,7 @@ private struct OfflineMathJaxView: NSViewRepresentable {
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             if message.name == "mathHeight", let rawHeight = message.body as? Double {
                 height.wrappedValue = CGFloat(rawHeight)
+                didFail.wrappedValue = false
             } else if message.name == "mathError" {
                 didFail.wrappedValue = true
             }
@@ -1585,6 +1637,39 @@ private struct OfflineMathJaxView: NSViewRepresentable {
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
             didFail.wrappedValue = true
         }
+    }
+}
+
+// Shared pool for MathJax
+private final class MathJaxPool: Sendable {
+    static let shared = MathJaxPool()
+    private let config: WKWebViewConfiguration
+
+    private init() {
+        let configuration = WKWebViewConfiguration()
+        configuration.suppressesIncrementalRendering = false
+        // Transparent
+        let controller = WKUserContentController()
+        // Handlers will be added per webview coordinator via copy? We use shared controller but need per-coordinator.
+        // Instead we create config with empty controller and each coordinator adds handlers to its webView's controller.
+        configuration.userContentController = controller
+        if #available(macOS 14, *) {
+            configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        }
+        // Transparent background
+        self.config = configuration
+    }
+
+    func configuration(for coordinator: OfflineMathJaxView.Coordinator) -> WKWebViewConfiguration {
+        // Return a copy with coordinator-registered handlers
+        let cfg = WKWebViewConfiguration()
+        cfg.preferences = config.preferences
+        cfg.suppressesIncrementalRendering = config.suppressesIncrementalRendering
+        let controller = WKUserContentController()
+        controller.add(coordinator, name: "mathHeight")
+        controller.add(coordinator, name: "mathError")
+        cfg.userContentController = controller
+        return cfg
     }
 }
 
@@ -1625,23 +1710,6 @@ private struct NativeMathBlockView: View {
             NativeCasesMathView(rows: rows)
         }
     }
-}
-
-private enum NativeMathBlockContent {
-    case text(String)
-    case aligned([NativeAlignedMathRow])
-    case matrix(rows: [[String]], leftDelimiter: String, rightDelimiter: String)
-    case cases([NativeCaseMathRow])
-}
-
-private struct NativeAlignedMathRow {
-    let leading: String
-    let trailing: String?
-}
-
-private struct NativeCaseMathRow {
-    let condition: String
-    let explanation: String?
 }
 
 private struct NativeMathText: View {
@@ -1735,18 +1803,6 @@ private struct NativeCasesMathView: View {
     }
 }
 
-enum FormattedMessageSection: Equatable {
-    case heading(level: Int, text: String)
-    case markdown(String)
-    case listItem(marker: String, text: String)
-    case quote(String)
-    case divider
-    case mathBlock(String)
-    case codeBlock(code: String, language: String)
-    case diagram(ARIADiagramSpec)
-    case flashcard(front: String, back: String)
-}
-
 private struct ARIADiagramView: View {
     let diagram: ARIADiagramSpec
     @State private var isExpanded = false
@@ -1785,7 +1841,7 @@ private struct ARIADiagramView: View {
                     if diagram.isSimulation || diagram.isCanvas {
                         simulationResetID = UUID()
                     } else {
-                        withAnimation(.easeOut(duration: 0.18)) {
+                        withAnimation(IBAnimation.gentle) {
                             zoom = 1
                             zoomBase = 1
                             offset = .zero
@@ -1799,7 +1855,7 @@ private struct ARIADiagramView: View {
                 .help("Reset diagram")
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(IBAnimation.smooth) {
                         isExpanded.toggle()
                     }
                 } label: {
@@ -2029,18 +2085,24 @@ private struct ARIAParticleSimulationView: View {
     let mode: String
     let particleCount: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isPlaying = true
     @State private var speed = 1.0
     @State private var pausedElapsed: TimeInterval = 0
     @State private var activeStartedAt = Date()
+    @State private var isVisible = false
 
     private var isAtomMode: Bool {
         mode.localizedCaseInsensitiveContains("atom") || mode.localizedCaseInsensitiveContains("electron")
     }
 
+    private var isPaused: Bool {
+        !isVisible || scenePhase != .active || !isPlaying || reduceMotion
+    }
+
     var body: some View {
         VStack(spacing: 8) {
-            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isPlaying || reduceMotion)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: isPaused)) { timeline in
                 Canvas { context, size in
                     let elapsed = pausedElapsed + (isPlaying ? timeline.date.timeIntervalSince(activeStartedAt) : 0)
                     let time = elapsed * speed
@@ -2075,6 +2137,8 @@ private struct ARIAParticleSimulationView: View {
             }
         }
         .accessibilityLabel(isAtomMode ? "Interactive atom simulation" : "Interactive particle simulation")
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false; if isPlaying { pausedElapsed += Date().timeIntervalSince(activeStartedAt) } }
     }
 
     private func togglePlayback() {
@@ -2133,12 +2197,18 @@ private struct ARIAGenerativeCanvasView: View {
     let scene: ARIADiagramSpec.CanvasScene
     let canvasHeight: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isPlaying = true
     @State private var masterSpeed = 1.0
     @State private var pausedElapsed: TimeInterval = 0
     @State private var activeStartedAt = Date()
+    @State private var isVisible = false
     @State private var controlValues: [String: Double]
     @State private var toggleValues: [String: Bool]
+
+    private var isPaused: Bool {
+        !isVisible || scenePhase != .active || !isPlaying || reduceMotion
+    }
 
     init(scene: ARIADiagramSpec.CanvasScene, canvasHeight: CGFloat) {
         self.scene = scene
@@ -2167,7 +2237,7 @@ private struct ARIAGenerativeCanvasView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isPlaying || reduceMotion)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: isPaused)) { timeline in
                 Canvas { context, size in
                     let elapsed = pausedElapsed + (isPlaying ? timeline.date.timeIntervalSince(activeStartedAt) : 0)
                     draw(in: &context, size: size, time: elapsed * masterSpeed)
@@ -2235,6 +2305,8 @@ private struct ARIAGenerativeCanvasView: View {
             }
         }
         .accessibilityLabel("Interactive ARIA Canvas")
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false; if isPlaying { pausedElapsed += Date().timeIntervalSince(activeStartedAt) } }
     }
 
     private func valueLabel(for control: ARIADiagramSpec.CanvasScene.Control) -> String {
@@ -2478,886 +2550,5 @@ private struct CodeBlockView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
-    }
-}
-
-enum FormattedMessageFormatter {
-    static func sections(from source: String) -> [FormattedMessageSection] {
-        let normalized = normalizeResponseText(source)
-        var sections: [FormattedMessageSection] = []
-        var markdownLines: [String] = []
-        var frontLines: [String] = []
-        var backLines: [String] = []
-        var codeBlockLines: [String] = []
-        var codeBlockLanguage = ""
-
-        enum ParseMode {
-            case markdown
-            case flashcardFront
-            case flashcardBack
-            case codeBlock
-        }
-
-        var mode: ParseMode = .markdown
-
-        func appendMarkdownBuffer() {
-            let markdown = markdownLines.joined(separator: "\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !markdown.isEmpty else {
-                markdownLines.removeAll()
-                return
-            }
-            appendStructuredMarkdownSections(from: markdown, into: &sections)
-            markdownLines.removeAll()
-        }
-
-        func appendFlashcardBuffer() {
-            let front = frontLines.joined(separator: "\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let back = backLines.joined(separator: "\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if !front.isEmpty && !back.isEmpty {
-                sections.append(.flashcard(front: front, back: back))
-            } else {
-                let fallback = ([front, back].filter { !$0.isEmpty }).joined(separator: "\n")
-                if !fallback.isEmpty {
-                    appendMathAwareSections(from: fallback, into: &sections)
-                }
-            }
-
-            frontLines.removeAll()
-            backLines.removeAll()
-        }
-
-        func appendCodeBlockBuffer() {
-            let code = codeBlockLines.joined(separator: "\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !code.isEmpty {
-                if let diagram = diagramSpec(from: code, language: codeBlockLanguage) {
-                    sections.append(.diagram(diagram))
-                } else {
-                    sections.append(.codeBlock(code: code, language: codeBlockLanguage))
-                }
-            }
-            codeBlockLines.removeAll()
-            codeBlockLanguage = ""
-        }
-
-        let lines = normalized.components(separatedBy: .newlines)
-        var i = 0
-        while i < lines.count {
-            let line = lines[i]
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            // Check for code block start
-            if trimmed.hasPrefix("```") {
-                if mode == .codeBlock {
-                    // End code block
-                    appendCodeBlockBuffer()
-                    mode = .markdown
-                } else {
-                    // Start code block
-                    appendMarkdownBuffer()
-                    codeBlockLanguage = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
-                    codeBlockLines.removeAll()
-                    mode = .codeBlock
-                }
-                i += 1
-                continue
-            }
-
-            switch mode {
-            case .codeBlock:
-                codeBlockLines.append(line)
-
-            case .markdown:
-                if let frontPayload = flashcardPayload(in: trimmed, marker: "FRONT") {
-                    appendMarkdownBuffer()
-                    frontLines = [frontPayload]
-                    mode = .flashcardFront
-                } else {
-                    markdownLines.append(line)
-                }
-
-            case .flashcardFront:
-                if let backPayload = flashcardPayload(in: trimmed, marker: "BACK") {
-                    backLines = [backPayload]
-                    mode = .flashcardBack
-                } else if let frontPayload = flashcardPayload(in: trimmed, marker: "FRONT") {
-                    appendFlashcardBuffer()
-                    frontLines = [frontPayload]
-                    mode = .flashcardFront
-                } else if isMarkdownHeader(trimmed) {
-                    appendFlashcardBuffer()
-                    markdownLines.append(line)
-                    mode = .markdown
-                } else if !trimmed.isEmpty {
-                    frontLines.append(trimmed)
-                }
-
-            case .flashcardBack:
-                if let frontPayload = flashcardPayload(in: trimmed, marker: "FRONT") {
-                    appendFlashcardBuffer()
-                    frontLines = [frontPayload]
-                    mode = .flashcardFront
-                } else if isMarkdownHeader(trimmed) {
-                    appendFlashcardBuffer()
-                    markdownLines.append(line)
-                    mode = .markdown
-                } else if !trimmed.isEmpty {
-                    backLines.append(trimmed)
-                }
-            }
-            
-            i += 1
-        }
-
-        switch mode {
-        case .markdown:
-            appendMarkdownBuffer()
-        case .flashcardFront, .flashcardBack:
-            appendFlashcardBuffer()
-        case .codeBlock:
-            appendCodeBlockBuffer()
-        }
-
-        if !sections.contains(where: {
-            if case .diagram = $0 { return true }
-            return false
-        }), let inferredSimulation = fallbackSimulation(for: normalized) {
-            sections.append(.diagram(inferredSimulation))
-        }
-
-        return sections.isEmpty ? [.markdown(normalized)] : sections
-    }
-
-    private static func diagramSpec(from code: String, language: String) -> ARIADiagramSpec? {
-        ARIAContentContract.decodeDiagram(from: code, language: language)
-    }
-
-    /// Old model responses may refuse a Canvas request instead of producing the
-    /// protocol block. Preserve the explanation but still mount a usable native
-    /// simulation for those already-saved messages.
-    private static func fallbackSimulation(for source: String) -> ARIADiagramSpec? {
-        let normalized = source.lowercased()
-        let refusalTerms = [
-            "cannot embed",
-            "can't embed",
-            "cannot render",
-            "can't render",
-            "compatible viewer",
-            "canvas-ready"
-        ]
-        guard refusalTerms.contains(where: normalized.contains) else { return nil }
-
-        if normalized.contains("atom") || normalized.contains("electron") {
-            return ARIADiagramSpec(
-                type: "simulation",
-                title: "Atom simulation",
-                xLabel: nil,
-                yLabel: nil,
-                series: nil,
-                nodes: nil,
-                edges: nil,
-                simulation: "atoms",
-                particleCount: 12
-            )
-        }
-        guard normalized.contains("particle") || normalized.contains("velocity") || normalized.contains("motion") else {
-            return nil
-        }
-        return ARIADiagramSpec(
-            type: "simulation",
-            title: "Particle simulation",
-            xLabel: nil,
-            yLabel: nil,
-            series: nil,
-            nodes: nil,
-            edges: nil,
-            simulation: "particles",
-            particleCount: 20
-        )
-    }
-
-    static func extractFlashcards(from source: String) -> [(front: String, back: String)] {
-        let normalized = normalizeResponseText(source)
-        let lines = normalized.components(separatedBy: .newlines)
-        var cards: [(front: String, back: String)] = []
-        var frontLines: [String] = []
-        var backLines: [String] = []
-        var mode: FlashcardParseMode = .idle
-
-        func flush() {
-            let front = frontLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            let back = backLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !front.isEmpty && !back.isEmpty {
-                cards.append((front: front, back: back))
-            }
-            frontLines.removeAll()
-            backLines.removeAll()
-            mode = .idle
-        }
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if let frontPayload = flashcardPayload(in: trimmed, marker: "FRONT") {
-                flush()
-                frontLines = [frontPayload]
-                mode = .front
-                continue
-            }
-
-            if let backPayload = flashcardPayload(in: trimmed, marker: "BACK") {
-                if mode == .idle {
-                    continue
-                }
-                backLines = [backPayload]
-                mode = .back
-                continue
-            }
-
-            switch mode {
-            case .front:
-                if trimmed.isEmpty {
-                    continue
-                }
-                if isMarkdownHeader(trimmed) {
-                    flush()
-                } else {
-                    frontLines.append(trimmed)
-                }
-            case .back:
-                if trimmed.isEmpty {
-                    continue
-                }
-                if isMarkdownHeader(trimmed) {
-                    flush()
-                } else {
-                    backLines.append(trimmed)
-                }
-            case .idle:
-                continue
-            }
-        }
-
-        flush()
-        return cards
-    }
-
-    static func attributedMarkdown(from source: String) -> AttributedString? {
-        let processed = displayFriendlyMarkdown(
-            normalizeResponseText(convertInlineMathToReadableText(in: source))
-        )
-        let options = AttributedString.MarkdownParsingOptions()
-        return try? AttributedString(markdown: processed, options: options)
-    }
-
-    private static func normalizeResponseText(_ source: String) -> String {
-        var result = source.replacingOccurrences(of: "\r\n", with: "\n")
-        result = normalizeMathDelimiters(in: result)
-        result = replaceRegex(pattern: #"[-—]{3,}\s*(FRONT:|BACK:)"#, template: "\n\n$1", in: result)
-        result = replaceRegex(pattern: #"(?m)^(#{1,6})([^ #\n])"#, template: "$1 $2", in: result)
-        result = replaceRegex(pattern: #"(?m)(?<!\n)(#{1,6}\s)"#, template: "\n\n$1", in: result)
-        result = replaceRegex(pattern: #"(?m)^\s*#{1,6}\s*$"#, template: "", in: result)
-        result = replaceRegex(pattern: #"(?m)^\s*(?:[-*•]|\d+[.)])\s*$"#, template: "", in: result)
-        result = replaceRegex(pattern: #"(?<=[^\n])\s*(FRONT:)"#, template: "\n\n$1", in: result)
-        result = replaceRegex(pattern: #"(?<=[^\n])\s*(BACK:)"#, template: "\n$1", in: result)
-        result = replaceRegex(pattern: #"(?m)^(#{1,6}\s+.+)\n(#{1,6}\s+.+)$"#, template: "$1\n\n$2", in: result)
-        result = collapseNewlinesPreservingCodeBlocks(in: result)
-        result = replaceRegex(pattern: #"\n{3,}"#, template: "\n\n", in: result)
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func displayFriendlyMarkdown(_ source: String) -> String {
-        MessageRenderingPolicy.displaySafeMarkdown(source)
-    }
-
-    private static func appendStructuredMarkdownSections(
-        from markdown: String,
-        into sections: inout [FormattedMessageSection]
-    ) {
-        var paragraphLines: [String] = []
-
-        func flushParagraph() {
-            let paragraph = paragraphLines.joined(separator: "\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !paragraph.isEmpty {
-                appendMathAwareSections(from: paragraph, into: &sections)
-            }
-            paragraphLines.removeAll()
-        }
-
-        for line in markdown.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if let heading = heading(from: trimmed) {
-                flushParagraph()
-                sections.append(.heading(level: heading.level, text: heading.text))
-            } else if trimmed == "---" || trimmed == "***" || trimmed == "___" {
-                flushParagraph()
-                sections.append(.divider)
-            } else if trimmed.hasPrefix("> ") {
-                flushParagraph()
-                sections.append(.quote(String(trimmed.dropFirst(2))))
-            } else if let item = listItem(from: trimmed) {
-                flushParagraph()
-                sections.append(.listItem(marker: item.marker, text: item.text))
-            } else {
-                paragraphLines.append(line)
-            }
-        }
-
-        flushParagraph()
-    }
-
-    private static func heading(from line: String) -> (level: Int, text: String)? {
-        let hashes = line.prefix { $0 == "#" }
-        guard !hashes.isEmpty, hashes.count <= 6 else { return nil }
-        let remainder = line.dropFirst(hashes.count)
-        guard remainder.first?.isWhitespace == true else { return nil }
-        let text = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : (hashes.count, text)
-    }
-
-    private static func listItem(from line: String) -> (marker: String, text: String)? {
-        for prefix in ["- ", "* ", "• "] where line.hasPrefix(prefix) {
-            let text = String(line.dropFirst(prefix.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return text.isEmpty ? nil : ("•", text)
-        }
-
-        let components = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
-        guard components.count == 2 else { return nil }
-        let marker = String(components[0])
-        let number = marker.dropLast()
-        guard (marker.hasSuffix(".") || marker.hasSuffix(")")),
-              Int(number) != nil else {
-            return nil
-        }
-        let text = String(components[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : (marker, text)
-    }
-
-    private static func collapseNewlinesPreservingCodeBlocks(in source: String) -> String {
-        var result = ""
-        var inCodeBlock = false
-        var consecutiveNewlines = 0
-        
-        for char in source {
-            if char == "`" {
-                // Check for triple backtick
-                let lastThree = result.suffix(2)
-                if lastThree == "``" {
-                    inCodeBlock.toggle()
-                    result.append(char)
-                    consecutiveNewlines = 0
-                    continue
-                }
-            }
-            
-            if char == "\n" {
-                if inCodeBlock {
-                    result.append(char)
-                    consecutiveNewlines = 0
-                } else {
-                    consecutiveNewlines += 1
-                    if consecutiveNewlines <= 2 {
-                        result.append(char)
-                    }
-                    // Skip additional newlines (3+)
-                }
-            } else {
-                consecutiveNewlines = 0
-                result.append(char)
-            }
-        }
-        
-        return result
-    }
-
-    private static func normalizeMathDelimiters(in source: String) -> String {
-        source
-            .replacingOccurrences(of: "\\[", with: "$$")
-            .replacingOccurrences(of: "\\]", with: "$$")
-            .replacingOccurrences(of: "\\(", with: "$")
-            .replacingOccurrences(of: "\\)", with: "$")
-    }
-
-    private static func appendMathAwareSections(from source: String, into sections: inout [FormattedMessageSection]) {
-        let paragraphs = source.components(separatedBy: "\n\n")
-        
-        for paragraph in paragraphs {
-            let trimmedParagraph = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedParagraph.isEmpty else { continue }
-            
-            // Check for fenced code blocks first
-            if trimmedParagraph.hasPrefix("```") {
-                if let codeBlock = parseCodeBlock(from: trimmedParagraph) {
-                    sections.append(.codeBlock(code: codeBlock.code, language: codeBlock.language))
-                    continue
-                }
-            }
-            
-            if trimmedParagraph.contains("$") {
-                var buffer = ""
-                var index = trimmedParagraph.startIndex
-                
-                while index < trimmedParagraph.endIndex {
-                    let remaining = trimmedParagraph[index...]
-                    let delimiter: String?
-                    if remaining.hasPrefix("$$"), !isEscapedDelimiter(at: index, in: trimmedParagraph) {
-                        delimiter = "$$"
-                    } else if remaining.hasPrefix("$"), !isEscapedDelimiter(at: index, in: trimmedParagraph) {
-                        delimiter = "$"
-                    } else {
-                        delimiter = nil
-                    }
-
-                    if let delimiter {
-                        let contentStart = trimmedParagraph.index(index, offsetBy: delimiter.count)
-
-                        if let closingRange = nextMathDelimiter(
-                            delimiter,
-                            in: trimmedParagraph,
-                            from: contentStart
-                        ) {
-                            let mathContent = String(trimmedParagraph[contentStart..<closingRange.lowerBound])
-                                .trimmingCharacters(in: .whitespacesAndNewlines)
-                            
-                            if delimiter == "$" {
-                                if !mathContent.isEmpty {
-                                    buffer += MathRenderingPolicy.inlineText(mathContent)
-                                }
-                            } else {
-                                let markdown = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
-                                if !markdown.isEmpty {
-                                    sections.append(.markdown(markdown))
-                                }
-                                buffer = ""
-
-                                if !mathContent.isEmpty {
-                                    sections.append(.mathBlock(mathContent))
-                                }
-                            }
-                            
-                            index = closingRange.upperBound
-                            continue
-                        }
-                    }
-                    
-                    buffer.append(trimmedParagraph[index])
-                    index = trimmedParagraph.index(after: index)
-                }
-                
-                let markdown = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !markdown.isEmpty {
-                    sections.append(.markdown(markdown))
-                }
-            } else {
-                sections.append(.markdown(trimmedParagraph))
-            }
-        }
-    }
-
-    private static func nextMathDelimiter(
-        _ delimiter: String,
-        in source: String,
-        from start: String.Index
-    ) -> Range<String.Index>? {
-        var index = start
-        while index < source.endIndex {
-            let remaining = source[index...]
-            let isSingleDollarInsideDisplayMath = delimiter == "$" && remaining.hasPrefix("$$")
-            if remaining.hasPrefix(delimiter),
-               !isSingleDollarInsideDisplayMath,
-               !isEscapedDelimiter(at: index, in: source) {
-                let upperBound = source.index(index, offsetBy: delimiter.count)
-                return index..<upperBound
-            }
-            index = source.index(after: index)
-        }
-        return nil
-    }
-
-    private static func isEscapedDelimiter(at index: String.Index, in source: String) -> Bool {
-        guard index > source.startIndex else { return false }
-        var cursor = source.index(before: index)
-        var slashCount = 0
-        while source[cursor] == "\\" {
-            slashCount += 1
-            guard cursor > source.startIndex else { break }
-            cursor = source.index(before: cursor)
-        }
-        return slashCount.isMultiple(of: 2) == false
-    }
-
-    private static func parseCodeBlock(from source: String) -> (code: String, language: String)? {
-        let lines = source.components(separatedBy: "\n")
-        guard let firstLine = lines.first, firstLine.hasPrefix("```") else { return nil }
-        
-        let language = String(firstLine.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Find closing ```
-        var codeLines: [String] = []
-        var foundClosing = false
-        for line in lines.dropFirst() {
-            if line.trimmingCharacters(in: .whitespacesAndNewlines) == "```" {
-                foundClosing = true
-                break
-            }
-            codeLines.append(line)
-        }
-        
-        guard foundClosing || codeLines.count > 0 else { return nil }
-        let code = codeLines.joined(separator: "\n")
-        guard !code.isEmpty else { return nil }
-        
-        return (code: code, language: language)
-    }
-
-    private static func convertInlineMathToReadableText(in source: String) -> String {
-        var result = ""
-        var index = source.startIndex
-
-        while index < source.endIndex {
-            if source[index] == "$" {
-                let next = source.index(after: index)
-
-                if next < source.endIndex,
-                   source[next] != "$",
-                   let closing = source[next...].firstIndex(of: "$") {
-                   let candidate = String(source[next..<closing])
-                   let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                    if !trimmed.isEmpty && !candidate.contains("\n") {
-                        result += MathExpressionFormatter.inlineString(from: candidate)
-                        index = source.index(after: closing)
-                        continue
-                    }
-                }
-            }
-
-            result.append(source[index])
-            index = source.index(after: index)
-        }
-
-        return result
-    }
-
-    private static func replaceRegex(pattern: String, template: String, in source: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return source }
-        let range = NSRange(source.startIndex..., in: source)
-        return regex.stringByReplacingMatches(in: source, range: range, withTemplate: template)
-    }
-
-    private enum FlashcardParseMode {
-        case idle
-        case front
-        case back
-    }
-
-    private static func flashcardPayload(in line: String, marker: String) -> String? {
-        let stripped = stripFlashcardLinePrefix(from: line)
-        let uppercased = stripped.uppercased()
-        let markerPrefix = "\(marker.uppercased()):"
-        guard uppercased.hasPrefix(markerPrefix) else { return nil }
-        return String(stripped.dropFirst(markerPrefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func stripFlashcardLinePrefix(from line: String) -> String {
-        var stripped = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        let patterns = [
-            #"^[\-\*\•]\s*"#,
-            #"^\d+[\.\)]\s*"#,
-            #"(?i)^card\s*\d+\s*[:\-\.\)]\s*"#
-        ]
-
-        for pattern in patterns {
-            stripped = replaceRegex(pattern: pattern, template: "", in: stripped)
-        }
-
-        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func isMarkdownHeader(_ line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.hasPrefix("#") || (trimmed.hasPrefix("**") && trimmed.hasSuffix("**"))
-    }
-}
-
-nonisolated enum MathExpressionFormatter {
-    private static let commandMap: [String: String] = [
-        "\\alpha": "α", "\\beta": "β", "\\gamma": "γ", "\\delta": "δ", "\\epsilon": "ϵ",
-        "\\theta": "θ", "\\lambda": "λ", "\\mu": "μ", "\\pi": "π", "\\sigma": "σ",
-        "\\phi": "φ", "\\omega": "ω", "\\Delta": "Δ", "\\Gamma": "Γ", "\\Lambda": "Λ",
-        "\\Pi": "Π", "\\Sigma": "Σ", "\\Omega": "Ω", "\\times": "×", "\\cdot": "·",
-        "\\pm": "±", "\\neq": "≠", "\\leq": "≤", "\\geq": "≥", "\\approx": "≈",
-        "\\infty": "∞", "\\to": "→", "\\rightarrow": "→", "\\left": "", "\\right": "",
-        "\\sum": "Σ", "\\prod": "∏", "\\int": "∫", "\\cdots": "⋯", "\\ldots": "…",
-        "\\sin": "sin", "\\cos": "cos", "\\tan": "tan", "\\sec": "sec", "\\csc": "csc",
-        "\\cot": "cot", "\\log": "log", "\\ln": "ln",
-        "\\lim": "lim"
-    ]
-
-    private static let superscripts: [Character: String] = [
-        "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
-        "+": "⁺", "-": "⁻", "=": "⁼", "(": "⁽", ")": "⁾", "n": "ⁿ", "i": "ⁱ"
-    ]
-
-    private static let subscripts: [Character: String] = [
-        "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
-        "+": "₊", "-": "₋", "=": "₌", "(": "₍", ")": "₎", "a": "ₐ", "e": "ₑ", "i": "ᵢ", "j": "ⱼ",
-        "k": "ₖ", "l": "ₗ", "m": "ₘ", "n": "ₙ", "o": "ₒ", "p": "ₚ", "r": "ᵣ", "s": "ₛ", "t": "ₜ",
-        "u": "ᵤ", "v": "ᵥ", "x": "ₓ"
-    ]
-
-    static func inlineString(from source: String) -> String {
-        prettified(source)
-    }
-
-    static func displayString(from source: String) -> String {
-        prettified(source)
-    }
-
-    fileprivate static func blockContent(from source: String) -> NativeMathBlockContent {
-        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if let environment = parseEnvironment(in: trimmed) {
-            switch environment.name {
-            case "align", "align*", "aligned", "aligned*":
-                let rows = parseAlignedRows(from: environment.body)
-                if !rows.isEmpty {
-                    return .aligned(rows)
-                }
-            case "cases":
-                let rows = parseCaseRows(from: environment.body)
-                if !rows.isEmpty {
-                    return .cases(rows)
-                }
-            case "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix":
-                let rows = parseMatrixRows(from: environment.body)
-                if !rows.isEmpty {
-                    let delimiters = delimiters(for: environment.name)
-                    return .matrix(rows: rows, leftDelimiter: delimiters.0, rightDelimiter: delimiters.1)
-                }
-            default:
-                break
-            }
-        }
-
-        let lines = splitRows(in: trimmed)
-            .map { prettified(stripAlignmentMarkers(from: $0)) }
-            .filter { !$0.isEmpty }
-
-        if lines.count > 1 {
-            return .aligned(lines.map { NativeAlignedMathRow(leading: $0, trailing: nil) })
-        }
-
-        return .text(prettified(trimmed))
-    }
-
-    private static func prettified(_ source: String) -> String {
-        var result = source.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        result = replaceBinaryCommand("\\frac", in: result) { lhs, rhs in
-            formatFraction(lhs: lhs, rhs: rhs)
-        }
-        result = replaceBinaryCommand("\\dfrac", in: result) { lhs, rhs in
-            formatFraction(lhs: lhs, rhs: rhs)
-        }
-        result = replaceBinaryCommand("\\tfrac", in: result) { lhs, rhs in
-            formatFraction(lhs: lhs, rhs: rhs)
-        }
-        result = replaceUnaryCommand("\\sqrt", in: result) { value in
-            "√(\(value))"
-        }
-        result = replaceUnaryCommand("\\text", in: result) { $0 }
-        result = replaceUnaryCommand("\\mathrm", in: result) { $0 }
-        result = replaceUnaryCommand("\\operatorname", in: result) { $0 }
-
-        for (command, symbol) in commandMap {
-            result = result.replacingOccurrences(of: command, with: symbol)
-        }
-
-        result = result
-            .replacingOccurrences(of: "{", with: "")
-            .replacingOccurrences(of: "}", with: "")
-            .replacingOccurrences(of: "\\", with: "")
-
-        result = applyScript(marker: "^", mapping: superscripts, to: result)
-        result = applyScript(marker: "_", mapping: subscripts, to: result)
-
-        return result
-            .replacingOccurrences(of: "  ", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func replaceUnaryCommand(_ command: String, in source: String, transform: (String) -> String) -> String {
-        replaceRegex(pattern: "\\\\\(command.dropFirst())\\{([^{}]+)\\}", in: source) { match in
-            let rawValue = match.numberOfRanges > 1 ? nsRange(match.range(at: 1), in: source).flatMap { Range($0, in: source) }.map { String(source[$0]) } : nil
-            return transform(prettified(rawValue ?? ""))
-        }
-    }
-
-    private static func replaceBinaryCommand(_ command: String, in source: String, transform: (String, String) -> String) -> String {
-        replaceRegex(pattern: "\\\\\(command.dropFirst())\\{([^{}]+)\\}\\{([^{}]+)\\}", in: source) { match in
-            let lhs = match.numberOfRanges > 1 ? nsRange(match.range(at: 1), in: source).flatMap { Range($0, in: source) }.map { String(source[$0]) } ?? "" : ""
-            let rhs = match.numberOfRanges > 2 ? nsRange(match.range(at: 2), in: source).flatMap { Range($0, in: source) }.map { String(source[$0]) } ?? "" : ""
-            return transform(prettified(lhs), prettified(rhs))
-        }
-    }
-
-    private static func replaceRegex(pattern: String, in source: String, replacement: (NSTextCheckingResult) -> String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return source }
-        let matches = regex.matches(in: source, range: NSRange(source.startIndex..., in: source))
-        guard !matches.isEmpty else { return source }
-
-        var result = source
-        for match in matches.reversed() {
-            let replacementText = replacement(match)
-            if let range = Range(match.range, in: result) {
-                result.replaceSubrange(range, with: replacementText)
-            }
-        }
-        return result == source ? source : replaceRegex(pattern: pattern, in: result, replacement: replacement)
-    }
-
-    private static func applyScript(marker: Character, mapping: [Character: String], to source: String) -> String {
-        var result = ""
-        var index = source.startIndex
-
-        while index < source.endIndex {
-            if source[index] == marker {
-                let next = source.index(after: index)
-                guard next < source.endIndex else {
-                    index = next
-                    continue
-                }
-
-                if source[next] == "{" {
-                    if let closing = source[next...].firstIndex(of: "}") {
-                        let content = source[source.index(after: next)..<closing]
-                        let rendered = content.compactMap { mapping[$0] ?? String($0) }.joined()
-                        result += rendered
-                        index = source.index(after: closing)
-                        continue
-                    }
-                } else {
-                    let rendered = mapping[source[next]] ?? String(source[next])
-                    result += rendered
-                    index = source.index(after: next)
-                    continue
-                }
-            }
-
-            result.append(source[index])
-            index = source.index(after: index)
-        }
-
-        return result
-    }
-
-    private static func nsRange(_ range: NSRange, in source: String) -> NSRange? {
-        range.location == NSNotFound ? nil : range
-    }
-
-    private static func formatFraction(lhs: String, rhs: String) -> String {
-        let numerator = needsGrouping(lhs) ? "(\(lhs))" : lhs
-        let denominator = needsGrouping(rhs) ? "(\(rhs))" : rhs
-        return "\(numerator)/\(denominator)"
-    }
-
-    private static func needsGrouping(_ expression: String) -> Bool {
-        expression.contains(where: { "+-= ".contains($0) })
-    }
-
-    private static func parseEnvironment(in source: String) -> (name: String, body: String)? {
-        let pattern = #"(?s)\\begin\{([A-Za-z\*]+)\}(.*?)\\end\{([A-Za-z\*]+)\}"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let range = NSRange(source.startIndex..., in: source)
-        guard let match = regex.firstMatch(in: source, range: range),
-              match.numberOfRanges >= 4,
-              let nameRange = Range(match.range(at: 1), in: source),
-              let bodyRange = Range(match.range(at: 2), in: source),
-              let endNameRange = Range(match.range(at: 3), in: source) else {
-            return nil
-        }
-
-        let name = String(source[nameRange])
-        let endName = String(source[endNameRange])
-        guard name == endName else { return nil }
-        return (name, String(source[bodyRange]))
-    }
-
-    private static func parseAlignedRows(from source: String) -> [NativeAlignedMathRow] {
-        splitRows(in: source).compactMap { row in
-            let columns = row
-                .components(separatedBy: "&")
-                .map { prettified($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                .filter { !$0.isEmpty }
-
-            guard let first = columns.first else { return nil }
-            let trailing = columns.dropFirst().joined(separator: " ")
-            return NativeAlignedMathRow(
-                leading: first,
-                trailing: trailing.isEmpty ? nil : trailing
-            )
-        }
-    }
-
-    private static func parseCaseRows(from source: String) -> [NativeCaseMathRow] {
-        splitRows(in: source).compactMap { row in
-            let columns = row
-                .components(separatedBy: "&")
-                .map { prettified($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                .filter { !$0.isEmpty }
-
-            guard let first = columns.first else { return nil }
-            let explanation = columns.dropFirst().joined(separator: " ")
-            return NativeCaseMathRow(
-                condition: first,
-                explanation: explanation.isEmpty ? nil : explanation
-            )
-        }
-    }
-
-    private static func parseMatrixRows(from source: String) -> [[String]] {
-        splitRows(in: source)
-            .map { row in
-                row
-                    .components(separatedBy: "&")
-                    .map { prettified($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                    .filter { !$0.isEmpty }
-            }
-            .filter { !$0.isEmpty }
-    }
-
-    private static func splitRows(in source: String) -> [String] {
-        source
-            .components(separatedBy: "\\\\")
-            .map { stripAlignmentMarkers(from: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
-
-    private static func stripAlignmentMarkers(from source: String) -> String {
-        source.replacingOccurrences(of: "&", with: " ")
-    }
-
-    private static func delimiters(for environment: String) -> (String, String) {
-        switch environment {
-        case "pmatrix":
-            return ("(", ")")
-        case "bmatrix":
-            return ("[", "]")
-        case "Bmatrix":
-            return ("{", "}")
-        case "vmatrix":
-            return ("|", "|")
-        case "Vmatrix":
-            return ("‖", "‖")
-        default:
-            return ("", "")
-        }
     }
 }
