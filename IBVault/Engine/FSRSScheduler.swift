@@ -16,8 +16,8 @@ nonisolated struct FSRSReviewPreview: Sendable, Equatable {
 
 @MainActor
 enum FSRSScheduler {
-    static let schedulerVersion = 6
-    static let desiredRetention = 0.90
+    nonisolated static let schedulerVersion = 6
+    nonisolated static let desiredRetention = 0.90
 
     nonisolated static func xp(for quality: RecallQuality) -> Int {
         switch quality {
@@ -36,8 +36,13 @@ enum FSRSScheduler {
     }
 
     static func applyReview(to card: StudyCard, quality: RecallQuality, now: Date = Date()) throws {
+        try applyReviewSync(to: card, quality: quality, now: now)
+    }
+
+    /// Nonisolated entry for background contexts (e.g. local bridge) that must not hop to MainActor synchronously.
+    nonisolated static func applyReviewSync(to card: StudyCard, quality: RecallQuality, now: Date = Date()) throws {
         let next = try nextCard(for: card, quality: quality, now: now)
-        apply(next, to: card)
+        applySync(next, to: card)
         card.totalReviewCount += 1
         if quality == .good || quality == .easy {
             card.successfulReviewCount += 1
@@ -46,6 +51,11 @@ enum FSRSScheduler {
             card.consecutiveCorrect = 0
         }
         ProficiencyTracker.updateProficiency(for: card)
+    }
+
+    nonisolated static func configureSync(_ session: ReviewSession, quality: RecallQuality) {
+        session.fsrsRatingRaw = rating(for: quality).rawValue
+        session.schedulerVersion = schedulerVersion
     }
 
     static func configure(_ session: ReviewSession, quality: RecallQuality) {
@@ -70,7 +80,7 @@ enum FSRSScheduler {
         }
     }
 
-    private static var scheduler: FSRS {
+    nonisolated private static var scheduler: FSRS {
         FSRS(parameters: FSRSParameters(
             requestRetention: desiredRetention,
             w: FSRSDefaults.defaultWv6,
@@ -79,11 +89,11 @@ enum FSRSScheduler {
         ))
     }
 
-    private static func nextCard(for card: StudyCard, quality: RecallQuality, now: Date) throws -> Card {
+    nonisolated private static func nextCard(for card: StudyCard, quality: RecallQuality, now: Date) throws -> Card {
         try scheduler.next(card: fsrsCard(for: card), now: now, grade: rating(for: quality)).card
     }
 
-    private static func fsrsCard(for card: StudyCard) -> Card {
+    nonisolated private static func fsrsCard(for card: StudyCard) -> Card {
         guard let stateRaw = card.fsrsStateRaw, let state = CardState(rawValue: stateRaw) else {
             return legacyConversion(for: card)
         }
@@ -100,7 +110,7 @@ enum FSRSScheduler {
         )
     }
 
-    private static func legacyConversion(for card: StudyCard) -> Card {
+    nonisolated private static func legacyConversion(for card: StudyCard) -> Card {
         guard card.repetitions > 0 || card.totalReviewCount > 0 else {
             return Card(due: card.nextReviewDate)
         }
@@ -120,6 +130,10 @@ enum FSRSScheduler {
     }
 
     private static func apply(_ fsrsCard: Card, to card: StudyCard) {
+        applySync(fsrsCard, to: card)
+    }
+
+    nonisolated private static func applySync(_ fsrsCard: Card, to card: StudyCard) {
         card.fsrsStability = fsrsCard.stability
         card.fsrsDifficulty = fsrsCard.difficulty
         card.fsrsElapsedDays = fsrsCard.elapsedDays
@@ -138,7 +152,7 @@ enum FSRSScheduler {
         card.easeFactor = max(1.3, 3.2 - fsrsCard.difficulty / 5)
     }
 
-    private static func rating(for quality: RecallQuality) -> Rating {
+    nonisolated private static func rating(for quality: RecallQuality) -> Rating {
         switch quality {
         case .again: return .again
         case .hard: return .hard

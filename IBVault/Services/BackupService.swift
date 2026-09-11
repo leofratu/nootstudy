@@ -536,6 +536,8 @@ nonisolated struct CardBackup: Codable {
     let sourceStudyPlanID: UUID?; let sourceStudySessionID: UUID?
     let fsrsStability: Double?; let fsrsDifficulty: Double?; let fsrsElapsedDays: Double?; let fsrsScheduledDays: Double?
     let fsrsRepetitions: Int?; let fsrsLapses: Int?; let fsrsStateRaw: Int?; let fsrsLastReviewDate: Date?; let fsrsSchedulerVersion: Int?
+    let cardStyleRaw: String?
+    let choicesJSON: String?
 
     init(from c: StudyCard) {
         id = c.id; topicName = c.topicName; subtopic = c.subtopic; front = c.front; back = c.back
@@ -552,6 +554,8 @@ nonisolated struct CardBackup: Codable {
         fsrsStability = c.fsrsStability; fsrsDifficulty = c.fsrsDifficulty; fsrsElapsedDays = c.fsrsElapsedDays
         fsrsScheduledDays = c.fsrsScheduledDays; fsrsRepetitions = c.fsrsRepetitions; fsrsLapses = c.fsrsLapses
         fsrsStateRaw = c.fsrsStateRaw; fsrsLastReviewDate = c.fsrsLastReviewDate; fsrsSchedulerVersion = c.fsrsSchedulerVersion
+        cardStyleRaw = c.cardStyleRaw
+        choicesJSON = c.choicesJSON
     }
 
     func toModel() -> StudyCard {
@@ -577,6 +581,8 @@ nonisolated struct CardBackup: Codable {
         c.fsrsStability = fsrsStability; c.fsrsDifficulty = fsrsDifficulty; c.fsrsElapsedDays = fsrsElapsedDays
         c.fsrsScheduledDays = fsrsScheduledDays; c.fsrsRepetitions = fsrsRepetitions; c.fsrsLapses = fsrsLapses
         c.fsrsStateRaw = fsrsStateRaw; c.fsrsLastReviewDate = fsrsLastReviewDate; c.fsrsSchedulerVersion = fsrsSchedulerVersion
+        c.cardStyleRaw = cardStyleRaw
+        c.choicesJSON = choicesJSON
         return c
     }
 }

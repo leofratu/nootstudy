@@ -46,6 +46,7 @@ final class ReviewQueueManager {
     private(set) var lastRefreshError: String?
 
     private var isRefreshing = false
+    private var lastFingerprint: String?
 
     private struct ScopeIndex: Sendable {
         let scopesBySubject: [String: [StudyScope]]
@@ -94,6 +95,15 @@ final class ReviewQueueManager {
             let filtered = fetched
             let reviewedIDs = reviewedCardIDsToday(in: context)
             let available = filtered.filter { !reviewedIDs.contains($0.id) }
+            // Fingerprint memoization: avoid recomputing per-subject counts when nothing changed.
+            let fingerprint = makeFingerprint(available: available, reviewedIDs: reviewedIDs, eligibleCount: (try? context.fetchCount(FetchDescriptor<StudyCard>())) ?? 0)
+            if let last = lastFingerprint, last == fingerprint {
+                lastRefreshError = nil
+                reviewedTodayCount = reviewedIDs.count
+                remainingDailyAllowance = available.count
+                return
+            }
+            lastFingerprint = fingerprint
             lastRefreshError = nil
             reviewedTodayCount = reviewedIDs.count
             remainingDailyAllowance = available.count
@@ -189,5 +199,16 @@ final class ReviewQueueManager {
     private func filterCardsToScopes(_ cards: [StudyCard], matching scopeIndex: ScopeIndex) -> [StudyCard] {
         guard !scopeIndex.isEmpty else { return [] }
         return cards.filter { scopeIndex.matches($0) }
+    }
+
+    private func makeFingerprint(available: [StudyCard], reviewedIDs: Set<UUID>, eligibleCount: Int) -> String {
+        var hasher = Hasher()
+        for card in available.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            hasher.combine(card.id)
+            hasher.combine(card.nextReviewDate.timeIntervalSince1970)
+        }
+        hasher.combine(reviewedIDs.count)
+        hasher.combine(eligibleCount)
+        return String(hasher.finalize())
     }
 }

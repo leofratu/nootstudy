@@ -1,28 +1,9 @@
 import SwiftUI
 import AppKit
 
-#if DEBUG
-// Disable calendar sync during XCTest runs to avoid Keychain hangs that block the test host.
-nonisolated enum _TestCalendarSyncDisabler: Sendable {
-    static let setup: Void = {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            || ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil
-            || NSClassFromString("XCTestCase") != nil {
-            UserDefaults.standard.set(false, forKey: "calendarSyncEnabled")
-            UserDefaults.standard.set("", forKey: "calendarSyncCalendarIdentifier")
-            UserDefaults.standard.removeObject(forKey: "calendarSyncEnabled")
-            UserDefaults.standard.removeObject(forKey: "calendarSyncCalendarIdentifier")
-        }
-    }()
-}
-#endif
-
 nonisolated enum IBLocalClock: Sendable {
     static var now: Date {
-        #if DEBUG
-        _ = _TestCalendarSyncDisabler.setup
-        #endif
-        return Date()
+        Date()
     }
     static var calendar: Calendar { Calendar.autoupdatingCurrent }
     static var timeZone: TimeZone { TimeZone.autoupdatingCurrent }
