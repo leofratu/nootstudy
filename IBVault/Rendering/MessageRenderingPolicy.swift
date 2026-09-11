@@ -45,12 +45,19 @@ nonisolated enum MessageRenderingPolicy: Sendable {
 
     private static func tableCells(in line: String) -> [String]? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("|"), trimmed.hasSuffix("|") else { return nil }
-        return trimmed
-            .dropFirst()
-            .dropLast()
+        // Support GFM tables with or without outer pipes: require at least one pipe and at least 2 cells
+        guard trimmed.contains("|") else { return nil }
+        // Heuristic: table rows contain pipe and are not just prose with single pipe.
+        // We treat any line with '|' as potential table row, but separator rows validated via isSeparatorRow.
+        var inner = trimmed
+        if inner.hasPrefix("|") { inner.removeFirst() }
+        if inner.hasSuffix("|") { inner.removeLast() }
+        let cells = inner
             .split(separator: "|", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        // Require at least 2 columns to be considered a table
+        guard cells.count >= 2 else { return nil }
+        return cells
     }
 
     private static func isSeparatorRow(_ cells: [String]) -> Bool {

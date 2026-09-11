@@ -217,11 +217,14 @@ struct StudyPlannerView: View {
                     Text(plan.subjectName)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .help(plan.subjectName)
                     HStack(spacing: 6) {
                         Text(plan.selectionSummary.isEmpty ? plan.scheduleLabel : plan.selectionSummary)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .help(plan.selectionSummary.isEmpty ? plan.scheduleLabel : plan.selectionSummary)
                         if plan.isFollowUpReview {
                             Text("REVIEW")
                                 .font(.system(size: 9, weight: .bold, design: .rounded))

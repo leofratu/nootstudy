@@ -157,8 +157,9 @@ struct SubjectWorkspaceRow: View {
                 Text(subject.name)
                     .font(.callout.weight(.bold))
                     .foregroundStyle(IBColors.ink)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.tail)
+                    .help(subject.name)
                     .layoutPriority(1)
                 HStack(spacing: 7) {
                     StudioPill(title: subject.level, tint: tint)

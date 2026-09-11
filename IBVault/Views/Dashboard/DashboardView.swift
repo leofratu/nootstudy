@@ -384,7 +384,7 @@ struct DashboardView: View {
                 let masteryBySubject = Dictionary(
                     uniqueKeysWithValues: evidence.map { ($0.subject.id, $0.evidence.blendedMastery ?? 0) }
                 )
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ForEach(sortedSubjects, id: \.id) { subject in
                         NavigationLink {
                             SubjectDetailView(subject: subject)

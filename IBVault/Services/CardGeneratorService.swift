@@ -59,7 +59,8 @@ struct CardGeneratorService {
         count: Int = 10,
         localStartingIndex: Int = 0,
         context: ModelContext,
-        preferredDifficulty: CardDifficulty? = nil
+        preferredDifficulty: CardDifficulty? = nil,
+        options: CardGenerationOptions? = nil
     ) async throws -> [StudyCard] {
         let performanceContext = academicPerformanceContext(
             subject: subject,
@@ -73,7 +74,18 @@ struct CardGeneratorService {
             subtopic: subtopic,
             evidence: performanceContext.evidence.assessmentEvidence
         )
-        let profile = preferredDifficulty.map { AdaptiveProfile(difficulty: $0, skillMix: adaptive.skillMix, reason: "Learner-selected IB difficulty: \($0.rawValue).") } ?? adaptive
+        let selectedDifficulty = options?.difficulty ?? preferredDifficulty
+        let selectedSkills = options.map { $0.resolvedSkills(fallback: adaptive.skillMix) } ?? adaptive.skillMix
+        let profile: AdaptiveProfile
+        if selectedDifficulty != nil || options?.cognitiveSkills.isEmpty == false {
+            profile = AdaptiveProfile(
+                difficulty: selectedDifficulty ?? adaptive.difficulty,
+                skillMix: selectedSkills,
+                reason: "Learner-selected card studio settings: \(selectedDifficulty?.rawValue ?? adaptive.difficulty.rawValue) difficulty."
+            )
+        } else {
+            profile = adaptive
+        }
         let metadata = SyllabusSeeder.metadata(for: subject.name)
         let remoteAvailable: Bool = switch AIConfiguration.provider {
         case .gemini: KeychainService.hasAPIKey

@@ -34,12 +34,14 @@ enum NavigationTab: String, CaseIterable, Hashable {
 
 struct ContentView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var queuedCards: [StudyCard]
     @Query private var queuedStudySessions: [StudySession]
     @Query private var profiles: [UserProfile]
     @State private var selectedTab: NavigationTab? = .dashboard
     @State private var reviewQueueManager = ReviewQueueManager()
     @State private var progressionEvents = ProgressionEventCenter()
+    @Namespace private var sidebarSelectionNamespace
 
     private var dueCount: Int {
         reviewQueueManager.totalDueBacklogCount
@@ -115,10 +117,14 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .frame(height: 34)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(selectedTab == tab ? IBColors.surfaceHover : Color.clear)
-        )
+        .background {
+            if selectedTab == tab {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(IBColors.surfaceHover)
+                    .matchedGeometryEffect(id: "sidebarSelection", in: sidebarSelectionNamespace)
+            }
+        }
+        .animation(reduceMotion ? nil : IBAnimation.snappy, value: selectedTab)
         .contentShape(Rectangle())
     }
 

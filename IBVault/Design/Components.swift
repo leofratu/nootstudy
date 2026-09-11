@@ -273,6 +273,7 @@ struct MasteryBar: View {
     let progress: Double
     var height: CGFloat = 6
     var color: Color = IBColors.electricBlue
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geo in
@@ -291,7 +292,7 @@ struct MasteryBar: View {
             }
         }
         .frame(height: height)
-        .animation(.easeInOut(duration: 0.3), value: progress)
+        .animation(reduceMotion ? nil : IBAnimation.smooth, value: progress)
     }
 }
 

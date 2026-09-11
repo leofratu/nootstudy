@@ -426,7 +426,7 @@ struct SubjectDetailView: View {
     private var topicsCard: some View {
         let index = cardIndex
         let sessionsByTopic = workSessionsByTopic
-        return VStack(alignment: .leading, spacing: 12) {
+        return LazyVStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "list.bullet")
                     .foregroundStyle(.tint)
