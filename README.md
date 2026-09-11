@@ -16,6 +16,9 @@ The app is intentionally Mac-first: it builds as a sandboxed AppKit-backed Swift
 - Local-first security posture: study data stays in SwiftData, API keys are stored in Keychain, and provider requests use `URLSession`. Backups are explicit user exports, not a cloud sync service.
 - Upgrade-safe persistence: the app prefers the existing `com.nootstudy.ibvault.app` store, preserves legacy flashcards, and can merge historical grades, reports, mastery evidence, and study history without replacing current cards.
 - Reliable desktop workflow: study planner sheets share one presentation route, so opening a session, guide, or review does not strand the sidebar or other navigation controls.
+- Card studio: flashcards can be generated as basic, cloze, or multiple-choice cards with selectable tone, cognitive skills, and difficulty, including a mode that tells the model to lean on the app's internal curriculum and duplicate-detection tools.
+- Local model-context integrations: a loopback integration bridge (Settings → Integrations) exposes the learner's data over authenticated HTTP, `nootstudy-mcp` connects Codex, ChatGPT, and other MCP clients for two-way sync, and NotebookLM exchanges study packs through export/import because NotebookLM has no public API.
+- Recorded-elsewhere recovery: work pushed by external tools or entered by hand lands in an external-activity queue that can be merged into study history idempotently.
 
 ## Repository Layout
 
@@ -29,9 +32,19 @@ IBVault/
   Services/                     Gemini, ARIA, Keychain, backup, cards, notifications, seeding
   Views/                        SwiftUI app surfaces
 IBVaultTests/                   Swift Testing unit and regression tests
+integrations/nootstudy-mcp/     MCP connector for Codex, ChatGPT, and other MCP clients
 project.yml                     XcodeGen source of truth for the project
 IBVault.xcodeproj/              checked-in generated Xcode project
 ```
+
+## Integrations
+
+Noot Study can exchange data with external AI tools while keeping the SwiftData store as the single source of truth.
+
+- **Integration bridge** — Settings → Integrations starts a loopback-only HTTP server (`127.0.0.1`) that speaks a versioned JSON API (cards, reviews, sessions, grades, plans, memories, external activity, snapshots, NotebookLM packs). It is off by default and requires a bearer token generated and stored by the app. Recent requests are visible in the same settings screen.
+- **MCP connector** — [`integrations/nootstudy-mcp`](integrations/nootstudy-mcp/README.md) is an MCP server with 20 read/write tools. Use stdio for Codex CLI and Claude, or the streamable HTTP transport with its own bearer token for ChatGPT connectors behind a tunnel. Both directions are covered: read snapshots and write back cards, reviews, sessions, plans, memories, and merged external activity.
+- **NotebookLM** — no public API exists, so the app exports a NotebookLM-ready study pack (structured markdown plus card corpus) and imports generated summaries as ARIA memories and draft flashcards.
+- **Unrecorded work** — work done outside the app can be pushed through the bridge or added by hand, then merged into study history without double counting.
 
 ## Requirements
 
