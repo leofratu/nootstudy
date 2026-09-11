@@ -89,6 +89,40 @@ struct ReviewQueueManagerTests {
     }
 
     @MainActor
+    @Test("eligibleCardsCount stays the full pool even when studied scopes exist")
+    func testEligibleCardsCountWithStudySessions() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let context = container.mainContext
+
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "#10B981")
+        context.insert(subject)
+
+        let card = StudyCard(topicName: "Cells", front: "F", back: "B", subject: subject)
+        card.nextReviewDate = Date().addingTimeInterval(-60)
+        context.insert(card)
+
+        // A meaningful scope makes `studiedScopes` non-empty. The eligible
+        // count must still reflect the whole card pool, not a scoped subset,
+        // and the refresh no longer materializes that table to find out.
+        let session = StudySession(
+            subjectName: "Biology",
+            topicsCovered: "Cells",
+            startDate: Date().addingTimeInterval(-3600),
+            cardsReviewed: 1,
+            correctCount: 1,
+            xpEarned: 5
+        )
+        context.insert(session)
+
+        let manager = ReviewQueueManager()
+        manager.refreshDueCardsSynchronously(context: context)
+
+        #expect(manager.eligibleCardCount == 1)
+        #expect(manager.dueCards.count == 1)
+    }
+
+    @MainActor
     @Test("A successful refresh clears the error flag and caches all due counts")
     func testSuccessfulRefreshCachesCounts() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)

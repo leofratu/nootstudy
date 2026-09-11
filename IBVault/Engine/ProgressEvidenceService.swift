@@ -1,6 +1,56 @@
 import Foundation
 
 nonisolated enum ProgressEvidenceService: Sendable {
+    /// Case-insensitive subject+level key used to bucket shared evidence once.
+    nonisolated struct SubjectLevelKey: Hashable {
+        let name: String
+        let level: String
+
+        init(name: String, level: String) {
+            self.name = name.lowercased()
+            self.level = level.lowercased()
+        }
+    }
+
+    /// Scores every subject in one pass. The shared assessment/mapping/report/
+    /// session arrays are grouped once up front, so the work is O(store) rather
+    /// than re-scanning the whole store for each subject (the previous
+    /// per-subject `score` calls).
+    static func scoreBySubject(
+        subjects: [Subject],
+        assessments: [AcademicAssessment],
+        mappings: [AcademicAssessmentMapping],
+        reports: [AcademicReportSnapshot],
+        workSessions: [StudySession]
+    ) -> [UUID: ProgressEvidence] {
+        let assessmentsBySubject = Dictionary(grouping: assessments) {
+            SubjectLevelKey(name: $0.subjectName, level: $0.courseLevel)
+        }
+        let mappingsBySubject = Dictionary(grouping: mappings) {
+            SubjectLevelKey(name: $0.subjectName, level: $0.courseLevel)
+        }
+        let reportsBySubject = Dictionary(grouping: reports) {
+            SubjectLevelKey(name: $0.subjectName, level: $0.courseLevel)
+        }
+        let sessionsByName = Dictionary(grouping: workSessions) { $0.subjectName.lowercased() }
+
+        var result: [UUID: ProgressEvidence] = [:]
+        result.reserveCapacity(subjects.count)
+        for subject in subjects {
+            let key = SubjectLevelKey(name: subject.name, level: subject.level)
+            result[subject.id] = score(
+                subjectName: subject.name,
+                courseLevel: subject.level,
+                cards: subject.cards,
+                assessments: assessmentsBySubject[key] ?? [],
+                mappings: mappingsBySubject[key] ?? [],
+                reports: reportsBySubject[key] ?? [],
+                workSessions: sessionsByName[subject.name.lowercased()] ?? []
+            )
+        }
+        return result
+    }
+
     static func score(
         subjectName: String,
         courseLevel: String,
@@ -28,7 +78,11 @@ nonisolated enum ProgressEvidenceService: Sendable {
         let recall = reviewedCards.isEmpty ? nil : ProficiencyTracker.masteryPercentage(for: reviewedCards)
         let dueCount = scopedCards.filter(\.isDue).count
 
-        let assessmentIndex = Dictionary(uniqueKeysWithValues: assessments.map { ($0.id, $0) })
+        // Duplicate ids must not trap; keep the first record of each id instead.
+        let assessmentIndex = Dictionary(
+            assessments.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let approvedMappings = mappings.filter {
             $0.status == .approved &&
             $0.subjectName.caseInsensitiveCompare(subjectName) == .orderedSame &&
