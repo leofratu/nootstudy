@@ -76,7 +76,52 @@ struct IBVaultApp: App {
         do {
             return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
-            fatalError("Could not open Noot Study data store: \(error)")
+            // A corrupt/unreadable store used to crash the app on launch.
+            // Preserve it (and its sidecars, together) in a quarantine folder,
+            // then start with a fresh store so the app still opens. The original
+            // files are never deleted and can be recovered manually.
+            guard let quarantined = quarantineStore(at: url) else {
+                fatalError("Could not open Noot Study data store: \(error)")
+            }
+            do {
+                let container = try ModelContainer(for: schema, configurations: [configuration])
+                storeRecoveryNotice = "Noot Study could not open its saved data, so it started with a fresh store. Your previous data was preserved in \(quarantined.lastPathComponent)."
+                return container
+            } catch {
+                fatalError("Could not open a fresh Noot Study data store: \(error)")
+            }
+        }
+    }
+
+    /// Set when a corrupt store is quarantined at launch; read once by RootView.
+    private(set) static var storeRecoveryNotice: String?
+
+    static func consumeStoreRecoveryNotice() -> String? {
+        defer { storeRecoveryNotice = nil }
+        return storeRecoveryNotice
+    }
+
+    /// Moves the store and its `-wal`/`-shm` sidecars together into a
+    /// timestamped folder next to the original.
+    private static func quarantineStore(at url: URL) -> URL? {
+        let fileManager = FileManager.default
+        let stamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let folder = url.deletingLastPathComponent()
+            .appendingPathComponent("NootStudy Store Recovery \(stamp)", isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+            for suffix in ["", "-wal", "-shm"] {
+                let source = URL(fileURLWithPath: url.path + suffix)
+                guard fileManager.fileExists(atPath: source.path) else { continue }
+                try fileManager.moveItem(
+                    at: source,
+                    to: folder.appendingPathComponent(source.lastPathComponent)
+                )
+            }
+            return folder
+        } catch {
+            return nil
         }
     }
 }
@@ -178,10 +223,11 @@ struct IBVaultCommands: Commands {
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    // Only profiles drive the root's routing, so this is the sole live query.
+    // Cards, reviews, and sessions are fetched on demand by the one-time launch
+    // migrations below; observing them here re-rendered the whole app on every
+    // card rating while holding entire tables in memory.
     @Query private var profiles: [UserProfile]
-    @Query private var cards: [StudyCard]
-    @Query private var reviewSessions: [ReviewSession]
-    @Query private var studySessions: [StudySession]
     @State private var hasAttemptedAutomaticBackup = false
     @State private var hasReconciledAchievements = false
     @State private var hasRecomputedProgression = false
@@ -224,6 +270,9 @@ struct RootView: View {
         // has a profile, so anything hung off the "no profile yet" path never
         // runs for them.
         .task {
+            if let notice = IBVaultApp.consumeStoreRecoveryNotice() {
+                launchError = notice
+            }
             // Let the window draw its first frame before touching the store.
             await Task.yield()
             preparePersistentStateIfNeeded()
@@ -251,6 +300,8 @@ struct RootView: View {
     private func migrateFSRSIfNeeded() {
         guard !hasMigratedFSRS else { return }
         hasMigratedFSRS = true
+        let cards = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
+        let reviewSessions = (try? context.fetch(FetchDescriptor<ReviewSession>())) ?? []
         FSRSScheduler.migrate(cards: cards, reviewSessions: reviewSessions)
         do {
             try context.save()
@@ -263,6 +314,10 @@ struct RootView: View {
         guard !hasNormalizedLegacySessions else { return }
         hasNormalizedLegacySessions = true
         var changed = false
+        // Fetch fresh here rather than holding live queries: the FSRS migration
+        // above may already have saved, and this is a one-shot launch pass.
+        let studySessions = (try? context.fetch(FetchDescriptor<StudySession>())) ?? []
+        let reviewSessions = (try? context.fetch(FetchDescriptor<ReviewSession>())) ?? []
 
         for session in studySessions where session.evidenceVersion == nil {
             let matchingReviews = reviewSessions.filter { review in

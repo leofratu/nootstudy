@@ -35,8 +35,6 @@ enum NavigationTab: String, CaseIterable, Hashable {
 struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Query private var queuedCards: [StudyCard]
-    @Query private var queuedStudySessions: [StudySession]
     @Query private var profiles: [UserProfile]
     @State private var selectedTab: NavigationTab? = .dashboard
     @State private var reviewQueueManager = ReviewQueueManager()
@@ -69,10 +67,10 @@ struct ContentView: View {
         .onChange(of: selectedTab) { _, _ in
             reviewQueueManager.refreshDueCards(context: context)
         }
-        .onChange(of: queuedCards) { _, _ in
-            reviewQueueManager.refreshDueCards(context: context)
-        }
-        .onChange(of: queuedStudySessions) { _, _ in
+        // Refresh whenever SwiftData persists a change; observing every
+        // card/session through @Query held whole tables in memory and
+        // re-rendered the shell on each rating.
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
             reviewQueueManager.refreshDueCards(context: context)
         }
         #if os(macOS)
