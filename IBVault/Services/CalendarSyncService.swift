@@ -197,10 +197,13 @@ final class CalendarSyncService {
         guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
             throw CalendarSyncError.callbackFailed
         }
-        let parameters: [String: String] = Dictionary(uniqueKeysWithValues: components.queryItems?.compactMap {
-            guard let value = $0.value else { return nil }
-            return ($0.name, value)
-        } ?? [])
+        let parameters: [String: String] = Dictionary(
+            components.queryItems?.compactMap {
+                guard let value = $0.value else { return nil }
+                return ($0.name, value)
+            } ?? [],
+            uniquingKeysWith: { first, _ in first }
+        )
 
         if let error = parameters["error"] {
             if error == "access_denied" { throw CalendarSyncError.signInCancelled }

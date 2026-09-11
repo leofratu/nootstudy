@@ -17,25 +17,21 @@ struct SubjectsGridView: View {
 
     /// Whole-subject mastery is derived from review performance and imported
     /// school evidence. Legacy curriculum flags are intentionally excluded.
+    /// Scored in one pre-grouped pass rather than re-scanning the whole store
+    /// for each subject.
     private var masteryBySubject: [UUID: Double] {
-        var result: [UUID: Double] = [:]
-        for subject in subjects {
-            result[subject.id] = ProgressEvidenceService.score(
-                subjectName: subject.name,
-                courseLevel: subject.level,
-                cards: subject.cards,
-                assessments: academicAssessments,
-                mappings: academicMappings,
-                reports: academicReports,
-                workSessions: studySessions
-            ).blendedMastery ?? 0
-        }
-        return result
+        ProgressEvidenceService.scoreBySubject(
+            subjects: subjects,
+            assessments: academicAssessments,
+            mappings: academicMappings,
+            reports: academicReports,
+            workSessions: studySessions
+        ).mapValues { $0.blendedMastery ?? 0 }
     }
 
-    private var averageMastery: Int {
+    private func averageMastery(_ mastery: [UUID: Double]) -> Int {
         guard !subjects.isEmpty else { return 0 }
-        let total = subjects.reduce(0.0) { $0 + (masteryBySubject[$1.id] ?? 0) }
+        let total = subjects.reduce(0.0) { $0 + (mastery[$1.id] ?? 0) }
         return Int((total / Double(subjects.count) * 100).rounded())
     }
 
@@ -60,7 +56,7 @@ struct SubjectsGridView: View {
 
                     HStack(spacing: 12) {
                         StudioMetricTile(value: "\(subjects.count)", label: "Enrolled", symbol: "books.vertical.fill", tint: IBColors.englishColor, detail: "Your IB syllabus")
-                        StudioMetricTile(value: "\(averageMastery)%", label: "Average mastery", symbol: "chart.bar.fill", tint: IBColors.inkTertiary, detail: "Across active subjects")
+                        StudioMetricTile(value: "\(averageMastery(mastery))%", label: "Average mastery", symbol: "chart.bar.fill", tint: IBColors.inkTertiary, detail: "Across active subjects")
                         StudioMetricTile(value: "\(subjects.reduce(0) { $0 + (dueCounts[$1.id] ?? 0) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.inkTertiary, detail: "Within studied scopes")
                     }
 

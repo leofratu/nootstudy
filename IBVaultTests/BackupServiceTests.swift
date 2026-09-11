@@ -6,6 +6,23 @@ import SwiftData
 @Suite("BackupService Restore Safety", .serialized)
 struct BackupServiceTests {
 
+    @Test("Backup meta round-trips through the ISO-8601 decoder used for throttling and restore discovery")
+    func backupMetaDecodesISO8601() throws {
+        let meta = BackupMeta(date: Date(timeIntervalSince1970: 1_700_000_000), fileCount: 18, version: "1.2.0")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("backup-meta-\(UUID().uuidString).json")
+        try encoder.encode(meta).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let decoded = BackupService.decodeMeta(at: url)
+
+        #expect(decoded?.fileCount == 18)
+        #expect(decoded?.version == "1.2.0")
+        #expect(abs((decoded?.date.timeIntervalSince1970 ?? 0) - 1_700_000_000) < 1)
+    }
+
     @MainActor
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(for:

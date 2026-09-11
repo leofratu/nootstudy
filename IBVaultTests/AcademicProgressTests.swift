@@ -234,4 +234,94 @@ struct AcademicProgressTests {
         #expect(sibling.blendedMastery == nil)
         #expect(sibling.workMastery == nil)
     }
+
+    @Test("Batch subject scoring matches per-subject scoring, including same-name subjects at different levels")
+    func batchScoringMatchesIndividualScoring() {
+        let biologyHL = Subject(name: "Biology", level: "HL", accentColorHex: "#10B981")
+        let biologySL = Subject(name: "Biology", level: "SL", accentColorHex: "#0EA5E9")
+        let economics = Subject(name: "Economics", level: "HL", accentColorHex: "#F0AD2E")
+
+        let bioAssessment = AcademicAssessment(
+            sourceKey: "bio-hl",
+            sourceFileName: "assessments.xlsx",
+            subjectName: "Biology",
+            courseLevel: "HL",
+            sourceClassLabel: "IB Biology HL",
+            assessmentDate: Date(),
+            title: "Cells test",
+            assessmentType: "Test",
+            category: "Summative",
+            status: "Graded",
+            percentage: 72
+        )
+        let economicsAssessment = AcademicAssessment(
+            sourceKey: "econ-hl",
+            sourceFileName: "assessments.xlsx",
+            subjectName: "Economics",
+            courseLevel: "HL",
+            sourceClassLabel: "IB Economics HL",
+            assessmentDate: Date(),
+            title: "Micro test",
+            assessmentType: "Test",
+            category: "Summative",
+            status: "Graded",
+            percentage: 65
+        )
+        let bioReport = AcademicReportSnapshot(
+            sourceFileName: "biology-report.pdf",
+            reportDate: Date(),
+            subjectName: "Biology",
+            courseLevel: "HL",
+            gradeRaw: "6"
+        )
+        let economicsReport = AcademicReportSnapshot(
+            sourceFileName: "economics-report.pdf",
+            reportDate: Date(),
+            subjectName: "Economics",
+            courseLevel: "HL",
+            gradeRaw: "5"
+        )
+        let bioSession = StudySession(
+            subjectName: "Biology",
+            topicsCovered: "Cells",
+            startDate: Date().addingTimeInterval(-3600),
+            cardsReviewed: 8,
+            correctCount: 7,
+            xpEarned: 12
+        )
+        let economicsSession = StudySession(
+            subjectName: "Economics",
+            topicsCovered: "Demand",
+            startDate: Date().addingTimeInterval(-1800),
+            cardsReviewed: 5,
+            correctCount: 3,
+            xpEarned: 8
+        )
+
+        let subjects = [biologyHL, biologySL, economics]
+        let assessments = [bioAssessment, economicsAssessment]
+        let reports = [bioReport, economicsReport]
+        let sessions = [bioSession, economicsSession]
+
+        let batch = ProgressEvidenceService.scoreBySubject(
+            subjects: subjects,
+            assessments: assessments,
+            mappings: [],
+            reports: reports,
+            workSessions: sessions
+        )
+
+        for subject in subjects {
+            let expected = ProgressEvidenceService.score(
+                subjectName: subject.name,
+                courseLevel: subject.level,
+                cards: subject.cards,
+                assessments: assessments,
+                mappings: [],
+                reports: reports,
+                workSessions: sessions
+            )
+            #expect(batch[subject.id] == expected)
+        }
+    }
 }

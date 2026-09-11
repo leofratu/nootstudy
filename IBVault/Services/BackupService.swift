@@ -50,8 +50,7 @@ nonisolated struct BackupService {
             return cachedLatestBackupDate
         }
         let metaURL = backupDirectory.appendingPathComponent("backup_meta.json")
-        guard let data = try? Data(contentsOf: metaURL),
-              let meta = try? JSONDecoder().decode(BackupMeta.self, from: data) else {
+        guard let meta = decodeMeta(at: metaURL) else {
             cachedLatestBackupDate = nil
             cachedLatestBackupDateIsValid = true
             return nil
@@ -59,6 +58,17 @@ nonisolated struct BackupService {
         cachedLatestBackupDate = meta.date
         cachedLatestBackupDateIsValid = true
         return meta.date
+    }
+
+    /// `backup_meta.json` is written with ISO-8601 dates, so it must be decoded
+    /// the same way. Decoding it with a default decoder always failed, which
+    /// silently defeated the daily throttle (a full backup was written on every
+    /// launch) and hid completed backups from restore discovery.
+    nonisolated static func decodeMeta(at url: URL) -> BackupMeta? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(BackupMeta.self, from: data)
     }
 
     static func resetCacheForTesting() {
@@ -217,9 +227,7 @@ nonisolated struct BackupService {
         let backupDirs = contents
             .filter { $0.hasDirectoryPath && $0.lastPathComponent.hasPrefix("backup_") }
             .filter {
-                let metaURL = $0.appendingPathComponent("backup_meta.json")
-                guard let data = try? Data(contentsOf: metaURL) else { return false }
-                return (try? JSONDecoder().decode(BackupMeta.self, from: data)) != nil
+                decodeMeta(at: $0.appendingPathComponent("backup_meta.json")) != nil
             }
             .sorted { $0.lastPathComponent > $1.lastPathComponent }
 
@@ -472,12 +480,10 @@ nonisolated struct BackupService {
         guard let contents = try? FileManager.default.contentsOfDirectory(at: backupDirectory, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles) else { return [] }
         return contents.filter { $0.hasDirectoryPath && $0.lastPathComponent.hasPrefix("backup_") }
             .compactMap { url in
-                let metaURL = url.appendingPathComponent("backup_meta.json")
-                if let data = try? Data(contentsOf: metaURL),
-                   let meta = try? JSONDecoder().decode(BackupMeta.self, from: data) {
-                    return (name: url.lastPathComponent, date: meta.date, url: url)
+                guard let meta = decodeMeta(at: url.appendingPathComponent("backup_meta.json")) else {
+                    return nil
                 }
-                return nil
+                return (name: url.lastPathComponent, date: meta.date, url: url)
             }
             .sorted { $0.date > $1.date }
     }

@@ -321,10 +321,15 @@ nonisolated struct AcademicRecordImporter {
     }
 
     private static func columnIndex(_ row: [Int: String]) -> [String: Int] {
-        Dictionary(uniqueKeysWithValues: row.compactMap { index, value in
-            let key = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return key.isEmpty ? nil : (key, index)
-        })
+        // Spreadsheets routinely repeat a header; the first occurrence wins
+        // rather than trapping on a duplicate key.
+        Dictionary(
+            row.compactMap { index, value in
+                let key = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return key.isEmpty ? nil : (key, index)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     private static func value(_ row: [Int: String], _ column: Int?) -> String {

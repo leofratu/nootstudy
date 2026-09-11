@@ -75,7 +75,8 @@ struct ReviewSessionView: View {
     private var fsrsPreviews: [RecallQuality: FSRSReviewPreview] {
         guard let currentCard else { return [:] }
         return Dictionary(
-            uniqueKeysWithValues: FSRSScheduler.previews(for: currentCard).map { ($0.quality, $0) }
+            FSRSScheduler.previews(for: currentCard).map { ($0.quality, $0) },
+            uniquingKeysWith: { first, _ in first }
         )
     }
 

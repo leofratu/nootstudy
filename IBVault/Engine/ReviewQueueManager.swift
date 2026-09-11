@@ -89,17 +89,18 @@ final class ReviewQueueManager {
         descriptor.sortBy = [SortDescriptor(\.nextReviewDate, order: .forward)]
 
         do {
-            let studiedScopes = fetchStudiedScopes(in: context)
             let fetched = try context.fetch(descriptor)
             // The global review queue is intentionally not limited to the
             // topics of past study sessions. A card can become due after its
             // originating session, and all due cards must remain reviewable.
             // Explicit subject/plan sessions apply their own scope filters.
-            let filtered = fetched
             let reviewedIDs = reviewedCardIDsToday(in: context)
-            let available = filtered.filter { !reviewedIDs.contains($0.id) }
+            let available = fetched.filter { !reviewedIDs.contains($0.id) }
+            // Counted once (a count query, not a full materialization) and reused
+            // for both the memoization fingerprint and the cached eligible pool.
+            let eligibleCount = (try? context.fetchCount(FetchDescriptor<StudyCard>())) ?? 0
             // Fingerprint memoization: avoid recomputing per-subject counts when nothing changed.
-            let fingerprint = makeFingerprint(available: available, reviewedIDs: reviewedIDs, eligibleCount: (try? context.fetchCount(FetchDescriptor<StudyCard>())) ?? 0)
+            let fingerprint = makeFingerprint(available: available, reviewedIDs: reviewedIDs, eligibleCount: eligibleCount)
             if let last = lastFingerprint, last == fingerprint {
                 lastRefreshError = nil
                 reviewedTodayCount = reviewedIDs.count
@@ -110,19 +111,14 @@ final class ReviewQueueManager {
             lastRefreshError = nil
             reviewedTodayCount = reviewedIDs.count
             remainingDailyAllowance = available.count
-            backlogDueCount = filtered.filter { !reviewedIDs.contains($0.id) }.count
+            backlogDueCount = available.count
             deferredDueCount = 0
             totalDueBacklogCount = backlogDueCount
             applyDueCardsSnapshot(available)
 
             // Cache the eligible pool count here (once per refresh) instead of
             // letting views run a full unfiltered fetch inside their body.
-            if studiedScopes.isEmpty {
-                eligibleCardCount = (try? context.fetchCount(FetchDescriptor<StudyCard>())) ?? 0
-            } else {
-                let all = (try? context.fetch(FetchDescriptor<StudyCard>())) ?? []
-                eligibleCardCount = all.count
-            }
+            eligibleCardCount = eligibleCount
         } catch {
             // Do not clear the queue: the previous snapshot is a better answer
             // than a fabricated "0 due". Views may ignore the error, but the

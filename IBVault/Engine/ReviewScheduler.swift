@@ -189,9 +189,10 @@ final class ReviewScheduler {
         let scopesBySubject = Dictionary(grouping: scopes, by: \.subjectName)
         let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
         let scopedCardsBySubjectID = Dictionary(
-            uniqueKeysWithValues: subjects.map { subject in
+            subjects.map { subject in
                 (subject.id, scopedCards(for: subject, scopesBySubject: scopesBySubject))
-            }
+            },
+            uniquingKeysWith: { first, _ in first }
         )
         
         let now = Date()
