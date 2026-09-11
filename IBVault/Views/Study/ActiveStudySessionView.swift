@@ -302,7 +302,7 @@ struct ActiveStudySessionView: View {
         HStack(spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(subjectColor(plan.subjectName).opacity(0.1))
+                    .fill(IBColors.inkTertiary.opacity(0.1))
                     .frame(width: 42, height: 42)
                 Image(systemName: subjectIcon(plan.subjectName))
                     .font(.system(size: 18, weight: .medium))
@@ -366,7 +366,7 @@ struct ActiveStudySessionView: View {
                                 .font(.system(size: 9, weight: .bold, design: .rounded))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
-                                .background(Capsule().fill(IBColors.electricBlue))
+                                .background(Capsule().fill(IBColors.accent))
                                 .foregroundStyle(.white)
                         }
                         Spacer(minLength: 0)
@@ -375,11 +375,11 @@ struct ActiveStudySessionView: View {
                     .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(selectedTab == tab ? IBColors.electricBlue.opacity(0.11) : Color.clear)
+                            .fill(selectedTab == tab ? IBColors.accent.opacity(0.11) : Color.clear)
                     )
                     .foregroundStyle(
                         selectedTab == tab
-                            ? AnyShapeStyle(IBColors.electricBlue)
+                            ? AnyShapeStyle(IBColors.accent)
                             : AnyShapeStyle(.secondary)
                     )
                 }
@@ -415,7 +415,7 @@ struct ActiveStudySessionView: View {
             Spacer()
 
             ProgressView(value: Double(completedTaskCount), total: Double(max(plan.planTasks.count, 1)))
-                .tint(IBColors.electricBlue)
+                .tint(IBColors.accent)
                 .padding(.horizontal, 14)
             Text("\(completedTaskCount) of \(plan.planTasks.count) steps")
                 .font(.caption2.monospacedDigit())
@@ -479,7 +479,7 @@ struct ActiveStudySessionView: View {
         VStack(spacing: 0) {
             // Messages
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: 10) {
                     if chatMessages.isEmpty {
                         emptyChat
                     }
@@ -491,11 +491,11 @@ struct ActiveStudySessionView: View {
                             if msg.role == "model" {
                                 ZStack {
                                     Circle()
-                                        .fill(IBColors.electricBlue.opacity(0.08))
+                                        .fill(IBColors.accent.opacity(0.08))
                                         .frame(width: 26, height: 26)
                                     Image(systemName: "sparkles")
                                         .font(.system(size: 11))
-                                        .foregroundStyle(IBColors.electricBlue)
+                                        .foregroundStyle(IBColors.accent)
                                 }
                                 .padding(.top, 2)
                             }
@@ -505,7 +505,7 @@ struct ActiveStudySessionView: View {
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
                                         .fill(msg.role == "user"
-                                              ? IBColors.electricBlue.opacity(0.08)
+                                              ? IBColors.accent.opacity(0.08)
                                               : Color.secondary.opacity(0.04))
                                 )
 
@@ -517,7 +517,7 @@ struct ActiveStudySessionView: View {
                         HStack(spacing: 8) {
                             ZStack {
                                 Circle()
-                                    .fill(IBColors.electricBlue.opacity(0.08))
+                                    .fill(IBColors.accent.opacity(0.08))
                                     .frame(width: 26, height: 26)
                                 ProgressView()
                                     .controlSize(.mini)
@@ -549,7 +549,7 @@ struct ActiveStudySessionView: View {
                         .foregroundStyle(
                             chatInput.isEmpty
                                 ? AnyShapeStyle(.tertiary)
-                                : AnyShapeStyle(IBColors.electricBlue)
+                                : AnyShapeStyle(IBColors.accent)
                         )
                 }
                 .buttonStyle(.borderless)
@@ -672,7 +672,7 @@ struct ActiveStudySessionView: View {
                 }
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.electricBlue.opacity(0.045)))
+            .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.accent.opacity(0.045)))
         }
     }
 
@@ -709,7 +709,7 @@ struct ActiveStudySessionView: View {
             FormattedMessageContent(text: card.front)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.electricBlue.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.accent.opacity(0.04)))
             flashcardAnswer(card, index: index)
         }
         .padding(12)
@@ -769,7 +769,7 @@ struct ActiveStudySessionView: View {
         switch quality {
         case .again: return IBColors.danger
         case .hard: return IBColors.warning
-        case .good, .easy: return IBColors.electricBlue
+        case .good, .easy: return IBColors.accent
         }
     }
 
@@ -877,7 +877,7 @@ struct ActiveStudySessionView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("\(criterion.weight)%")
                         .font(.caption.weight(.bold).monospacedDigit())
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                         .frame(width: 42, alignment: .trailing)
                 }
                 .padding(.vertical, 4)
@@ -889,8 +889,8 @@ struct ActiveStudySessionView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(IBColors.electricBlue.opacity(0.045))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(IBColors.electricBlue.opacity(0.12)))
+                .fill(IBColors.accent.opacity(0.045))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(IBColors.accent.opacity(0.12)))
         )
     }
 
@@ -1016,7 +1016,7 @@ struct ActiveStudySessionView: View {
             // Session status
             HStack(spacing: 6) {
                 Circle()
-                    .fill(.green)
+                    .fill(IBColors.success)
                     .frame(width: 7, height: 7)
                 Text("Session active")
                     .font(.system(size: 12, weight: .medium))
@@ -1067,7 +1067,7 @@ struct ActiveStudySessionView: View {
                 .foregroundStyle(Color.white)
                 .background(
                     RoundedRectangle(cornerRadius: 7)
-                        .fill(isCompletingSession ? IBColors.secondaryText : IBColors.success)
+                        .fill(isCompletingSession ? IBColors.inkSecondary : IBColors.success)
                 )
             }
             .buttonStyle(.plain)
@@ -1084,7 +1084,7 @@ struct ActiveStudySessionView: View {
                         title: "Check your recall",
                         subtitle: "Rate what you can explain without notes. Each answer updates only its matching topic or subunit.",
                         symbol: "checkmark.seal",
-                        tint: IBColors.teal
+                        tint: IBColors.inkTertiary
                     ) {
                         EmptyView()
                     }
@@ -1120,7 +1120,7 @@ struct ActiveStudySessionView: View {
                                 .fill(IBColors.surface)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(IBColors.cardBorder, lineWidth: 1)
+                                        .stroke(IBColors.border, lineWidth: 1)
                                 )
                         )
                     }
@@ -1158,7 +1158,7 @@ struct ActiveStudySessionView: View {
                             .padding(.vertical, 6)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(hasCompleteCheckIn && !isCompletingSession ? IBColors.success : IBColors.secondaryText)
+                                    .fill(hasCompleteCheckIn && !isCompletingSession ? IBColors.success : IBColors.inkSecondary)
                             )
                     }
                     .buttonStyle(.plain)
@@ -1191,10 +1191,10 @@ struct ActiveStudySessionView: View {
                 .padding(.vertical, 5)
                 .background(
                     Capsule()
-                        .fill(IBColors.electricBlue.opacity(0.06))
-                        .overlay(Capsule().strokeBorder(IBColors.electricBlue.opacity(0.12), lineWidth: 0.5))
+                        .fill(IBColors.accent.opacity(0.06))
+                        .overlay(Capsule().strokeBorder(IBColors.accent.opacity(0.12), lineWidth: 0.5))
                 )
-                .foregroundStyle(IBColors.electricBlue)
+                .foregroundStyle(IBColors.accent)
         }
         .buttonStyle(.plain)
     }
@@ -1235,24 +1235,24 @@ struct ActiveStudySessionView: View {
     private var completionHero: some View {
         VStack(spacing: 12) {
             ZStack {
-                Circle().fill(.green.opacity(0.06)).frame(width: 90, height: 90)
-                Circle().fill(.green.opacity(0.1)).frame(width: 65, height: 65)
-                Image(systemName: "checkmark.seal.fill").font(.system(size: 36)).foregroundStyle(.green)
+                Circle().fill(IBColors.success.opacity(0.06)).frame(width: 90, height: 90)
+                Circle().fill(IBColors.success.opacity(0.1)).frame(width: 65, height: 65)
+                Image(systemName: "checkmark.seal.fill").font(.system(size: 36)).foregroundStyle(IBColors.success)
             }
-            .glow(color: .green, radius: 20)
+            .glow(color: IBColors.success, radius: 20)
             Text("Session Complete!").font(.system(size: 22, weight: .bold, design: .rounded))
             HStack(spacing: 8) {
                 Image(systemName: "bolt.fill")
                     .font(.title2)
-                    .foregroundStyle(IBColors.gold)
+                    .foregroundStyle(IBColors.inkTertiary)
                     .symbolEffect(.bounce, value: showRewardPulse)
                 Text("+").font(.title2.bold())
-                AnimatedCounter(value: xpAwarded, font: .system(size: 30, weight: .black, design: .rounded), color: IBColors.gold)
+                AnimatedCounter(value: xpAwarded, font: .system(size: 30, weight: .black, design: .rounded), color: IBColors.inkTertiary)
                 Text("XP").font(.headline).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
-            .background(Capsule().fill(IBColors.gold.opacity(0.10)))
+            .background(Capsule().fill(IBColors.inkTertiary.opacity(0.10)))
             .scaleEffect(showRewardPulse ? 1 : 0.72)
             .opacity(showRewardPulse ? 1 : 0)
             .animation(IBAnimation.bounce, value: showRewardPulse)
@@ -1261,11 +1261,11 @@ struct ActiveStudySessionView: View {
 
     private var completionStats: some View {
         HStack(spacing: 0) {
-            StatCard(value: "\(dedicatedMinutes)m", label: "Dedicated", color: .orange, icon: "clock.fill")
+            StatCard(value: "\(dedicatedMinutes)m", label: "Dedicated", color: IBColors.warning, icon: "clock.fill")
             Divider().frame(height: 44)
             StatCard(value: plan.subjectName, label: "Subject", color: subjectColor(plan.subjectName), icon: "book.fill")
             Divider().frame(height: 44)
-            StatCard(value: "\(reviewedCardCount)", label: "Reviewed", color: IBColors.electricBlue, icon: "rectangle.on.rectangle")
+            StatCard(value: "\(reviewedCardCount)", label: "Reviewed", color: IBColors.accent, icon: "rectangle.on.rectangle")
             Divider().frame(height: 44)
             StatCard(value: "+\(xpAwarded)xp", label: "Earned", color: .purple, icon: "star.fill")
         }
@@ -1297,13 +1297,13 @@ struct ActiveStudySessionView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Label("\(completedStreak)-day streak", systemImage: "flame.fill")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(IBColors.streakOrange)
+                        .foregroundStyle(IBColors.inkTertiary)
                     Text(completedStreak > previousStreak ? "+1 from this session" : "Maintained today")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.streakOrange.opacity(0.08)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.inkTertiary.opacity(0.08)))
             }
         }
         .frame(maxWidth: 550, alignment: .leading)
@@ -1316,9 +1316,9 @@ struct ActiveStudySessionView: View {
             systemImage: "rectangle.stack.badge.play"
         )
         .font(.caption.weight(.semibold))
-        .foregroundStyle(IBColors.electricBlue)
+        .foregroundStyle(IBColors.accent)
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.electricBlue.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.accent.opacity(0.04)))
     }
 
     @ViewBuilder
@@ -1326,7 +1326,7 @@ struct ActiveStudySessionView: View {
         if let profile = profiles.first {
             Label(profile.achievedStep.displayName, systemImage: profile.achievedStep.rank.symbolName)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(IBColors.electricBlue)
+                .foregroundStyle(IBColors.accent)
                 .padding(10)
                 .glassCard(cornerRadius: IBRadius.md)
         }
@@ -1342,7 +1342,7 @@ struct ActiveStudySessionView: View {
         return VStack(alignment: .leading, spacing: 2) {
             Label("\(value >= 0 ? "+" : "")\(value)", systemImage: symbol)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(isPositive ? IBColors.success : IBColors.coral)
+                .foregroundStyle(isPositive ? IBColors.success : IBColors.inkTertiary)
             Text(isPositive ? positiveLabel : negativeLabel)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -1350,7 +1350,7 @@ struct ActiveStudySessionView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill((isPositive ? IBColors.success : IBColors.coral).opacity(0.08))
+                .fill((isPositive ? IBColors.success : IBColors.inkTertiary).opacity(0.08))
         )
     }
 
@@ -2208,9 +2208,9 @@ private struct SessionTimerView: View {
 
     private var timerColor: Color {
         let target = Double(durationMinutes * 60)
-        if elapsed > target { return .red }
-        if elapsed > target * 0.8 { return .orange }
-        return IBColors.electricBlue
+        if elapsed > target { return IBColors.danger }
+        if elapsed > target * 0.8 { return IBColors.warning }
+        return IBColors.accent
     }
 
     var body: some View {
@@ -2264,7 +2264,7 @@ private struct FocusRhythmView: View {
 
         var title: String { self == .focus ? "Focus 45" : "Break 15" }
         var icon: String { self == .focus ? "brain.head.profile" : "figure.walk" }
-        var tint: Color { self == .focus ? IBColors.electricBlue : IBColors.teal }
+        var tint: Color { self == .focus ? IBColors.accent : IBColors.inkTertiary }
         var duration: Int { self == .focus ? 45 * 60 : 15 * 60 }
     }
 
@@ -2368,7 +2368,7 @@ private struct PlanPanelView: View {
                             Link(destination: resource.url) {
                                 HStack(alignment: .top, spacing: 10) {
                                     Image(systemName: "arrow.up.right.square")
-                                        .foregroundStyle(IBColors.electricBlue)
+                                        .foregroundStyle(IBColors.accent)
                                         .frame(width: 20)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(resource.title)
@@ -2405,7 +2405,7 @@ private struct PlanPanelView: View {
 
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "lightbulb.fill")
-                            .foregroundStyle(IBColors.gold)
+                            .foregroundStyle(IBColors.inkTertiary)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Coach cue")
                                 .font(.caption.weight(.bold))
@@ -2419,7 +2419,7 @@ private struct PlanPanelView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(IBColors.gold.opacity(0.08))
+                            .fill(IBColors.inkTertiary.opacity(0.08))
                     )
 
                     ForEach(Array(plan.planTasks.enumerated()), id: \.element.id) { index, task in
@@ -2435,7 +2435,7 @@ private struct PlanPanelView: View {
                             } label: {
                                 Image(systemName: completedTaskIDs.contains(task.id) ? "checkmark.circle.fill" : "circle")
                                     .font(.title3)
-                                    .foregroundStyle(completedTaskIDs.contains(task.id) ? IBColors.success : IBColors.electricBlue)
+                                    .foregroundStyle(completedTaskIDs.contains(task.id) ? IBColors.success : IBColors.accent)
                                     .frame(width: 28, height: 28)
                             }
                             .buttonStyle(.plain)
@@ -2453,7 +2453,7 @@ private struct PlanPanelView: View {
                                 }
                                 Text(task.subtopicName.isEmpty ? task.topicName : "\(task.topicName) · \(task.subtopicName)")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(IBColors.electricBlue)
+                                    .foregroundStyle(IBColors.accent)
                                 Text(task.instructions)
                                     .font(.callout)
                                     .lineSpacing(3)
@@ -2463,7 +2463,7 @@ private struct PlanPanelView: View {
                                 if task.flashcardTarget > 0 {
                                     Label("\(task.flashcardTarget) flashcards", systemImage: "rectangle.on.rectangle")
                                         .font(.caption)
-                                        .foregroundStyle(IBColors.teal)
+                                        .foregroundStyle(IBColors.inkTertiary)
                                 }
 
                                 Button {
@@ -2473,7 +2473,7 @@ private struct PlanPanelView: View {
                                         .font(.caption.weight(.semibold))
                                 }
                                 .buttonStyle(.borderless)
-                                .foregroundStyle(IBColors.electricBlue)
+                                .foregroundStyle(IBColors.accent)
                             }
                         }
                         .padding(.vertical, 12)

@@ -62,7 +62,7 @@ struct OnboardingView: View {
                 RoundedRectangle(cornerRadius: 28)
                     .fill(IBGradient.accent)
                     .frame(width: 96, height: 96)
-                    .shadow(color: IBColors.electricBlue.opacity(0.4), radius: 24, x: 0, y: 10)
+                    .shadow(color: IBColors.accent.opacity(0.4), radius: 24, x: 0, y: 10)
                 Image(systemName: pages[safePageIndex].icon)
                     .font(.system(size: 40, weight: .semibold))
                     .foregroundStyle(.white)
@@ -73,7 +73,7 @@ struct OnboardingView: View {
             VStack(spacing: 8) {
                 Text("IB Vault")
                     .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accent)
                     .textCase(.uppercase)
                     .tracking(2)
 
@@ -106,7 +106,7 @@ struct OnboardingView: View {
                 HStack(spacing: 8) {
                     ForEach(0..<pages.count, id: \.self) { index in
                         Circle()
-                            .fill(index == currentPage ? IBColors.electricBlue : Color.secondary.opacity(0.3))
+                            .fill(index == currentPage ? IBColors.accent : Color.secondary.opacity(0.3))
                             .frame(width: index == currentPage ? 10 : 7, height: index == currentPage ? 10 : 7)
                             .animation(reduceMotion ? nil : IBAnimation.snappy, value: currentPage)
                     }
@@ -164,7 +164,7 @@ struct OnboardingView: View {
             featureRow(icon: "sparkles", color: .purple,
                       title: "AI Study Companion",
                       desc: "ARIA generates guides and analyses your progress")
-            featureRow(icon: "books.vertical", color: .orange,
+            featureRow(icon: "books.vertical", color: IBColors.warning,
                       title: "Subject Library",
                       desc: "All IB materials in one searchable workspace")
         }
@@ -172,7 +172,7 @@ struct OnboardingView: View {
 
     private var scienceContent: some View {
         VStack(spacing: 12) {
-            featureRow(icon: "arrow.triangle.2.circlepath", color: .green,
+            featureRow(icon: "arrow.triangle.2.circlepath", color: IBColors.success,
                       title: "Spaced Repetition",
                       desc: "Reviews scheduled at optimal intervals for long-term memory")
             featureRow(icon: "brain.head.profile", color: .blue,
@@ -210,28 +210,28 @@ struct OnboardingView: View {
             HStack(alignment: .center, spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(IBColors.teal.opacity(0.12))
+                        .fill(IBColors.inkTertiary.opacity(0.12))
                         .frame(width: 42, height: 42)
                     Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(IBColors.teal)
+                        .foregroundStyle(IBColors.inkTertiary)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(scoredEvidenceCount) scored school records loaded")
                         .font(.callout.weight(.bold))
                     Text("These values establish your starting mastery before recall reviews begin.")
                         .font(.caption)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                 }
                 Spacer(minLength: 0)
             }
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: IBRadius.md)
-                    .fill(IBGradient.tint(IBColors.teal))
+                    .fill(IBGradient.tint(IBColors.inkTertiary))
                     .overlay(
                         RoundedRectangle(cornerRadius: IBRadius.md)
-                            .stroke(IBColors.teal.opacity(0.18), lineWidth: 1)
+                            .stroke(IBColors.inkTertiary.opacity(0.18), lineWidth: 1)
                     )
             )
 
@@ -240,7 +240,7 @@ struct OnboardingView: View {
                     ProgressView().controlSize(.small)
                     Text("Loading your school evidence...")
                         .font(.callout)
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 150)
             } else {
@@ -279,7 +279,7 @@ struct OnboardingView: View {
                 MasteryBar(progress: row.mastery, height: 5, color: tint)
                 Text(row.progress.scoredAssessmentCount == 0 ? "No scored evidence yet" : "\(row.progress.scoredAssessmentCount) scored report or assessment records")
                     .font(.caption2)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
         }
         .padding(.horizontal, 14)
@@ -306,7 +306,7 @@ struct OnboardingView: View {
                     .foregroundStyle(IBColors.ink)
                 Text(desc)
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
             Spacer()
         }

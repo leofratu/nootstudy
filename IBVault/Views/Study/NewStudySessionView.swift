@@ -144,7 +144,7 @@ struct NewStudySessionView: View {
             ForEach(Array(Self.stepNames.enumerated()), id: \.offset) { index, name in
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(index <= step ? IBColors.electricBlue : Color.secondary.opacity(0.3))
+                        .fill(index <= step ? IBColors.accent : Color.secondary.opacity(0.3))
                         .frame(width: 8, height: 8)
                     Text(name)
                         .font(.caption)
@@ -152,7 +152,7 @@ struct NewStudySessionView: View {
                 }
                 if index < Self.stepNames.count - 1 {
                     Rectangle()
-                        .fill(index < step ? IBColors.electricBlue : Color.secondary.opacity(0.2))
+                        .fill(index < step ? IBColors.accent : Color.secondary.opacity(0.2))
                         .frame(height: 1)
                         .frame(maxWidth: .infinity)
                 }
@@ -186,7 +186,7 @@ struct NewStudySessionView: View {
                     } label: {
                         HStack(spacing: 10) {
                             Circle()
-                                .fill(Color(hex: subject.accentColorHex))
+                                .fill(IBColors.inkTertiary)
                                 .frame(width: 10, height: 10)
                             Text(subject.name)
                                 .font(.callout.weight(.medium))
@@ -200,11 +200,11 @@ struct NewStudySessionView: View {
                         .contentShape(Rectangle())
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(selectedSubject?.id == subject.id ? Color(hex: subject.accentColorHex).opacity(0.08) : Color.clear)
+                                .fill(selectedSubject?.id == subject.id ? IBColors.inkTertiary.opacity(0.08) : Color.clear)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .strokeBorder(selectedSubject?.id == subject.id ? Color(hex: subject.accentColorHex) : Color.secondary.opacity(0.15), lineWidth: 1)
+                                .strokeBorder(selectedSubject?.id == subject.id ? IBColors.inkTertiary : Color.secondary.opacity(0.15), lineWidth: 1)
                         )
                     }
                     .buttonStyle(.plain)
@@ -227,7 +227,7 @@ struct NewStudySessionView: View {
             if !selectedTopics.isEmpty {
                 Text("\(selectedTopicList.count) topic\(selectedTopicList.count == 1 ? "" : "s") selected")
                     .font(.caption)
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accent)
             }
 
             ForEach(curriculum, id: \.name) { unit in
@@ -254,7 +254,7 @@ struct NewStudySessionView: View {
                                 Image(systemName: selectedTopics.contains(topic.name) ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(
                                         selectedTopics.contains(topic.name)
-                                            ? AnyShapeStyle(IBColors.electricBlue)
+                                            ? AnyShapeStyle(IBColors.accent)
                                             : AnyShapeStyle(.secondary)
                                     )
                                 Text(topic.name)
@@ -279,7 +279,7 @@ struct NewStudySessionView: View {
                                     if !selectedSubtopics(for: topic.name).isEmpty {
                                         Text("\(selectedSubtopics(for: topic.name).count) selected")
                                             .font(.caption2)
-                                            .foregroundStyle(IBColors.electricBlue)
+                                            .foregroundStyle(IBColors.accent)
                                     }
                                 }
                                 .padding(.bottom, 4)
@@ -294,7 +294,7 @@ struct NewStudySessionView: View {
                                                 .font(.system(size: 12))
                                                 .foregroundStyle(
                                                     selectedSubtopics(for: topic.name).contains(sub)
-                                                        ? AnyShapeStyle(IBColors.electricBlue)
+                                                        ? AnyShapeStyle(IBColors.accent)
                                                         : AnyShapeStyle(.tertiary)
                                                 )
                                             Text(sub)
@@ -463,7 +463,7 @@ struct NewStudySessionView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 30))
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                     Text("Ready to generate your study plan!")
                         .font(.callout)
                     Text("ARIA will create a personalised plan for \(selectedTopicSummary) based on your current mastery and IB exam requirements.")
@@ -499,7 +499,7 @@ struct NewStudySessionView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "doc.text.fill")
-                            .foregroundStyle(IBColors.electricBlue)
+                            .foregroundStyle(IBColors.accent)
                         Text("Your Study Plan")
                             .font(.headline)
                     }
@@ -514,7 +514,7 @@ struct NewStudySessionView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .foregroundStyle(IBColors.electricBlue)
+                            .foregroundStyle(IBColors.accent)
                         Text("Refine with ARIA")
                             .font(.headline)
                     }
@@ -526,7 +526,7 @@ struct NewStudySessionView: View {
                                 .padding(10)
                                 .background(
                                     RoundedRectangle(cornerRadius: 10)
-                                        .fill(msg.role == "user" ? IBColors.electricBlue.opacity(0.1) : Color.secondary.opacity(0.05))
+                                        .fill(msg.role == "user" ? IBColors.accent.opacity(0.1) : Color.secondary.opacity(0.05))
                                 )
                                 .frame(maxWidth: 400, alignment: msg.role == "user" ? .trailing : .leading)
                             if msg.role == "model" { Spacer() }

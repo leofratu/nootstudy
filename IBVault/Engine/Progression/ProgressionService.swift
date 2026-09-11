@@ -10,6 +10,74 @@ import SwiftData
 /// `@MainActor` — that would force every test and view to await it — but a
 /// background context must never be passed in.
 enum ProgressionService: Sendable {
+    private static var lastFingerprint: String?
+    private static var lastFingerprintContextID: ObjectIdentifier?
+
+    static func resetFingerprintForTesting() {
+        lastFingerprint = nil
+        lastFingerprintContextID = nil
+    }
+
+    private static func makeFingerprint(
+        subjects: [Subject],
+        reviews: [ReviewSession],
+        profiles: [UserProfile],
+        tracks: [SubjectTrack],
+        studySessions: [StudySession],
+        assessments: [AcademicAssessment],
+        mappings: [AcademicAssessmentMapping],
+        reports: [AcademicReportSnapshot],
+        achievements: [Achievement],
+        now: Date
+    ) -> String {
+        var hasher = Hasher()
+        hasher.combine(subjects.count)
+        hasher.combine(reviews.count)
+        hasher.combine(assessments.count)
+        hasher.combine(mappings.count)
+        hasher.combine(reports.count)
+        hasher.combine(studySessions.count)
+        hasher.combine(achievements.count)
+        hasher.combine(tracks.count)
+        if let profile = profiles.first {
+            hasher.combine(profile.totalXP)
+            hasher.combine(profile.currentStreak)
+            hasher.combine(profile.achievedRankRaw)
+            hasher.combine(profile.achievedTierRaw)
+        }
+        // Counts + lastUpdated signals: include per-card mastery signals and
+        // review timestamps so any material change invalidates the cache.
+        // Truncate now to day so daily freshness decay still triggers recompute.
+        hasher.combine(Calendar.current.startOfDay(for: now).timeIntervalSince1970)
+        for subject in subjects.sorted(by: { $0.name < $1.name }) {
+            hasher.combine(subject.name)
+            hasher.combine(subject.level)
+            hasher.combine(subject.cards.count)
+            for card in subject.cards.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+                hasher.combine(card.id)
+                hasher.combine(card.totalReviewCount)
+                hasher.combine(card.successfulReviewCount)
+                hasher.combine(card.proficiencyRaw)
+                hasher.combine(card.lastReviewedDate?.timeIntervalSince1970 ?? 0)
+                hasher.combine(card.nextReviewDate.timeIntervalSince1970)
+                hasher.combine(card.interval)
+                hasher.combine(card.repetitions)
+            }
+        }
+        for review in reviews.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            hasher.combine(review.id)
+            hasher.combine(review.timestamp.timeIntervalSince1970)
+            hasher.combine(review.qualityRating)
+        }
+        for track in tracks.sorted(by: { $0.subjectName < $1.subjectName }) {
+            hasher.combine(track.subjectName)
+            hasher.combine(track.cachedMastery)
+            hasher.combine(track.achievedRankRaw)
+            hasher.combine(track.achievedTierRaw)
+        }
+        hasher.combine(studySessions.reduce(0) { $0 + $1.xpEarned })
+        return String(hasher.finalize())
+    }
 
     @discardableResult
     static func recompute(context: ModelContext, now: Date = Date()) -> [ProgressionEvent] {
@@ -42,6 +110,23 @@ enum ProgressionService: Sendable {
         let mappings = (try? context.fetch(FetchDescriptor<AcademicAssessmentMapping>())) ?? []
         let reports = (try? context.fetch(FetchDescriptor<AcademicReportSnapshot>())) ?? []
         guard let profile = profiles.first else { return [] }
+
+        let fingerprint = makeFingerprint(
+            subjects: subjects,
+            reviews: reviews,
+            profiles: profiles,
+            tracks: tracks,
+            studySessions: studySessions,
+            assessments: assessments,
+            mappings: mappings,
+            reports: reports,
+            achievements: achievements,
+            now: now
+        )
+        let contextID = ObjectIdentifier(context.container)
+        if let last = lastFingerprint, last == fingerprint, lastFingerprintContextID == contextID {
+            return []
+        }
 
         var events: [ProgressionEvent] = []
         let snapshots = SnapshotBuilder.snapshots(for: subjects, reviews: reviews)
@@ -109,6 +194,8 @@ enum ProgressionService: Sendable {
 
         do {
             try context.save()
+            lastFingerprint = fingerprint
+            lastFingerprintContextID = contextID
         } catch {
             // Never present a rank-up/tier-up that did not persist: the caller
             // uses the returned events to congratulate the user, and a fake

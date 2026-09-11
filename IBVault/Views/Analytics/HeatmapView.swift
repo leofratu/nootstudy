@@ -23,7 +23,7 @@ struct HeatmapView: View {
                 // Grid
                 ForEach(0..<rows, id: \.self) { day in
                     HStack(spacing: spacing) {
-                        Text(dayLabel(day)).font(.system(size: 8)).foregroundColor(IBColors.mutedGray).frame(width: 24)
+                        Text(dayLabel(day)).font(.system(size: 8)).foregroundColor(IBColors.inkTertiary).frame(width: 24)
                         ForEach(0..<columns, id: \.self) { week in
                             let date = dateFor(week: week, day: day)
                             let intensity = intensityFor(date: date, in: index)
@@ -36,11 +36,11 @@ struct HeatmapView: View {
                 // Legend
                 HStack(spacing: IBSpacing.sm) {
                     Spacer()
-                    Text("Less").font(.system(size: 9)).foregroundColor(IBColors.mutedGray)
+                    Text("Less").font(.system(size: 9)).foregroundColor(IBColors.inkTertiary)
                     ForEach(0..<5, id: \.self) { i in
                         RoundedRectangle(cornerRadius: 2).fill(colorForIntensity(i)).frame(width: 10, height: 10)
                     }
-                    Text("More").font(.system(size: 9)).foregroundColor(IBColors.mutedGray)
+                    Text("More").font(.system(size: 9)).foregroundColor(IBColors.inkTertiary)
                 }
             }
         }
@@ -54,7 +54,7 @@ struct HeatmapView: View {
         let date = dateFor(week: week, day: 0)
         return Text(Self.monthFormatter.string(from: date))
             .font(.system(size: 8))
-            .foregroundColor(IBColors.mutedGray)
+            .foregroundColor(IBColors.inkTertiary)
             .frame(width: cellSize, alignment: .leading)
             // Allow "Dec"/"Mar" to overflow their 12pt cell instead of clipping
             // while keeping the grid column alignment intact.
@@ -92,11 +92,11 @@ struct HeatmapView: View {
 
     private func colorForIntensity(_ level: Int) -> Color {
         switch level {
-        case 0: return IBColors.cardBorder
-        case 1: return IBColors.electricBlue.opacity(0.25)
-        case 2: return IBColors.electricBlue.opacity(0.5)
-        case 3: return IBColors.electricBlue.opacity(0.75)
-        default: return IBColors.electricBlue
+        case 0: return IBColors.border
+        case 1: return IBColors.accent.opacity(0.25)
+        case 2: return IBColors.accent.opacity(0.5)
+        case 3: return IBColors.accent.opacity(0.75)
+        default: return IBColors.accent
         }
     }
 }

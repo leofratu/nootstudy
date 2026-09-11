@@ -69,9 +69,6 @@ struct ContentView: View {
         .onChange(of: selectedTab) { _, _ in
             reviewQueueManager.refreshDueCards(context: context)
         }
-        // The badge, dashboard, and review screen all read the same snapshot.
-        // Refresh it whenever SwiftData observes a card reschedule/delete or a
-        // session scope change; relying on navigation events left stale badges.
         .onChange(of: queuedCards) { _, _ in
             reviewQueueManager.refreshDueCards(context: context)
         }
@@ -101,16 +98,20 @@ struct ContentView: View {
                 Text(tab.rawValue)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
+                    .foregroundStyle(selectedTab == tab ? IBColors.ink : IBColors.inkSecondary)
             } icon: {
                 Image(systemName: tab.icon)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(selectedTab == tab ? IBColors.electricBlue : IBColors.secondaryText)
+                    .foregroundStyle(selectedTab == tab ? IBColors.accent : IBColors.inkTertiary)
             }
             Spacer(minLength: 4)
             if let badge = sidebarBadge(for: tab) {
                 badge
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .font(.system(size: 10, weight: .bold).monospacedDigit())
+                    .foregroundStyle(IBColors.inkSecondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(IBColors.surfaceHover).overlay(Capsule().stroke(IBColors.border, lineWidth: 1)))
                     .allowsHitTesting(false)
             }
         }
@@ -119,8 +120,9 @@ struct ContentView: View {
         .frame(height: 34)
         .background {
             if selectedTab == tab {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 8)
                     .fill(IBColors.surfaceHover)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
                     .matchedGeometryEffect(id: "sidebarSelection", in: sidebarSelectionNamespace)
             }
         }
@@ -134,7 +136,7 @@ struct ContentView: View {
                 HStack(spacing: 12) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(IBColors.electricBlue)
+                            .fill(IBColors.accentFill)
                             .frame(width: 30, height: 30)
                         Image(systemName: "books.vertical.fill")
                             .font(.system(size: 13, weight: .bold))
@@ -185,20 +187,20 @@ struct ContentView: View {
         let name = profile?.studentName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let initial = name.first.map { String($0).uppercased() } ?? "S"
         return VStack(spacing: 0) {
-            Divider()
-                .opacity(0.6)
+            Rectangle().fill(IBColors.border).frame(height: 1)
             Button {
                 selectedTab = .settings
             } label: {
                 Label("Settings", systemImage: "gearshape")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(selectedTab == .settings ? IBColors.electricBlue : IBColors.ink)
+                    .foregroundStyle(selectedTab == .settings ? IBColors.accent : IBColors.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .frame(height: 34)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
                             .fill(selectedTab == .settings ? IBColors.surfaceHover : Color.clear)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(selectedTab == .settings ? IBColors.border : Color.clear, lineWidth: 1))
                     )
             }
             .buttonStyle(.plain)
@@ -210,11 +212,12 @@ struct ContentView: View {
                     HStack(spacing: 10) {
                         ZStack {
                             Circle()
-                                .fill(IBColors.electricBlue)
+                                .fill(IBColors.surfaceHover)
                                 .frame(width: 28, height: 28)
+                                .overlay(Circle().stroke(IBColors.border, lineWidth: 1))
                             Text(initial)
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundStyle(.white)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(IBColors.inkSecondary)
                         }
                         VStack(alignment: .leading, spacing: 1) {
                             Text(name.isEmpty ? "Student" : name)
@@ -223,7 +226,7 @@ struct ContentView: View {
                                 .lineLimit(1)
                             Text(profile?.achievedStep.displayName ?? "Getting started")
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(IBColors.secondaryText)
+                                .foregroundStyle(IBColors.inkTertiary)
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 4)
@@ -233,7 +236,6 @@ struct ContentView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-
             }
             .padding(.horizontal, 4)
         }
@@ -260,8 +262,8 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(IBColors.canvas)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.cardBorder, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(IBColors.border, lineWidth: 1))
         .padding(10)
         .background(IBColors.canvasDeep)
     }
@@ -273,11 +275,9 @@ struct ContentView: View {
 
     private func handleAppCommand(_ payload: Any?) {
         guard let command = IBVaultAppCommand.fromNotificationPayload(payload) else { return }
-
         if let targetTab = command.targetTab {
             selectedTab = targetTab
         }
-
         if command == .refreshReviewQueue {
             reviewQueueManager.refreshDueCards(context: context)
         }
@@ -296,11 +296,9 @@ struct ReviewLaunchView: View {
     private var eligibleCount: Int {
         queueManager.eligibleCardsCount()
     }
-
     private var dueCardsCount: Int {
         queueManager.dueCards.count
     }
-
     private var dueBacklogCount: Int {
         queueManager.totalDueBacklogCount
     }
@@ -308,36 +306,34 @@ struct ReviewLaunchView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 24) {
                     StudioPageHeader(
                         eyebrow: "Active recall",
                         title: "Flashcard queue",
                         subtitle: reviewSubtitle,
-                        symbol: "brain.head.profile",
-                        tint: IBColors.electricBlue
+                        symbol: "brain.head.profile"
                     ) {
-                        StudioPill(title: dueBacklogCount == 0 ? "QUEUE CLEAR" : "\(dueBacklogCount) FLASHCARDS DUE", tint: dueBacklogCount == 0 ? IBColors.success : IBColors.coral)
+                        StudioPill(title: dueBacklogCount == 0 ? "QUEUE CLEAR" : "\(dueBacklogCount) DUE", semantic: .neutral)
                     }
 
                     HStack(spacing: 12) {
-                        StudioMetricTile(value: "\(dueBacklogCount)", label: "Flashcards due", symbol: "clock.badge.exclamationmark", tint: dueBacklogCount == 0 ? IBColors.success : IBColors.coral, detail: "All available to review")
-                        StudioMetricTile(value: "\(queueManager.reviewedTodayCount)", label: "Reviewed today", symbol: "checkmark.circle.fill", tint: IBColors.electricBlue, detail: "Completed cards")
-                        StudioMetricTile(value: "\(eligibleCount)", label: "Saved cards", symbol: "square.stack.fill", tint: IBColors.teal, detail: "From studied material")
+                        StudioMetricTile(value: "\(dueBacklogCount)", label: "Flashcards due", symbol: "rectangle.stack", detail: "All available to review")
+                        StudioMetricTile(value: "\(queueManager.reviewedTodayCount)", label: "Reviewed today", symbol: "checkmark.circle", detail: "Completed")
+                        StudioMetricTile(value: "\(eligibleCount)", label: "Saved cards", symbol: "square.stack", detail: "Studied material")
                     }
 
-                    VStack(alignment: .leading, spacing: 18) {
-                        StudioSectionHeader("Your next review", subtitle: dueBacklogCount == 0 ? "There are no flashcards due right now." : "All \(dueBacklogCount) due flashcards are available now.", symbol: "play.rectangle.fill", tint: IBColors.electricBlue) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        StudioSectionHeader("Your next review", subtitle: dueBacklogCount == 0 ? "There are no flashcards due right now." : "All \(dueBacklogCount) due cards are available now.", symbol: "play.rectangle") {
                             EmptyView()
                         }
-
                         HStack(alignment: .center, spacing: 18) {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(dueCardsCount == 0 ? "Queue complete" : "Start a focused recall session")
-                                    .font(.title3.bold())
+                                    .font(IBTypography.sectionTitle)
                                     .foregroundStyle(IBColors.ink)
                                 Text("Each response updates scheduling and builds a more reliable picture of what you know.")
-                                    .font(.callout)
-                                    .foregroundStyle(IBColors.secondaryText)
+                                    .font(IBTypography.body13)
+                                    .foregroundStyle(IBColors.inkSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 20)
@@ -349,24 +345,23 @@ struct ReviewLaunchView: View {
                                     Label("Start cards", systemImage: "play.fill")
                                         .frame(minWidth: 160)
                                 }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(PrimaryButtonStyle())
                                 .controlSize(.large)
-                                .tint(IBColors.electricBlue)
                                 .disabled(studySessions.isEmpty || dueCardsCount == 0)
 
                                 Button {
                                     IBHaptics.soft()
                                     showGuide = true
                                 } label: {
-                                    Label("Open study guide", systemImage: "book.closed.fill")
+                                    Label("Open study guide", systemImage: "book.closed")
                                         .frame(minWidth: 160)
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(SecondaryButtonStyle())
                             }
                         }
                     }
                     .padding(22)
-                    .glassCard()
+                    .surfaceCard()
                 }
                 .frame(maxWidth: 960, alignment: .leading)
                 .padding(.horizontal, 28)
@@ -376,8 +371,6 @@ struct ReviewLaunchView: View {
             .background(IBColors.canvas)
             .navigationTitle("Review")
             .sheet(isPresented: $showReview, onDismiss: {
-                // A completed review consumed the due queue; refresh the badge
-                // and the launch metrics without waiting for a tab change.
                 queueManager.refreshDueCards(context: context)
             }) { ReviewSessionView() }
             .sheet(isPresented: $showGuide) { StudyGuideView(subject: nil, mode: .preSession) }

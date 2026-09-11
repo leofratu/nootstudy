@@ -38,21 +38,59 @@ nonisolated struct BackupService {
         }
     }
 
+    nonisolated(unsafe) private static var cachedLatestBackupDate: Date?
+    nonisolated(unsafe) private static var cachedLatestBackupDateIsValid = false
+
     nonisolated static var latestBackupDate: Date? {
+        if cachedLatestBackupDateIsValid {
+            return cachedLatestBackupDate
+        }
+        // Never do file IO on the main thread; return cached value (nil on first launch)
+        if Thread.isMainThread {
+            return cachedLatestBackupDate
+        }
         let metaURL = backupDirectory.appendingPathComponent("backup_meta.json")
         guard let data = try? Data(contentsOf: metaURL),
-              let meta = try? JSONDecoder().decode(BackupMeta.self, from: data) else { return nil }
+              let meta = try? JSONDecoder().decode(BackupMeta.self, from: data) else {
+            cachedLatestBackupDate = nil
+            cachedLatestBackupDateIsValid = true
+            return nil
+        }
+        cachedLatestBackupDate = meta.date
+        cachedLatestBackupDateIsValid = true
         return meta.date
+    }
+
+    static func resetCacheForTesting() {
+        cachedLatestBackupDate = nil
+        cachedLatestBackupDateIsValid = false
+        hasConfiguredBackupExclusion = false
     }
 
     @discardableResult
     nonisolated static func autoBackupIfNeeded(context: ModelContext) throws -> URL? {
+        // Cheap early-out without file IO when interval not elapsed.
+        if let cached = cachedLatestBackupDate, cachedLatestBackupDateIsValid,
+           Date().timeIntervalSince(cached) < automaticBackupInterval {
+            return nil
+        }
+        if Thread.isMainThread {
+            // Never block main with file IO; schedule background check and return early.
+            let container = context.container
+            Task.detached(priority: .utility) {
+                let bgContext = ModelContext(container)
+                _ = try? BackupService.autoBackupIfNeeded(context: bgContext)
+            }
+            return nil
+        }
         if let latestBackupDate,
            Date().timeIntervalSince(latestBackupDate) < automaticBackupInterval {
             return nil
         }
-
-        return try exportBackup(context: context)
+        let url = try exportBackup(context: context)
+        cachedLatestBackupDate = Date()
+        cachedLatestBackupDateIsValid = true
+        return url
     }
 
     // MARK: - Export All Data
@@ -192,7 +230,46 @@ nonisolated struct BackupService {
     /// Recovers historical evidence without replacing the live subjects/cards.
     /// Older full exports contain mastery and session history that predates the
     /// current store; those records are safe to merge by UUID.
+    static func mergeHistoricalEvidence(from directory: URL, container: ModelContainer) throws {
+        if UserDefaults.standard.bool(forKey: "IBVaultHistoricalEvidenceMerged.v1") {
+            return
+        }
+        let context = ModelContext(container)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let subjectsByName = Dictionary((try context.fetch(FetchDescriptor<Subject>())).map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        let grades = try decodeOrNil([GradeBackup].self, fileName: "grades.json", from: directory, decoder: decoder) ?? []
+        let reviews = try decodeOrNil([SessionBackup].self, fileName: "review_sessions.json", from: directory, decoder: decoder) ?? []
+        let studySessions = try decodeOrNil([StudySessionBackup].self, fileName: "study_sessions.json", from: directory, decoder: decoder) ?? []
+        let curriculum = try decodeOrNil([CurriculumNodeBackup].self, fileName: "curriculum_progress.json", from: directory, decoder: decoder) ?? []
+        let reports = try decodeOrNil([AcademicReportSnapshotBackup].self, fileName: "academic_reports.json", from: directory, decoder: decoder) ?? []
+
+        let existingGrades = Set((try context.fetch(FetchDescriptor<Grade>())).map(\.id))
+        for backup in grades where !existingGrades.contains(backup.id) { context.insert(backup.toModel(subjectsByName: subjectsByName)) }
+        let existingReviews = Set((try context.fetch(FetchDescriptor<ReviewSession>())).map(\.id))
+        for backup in reviews where !existingReviews.contains(backup.id) { context.insert(backup.toModel()) }
+        let existingStudySessions = Set((try context.fetch(FetchDescriptor<StudySession>())).map(\.id))
+        for backup in studySessions where !existingStudySessions.contains(backup.id) { context.insert(backup.toModel()) }
+        let existingNodes = Set((try context.fetch(FetchDescriptor<CurriculumNode>())).map(\.id))
+        for backup in curriculum where !existingNodes.contains(backup.id) { context.insert(backup.toModel()) }
+        let existingReports = Set((try context.fetch(FetchDescriptor<AcademicReportSnapshot>())).map(\.id))
+        for backup in reports where !existingReports.contains(backup.id) { context.insert(backup.toModel()) }
+        try context.save()
+    }
+
     static func mergeHistoricalEvidence(from directory: URL, context: ModelContext) throws {
+        // Cheap early-out when already merged; avoids any file IO.
+        if UserDefaults.standard.bool(forKey: "IBVaultHistoricalEvidenceMerged.v1") {
+            return
+        }
+        // Never do file IO on the main thread synchronously.
+        if Thread.isMainThread {
+            let container = context.container
+            Task.detached(priority: .utility) {
+                try? BackupService.mergeHistoricalEvidence(from: directory, container: container)
+            }
+            return
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let subjectsByName = Dictionary((try context.fetch(FetchDescriptor<Subject>())).map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })

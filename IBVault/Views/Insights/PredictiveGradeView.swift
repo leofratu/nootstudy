@@ -25,9 +25,9 @@ struct PredictiveGradeView: View {
                     title: "Grade prediction",
                     subtitle: "Teacher predictions from the latest D1 report, using an assumed 2 TOK/EE core points.",
                     symbol: "chart.line.uptrend.xyaxis",
-                    tint: IBColors.teal
+                    tint: IBColors.inkTertiary
                 ) {
-                    StudioPill(title: subjectPointsStillNeeded == 0 ? "ON TARGET" : "\(subjectPointsStillNeeded) PTS TO CLOSE", tint: subjectPointsStillNeeded == 0 ? IBColors.success : IBColors.coral)
+                    StudioPill(title: subjectPointsStillNeeded == 0 ? "ON TARGET" : "\(subjectPointsStillNeeded) PTS TO CLOSE", tint: subjectPointsStillNeeded == 0 ? IBColors.success : IBColors.inkTertiary)
                 }
 
                 predictedScoreCard
@@ -59,7 +59,7 @@ struct PredictiveGradeView: View {
                 VStack(spacing: 4) {
                     Text("\(predictedSubjectPoints)")
                         .font(.system(size: 48, weight: .heavy, design: .rounded))
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                     Text("Subject points / 42")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -70,7 +70,7 @@ struct PredictiveGradeView: View {
                 VStack(spacing: 4) {
                     Text("\(DiplomaForecast.assumedCorePoints)")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(IBColors.teal)
+                        .foregroundStyle(IBColors.inkTertiary)
                     Text("TOK + EE assumed")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -104,7 +104,7 @@ struct PredictiveGradeView: View {
             if subjectPointsStillNeeded > 0 {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(IBColors.coral)
+                        .foregroundStyle(IBColors.inkTertiary)
                     Text("Assuming \(DiplomaForecast.assumedCorePoints) TOK/EE core points, you need \(subjectPointsStillNeeded) more points to reach \(targetScore).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -124,7 +124,7 @@ struct PredictiveGradeView: View {
     }
     
     private var targetColor: Color {
-        subjectPointsStillNeeded == 0 ? IBColors.success : .orange
+        subjectPointsStillNeeded == 0 ? IBColors.success : IBColors.warning
     }
     
     // MARK: - Subject Predictions
@@ -152,7 +152,7 @@ struct PredictiveGradeView: View {
     
     private func subjectPredictionRow(_ subject: Subject) -> some View {
         let prediction = predictSubjectGrade(subject)
-        let color = Color(hex: subject.accentColorHex)
+        let color = IBColors.inkTertiary
         let mastery = evidenceBackedMastery(for: subject)
         
         return VStack(spacing: 8) {
@@ -194,7 +194,7 @@ struct PredictiveGradeView: View {
                     Text(prediction.trend == .improving ? "Improving" : "Declining")
                         .font(.caption2)
                 }
-                .foregroundStyle(prediction.trend == .improving ? IBColors.success : .orange)
+                .foregroundStyle(prediction.trend == .improving ? IBColors.success : IBColors.warning)
             }
         }
         .padding(.vertical, 4)
@@ -244,14 +244,14 @@ struct PredictiveGradeView: View {
                                 ForEach(Array(weakest)) { subject in
                                     HStack {
                                         Circle()
-                                            .fill(Color(hex: subject.accentColorHex))
+                                            .fill(IBColors.inkTertiary)
                                             .frame(width: 8, height: 8)
                                         Text(subject.name)
                                             .font(.callout)
                                         Spacer()
                                         Text("\(Int(evidenceBackedMastery(for: subject) * 100))%")
                                             .font(.caption)
-                                            .foregroundStyle(.red)
+                                            .foregroundStyle(IBColors.danger)
                                     }
                                 }
                             }

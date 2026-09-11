@@ -11,7 +11,7 @@ struct CardStudioOptionsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("Card style", systemImage: "rectangle.on.rectangle")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Picker("Style", selection: $options.style) {
                     ForEach(CardStyle.allCases) { style in
                         Text(style.label).tag(style)
@@ -21,14 +21,14 @@ struct CardStudioOptionsView: View {
                 .help(options.style.summary)
                 Text(options.style.summary)
                     .font(.caption2)
-                    .foregroundStyle(IBColors.tertiaryText)
+                    .foregroundStyle(IBColors.inkTertiary)
             }
 
             // Tone
             VStack(alignment: .leading, spacing: 6) {
                 Label("Tone", systemImage: "text.bubble")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Picker("Tone", selection: $options.tone) {
                     ForEach(CardTone.allCases) { tone in
                         Text(tone.label).tag(tone)
@@ -41,7 +41,7 @@ struct CardStudioOptionsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("Difficulty", systemImage: "chart.bar")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Picker("Difficulty", selection: $options.difficulty) {
                     ForEach(CardDifficulty.allCases) { diff in
                         Text(diff.rawValue).tag(diff)
@@ -54,10 +54,10 @@ struct CardStudioOptionsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("Cognitive skills", systemImage: "brain.head.profile")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                 Text("Tap to select multiple. Leave empty for adaptive mix.")
                     .font(.caption2)
-                    .foregroundStyle(IBColors.tertiaryText)
+                    .foregroundStyle(IBColors.inkTertiary)
                 FlowLayout(spacing: 6) {
                     ForEach(CardCognitiveSkill.allCases) { skill in
                         SkillChip(
@@ -80,7 +80,7 @@ struct CardStudioOptionsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Card count", systemImage: "number")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(IBColors.secondaryText)
+                        .foregroundStyle(IBColors.inkSecondary)
                     HStack(spacing: 10) {
                         Text("\(options.count)")
                             .font(.callout.weight(.semibold).monospacedDigit())
@@ -102,7 +102,7 @@ struct CardStudioOptionsView: View {
                     }
                     Text("1 to 50 cards per batch")
                         .font(.caption2)
-                        .foregroundStyle(IBColors.tertiaryText)
+                        .foregroundStyle(IBColors.inkTertiary)
                 }
             }
 
@@ -111,37 +111,37 @@ struct CardStudioOptionsView: View {
                 Toggle(isOn: $options.useInternalTools) {
                     HStack(spacing: 6) {
                         Image(systemName: "internaldrive")
-                            .foregroundStyle(IBColors.electricBlue)
+                            .foregroundStyle(IBColors.accent)
                         Text("Let ARIA use internal tools")
                             .font(.callout.weight(.semibold))
                     }
                 }
                 .toggleStyle(.switch)
-                .tint(IBColors.electricBlue)
+                .tint(IBColors.accent)
 
                 Text("ARIA looks up your curriculum, checks duplicates, and schedules; the app enforces these steps.")
                     .font(.caption)
-                    .foregroundStyle(IBColors.secondaryText)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 2)
             }
             .padding(10)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.electricBlue.opacity(0.06))
+                    .fill(IBColors.surfaceHover)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.electricBlue.opacity(0.15), lineWidth: 1)
+                            .stroke(IBColors.border, lineWidth: 1)
                     )
             )
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(IBColors.surface)
+                .fill(IBColors.surface).overlay(RoundedRectangle(cornerRadius: 10).stroke(IBColors.border, lineWidth: 1))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(IBColors.cardBorder, lineWidth: 1)
+                        .stroke(IBColors.border, lineWidth: 1)
                 )
         )
     }
@@ -161,9 +161,9 @@ private struct SkillChip: View {
                 .padding(.vertical, 5)
                 .background(
                     Capsule()
-                        .fill(isSelected ? IBColors.electricBlue : IBColors.canvas)
+                        .fill(isSelected ? IBColors.accentFill : IBColors.surfaceHover)
                         .overlay(
-                            Capsule().stroke(isSelected ? IBColors.electricBlue : IBColors.cardBorder, lineWidth: 1)
+                            Capsule().stroke(isSelected ? IBColors.accentFill : IBColors.border, lineWidth: 1)
                         )
                 )
         }

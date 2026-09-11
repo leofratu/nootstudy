@@ -47,11 +47,11 @@ struct StudySessionLogView: View {
     private var statsHeader: some View {
         HStack(spacing: 0) {
             let s = weeklyStats
-            StatCard(value: "\(s.sessions)", label: "Sessions", color: IBColors.electricBlue, icon: "book.fill")
+            StatCard(value: "\(s.sessions)", label: "Sessions", color: IBColors.accent, icon: "book.fill")
             Divider().frame(height: 40)
-            StatCard(value: "\(s.cards)", label: "Cards", color: .orange, icon: "square.stack.fill")
+            StatCard(value: "\(s.cards)", label: "Cards", color: IBColors.warning, icon: "square.stack.fill")
             Divider().frame(height: 40)
-            StatCard(value: "\(s.minutes)m", label: "Study Time", color: .green, icon: "clock.fill")
+            StatCard(value: "\(s.minutes)m", label: "Study Time", color: IBColors.success, icon: "clock.fill")
         }
         .padding(.vertical, 12)
         .glassCard()
@@ -81,7 +81,7 @@ struct StudySessionLogView: View {
         HStack(spacing: 12) {
             // Subject indicator
             RoundedRectangle(cornerRadius: 3)
-                .fill(subjectColor(session.subjectName))
+                .fill(IBColors.inkTertiary)
                 .frame(width: 4, height: 40)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -124,7 +124,7 @@ struct StudySessionLogView: View {
     }
 
     private func retentionBadge(_ percent: Int) -> some View {
-        let color: Color = percent >= 80 ? .green : percent >= 50 ? .orange : .red
+        let color: Color = percent >= 80 ? IBColors.success : percent >= 50 ? IBColors.warning : IBColors.danger
         return Text("\(percent)%")
             .font(.caption.bold())
             .padding(.horizontal, 8)

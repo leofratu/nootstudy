@@ -50,11 +50,11 @@ struct LearningAnalyticsView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(IBColors.electricBlue.opacity(0.12))
+                        .fill(IBColors.accent.opacity(0.12))
                         .frame(width: 44, height: 44)
                     Image(systemName: "chart.bar.xaxis")
                         .font(.system(size: 18))
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
@@ -90,7 +90,7 @@ struct LearningAnalyticsView: View {
                 VStack(spacing: 4) {
                     Text("\(weekMinutes)")
                         .font(.system(size: 32, weight: .heavy, design: .rounded))
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                     Text("minutes this week")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -116,7 +116,7 @@ struct LearningAnalyticsView: View {
                         x: .value("Day", day.day),
                         y: .value("Minutes", day.minutes)
                     )
-                    .foregroundStyle(IBColors.electricBlue.gradient)
+                    .foregroundStyle(IBColors.accent.gradient)
                 }
             }
             .frame(height: 120)
@@ -130,7 +130,7 @@ struct LearningAnalyticsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "bolt.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(IBColors.inkTertiary)
                 Text("Productivity")
                     .font(.headline)
                 Spacer()
@@ -142,7 +142,7 @@ struct LearningAnalyticsView: View {
                 VStack(spacing: 4) {
                     Text("\(sessions.count)")
                         .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                     Text("sessions")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -162,7 +162,7 @@ struct LearningAnalyticsView: View {
                 VStack(spacing: 4) {
                     Text("\(Int(productivityScore * 100))%")
                         .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(IBColors.warning)
                     Text("efficiency")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -193,7 +193,7 @@ struct LearningAnalyticsView: View {
             HStack(spacing: 20) {
                 ZStack {
                     Circle()
-                        .stroke(IBColors.cardBorder.opacity(0.3), lineWidth: 8)
+                        .stroke(IBColors.border.opacity(0.3), lineWidth: 8)
                         .frame(width: 80, height: 80)
                     Circle()
                         .trim(from: 0, to: retention)

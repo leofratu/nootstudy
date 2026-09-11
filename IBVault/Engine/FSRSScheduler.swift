@@ -64,6 +64,10 @@ enum FSRSScheduler {
     }
 
     static func migrate(cards: [StudyCard], reviewSessions: [ReviewSession]) {
+        // Cheap early-out when already migrated.
+        if cards.allSatisfy({ $0.fsrsSchedulerVersion == schedulerVersion }) {
+            return
+        }
         let sessionsByCard = Dictionary(grouping: reviewSessions, by: \.cardID)
         for card in cards where card.fsrsSchedulerVersion != schedulerVersion {
             let history = (sessionsByCard[card.id] ?? []).sorted { $0.timestamp < $1.timestamp }

@@ -108,7 +108,7 @@ struct AnalyticsView: View {
                         title: "Progress",
                         subtitle: "Measure consistency, retrieval quality, and the subjects that need a different plan.",
                         symbol: "chart.xyaxis.line",
-                        tint: IBColors.teal
+                        tint: IBColors.inkTertiary
                     ) {
                         Picker("Range", selection: $selectedRange) {
                             ForEach(AnalyticsRange.allCases) { range in
@@ -120,9 +120,9 @@ struct AnalyticsView: View {
                     }
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                        StudioMetricTile(value: "\(rangeCards)", label: "Cards reviewed", symbol: "square.stack.fill", tint: IBColors.electricBlue, detail: selectedRange.rawValue)
-                        StudioMetricTile(value: "\(rangeXP)", label: "XP earned", symbol: "bolt.fill", tint: IBColors.gold, detail: "Completed sessions")
-                        StudioMetricTile(value: "\(rangeMinutes)m", label: "Study time", symbol: "clock.fill", tint: IBColors.teal, detail: "Completed sessions")
+                        StudioMetricTile(value: "\(rangeCards)", label: "Cards reviewed", symbol: "square.stack.fill", tint: IBColors.accent, detail: selectedRange.rawValue)
+                        StudioMetricTile(value: "\(rangeXP)", label: "XP earned", symbol: "bolt.fill", tint: IBColors.inkTertiary, detail: "Completed sessions")
+                        StudioMetricTile(value: "\(rangeMinutes)m", label: "Study time", symbol: "clock.fill", tint: IBColors.inkTertiary, detail: "Completed sessions")
                         StudioMetricTile(value: rangeRetention.map { "\($0)%" } ?? "—", label: "Retention", symbol: "brain.head.profile", tint: IBColors.englishColor, detail: rangeRetention == nil ? "No rated reviews" : "Across rated cards")
                     }
 
@@ -186,7 +186,7 @@ struct AnalyticsView: View {
                         MasteryBar(
                             progress: Double(row.cards) / peakCards,
                             height: 8,
-                            color: IBColors.electricBlue
+                            color: IBColors.accent
                         )
 
                         HStack(spacing: 10) {

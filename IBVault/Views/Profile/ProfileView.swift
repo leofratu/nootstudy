@@ -17,9 +17,9 @@ struct ProfileView: View {
                         title: profile?.studentName.isEmpty == false ? profile?.studentName ?? "Profile" : "Your profile",
                         subtitle: "Your earned rank, consistency, and the milestones behind your study practice.",
                         symbol: profile?.achievedStep.rank.symbolName ?? "person.crop.circle.fill",
-                        tint: IBColors.electricBlue
+                        tint: IBColors.accent
                     ) {
-                        StudioPill(title: profile?.achievedStep.displayName.uppercased() ?? "UNRANKED", tint: IBColors.electricBlue)
+                        StudioPill(title: profile?.achievedStep.displayName.uppercased() ?? "UNRANKED", tint: IBColors.accent)
                     }
 
                     profileHero
@@ -59,11 +59,11 @@ struct ProfileView: View {
             // Rank badge
             ZStack {
                 Circle()
-                    .fill(IBColors.electricBlue.opacity(0.08))
+                    .fill(IBColors.accent.opacity(0.08))
                     .frame(width: 80, height: 80)
                 Image(systemName: profile?.achievedStep.rank.symbolName ?? "bolt.circle")
                     .font(.system(size: 32))
-                    .foregroundStyle(IBColors.electricBlue)
+                    .foregroundStyle(IBColors.accent)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -72,7 +72,7 @@ struct ProfileView: View {
                 HStack(spacing: 8) {
                     Text(profile?.achievedStep.displayName ?? "Unranked")
                         .font(.callout.weight(.medium))
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                     Text("•")
                         .foregroundStyle(.tertiary)
                     Text(profile?.ibYear.rawValue ?? "")
@@ -95,7 +95,7 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "trophy.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(IBColors.inkTertiary)
                 Text("Rank Progress")
                     .font(.headline)
             }
@@ -103,7 +103,7 @@ struct ProfileView: View {
             if let p = profile {
                 HStack(spacing: 8) {
                     Image(systemName: p.achievedStep.rank.symbolName)
-                        .foregroundStyle(IBColors.electricBlue)
+                        .foregroundStyle(IBColors.accent)
                     Text(p.achievedStep.displayName)
                         .font(.callout.weight(.medium))
                 }
@@ -119,7 +119,7 @@ struct ProfileView: View {
             StatCard(
                 value: "\(profile?.totalXP ?? 0)",
                 label: "Total XP",
-                color: IBColors.electricBlue,
+                color: IBColors.accent,
                 icon: "star.fill"
             )
             Divider().frame(height: 50)
@@ -129,7 +129,7 @@ struct ProfileView: View {
                         .font(.system(size: 16))
                     Text("\(profile?.currentStreak ?? 0)")
                         .font(IBTypography.stat)
-                        .foregroundColor(IBColors.streakOrange)
+                        .foregroundColor(IBColors.inkTertiary)
                 }
                 Text("Current Streak")
                     .font(.system(size: 11, weight: .medium))
@@ -149,10 +149,10 @@ struct ProfileView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "snowflake")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.cyan)
+                            .foregroundStyle(IBColors.inkTertiary)
                         Text("\(profile?.streakFreezes ?? 0)")
                             .font(IBTypography.stat)
-                            .foregroundColor(.cyan)
+                            .foregroundColor(IBColors.inkTertiary)
                     }
                     Text("Freezes Left")
                         .font(.system(size: 11, weight: .medium))
@@ -170,7 +170,7 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "medal.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(IBColors.inkTertiary)
                 Text("Achievements")
                     .font(.headline)
                 Spacer()
@@ -194,7 +194,7 @@ struct ProfileView: View {
                     ForEach(achievements, id: \.id) { achievement in
                         HStack(spacing: 8) {
                             Image(systemName: achievement.icon)
-                                .foregroundStyle(achievement.unlocked ? Color.yellow : Color.secondary)
+                                .foregroundStyle(achievement.unlocked ? IBColors.inkTertiary : Color.secondary)
                                 .frame(width: 20)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(achievement.title)
@@ -209,7 +209,7 @@ struct ProfileView: View {
                         .padding(8)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(achievement.unlocked ? Color.yellow.opacity(0.06) : Color.primary.opacity(0.03))
+                                .fill(achievement.unlocked ? IBColors.inkTertiary.opacity(0.06) : Color.primary.opacity(0.03))
                         )
                         .opacity(achievement.unlocked ? 1 : 0.5)
                     }
@@ -255,7 +255,7 @@ struct ProfileView: View {
                         Spacer()
                         Text("+\(activity.xpEarned) XP")
                             .font(.callout.bold())
-                            .foregroundStyle(IBColors.electricBlue)
+                            .foregroundStyle(IBColors.accent)
                     }
                     .padding(.vertical, 2)
                     if activity.id != recent.last?.id {

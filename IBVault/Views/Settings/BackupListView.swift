@@ -67,7 +67,7 @@ struct BackupListView: View {
                 if !statusMessage.isEmpty {
                     Section {
                         Text(statusMessage)
-                            .foregroundStyle(statusMessage.hasPrefix("✗") ? .red : .green)
+                            .foregroundStyle(statusMessage.hasPrefix("✗") ? IBColors.danger : IBColors.success)
                     }
                 }
             }
