@@ -15,10 +15,11 @@ struct IBVaultApp: App {
         WindowGroup {
             RootView()
                 .preferredColorScheme(appAppearance.colorScheme)
+                .tint(IBColors.accent)
         }
         .modelContainer(Self.makeModelContainer())
         #if os(macOS)
-        .defaultSize(width: 1100, height: 750)
+        .defaultSize(width: 1280, height: 860)
         .windowResizability(.automatic)
         .windowToolbarStyle(.unified)
         .commands {
