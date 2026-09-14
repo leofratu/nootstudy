@@ -25,6 +25,7 @@
 		191EAB5615D9F2EAF1B780D0 /* FSRSSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74CAC7B208256AACF431A37 /* FSRSSchedulerTests.swift */; };
 		1C14D164525849C978E9410A /* CardGeneratorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */; };
 		1D74C1986F68005ABAF59E08 /* PerformanceSignposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E2640C5BF22FEA695396CB3 /* PerformanceSignposts.swift */; };
+		1E2A3F1506E5793FFABAC75C /* ExamMarkingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D4BB561DB401B764D757937 /* ExamMarkingService.swift */; };
 		2001F4FD7F63976CBFCF8A08 /* ProgressEvidenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F13D6842DC40308A4B0D7A3 /* ProgressEvidenceService.swift */; };
 		2234A24399DD3CBE5D477949 /* MathRenderingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA3CF51148F895236431DEA /* MathRenderingPolicy.swift */; };
 		257730CBAAE031461F3EB6AE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C613E0427FC32753318726C /* ContentView.swift */; };
@@ -90,6 +91,7 @@
 		79033963D3AA9826816AA9B0 /* CardStudioOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6E515254C03409A795DF96E /* CardStudioOptionsView.swift */; };
 		79E44E1EBCD34648F7CE098D /* StudyGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E25383C7CD4E2D5968FE6CA9 /* StudyGuideView.swift */; };
 		7A5590C46CBC444247A4C18D /* MasterySignalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C32B3A369EDF454A13A6276 /* MasterySignalsTests.swift */; };
+		7EBDDA6C8AC44180FD17EF5D /* ExamMarkerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9B7AD46A06C515B54E922B5 /* ExamMarkerView.swift */; };
 		7EFDD87487F9496EEFCBBB3C /* StudyActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7505D827B276C5D32D759F1 /* StudyActivity.swift */; };
 		8002E34EB904D0B3884E67A2 /* CardGenerationOptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C12E8304F72A610E04B382 /* CardGenerationOptionsTests.swift */; };
 		80A3F6C4C54EC5C5AA5A71CD /* UnitState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32E59F06A5BB239E59A6F86C /* UnitState.swift */; };
@@ -187,6 +189,7 @@
 		15D105C387E41396D66371BE /* ReviewScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScheduler.swift; sourceTree = "<group>"; };
 		1C613E0427FC32753318726C /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		1C985AD5D381BE3EFB7E3647 /* ReviewRankingPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRankingPolicyTests.swift; sourceTree = "<group>"; };
+		1D4BB561DB401B764D757937 /* ExamMarkingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExamMarkingService.swift; sourceTree = "<group>"; };
 		1E2640C5BF22FEA695396CB3 /* PerformanceSignposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceSignposts.swift; sourceTree = "<group>"; };
 		1F435DA61625312BA239140B /* StudyPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlan.swift; sourceTree = "<group>"; };
 		1F8A505BBDBC11462DD6741E /* JSONLineBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONLineBufferTests.swift; sourceTree = "<group>"; };
@@ -302,6 +305,7 @@
 		D0AD0CB222EFBF14223F2F50 /* IntegrationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationSettingsSection.swift; sourceTree = "<group>"; };
 		D3BCAD49D131C5FE4122185C /* StudyPlanFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyPlanFormatterTests.swift; sourceTree = "<group>"; };
 		D57E3D57A20801A4F58606C9 /* MessageRenderingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRenderingPolicy.swift; sourceTree = "<group>"; };
+		D9B7AD46A06C515B54E922B5 /* ExamMarkerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExamMarkerView.swift; sourceTree = "<group>"; };
 		DC8BC9E15B44C44E79378429 /* CardParsingBenchmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardParsingBenchmarkTests.swift; sourceTree = "<group>"; };
 		DEAFA961AFC5ABD8A57067A9 /* SyllabusSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllabusSeeder.swift; sourceTree = "<group>"; };
 		E25383C7CD4E2D5968FE6CA9 /* StudyGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyGuideView.swift; sourceTree = "<group>"; };
@@ -344,6 +348,7 @@
 			isa = PBXGroup;
 			children = (
 				FCFE0AD23091FA92B8654671 /* CardLibraryView.swift */,
+				D9B7AD46A06C515B54E922B5 /* ExamMarkerView.swift */,
 				6619E77356D387840DE2DF7D /* RecallCardView.swift */,
 				3EC41E2FCE8152E61CC560A4 /* ReviewSessionView.swift */,
 				E25383C7CD4E2D5968FE6CA9 /* StudyGuideView.swift */,
@@ -462,6 +467,7 @@
 				505085610DC73FFFFC2B21B1 /* CardBatchService.swift */,
 				9E6A912641FACB15A48B1764 /* CardGenerationOptions.swift */,
 				446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */,
+				1D4BB561DB401B764D757937 /* ExamMarkingService.swift */,
 				37683C18AEEFB21C70A982F3 /* ExternalActivityService.swift */,
 				27ABD428FFA80120ECFA4F39 /* GeminiService.swift */,
 				ED97CD9D635EAE250C259E5F /* KeychainService.swift */,
@@ -833,6 +839,8 @@
 				F103A1E5F76E417E026DA182 /* DashboardView.swift in Sources */,
 				9D1F50FAE95AFD66C6E15506 /* DesignSystem.swift in Sources */,
 				2E6108F8EA41CFBF27907F37 /* EffectivenessView.swift in Sources */,
+				7EBDDA6C8AC44180FD17EF5D /* ExamMarkerView.swift in Sources */,
+				1E2A3F1506E5793FFABAC75C /* ExamMarkingService.swift in Sources */,
 				E53965391F212764D5B52A58 /* ExternalActivity.swift in Sources */,
 				D5BCB7BE7029C541495D2A96 /* ExternalActivityService.swift in Sources */,
 				C808A6338A93963239F5D457 /* ExternalActivityView.swift in Sources */,
