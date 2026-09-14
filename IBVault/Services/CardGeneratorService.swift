@@ -3,7 +3,7 @@ import SwiftData
 
 struct CardGeneratorService {
     private static let fallbackModels = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
-    static let promptVersion = 2
+    nonisolated static let promptVersion = 3
 
     struct AdaptiveProfile: Equatable, Sendable {
         let difficulty: CardDifficulty
@@ -74,7 +74,7 @@ struct CardGeneratorService {
             .replacingOccurrences(of: "```", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let startIdx = cleaned.firstIndex(of: "["),
-           let endIdx = cleaned.lastIndex(of: "]") {
+           let endIdx = cleaned.lastIndex(of: "]"), startIdx <= endIdx {
             cleaned = String(cleaned[startIdx...endIdx])
             if let data = cleaned.data(using: .utf8),
                let payloads = try? JSONDecoder().decode([GeneratedCardPayload].self, from: data),
@@ -105,6 +105,7 @@ struct CardGeneratorService {
         }
         let cards = cardsFromPayloads(payloads, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile, options: options)
         if !cards.isEmpty { return cards }
+        if options != nil { return [] }
         // Fallback when payloads produced no useful cards but DTOs came from FRONT/BACK blocks.
         let pairs = dtos.map { ($0.front, $0.back) }
         return cardsFromPairs(pairs, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile)
@@ -128,7 +129,8 @@ struct CardGeneratorService {
         localStartingIndex: Int = 0,
         context: ModelContext,
         preferredDifficulty: CardDifficulty? = nil,
-        options: CardGenerationOptions? = nil
+        options: CardGenerationOptions? = nil,
+        allowsLocalFallback: Bool = true
     ) async throws -> [StudyCard] {
         let performanceContext = academicPerformanceContext(
             subject: subject,
@@ -171,6 +173,9 @@ struct CardGeneratorService {
         case .codexCLI: true
         }
         if !remoteAvailable {
+            guard allowsLocalFallback else {
+                throw AIProviderError.missingCredential(provider: AIConfiguration.provider)
+            }
             return localStarterCards(
                 subject: subject,
                 topicName: topicName,
@@ -214,6 +219,7 @@ struct CardGeneratorService {
 
         for model in modelsToTry {
             for _ in 0..<2 {
+                try Task.checkCancellation()
                 let remaining = targetCount - collectedCards.count
                 guard remaining > 0 else {
                     return Array(collectedCards.prefix(targetCount))
@@ -255,6 +261,7 @@ struct CardGeneratorService {
                         break
                     }
                 } catch {
+                    if Task.isCancelled || error is CancellationError { throw CancellationError() }
                     lastError = error
                     break
                 }
@@ -264,6 +271,7 @@ struct CardGeneratorService {
         if !collectedCards.isEmpty {
             return collectedCards
         }
+        guard allowsLocalFallback else { throw lastError ?? CardGeneratorError.noCardsGenerated }
         // A study session must remain usable when the provider is offline,
         // unauthenticated, rate-limited, or returns malformed JSON. These
         // syllabus-grounded starter cards are intentionally explicit about
@@ -327,7 +335,7 @@ struct CardGeneratorService {
         }
         guard !facts.isEmpty else { return [] }
         let metadata = SyllabusSeeder.metadata(for: subject.name)
-        let safeCount = min(max(count, 1), min(50, max(0, facts.count - max(startingIndex, 0))))
+        let safeCount = min(max(count, 0), min(50, max(0, facts.count - max(startingIndex, 0))))
         let requestedStyle = options?.style ?? .basic
         return (0..<safeCount).map { index in
             let absoluteIndex = max(startingIndex, 0) + index
@@ -492,7 +500,7 @@ struct CardGeneratorService {
 
         // Find the JSON array
         guard let startIdx = cleaned.firstIndex(of: "["),
-              let endIdx = cleaned.lastIndex(of: "]") else {
+              let endIdx = cleaned.lastIndex(of: "]"), startIdx <= endIdx else {
             throw CardGeneratorError.invalidFormat
         }
         cleaned = String(cleaned[startIdx...endIdx])
@@ -511,6 +519,8 @@ struct CardGeneratorService {
                 return cards
             }
         }
+
+        if options != nil { throw CardGeneratorError.invalidFormat }
 
         let textPairs = parseFrontBackBlocks(from: response)
         let cards = cardsFromPairs(
@@ -547,9 +557,12 @@ struct CardGeneratorService {
             let front = normalizedMath(payload.front).trimmingCharacters(in: .whitespacesAndNewlines)
             let back = normalizedMath(payload.back).trimmingCharacters(in: .whitespacesAndNewlines)
             guard isUsefulAnswer(front: front, back: back) else { return nil }
-            let requestedStyle = parsedCardStyle(payload.cardStyle) ?? options?.style ?? .basic
+            let requestedStyle = options?.style ?? parsedCardStyle(payload.cardStyle) ?? .basic
             let difficulty = clampDifficulty(parsedDifficulty(payload.difficulty) ?? profile.difficulty, options: options, profile: profile)
-            let skill = parsedSkill(payload.skill) ?? profile.skillMix.first ?? .explain
+            let parsed = parsedSkill(payload.skill)
+            let selectedSkills = options?.cognitiveSkills ?? []
+            let skill = selectedSkills.isEmpty ? (parsed ?? profile.skillMix.first ?? .explain)
+                : (parsed.flatMap { selectedSkills.contains($0) ? $0 : nil } ?? selectedSkills[0])
             let finalFront = front
             var finalStyle = requestedStyle
             var finalChoices: [String] = []
@@ -560,6 +573,7 @@ struct CardGeneratorService {
                 if isValidCloze(front: front, back: back) {
                     finalChoices = []
                 } else {
+                    if options != nil { return nil }
                     // Repair invalid cloze to basic rather than saving broken
                     finalStyle = .basic
                     finalChoices = []
@@ -568,6 +582,7 @@ struct CardGeneratorService {
                 if let validated = validatedChoices(back: back, choices: payload.choices) {
                     finalChoices = validated
                 } else {
+                    if options != nil { return nil }
                     finalStyle = .basic
                     finalChoices = []
                 }

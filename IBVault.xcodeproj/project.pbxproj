@@ -12,6 +12,7 @@
 		03D03E613D9E1169F9371209 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C729E73BE8AAA09B5A1FA06B /* NotificationService.swift */; };
 		048C5D59CE730788327D6FCC /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A053DD9D3F0980025D8A3C /* AppEnvironment.swift */; };
 		04D20EE41DCFFA6C14B7C0B2 /* ARIAChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60116E8218221A79342DCBE5 /* ARIAChatInputBar.swift */; };
+		06009C55DDC37DC4DB3C411A /* CardStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8919A698994D163B66CBA44A /* CardStudioView.swift */; };
 		06C90D075EF16F41D104F04B /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 097E508F5709148582415B7B /* README.md */; };
 		06E28858193E70D583BC5CBD /* ADHDTrackerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0CBD332FD598F687CAE0EEE /* ADHDTrackerView.swift */; };
 		08A1B11EAB0B6F9F0E5B71F4 /* ARIAContentContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1E5E2E369BCEE329EE4F90 /* ARIAContentContract.swift */; };
@@ -32,6 +33,7 @@
 		289A7737FFC30849D78017FF /* Achievement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A6EF035A1AF10213DA1FA65 /* Achievement.swift */; };
 		2BF52E00008EF9113F3FD51E /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 1B3D8DBE326636DD7CA083BB /* ZIPFoundation */; };
 		2D31DC9A31A8C61A9F86333F /* PerformanceBenchmarks.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD84BC773C033B813204E295 /* PerformanceBenchmarks.swift */; };
+		2DF24B42A27532C7E279AB34 /* CardLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCFE0AD23091FA92B8654671 /* CardLibraryView.swift */; };
 		2E6108F8EA41CFBF27907F37 /* EffectivenessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6068C07FEC68B8172047E23A /* EffectivenessView.swift */; };
 		2EFBF765B66EC5D62646E525 /* FSRS in Frameworks */ = {isa = PBXBuildFile; productRef = 63272128F9E9D0F19C7DD75A /* FSRS */; };
 		329FD1DA884542BDB76B10F0 /* NotebookPackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D06AE20F258F2FB7F9451E /* NotebookPackTests.swift */; };
@@ -39,6 +41,7 @@
 		33F81B4B1E53FB64783BBD2A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E125707A54C6B4B05D3DA55 /* SettingsView.swift */; };
 		349D7CED9BAE6A7F7CA73A70 /* ARIAStreamCoalescerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 795209407B02C1090FCD06AE /* ARIAStreamCoalescerTests.swift */; };
 		34DED5CA5481058748C0B1B5 /* XPCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5524048C48A17DEF1898B2E3 /* XPCalculator.swift */; };
+		382FE53FBC34E93F2C652B85 /* TopicSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3906A5D26A078E320F480F22 /* TopicSelectionView.swift */; };
 		3B2D0398A5F946B7691835FD /* AcademicImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E66491824275CC8A051C341 /* AcademicImportView.swift */; };
 		3B446844F68A315BC9A4D7D3 /* StudySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43594ABE6B0E41B86138E5D8 /* StudySession.swift */; };
 		3CBC10115E77C6CDCB02F9DD /* BackupServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D7DCA5B36607009F4CB0D8 /* BackupServiceTests.swift */; };
@@ -78,6 +81,7 @@
 		6BD4E18E615166A8145BF3A6 /* ReviewSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC41E2FCE8152E61CC560A4 /* ReviewSessionView.swift */; };
 		6E2010CC9F8C266D3152AF16 /* ARIAStreamCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28916FD3115FC19C1937AC72 /* ARIAStreamCoalescer.swift */; };
 		6FF95C5BFE1FBBF4E953D44C /* AchievementRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D9F64EDCEC91CEE062BA91 /* AchievementRule.swift */; };
+		7215EC5FDD0DD7F314750917 /* RecallCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6619E77356D387840DE2DF7D /* RecallCardView.swift */; };
 		721EEBF0877E1F4567E0A3EF /* SnapshotBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A509D28E1909411F56D71D14 /* SnapshotBuilder.swift */; };
 		74F907BB6FD0CE9CFE7B5731 /* SyllabusSeederTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B3FD673726F5C6639FD59F /* SyllabusSeederTests.swift */; };
 		75B0AE4B67162FD8215E4AE4 /* ProgressionEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D9C160A12D3DD94F6B217B /* ProgressionEventTests.swift */; };
@@ -143,6 +147,7 @@
 		E672DA2CB1B64A1E5C43F1DF /* CardGeneratorServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1255C79E6636C1720B49819F /* CardGeneratorServiceTests.swift */; };
 		EB08D3857E24FAAA8B7B7A08 /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27ABD428FFA80120ECFA4F39 /* GeminiService.swift */; };
 		EDD4602086372142D0488AD7 /* BridgeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C9D563530F73034BD2DDAA /* BridgeModels.swift */; };
+		EF590A69FE554B7E160CD0A5 /* CardBatchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 505085610DC73FFFFC2B21B1 /* CardBatchService.swift */; };
 		EFF3C377CDD0C92E7D20BB58 /* SubjectsGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C62F1C144442B95388DE982 /* SubjectsGridView.swift */; };
 		F0EF716789BD1BA7B4D79304 /* PredictiveGradeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2563267FF51967587B50FEC5 /* PredictiveGradeView.swift */; };
 		F103A1E5F76E417E026DA182 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1005F0902AD14EE836086B46 /* DashboardView.swift */; };
@@ -203,6 +208,7 @@
 		36F56DE8FE46360EDE84E832 /* BackupEarlyOutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupEarlyOutTests.swift; sourceTree = "<group>"; };
 		37683C18AEEFB21C70A982F3 /* ExternalActivityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalActivityService.swift; sourceTree = "<group>"; };
 		379A1481BDF76445ADFE4363 /* GradeMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GradeMappingTests.swift; sourceTree = "<group>"; };
+		3906A5D26A078E320F480F22 /* TopicSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicSelectionView.swift; sourceTree = "<group>"; };
 		3B3D4F61BB1E0B086E7C6333 /* AIConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfiguration.swift; sourceTree = "<group>"; };
 		3EC41E2FCE8152E61CC560A4 /* ReviewSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSessionView.swift; sourceTree = "<group>"; };
 		3F13D6842DC40308A4B0D7A3 /* ProgressEvidenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressEvidenceService.swift; sourceTree = "<group>"; };
@@ -212,6 +218,7 @@
 		46572174C584F070E8732E12 /* MasteryCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryCalculator.swift; sourceTree = "<group>"; };
 		4867AB101DB50691695AA292 /* FormattedMessageFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormattedMessageFormatterTests.swift; sourceTree = "<group>"; };
 		4ED01AD46D3FF1E35B15C4F1 /* IBVaultTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IBVaultTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		505085610DC73FFFFC2B21B1 /* CardBatchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardBatchService.swift; sourceTree = "<group>"; };
 		5233D9FE11A99995314C6222 /* SubjectKnowledgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectKnowledgeTests.swift; sourceTree = "<group>"; };
 		5524048C48A17DEF1898B2E3 /* XPCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XPCalculator.swift; sourceTree = "<group>"; };
 		56F393C55ED8372446273171 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
@@ -225,6 +232,7 @@
 		6240C9F2594DA0B2C567AB5F /* IBVault.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IBVault.entitlements; sourceTree = "<group>"; };
 		64457DA4883197D2A87251A1 /* ADHDMedicationTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADHDMedicationTrackerTests.swift; sourceTree = "<group>"; };
 		64866ADFA36E9AE318F56941 /* IBVault.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IBVault.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6619E77356D387840DE2DF7D /* RecallCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecallCardView.swift; sourceTree = "<group>"; };
 		67BC5408382187E921958667 /* CurriculumNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurriculumNode.swift; sourceTree = "<group>"; };
 		69F1ABD16621DF2227D783B7 /* ActiveStudySessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveStudySessionView.swift; sourceTree = "<group>"; };
 		73711AF048136739D56C8EA9 /* LearningAnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningAnalyticsView.swift; sourceTree = "<group>"; };
@@ -242,6 +250,7 @@
 		83E12470134DF352846A1C65 /* RankLadderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankLadderTests.swift; sourceTree = "<group>"; };
 		84CBE422BE3736077D85F83C /* HeatmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapView.swift; sourceTree = "<group>"; };
 		88FC6557D278D7C5D2150576 /* TopicBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicBrowserView.swift; sourceTree = "<group>"; };
+		8919A698994D163B66CBA44A /* CardStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStudioView.swift; sourceTree = "<group>"; };
 		8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewQueueManager.swift; sourceTree = "<group>"; };
 		908ECDE117349ED5E8B3004B /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		909162F38CAE7020F7B6A53F /* BridgeAuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeAuthServiceTests.swift; sourceTree = "<group>"; };
@@ -312,6 +321,7 @@
 		F6C812EE55F9D81E1C5BDDDA /* CalendarSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncService.swift; sourceTree = "<group>"; };
 		F6E515254C03409A795DF96E /* CardStudioOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStudioOptionsView.swift; sourceTree = "<group>"; };
 		FBEF0F514FDAF02DADE26C08 /* ProgressionEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressionEvent.swift; sourceTree = "<group>"; };
+		FCFE0AD23091FA92B8654671 /* CardLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardLibraryView.swift; sourceTree = "<group>"; };
 		FD42C0B0534AB6E78452E12D /* UserProfileProgressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileProgressionTests.swift; sourceTree = "<group>"; };
 		FD7054635482B1FC324201C7 /* MasterySignals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasterySignals.swift; sourceTree = "<group>"; };
 		FE35A2B5EB4D74B9779057D4 /* Subject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Subject.swift; sourceTree = "<group>"; };
@@ -333,6 +343,8 @@
 		00CDB86EB94077AE11C8A71C /* Review */ = {
 			isa = PBXGroup;
 			children = (
+				FCFE0AD23091FA92B8654671 /* CardLibraryView.swift */,
+				6619E77356D387840DE2DF7D /* RecallCardView.swift */,
 				3EC41E2FCE8152E61CC560A4 /* ReviewSessionView.swift */,
 				E25383C7CD4E2D5968FE6CA9 /* StudyGuideView.swift */,
 			);
@@ -391,9 +403,11 @@
 			isa = PBXGroup;
 			children = (
 				9E66491824275CC8A051C341 /* AcademicImportView.swift */,
+				8919A698994D163B66CBA44A /* CardStudioView.swift */,
 				F6C4E5C0A77ABFA31DA98783 /* SubjectDetailView.swift */,
 				2C62F1C144442B95388DE982 /* SubjectsGridView.swift */,
 				88FC6557D278D7C5D2150576 /* TopicBrowserView.swift */,
+				3906A5D26A078E320F480F22 /* TopicSelectionView.swift */,
 			);
 			path = Subjects;
 			sourceTree = "<group>";
@@ -445,6 +459,7 @@
 				56F393C55ED8372446273171 /* BackupService.swift */,
 				EA0B4023A285DCACC03E6EDC /* CalendarSyncCoordinator.swift */,
 				F6C812EE55F9D81E1C5BDDDA /* CalendarSyncService.swift */,
+				505085610DC73FFFFC2B21B1 /* CardBatchService.swift */,
 				9E6A912641FACB15A48B1764 /* CardGenerationOptions.swift */,
 				446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */,
 				37683C18AEEFB21C70A982F3 /* ExternalActivityService.swift */,
@@ -806,9 +821,12 @@
 				45C0BC8B7710B682EF1B657D /* BridgeRouter.swift in Sources */,
 				95D3B082A771FAB4371CE241 /* CalendarSyncCoordinator.swift in Sources */,
 				5037AAD926F042F7AC948464 /* CalendarSyncService.swift in Sources */,
+				EF590A69FE554B7E160CD0A5 /* CardBatchService.swift in Sources */,
 				C8128B877A19E67DEDA06D86 /* CardGenerationOptions.swift in Sources */,
 				1C14D164525849C978E9410A /* CardGeneratorService.swift in Sources */,
+				2DF24B42A27532C7E279AB34 /* CardLibraryView.swift in Sources */,
 				79033963D3AA9826816AA9B0 /* CardStudioOptionsView.swift in Sources */,
+				06009C55DDC37DC4DB3C411A /* CardStudioView.swift in Sources */,
 				FAB7006BDFEDD13413FBE915 /* Components.swift in Sources */,
 				257730CBAAE031461F3EB6AE /* ContentView.swift in Sources */,
 				46DA567E643175829DC0B7E3 /* CurriculumNode.swift in Sources */,
@@ -852,6 +870,7 @@
 				85E962C86D710F46AC69BE33 /* ProgressionSnapshots.swift in Sources */,
 				C2A0CD45FFEC4EFF8BC95B35 /* RankLadder.swift in Sources */,
 				449ADDA1C21F572EE1872A6C /* RankProgress.swift in Sources */,
+				7215EC5FDD0DD7F314750917 /* RecallCardView.swift in Sources */,
 				678B77411090D1DAB71C0E07 /* RelativeTimeHelper.swift in Sources */,
 				5839DFD9945FDFFFD3420911 /* ReviewQueueManager.swift in Sources */,
 				9AD053EF7D6637FC4E100EA0 /* ReviewScheduler.swift in Sources */,
@@ -875,6 +894,7 @@
 				EFF3C377CDD0C92E7D20BB58 /* SubjectsGridView.swift in Sources */,
 				91A938936F44803FE63A8926 /* SyllabusSeeder.swift in Sources */,
 				FDEC1D8CE0720ECB213E467F /* TopicBrowserView.swift in Sources */,
+				382FE53FBC34E93F2C652B85 /* TopicSelectionView.swift in Sources */,
 				80A3F6C4C54EC5C5AA5A71CD /* UnitState.swift in Sources */,
 				DF44F7CAB72D0F736F8EB8A5 /* UserProfile.swift in Sources */,
 				F8F8CFC2084381A99A18E627 /* WeeklyChallenge.swift in Sources */,

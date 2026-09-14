@@ -200,108 +200,12 @@ struct ReviewSessionView: View {
 
             Divider()
 
-            // Card area
             ScrollView {
-                VStack(spacing: 20) {
-                    // The flashcard
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Topic name
-                        HStack(spacing: 8) {
-                            Image(systemName: "lightbulb")
-                                .foregroundStyle(IBColors.inkTertiary)
-                            Text(card.topicName)
-                                .font(.headline)
-                            Text(card.difficulty.rawValue)
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Capsule().fill(IBColors.surfaceHover))
-                                .foregroundStyle(IBColors.accent)
-                            Text(card.cognitiveSkill.rawValue)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(IBColors.inkSecondary)
-                        }
-
-                        Divider()
-
-                        if isFlipped {
-                            // Back side
-                            VStack(alignment: .leading, spacing: 16) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "questionmark.circle.fill")
-                                        .foregroundStyle(IBColors.inkTertiary)
-                                    Text("Question")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(IBColors.inkSecondary)
-                                }
-                                FormattedMessageContent(text: card.front)
-                                    .font(.system(size: 20, weight: .medium, design: .serif))
-                                    .textSelection(.enabled)
-
-                                Divider()
-
-                                HStack(spacing: 6) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(IBColors.success)
-                                    Text("Answer")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(IBColors.inkSecondary)
-                                }
-                                FormattedMessageContent(text: card.back)
-                                    .font(.system(size: 19, weight: .regular, design: .serif))
-                                    .textSelection(.enabled)
-
-                                if let hint = card.hint, !hint.isEmpty {
-                                    Label {
-                                        FormattedMessageContent(text: hint)
-                                    } icon: {
-                                        Image(systemName: "lightbulb")
-                                    }
-                                    .font(.caption)
-                                    .foregroundStyle(IBColors.inkSecondary)
-                                }
-
-                                if let sourceTitle = card.sourceTitle, !sourceTitle.isEmpty {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "link")
-                                        if let sourceURL = card.sourceURL {
-                                            Link(sourceTitle, destination: sourceURL)
-                                        } else {
-                                            Text(sourceTitle)
-                                        }
-                                        if let reference = card.syllabusReference, !reference.isEmpty {
-                                            Text("· \(reference)")
-                                                .lineLimit(1)
-                                        }
-                                    }
-                                    .font(.caption2)
-                                    .foregroundStyle(IBColors.inkSecondary)
-                                }
-                            }
-                        } else {
-                            // Front side
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "questionmark.circle.fill")
-                                        .foregroundStyle(IBColors.inkTertiary)
-                                    Text("Question")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(IBColors.inkSecondary)
-                                }
-                                FormattedMessageContent(text: card.front)
-                                    .font(.system(size: 28, weight: .medium, design: .serif))
-                                    .textSelection(.enabled)
-                            }
-                        }
-                    }
+                RecallCardView(card: card, revealed: $isFlipped)
+                    .id(card.id)
+                    .frame(maxWidth: 820)
                     .padding(24)
-                    .frame(maxWidth: 820, minHeight: 300, alignment: .leading)
-                    .glassCard()
-                    .matchedGeometryEffect(id: "card-\(card.id.uuidString)", in: cardFlipNamespace)
-                    .animation(reduceMotion ? nil : IBAnimation.snappy, value: isFlipped)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(24)
+                    .frame(maxWidth: .infinity)
             }
 
             Divider()
