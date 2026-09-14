@@ -9,6 +9,71 @@ struct VisualSnapshotHarness {
 
     @MainActor
     @Test
+    func renderSettingsSnapshots() throws {
+        guard let path = ProcessInfo.processInfo.environment["NOOTSTUDY_SETTINGS_SNAPSHOTS"],
+              !path.isEmpty else { return }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let container = try makeSeededContainer()
+        let suite = "NootStudy.SettingsSnapshot.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(AIProviderKind.codexCLI.rawValue, forKey: "ariaProvider")
+        defaults.set("gpt-5.5", forKey: "codexModel")
+        defaults.set("high", forKey: "ariaReasoningEffort")
+        for scheme in [ColorScheme.light, .dark] {
+            let suffix = scheme == .light ? "light" : "dark"
+            for section in [SettingsView.SettingsSection.general, .assistant, .study, .subjects, .data, .about] {
+                try render(SettingsView(initialSection: section, loadsExternalState: false)
+                    .defaultAppStorage(defaults).modelContainer(container),
+                    size: CGSize(width: 1000, height: 1040),
+                    name: "settings-\(section.id)-\(suffix)", directory: directory, scheme: scheme)
+            }
+            try render(SettingsView(initialSection: .assistant, loadsExternalState: false)
+                .defaultAppStorage(defaults).modelContainer(container),
+                size: CGSize(width: 660, height: 1000),
+                name: "settings-narrow-\(suffix)", directory: directory, scheme: scheme)
+        }
+    }
+
+    @MainActor
+    @Test
+    func renderReworkSnapshots() throws {
+        guard let path = ProcessInfo.processInfo.environment["NOOTSTUDY_REWORK_SNAPSHOTS"],
+              !path.isEmpty else { return }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let container = try makeSeededContainer()
+        let subject = try #require(container.mainContext.fetch(FetchDescriptor<Subject>()).first { $0.name == "Biology" })
+        let manager = ReviewQueueManager()
+        manager.refreshDueCards(context: container.mainContext)
+        let bridge = IntegrationBridgeController(container: container)
+        let topic = try #require(SyllabusSeeder.curriculum(for: subject.name, level: subject.level).first?.topics.first?.name)
+        let selection: Set<CardTopicSelection> = [.init(topic: topic)]
+        for scheme in [ColorScheme.light, .dark] {
+            let suffix = scheme == .light ? "light" : "dark"
+            try render(ContentView().modelContainer(container).environment(bridge),
+                       size: CGSize(width: 1440, height: 1000), name: "workspace-\(suffix)", directory: directory, scheme: scheme)
+            try render(SubjectsGridView().modelContainer(container),
+                       size: CGSize(width: 1050, height: 900), name: "subjects-\(suffix)", directory: directory, scheme: scheme)
+            try render(CardStudioView(initialSubject: subject, initialSelection: selection).modelContainer(container),
+                       size: CGSize(width: 1100, height: 1050), name: "studio-\(suffix)", directory: directory, scheme: scheme)
+            try render(CardStudioView(initialSubject: subject, initialSelection: selection).modelContainer(container),
+                       size: CGSize(width: 700, height: 900), name: "studio-narrow-\(suffix)", directory: directory, scheme: scheme)
+            try render(ExamMarkerView().modelContainer(container),
+                       size: CGSize(width: 1000, height: 950), name: "exam-\(suffix)", directory: directory, scheme: scheme)
+            try render(TopicBrowserView(subject: subject).modelContainer(container),
+                       size: CGSize(width: 900, height: 750), name: "curriculum-\(suffix)", directory: directory, scheme: scheme)
+            let card = StudyCard(topicName: "Cell biology", front: "Which organelle produces most of a cell's ATP?",
+                                 back: "Mitochondrion", cardStyle: .multipleChoice,
+                                 choices: ["Nucleus", "Mitochondrion", "Ribosome", "Golgi apparatus"])
+            try render(RecallSnapshotWrapper(card: card).padding(32).background(IBColors.canvas),
+                       size: CGSize(width: 760, height: 700), name: "multiple-choice-\(suffix)", directory: directory, scheme: scheme)
+        }
+    }
+
+    @MainActor
+    @Test
     func renderSnapshots() throws {
         var dirString = ProcessInfo.processInfo.environment["NOOTSTUDY_SNAPSHOT_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         if dirString == nil || dirString!.isEmpty {
@@ -157,10 +222,10 @@ struct VisualSnapshotHarness {
     // MARK: - Rendering helper
 
     @MainActor
-    private func render<V: View>(_ view: V, size: CGSize, name: String, directory: URL) throws {
+    private func render<V: View>(_ view: V, size: CGSize, name: String, directory: URL, scheme: ColorScheme = .dark) throws {
         let wrapped = view
-            .preferredColorScheme(.dark)
-            .environment(\.colorScheme, .dark)
+            .preferredColorScheme(scheme)
+            .environment(\.colorScheme, scheme)
             .frame(width: size.width, height: size.height)
             .background(IBColors.canvasDeep)
             .clipShape(Rectangle())
@@ -168,7 +233,7 @@ struct VisualSnapshotHarness {
         // Prefer NSHostingView for AppKit-backed views (NavigationSplitView,
         // ScrollView, etc.) which ImageRenderer sometimes captures as blank.
         // Fall back to ImageRenderer if hosting fails.
-        if let pngData = try? hostingPNG(for: wrapped, size: size) {
+        if let pngData = try? hostingPNG(for: wrapped, size: size, scheme: scheme, inspect: name == "workspace-dark") {
             let url = directory.appendingPathComponent("\(name).png")
             try pngData.write(to: url)
             return
@@ -190,19 +255,34 @@ struct VisualSnapshotHarness {
     }
 
     @MainActor
-    private func hostingPNG<V: View>(for view: V, size: CGSize) throws -> Data {
-        let darkView = view.preferredColorScheme(.dark).environment(\.colorScheme, .dark)
-        let hosting = NSHostingView(rootView: darkView)
-        hosting.appearance = NSAppearance(named: .darkAqua)
-        NSApp.appearance = NSAppearance(named: .darkAqua)
+    private func hostingPNG<V: View>(for view: V, size: CGSize, scheme: ColorScheme, inspect: Bool) throws -> Data {
+        let styled = view.preferredColorScheme(scheme).environment(\.colorScheme, scheme)
+        let hosting = NSHostingView(rootView: styled)
+        let previous = NSApp.appearance
+        defer { NSApp.appearance = previous }
+        hosting.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        NSApp.appearance = hosting.appearance
         hosting.frame = NSRect(origin: .zero, size: size)
         hosting.wantsLayer = true
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.orderFront(nil)
+        defer { window.orderOut(nil); window.close() }
         // Allow SwiftData queries to resolve
         hosting.layoutSubtreeIfNeeded()
         // Small runloop tick for @Query
-        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
         hosting.layoutSubtreeIfNeeded()
         hosting.displayIfNeeded()
+        // Native sidebar glass is composited outside cacheDisplay. Opt in to a
+        // short live inspection window when checking the full macOS shell.
+        if inspect, ProcessInfo.processInfo.environment["NOOTSTUDY_INSPECT_WINDOW"] == "1" {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            print("NOOTSTUDY_INSPECTION_READY")
+            RunLoop.current.run(until: Date().addingTimeInterval(45))
+        }
         guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
             throw SnapshotError.renderFailed("hosting")
         }
@@ -571,6 +651,12 @@ print(rate(light: lightIntensity, co2: co2ppm))
             ctx.insert(t)
         }
     }
+}
+
+private struct RecallSnapshotWrapper: View {
+    let card: StudyCard
+    @State private var revealed = false
+    var body: some View { RecallCardView(card: card, revealed: $revealed) }
 }
 
 private struct CardStudioSnapshotWrapper: View {

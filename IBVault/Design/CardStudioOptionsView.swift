@@ -2,220 +2,113 @@ import SwiftUI
 
 struct CardStudioOptionsView: View {
     @Binding var options: CardGenerationOptions
-    var showsCount: Bool = true
-    var compact: Bool = false
+    var showsCount = true
+    var compact = false
+    var showsStyle = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 10 : 14) {
-            // Style
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Card style", systemImage: "rectangle.on.rectangle")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.inkSecondary)
-                Picker("Style", selection: $options.style) {
-                    ForEach(CardStyle.allCases) { style in
-                        Text(style.label).tag(style)
+        VStack(alignment: .leading, spacing: compact ? 16 : 24) {
+            if showsStyle {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Format").font(IBTypography.headline)
+                    Picker("Card format", selection: $options.style) {
+                        ForEach(CardStyle.allCases) { Text($0.label).tag($0) }
                     }
-                }
-                .pickerStyle(.segmented)
-                .help(options.style.summary)
-                Text(options.style.summary)
-                    .font(.caption2)
-                    .foregroundStyle(IBColors.inkTertiary)
-            }
-
-            // Tone
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Tone", systemImage: "text.bubble")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.inkSecondary)
-                Picker("Tone", selection: $options.tone) {
-                    ForEach(CardTone.allCases) { tone in
-                        Text(tone.label).tag(tone)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-
-            // Difficulty
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Difficulty", systemImage: "chart.bar")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.inkSecondary)
-                Picker("Difficulty", selection: $options.difficulty) {
-                    ForEach(CardDifficulty.allCases) { diff in
-                        Text(diff.rawValue).tag(diff)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-
-            // Cognitive skills multi-select chips
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Cognitive skills", systemImage: "brain.head.profile")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(IBColors.inkSecondary)
-                Text("Tap to select multiple. Leave empty for adaptive mix.")
-                    .font(.caption2)
-                    .foregroundStyle(IBColors.inkTertiary)
-                FlowLayout(spacing: 6) {
-                    ForEach(CardCognitiveSkill.allCases) { skill in
-                        SkillChip(
-                            skill: skill,
-                            isSelected: options.cognitiveSkills.contains(skill),
-                            action: {
-                                if options.cognitiveSkills.contains(skill) {
-                                    options.cognitiveSkills.removeAll { $0 == skill }
-                                } else {
-                                    options.cognitiveSkills.append(skill)
-                                }
-                                IBHaptics.light()
-                            }
-                        )
-                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    Text(options.style.summary)
+                        .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                 }
             }
-
             if showsCount {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("Card count", systemImage: "number")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(IBColors.inkSecondary)
-                    HStack(spacing: 10) {
-                        Text("\(options.count)")
-                            .font(.callout.weight(.semibold).monospacedDigit())
-                            .frame(width: 30)
-                        Slider(
-                            value: Binding(
-                                get: { Double(options.count) },
-                                set: { options.count = min(max(Int($0.rounded()), 1), 50) }
-                            ),
-                            in: 1...50,
-                            step: 1
-                        )
-                        Stepper("", value: Binding(
-                            get: { options.count },
-                            set: { options.count = min(max($0, 1), 50) }
-                        ), in: 1...50)
-                        .labelsHidden()
-                        .fixedSize()
+                HStack {
+                    Text("Total cards").font(IBTypography.headline)
+                    Spacer()
+                    Stepper(value: $options.count, in: 1...50, step: 1) {
+                        Text("\(options.count)").monospacedDigit().font(IBTypography.title3)
+                            .frame(minWidth: 32)
                     }
-                    Text("1 to 50 cards per batch")
-                        .font(.caption2)
-                        .foregroundStyle(IBColors.inkTertiary)
+                    .fixedSize()
                 }
             }
-
-            // Internal tools toggle — prominent
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle(isOn: $options.useInternalTools) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "internaldrive")
-                            .foregroundStyle(IBColors.accent)
-                        Text("Let ARIA use internal tools")
-                            .font(.callout.weight(.semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Difficulty").font(IBTypography.headline)
+                Picker("Difficulty", selection: $options.difficulty) {
+                    ForEach(CardDifficulty.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            HStack {
+                Text("Writing style").font(IBTypography.headline)
+                Spacer()
+                Picker("Writing style", selection: $options.tone) {
+                    ForEach(CardTone.allCases) { Text($0.label).tag($0) }
+                }
+                .labelsHidden().frame(maxWidth: 160)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Skills to practise").font(IBTypography.headline)
+                    Spacer()
+                    if options.cognitiveSkills.isEmpty {
+                        Text("Adaptive mix").font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                     }
                 }
-                .toggleStyle(.switch)
-                .tint(IBColors.accent)
-
-                Text("ARIA looks up your curriculum, checks duplicates, and schedules; the app enforces these steps.")
-                    .font(.caption)
-                    .foregroundStyle(IBColors.inkSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 2)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 8)], spacing: 8) {
+                    ForEach(CardCognitiveSkill.allCases) { skill in
+                        StudioSelectionButton(title: skill.rawValue, selected: options.cognitiveSkills.contains(skill)) {
+                            if options.cognitiveSkills.contains(skill) {
+                                options.cognitiveSkills.removeAll { $0 == skill }
+                            } else { options.cognitiveSkills.append(skill) }
+                        }
+                    }
+                }
             }
-            .padding(10)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.surfaceHover)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.border, lineWidth: 1)
-                    )
-            )
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(IBColors.surface).overlay(RoundedRectangle(cornerRadius: 10).stroke(IBColors.border, lineWidth: 1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(IBColors.border, lineWidth: 1)
-                )
-        )
+        .foregroundStyle(IBColors.ink)
     }
 }
 
-private struct SkillChip: View {
-    let skill: CardCognitiveSkill
-    let isSelected: Bool
+struct StudioSelectionButton: View {
+    let title: String
+    let selected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(skill.rawValue)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(isSelected ? .white : IBColors.ink)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? IBColors.accentFill : IBColors.surfaceHover)
-                        .overlay(
-                            Capsule().stroke(isSelected ? IBColors.accentFill : IBColors.border, lineWidth: 1)
-                        )
-                )
+            HStack(spacing: 6) {
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                Text(title).fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(selected ? IBColors.accent : IBColors.inkSecondary)
+            .padding(.horizontal, 10).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? IBColors.highlight : IBColors.surface, in: RoundedRectangle(cornerRadius: IBRadius.md))
+            .overlay(RoundedRectangle(cornerRadius: IBRadius.md).stroke(selected ? IBColors.accent : IBColors.borderStrong, lineWidth: 1))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(skill.rawValue)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityValue(selected ? "Selected" : "Not selected")
     }
 }
 
-// Simple flow layout for chips
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 400
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        for sub in subviews {
-            let size = sub.sizeThatFits(.unspecified)
-            if x + size.width > width {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-        }
-        return CGSize(width: width, height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        let maxWidth = bounds.width
-        for sub in subviews {
-            let size = sub.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            sub.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-            if x > maxWidth { x = bounds.minX; y += rowHeight + spacing }
+extension CardStyle {
+    var symbol: String {
+        switch self {
+        case .basic: "rectangle.on.rectangle"
+        case .cloze: "textformat.abc.dottedunderline"
+        case .multipleChoice: "list.bullet.circle"
         }
     }
-}
 
-#Preview {
-    CardStudioOptionsView(options: .constant(.default))
-        .frame(width: 400)
-        .padding()
+    var shortDescription: String {
+        switch self {
+        case .basic: "Question & answer"
+        case .cloze: "Fill in the blank"
+        case .multipleChoice: "Pick the right answer"
+        }
+    }
 }

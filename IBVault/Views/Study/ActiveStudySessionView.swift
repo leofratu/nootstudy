@@ -23,10 +23,12 @@ struct ActiveStudySessionView: View {
     @State private var selectedTab: SessionTab = .plan
     @State private var generatedCards: [GeneratedFlashcard] = []
     @State private var isGeneratingCards = false
+    @State private var flashcardTask: Task<Void, Never>?
     @State private var flashcardError: String?
     @State private var flashcardBatchSize = 10
     @State private var flashcardTopicName = ""
     @State private var flashcardSubtopicName = ""
+    @State private var flashcardSelection: Set<CardTopicSelection> = []
     @State private var flashcardDifficulty: CardDifficulty = .exam
     @State private var cardStudioOptions = CardGenerationOptions(count: 10, difficulty: .exam, style: .basic, tone: .exam, cognitiveSkills: [], useInternalTools: false)
     @State private var completedTaskIDs: Set<UUID> = []
@@ -37,8 +39,10 @@ struct ActiveStudySessionView: View {
     @State private var examMarkdown = ""
     @State private var isGeneratingExam = false
     @State private var examResponse = ""
+    @State private var examMarkScheme = ""
     @State private var examGradingMarkdown = ""
     @State private var isGradingExam = false
+    @State private var markingTask: Task<Void, Never>?
     @State private var examGradingError: String?
     @State private var isCompletingSession = false
     @State private var isSessionComplete = false
@@ -53,13 +57,7 @@ struct ActiveStudySessionView: View {
     // cannot write the same card twice and create duplicates in the subject.
     @State private var savedCardIDs: Set<UUID> = []
 
-    private struct GeneratedFlashcard: Identifiable {
-        let id = UUID()
-        let topicName: String
-        let subtopic: String
-        let front: String
-        let back: String
-    }
+    private typealias GeneratedFlashcard = CardDraft
 
     private struct EvidenceScope: Identifiable {
         let topicName: String
@@ -244,6 +242,8 @@ struct ActiveStudySessionView: View {
             prepareFlashcardsIfRequested()
         }
         .onDisappear {
+            flashcardTask?.cancel()
+            markingTask?.cancel()
             saveSessionNotes()
         }
         .sheet(isPresented: $showCompletionCheckIn) {
@@ -294,6 +294,12 @@ struct ActiveStudySessionView: View {
         guard flashcardTopicName.isEmpty else { return }
         flashcardTopicName = flashcardTopics.first ?? plan.topicName
         flashcardSubtopicName = flashcardSubtopics.first ?? ""
+        let level = subjects.first(where: { $0.name == plan.subjectName })?.level ?? ""
+        flashcardSelection = Set(flashcardTopics.flatMap { topic -> [CardTopicSelection] in
+            let valid = SyllabusSeeder.subtopics(for: plan.subjectName, level: level, topicName: topic)
+            let selected = plan.selectedSubtopicNames.filter { valid.contains($0) }
+            return selected.isEmpty ? [.init(topic: topic)] : selected.map { .init(topic: topic, subtopic: $0) }
+        })
     }
 
     // MARK: - Header
@@ -456,9 +462,11 @@ struct ActiveStudySessionView: View {
         if !task.subtopicName.isEmpty {
             flashcardTopicName = task.topicName
             flashcardSubtopicName = task.subtopicName
+            flashcardSelection = [.init(topic: task.topicName, subtopic: task.subtopicName)]
         } else if !task.topicName.isEmpty {
             flashcardTopicName = task.topicName
             flashcardSubtopicName = ""
+            flashcardSelection = [.init(topic: task.topicName)]
         }
     }
 
@@ -611,6 +619,7 @@ struct ActiveStudySessionView: View {
 
     private var cardStudioPanel: some View {
         CardStudioOptionsView(options: $cardStudioOptions, showsCount: true)
+            .disabled(isGeneratingCards)
             .onChange(of: cardStudioOptions.count) { _, new in flashcardBatchSize = new }
             .onChange(of: cardStudioOptions.difficulty) { _, new in flashcardDifficulty = new }
             .onChange(of: flashcardBatchSize) { _, new in cardStudioOptions.count = new }
@@ -629,6 +638,7 @@ struct ActiveStudySessionView: View {
             Spacer()
             if isGeneratingCards {
                 ProgressView().controlSize(.small)
+                Button("Cancel") { flashcardTask?.cancel() }
             } else {
                 Button(action: generateFlashcards) {
                     Label(
@@ -646,33 +656,12 @@ struct ActiveStudySessionView: View {
 
     @ViewBuilder
     private var flashcardScopeSection: some View {
-        if !flashcardTopics.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Scope")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Unit").font(.caption2).foregroundStyle(.tertiary)
-                        Text(flashcardUnitName).font(.caption.weight(.medium)).lineLimit(1)
-                    }
-                    .frame(maxWidth: 180, alignment: .leading)
-                    Picker("Topic", selection: $flashcardTopicName) {
-                        ForEach(flashcardTopics, id: \.self) { Text($0).tag($0) }
-                    }
-                    .frame(maxWidth: 220)
-                    .onChange(of: flashcardTopicName) { _, _ in
-                        flashcardSubtopicName = flashcardSubtopics.first ?? ""
-                    }
-                    Picker("Subunit", selection: $flashcardSubtopicName) {
-                        Text("All subunits").tag("")
-                        ForEach(flashcardSubtopics, id: \.self) { Text($0).tag($0) }
-                    }
-                    .frame(maxWidth: 240)
-                }
+        if let subject = subjects.first(where: { $0.name == plan.subjectName }) {
+            DisclosureGroup("Choose topics · \(flashcardSelection.count) selected") {
+                TopicSelectionView(subject: subject, selection: $flashcardSelection).padding(.top, 16)
             }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.accent.opacity(0.045)))
+            .padding(16).surfaceCard()
+            .disabled(isGeneratingCards)
         }
     }
 
@@ -706,10 +695,10 @@ struct ActiveStudySessionView: View {
     private func flashcardRow(_ card: GeneratedFlashcard, index: Int) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             flashcardRowHeader(card, index: index)
-            FormattedMessageContent(text: card.front)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.accent.opacity(0.04)))
+            RecallCardView(card: card.makeCard(), revealed: Binding(
+                get: { revealedCards.contains(index) },
+                set: { if $0 { revealedCards.insert(index) } else { revealedCards.remove(index) } }
+            )).id(card.id)
             flashcardAnswer(card, index: index)
         }
         .padding(12)
@@ -734,10 +723,6 @@ struct ActiveStudySessionView: View {
     @ViewBuilder
     private func flashcardAnswer(_ card: GeneratedFlashcard, index: Int) -> some View {
         if revealedCards.contains(index) {
-            FormattedMessageContent(text: card.back)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.03)))
             if let rating = cardRatings[card.id] {
                 Label("Rated \(rating.label)", systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
@@ -789,6 +774,7 @@ struct ActiveStudySessionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 examToolbar
+                    .disabled(isGradingExam)
                 examContent
             }
             .padding(.horizontal, 20)
@@ -859,7 +845,7 @@ struct ActiveStudySessionView: View {
     private var examRubricOverview: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("IB grading criteria", systemImage: "list.bullet.clipboard")
+                Label("Practice criteria", systemImage: "list.bullet.clipboard")
                     .font(.headline)
                 Spacer()
                 Text("\(IBExamRubric.totalMarks(in: examMarkdown)) marks")
@@ -910,15 +896,25 @@ struct ActiveStudySessionView: View {
                 .frame(minHeight: 240)
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.035)))
+                .disabled(isGradingExam)
+            DisclosureGroup("Add a mark scheme (optional)") {
+                TextEditor(text: $examMarkScheme)
+                    .frame(minHeight: 120).padding(10)
+                    .scrollContentBackground(.hidden)
+                    .background(IBColors.canvas)
+                    .accessibilityLabel("Practice exam mark scheme")
+                    .disabled(isGradingExam)
+            }
             HStack {
-                Text("Rubric: \(IBExamRubric.shortName(for: plan.subjectName))")
+                Text(examMarkScheme.isEmpty ? "Practice estimate · No mark scheme" : "Against your supplied scheme")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if isGradingExam {
                     ProgressView().controlSize(.small)
+                    Button("Cancel") { markingTask?.cancel() }
                 }
-                Button("Grade with IB Rubric", systemImage: "checkmark.seal", action: gradeExamResponse)
+                Button("Mark my answer", systemImage: "checkmark.seal", action: gradeExamResponse)
                     .buttonStyle(.borderedProminent)
                     .disabled(examResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isGradingExam)
             }
@@ -936,7 +932,7 @@ struct ActiveStudySessionView: View {
         }
         if !examGradingMarkdown.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Label("IB rubric feedback", systemImage: "checkmark.seal.fill")
+                Label("Practice feedback", systemImage: "checkmark.seal.fill")
                     .font(.headline)
                     .foregroundStyle(IBColors.success)
                 FormattedMessageContent(text: examGradingMarkdown)
@@ -1423,82 +1419,29 @@ struct ActiveStudySessionView: View {
     // MARK: - Flashcard Generation
 
     private func generateFlashcards() {
+        guard !isGeneratingCards, let subject = subjects.first(where: { $0.name == plan.subjectName }) else { return }
+        let jobs: [CardBatchJob]
+        do {
+            jobs = try CardBatchService.plan(scopes: Array(flashcardSelection),
+                                             styles: [cardStudioOptions.style], count: cardStudioOptions.count)
+        } catch { flashcardError = error.localizedDescription; return }
         isGeneratingCards = true
-
-        Task {
+        flashcardError = nil
+        let options = cardStudioOptions
+        flashcardTask = Task { @MainActor in
+            defer { isGeneratingCards = false; flashcardTask = nil }
             do {
-                await MainActor.run {
-                    flashcardError = nil
-                }
-
-                var generatedBatch: [GeneratedFlashcard] = []
-                guard let subject = subjects.first(where: { $0.name == plan.subjectName }) else {
-                    throw NSError(
-                        domain: "IBVault.ActiveStudySessionView",
-                        code: 2,
-                        userInfo: [NSLocalizedDescriptionKey: "Could not find the subject needed to save generated flashcards."]
-                    )
-                }
-
-                // Ensure studio count sync
-                cardStudioOptions.count = flashcardBatchSize
-                cardStudioOptions.difficulty = flashcardDifficulty
-                let generatedCardsForScope = try await CardGeneratorService.generateCards(
-                    subject: subject,
-                    topicName: flashcardTopicName,
-                    subtopic: flashcardSubtopicName,
-                    count: cardStudioOptions.count,
-                    localStartingIndex: generatedCards.count,
-                    context: context,
-                    preferredDifficulty: cardStudioOptions.difficulty,
-                    options: cardStudioOptions
-                )
-                generatedBatch.append(contentsOf: generatedCardsForScope.map {
-                    GeneratedFlashcard(
-                        topicName: $0.topicName,
-                        subtopic: $0.subtopic,
-                        front: $0.front,
-                        back: $0.back
-                    )
-                })
-
-                var seenSignatures = Set(generatedCards.map { "\($0.front)|\($0.back)" })
-                generatedBatch = generatedBatch.filter {
-                    seenSignatures.insert("\($0.front)|\($0.back)").inserted
-                }
-
-                guard !generatedBatch.isEmpty else {
-                    throw NSError(
-                        domain: "IBVault.ActiveStudySessionView",
-                        code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: "ARIA returned text, but no valid FRONT/BACK flashcards could be parsed. Try again."]
-                    )
-                }
-
-                ARIAService.recordFlashcardGeneration(
-                    subjectName: plan.subjectName,
-                    topicName: plan.topicName,
-                    subtopicName: plan.subtopicName,
-                    generatedCards: generatedBatch.map { ($0.front, $0.back) },
-                    sourceReference: "ActiveStudySessionView.generateFlashcards"
-                )
-
-                await MainActor.run {
-                    generatedCards.append(contentsOf: generatedBatch)
-                    // Persist the generated batch immediately. A session can
-                    // be dismissed before the learner taps Save, so generated
-                    // cards must not exist only in transient view state.
-                    for card in generatedBatch where !savedCardIDs.contains(card.id) {
-                        _ = saveCardToSubject(card)
-                    }
-                    isGeneratingCards = false
-                }
-            } catch {
-                await MainActor.run {
-                    flashcardError = error.localizedDescription
-                    isGeneratingCards = false
-                }
-            }
+                let batch = try await CardBatchService.generate(subject: subject, jobs: jobs, options: options,
+                                                                context: context) { _, _, _ in }
+                try Task.checkCancellation()
+                generatedCards.append(contentsOf: batch.drafts)
+                flashcardError = batch.issues.isEmpty ? nil : batch.issues.joined(separator: "\n")
+                // Session cards are saved with their complete format metadata
+                // before rating, and each draft is persisted only once.
+                for card in batch.drafts { _ = saveCardToSubject(card) }
+            } catch is CancellationError {
+                // Cancellation leaves the existing set intact.
+            } catch { flashcardError = error.localizedDescription }
         }
     }
 
@@ -1507,6 +1450,7 @@ struct ActiveStudySessionView: View {
     private func clearExamWorkspace() {
         withAnimation(IBAnimation.smooth) {
             examMarkdown = ""
+            examMarkScheme = ""
             examResponse = ""
             examGradingMarkdown = ""
             examGradingError = nil
@@ -1582,83 +1526,23 @@ struct ActiveStudySessionView: View {
     }
 
     private func gradeExamResponse() {
-        let answer = examResponse.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !answer.isEmpty, !examMarkdown.isEmpty else { return }
+        guard !isGradingExam else { return }
+        let request = ExamMarkingRequest(subject: plan.subjectName,
+            level: subjects.first(where: { $0.name == plan.subjectName })?.level ?? "",
+            question: examMarkdown, answer: examResponse, markScheme: examMarkScheme,
+            maximumMarks: IBExamRubric.totalMarks(in: examMarkdown))
+        guard request.isValid else { examGradingError = ExamMarkingError.invalidRequest.localizedDescription; return }
         isGradingExam = true
         examGradingError = nil
         examGradingMarkdown = ""
-
-        let subject = plan.subjectName
-        let level = subjects.first(where: { $0.name == subject })?.level ?? ""
-        let rubric = IBExamRubric.markdown(for: subject, level: level)
-        let totalMarks = IBExamRubric.totalMarks(in: examMarkdown)
-        let scopeTerms = plan.selectedTopicNames + plan.selectedSubtopicNames
-        let remoteAvailable: Bool = switch AIConfiguration.provider {
-        case .gemini: KeychainService.hasAPIKey
-        case .junali: KeychainService.hasJunaliAPIKey
-        case .codexCLI: true
-        }
-
-        guard remoteAvailable else {
-            examGradingMarkdown = IBExamRubric.localFeedback(
-                subject: subject,
-                level: level,
-                answer: answer,
-                totalMarks: totalMarks,
-                scopeTerms: scopeTerms
-            )
-            isGradingExam = false
-            return
-        }
-
-        Task {
+        markingTask = Task { @MainActor in
+            defer { isGradingExam = false; markingTask = nil }
             do {
-                let prompt = """
-                Grade this learner response as an exacting \(subject) \(level) IB examiner.
-
-                IB-aligned rubric:
-                \(rubric)
-
-                Practice paper (maximum \(totalMarks) marks):
-                \(examMarkdown.prefix(14_000))
-
-                Learner response:
-                \(answer.prefix(14_000))
-
-                Return concise Markdown with exactly these sections:
-                ## Result
-                - estimated mark as X/\(totalMarks) and percentage
-                - approximate IB grade 1-7, explicitly labelled as an estimate rather than an official boundary result
-                ## Criterion grading
-                For every criterion use a separate ### heading followed by bullets for weight, awarded performance, brief quoted evidence, and what prevented the next band. Do not use a Markdown table.
-                ## Question-level feedback
-                Award marks question by question where the paper permits it. Do not award unsupported content.
-                ## Next actions
-                Three concrete changes that would gain marks on a rewrite.
-
-                Apply the command terms and subject conventions. For mathematics require visible method; for sciences require correct terminology and data handling; for economics and business require application and evaluation; for language and literature require textual analysis, organization, and language quality. Never invent evidence that is absent from the response.
-                """
-                let response = try await AIProviderService.generateContent(
-                    messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You are an IB examiner applying the supplied subject rubric consistently. Grade only the learner response, distinguish correctness from writing length, and explain every deduction."
-                )
-                await MainActor.run {
-                    examGradingMarkdown = IBExamRubric.displaySafeMarkdown(response)
-                    isGradingExam = false
-                }
-            } catch {
-                await MainActor.run {
-                    examGradingMarkdown = IBExamRubric.localFeedback(
-                        subject: subject,
-                        level: level,
-                        answer: answer,
-                        totalMarks: totalMarks,
-                        scopeTerms: scopeTerms
-                    )
-                    examGradingError = "AI grading was unavailable; showing the local rubric estimate."
-                    isGradingExam = false
-                }
-            }
+                let result = try await ExamMarkingService.mark(request)
+                examGradingMarkdown = result.transcript(hasScheme: request.hasScheme)
+            } catch is CancellationError {
+                // Keep the response available for another attempt.
+            } catch { examGradingError = error.localizedDescription }
         }
     }
 
@@ -1669,23 +1553,17 @@ struct ActiveStudySessionView: View {
            let existing = subject.cards.first(where: { $0.id == persistedID }) {
             return existing
         }
-        let card = StudyCard(
-            topicName: generatedCard.topicName,
-            subtopic: generatedCard.subtopic,
-            front: generatedCard.front,
-            back: generatedCard.back,
-            subject: subject,
-            sourceStudyPlanID: plan.id,
-            sourceStudySessionID: activeSessionID
-        )
-        subject.cards.append(card)
+        let card = generatedCard.makeCard(subject: subject)
+        card.sourceStudyPlanID = plan.id
+        card.sourceStudySessionID = activeSessionID
+        context.insert(card)
         do {
             try context.save()
         } catch {
             // Do not leave a card that was never persisted: drop the pending
             // insert so the UI cannot claim a save that did not happen. The
             // failure is surfaced so the user knows the card was not saved.
-            context.rollback()
+            context.delete(card)
             flashcardError = "Could not save this flashcard: \(error.localizedDescription)"
             return nil
         }
@@ -1699,17 +1577,13 @@ struct ActiveStudySessionView: View {
         guard let subject = subjects.first(where: { $0.name == plan.subjectName }) else { return }
         let toSave = unsavedGeneratedCards
         guard !toSave.isEmpty else { return }
+        var inserted: [StudyCard] = []
         for card in toSave {
-            let studyCard = StudyCard(
-                topicName: card.topicName,
-                subtopic: card.subtopic,
-                front: card.front,
-                back: card.back,
-                subject: subject,
-                sourceStudyPlanID: plan.id,
-                sourceStudySessionID: activeSessionID
-            )
-            subject.cards.append(studyCard)
+            let studyCard = card.makeCard(subject: subject)
+            studyCard.sourceStudyPlanID = plan.id
+            studyCard.sourceStudySessionID = activeSessionID
+            context.insert(studyCard)
+            inserted.append(studyCard)
             persistedCardIDs[card.id] = studyCard.id
         }
         do {
@@ -1717,7 +1591,8 @@ struct ActiveStudySessionView: View {
         } catch {
             // Same reasoning as `saveCardToSubject`: a failed save must not be
             // presented as a completed batch.
-            context.rollback()
+            inserted.forEach(context.delete)
+            for card in toSave { persistedCardIDs.removeValue(forKey: card.id) }
             flashcardError = "Could not save your flashcards: \(error.localizedDescription)"
             return
         }

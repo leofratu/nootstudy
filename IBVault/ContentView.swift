@@ -9,6 +9,8 @@ enum NavigationTab: String, CaseIterable, Hashable {
     case subjects = "Subjects"
     case studySessions = "Sessions"
     case review = "Review"
+    case cardStudio = "Card studio"
+    case examMarker = "Exam marker"
     case aria = "ARIA"
     case analytics = "Progress"
     case recommendations = "Recommendations"
@@ -22,6 +24,8 @@ enum NavigationTab: String, CaseIterable, Hashable {
         case .subjects: return "books.vertical.fill"
         case .studySessions: return "calendar.badge.clock"
         case .review: return "brain.head.profile"
+        case .cardStudio: return "rectangle.stack.badge.plus"
+        case .examMarker: return "checkmark.bubble"
         case .aria: return "sparkles"
         case .analytics: return "chart.bar.fill"
         case .recommendations: return "lightbulb.fill"
@@ -57,10 +61,11 @@ struct ContentView: View {
             detailPane
         }
         #if os(macOS)
-        .frame(minWidth: 940, minHeight: 600)
+        .frame(minWidth: 940, minHeight: 640)
         #endif
         .environment(reviewQueueManager)
         .environment(progressionEvents)
+        .tint(IBColors.accent)
         .onAppear {
             reviewQueueManager.refreshDueCards(context: context)
         }
@@ -115,11 +120,11 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
-        .frame(height: 34)
+        .frame(height: 42)
         .background {
             if selectedTab == tab {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.surfaceHover)
+                    .fill(IBColors.highlight)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
                     .matchedGeometryEffect(id: "sidebarSelection", in: sidebarSelectionNamespace)
             }
@@ -129,55 +134,41 @@ struct ContentView: View {
     }
 
     private var sidebarList: some View {
-        List {
-            Section {
-                HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(IBColors.accentFill)
-                            .frame(width: 30, height: 30)
-                        Image(systemName: "books.vertical.fill")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Noot Study")
-                            .font(.system(size: 14.5, weight: .bold))
-                            .foregroundStyle(IBColors.ink)
-                    }
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "books.vertical.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(IBColors.accent)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("noot study").font(.custom("Georgia-Bold", size: 20))
+                        .foregroundStyle(IBColors.ink)
+                    Text("MAKE IT STICK").font(.system(size: 9, weight: .semibold))
+                        .tracking(1.8).foregroundStyle(IBColors.inkSecondary)
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, 14)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-
-                ForEach([
-                    NavigationTab.dashboard,
-                    .studySessions,
-                    .review,
-                    .subjects,
-                    .aria,
-                    .analytics,
-                    .recommendations,
-                    .predictions
-                ], id: \.self) { tab in
-                    sidebarButton(tab)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                Spacer(minLength: 0)
+            }.padding(.horizontal, 20).padding(.top, 28).padding(.bottom, 28)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    sidebarSection("WORKSPACE", tabs: [.dashboard, .subjects, .studySessions])
+                    sidebarSection("PRACTICE", tabs: [.cardStudio, .review, .examMarker, .aria])
+                    sidebarSection("YOUR PROGRESS", tabs: [.analytics, .recommendations, .predictions])
                 }
+                .padding(.horizontal, 12).padding(.bottom, 20)
             }
-        }
-        .listStyle(.sidebar)
-        .background(IBColors.canvasDeep)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
             sidebarFooter
         }
+        .background(IBColors.canvasDeep)
         .navigationTitle("Noot Study")
-        #if os(macOS)
         .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
-        #endif
+    }
+
+    private func sidebarSection(_ title: String, tabs: [NavigationTab]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 9, weight: .semibold)).tracking(1.5)
+                .foregroundStyle(IBColors.inkSecondary)
+                .padding(.horizontal, 10).padding(.bottom, 8)
+            ForEach(tabs, id: \.self) { sidebarButton($0) }
+        }
     }
 
     private var sidebarFooter: some View {
@@ -248,6 +239,8 @@ struct ContentView: View {
             case .subjects: SubjectsGridView()
             case .studySessions: StudyPlannerView()
             case .review: ReviewLaunchView()
+            case .cardStudio: CardStudioView()
+            case .examMarker: ExamMarkerView()
             case .aria: ARIAChatView()
             case .analytics: ProgressHubView()
             case .recommendations: SmartRecommendationsView()
@@ -260,9 +253,6 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(IBColors.canvas)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(IBColors.border, lineWidth: 1))
-        .padding(10)
         .background(IBColors.canvasDeep)
     }
 

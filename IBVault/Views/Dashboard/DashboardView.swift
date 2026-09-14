@@ -60,11 +60,12 @@ struct DashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     dashboardHeader
+                    practiceDesk
                     metricsGrid
-                    externalWorkPrompt
-                    assessmentCalibration(evidence: evidence)
                     focusGrid
                     subjectPortfolio(evidence: evidence)
+                    assessmentCalibration(evidence: evidence)
+                    externalWorkPrompt
                 }
                 .frame(maxWidth: 1240, alignment: .leading)
                 .padding(.horizontal, 28)
@@ -139,13 +140,54 @@ struct DashboardView: View {
             return "\(dueBacklogCount) flashcards are due and available for review."
         }
         if studySessions.isEmpty {
-            return "Your report baseline is loaded. Start with a focused study block or build more recall cards."
+            return "Pick a topic, make a set, and build your understanding."
         }
         return "Your queue is clear. Use the time to plan your next focused session."
     }
 
     private var subjectCountWithDue: Int {
         Set(dueCards.compactMap { $0.subject?.id }).count
+    }
+
+    private var practiceDesk: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("YOUR STUDY DESK").font(IBTypography.captionBold).tracking(2)
+                    Text("Small sessions.\nLasting knowledge.")
+                        .font(.custom("Georgia", size: 36))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "text.book.closed")
+                    .font(.system(size: 60, weight: .ultraLight))
+                    .foregroundStyle(IBColors.accent)
+                    .padding(16)
+                    .accessibilityHidden(true)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    NavigationLink { CardStudioView() } label: {
+                        Label("Create flashcards", systemImage: "rectangle.stack.badge.plus")
+                    }.buttonStyle(PrimaryButtonStyle())
+                    NavigationLink { ExamMarkerView() } label: {
+                        Label("Mark an exam answer", systemImage: "checkmark.bubble")
+                    }.buttonStyle(SecondaryButtonStyle())
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    NavigationLink { CardStudioView() } label: {
+                        Label("Create flashcards", systemImage: "rectangle.stack.badge.plus")
+                    }.buttonStyle(PrimaryButtonStyle())
+                    NavigationLink { ExamMarkerView() } label: {
+                        Label("Mark an exam answer", systemImage: "checkmark.bubble")
+                    }.buttonStyle(SecondaryButtonStyle())
+                }
+            }
+        }
+        .foregroundStyle(IBColors.ink)
+        .padding(28)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(IBColors.highlight, in: RoundedRectangle(cornerRadius: IBRadius.xl))
     }
 
     private var evidenceRows: [EvidenceRow] {

@@ -49,14 +49,14 @@ struct StudioPageHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: IBSpacing.lg) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: symbol)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(IBColors.inkTertiary)
+                        .foregroundStyle(tint)
                     Text(eyebrow.uppercased())
                         .font(.system(size: 11, weight: .semibold))
-                        .tracking(0.8)
+                        .tracking(1.8)
                         .foregroundStyle(IBColors.inkTertiary)
                 }
 
@@ -100,7 +100,7 @@ struct StudioSectionHeader<Trailing: View>: View {
         HStack(spacing: 10) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(IBColors.inkTertiary)
+                .foregroundStyle(tint)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -130,7 +130,7 @@ struct StudioMetricTile: View {
         self.value = value
         self.label = label
         self.symbol = symbol
-        self.tint = nil
+        self.tint = tint
         self.detail = detail
     }
     init(value: String, label: String, symbol: String, detail: String? = nil) {
@@ -152,7 +152,7 @@ struct StudioMetricTile: View {
                 Spacer(minLength: 8)
                 Image(systemName: symbol)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(IBColors.inkTertiary)
+                    .foregroundStyle(tint ?? IBColors.accent)
             }
             Text(label)
                 .font(.system(size: 11, weight: .semibold))
@@ -227,7 +227,7 @@ struct ProgressRing: View {
                 .stroke(IBColors.border, lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: clampedProgress)
-                .stroke(IBColors.accent, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(IBAnimation.smooth, value: progress)
             Text("\(Int(clampedProgress * 100))")
@@ -315,7 +315,7 @@ struct MasteryBar: View {
                 Capsule()
                     .fill(IBColors.border)
                 Capsule()
-                    .fill(IBColors.accent)
+                    .fill(color)
                     .frame(width: max(0, geo.size.width * min(progress, 1.0)))
             }
         }
@@ -509,23 +509,25 @@ struct StatCard: View {
 // MARK: - Button Styles
 
 struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(isEnabled ? Color.white : IBColors.inkTertiary)
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.accentFill))
+            .padding(.vertical, 11)
+            .background(RoundedRectangle(cornerRadius: IBRadius.md).fill(isEnabled ? IBColors.accentFill : IBColors.surfaceHover))
             .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
 struct SecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(IBColors.ink)
+            .foregroundStyle(isEnabled ? IBColors.ink : IBColors.inkTertiary)
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 11)
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(IBColors.surface)

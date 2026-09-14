@@ -66,24 +66,24 @@ struct IBColors {
     // Helper: dynamic Color from light/dark hex pair
     private static func dynamic(light: String, dark: String) -> Color {
         Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-            appearance.name == .darkAqua ? NSColor(hex: dark) : NSColor(hex: light)
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(hex: dark) : NSColor(hex: light)
         }))
     }
 
     // Core surfaces — flat, no gradient/glass
-    static let canvas = dynamic(light: "F5F6F8", dark: "0A0C10")
-    static let canvasDeep = dynamic(light: "F5F6F8", dark: "07090C")
-    static let surface = dynamic(light: "FFFFFF", dark: "12151C")
-    static let surfaceRaised = dynamic(light: "FFFFFF", dark: "171B24")
-    static let surfaceHover = dynamic(light: "EEF1F5", dark: "1E2430")
-    static let border = dynamic(light: "E2E5EA", dark: "262D3A")
-    static let borderStrong = dynamic(light: "E2E5EA", dark: "333C4D")
+    static let canvas = dynamic(light: "F6F3EB", dark: "151D1B")
+    static let canvasDeep = dynamic(light: "EAE7DD", dark: "101714")
+    static let surface = dynamic(light: "FFFEF9", dark: "1D2723")
+    static let surfaceRaised = dynamic(light: "EFEDE2", dark: "25332C")
+    static let surfaceHover = dynamic(light: "E6EBDD", dark: "304036")
+    static let border = dynamic(light: "D6D9CD", dark: "3B4B40")
+    static let borderStrong = dynamic(light: "7A8679", dark: "788C79")
     static let cardBorder = border
 
     // Ink
-    static let ink = dynamic(light: "12151A", dark: "E9EDF4")
-    static let inkSecondary = dynamic(light: "5B6472", dark: "A2ADBE")
-    static let inkTertiary = dynamic(light: "8A93A3", dark: "6B7688")
+    static let ink = dynamic(light: "20382B", dark: "F1F2E6")
+    static let inkSecondary = dynamic(light: "536052", dark: "BCC8B8")
+    static let inkTertiary = dynamic(light: "64705F", dark: "A0B09C")
     static let secondaryText = inkSecondary
     static let tertiaryText = inkTertiary
     static let mutedGray = inkTertiary
@@ -92,38 +92,42 @@ struct IBColors {
 
     // Accent — single accent system
     /// Accent used for text, tint, icons
-    static let accent = dynamic(light: "2E5BE6", dark: "7FA8FF")
+    static let accent = dynamic(light: "386044", dark: "C3DF91")
     /// Accent fill used for primary button backgrounds (white text)
-    static let accentFill = dynamic(light: "2E5BE6", dark: "2F6BFF")
+    static let accentFill = dynamic(light: "34533B", dark: "426144")
+    static let highlight = dynamic(light: "E2EEBC", dark: "34432C")
     static let electricBlue = accent
     static let electricBlueMuted = accentFill
 
     // Legacy semantic aliases kept neutral-compiled
-    static let teal = dynamic(light: "5B6472", dark: "A2ADBE")
-    static let coral = dynamic(light: "5B6472", dark: "A2ADBE")
-    static let gold = dynamic(light: "5B6472", dark: "A2ADBE")
-    static let streakOrange = dynamic(light: "5B6472", dark: "A2ADBE")
+    static let teal = dynamic(light: "286B70", dark: "91CFCA")
+    static let coral = dynamic(light: "A04E36", dark: "E4AB8F")
+    static let gold = dynamic(light: "83621D", dark: "E4CE8E")
+    static let streakOrange = coral
 
     // Semantic — only where meaning is real
-    static let success = dynamic(light: "1F9D5C", dark: "3DD68C")
+    static let success = dynamic(light: "336C40", dark: "AED3A0")
     static let warning = dynamic(light: "B7791F", dark: "F5B04C")
     static let danger = dynamic(light: "C0392B", dark: "FF6B6B")
 
     // Subject accents — now neutral (single accent discipline)
-    static let englishColor = accent
-    static let russianColor = accent
+    static let englishColor = coral
+    static let russianColor = gold
     static let biologyColor = accent
-    static let mathColor = accent
-    static let economicsColor = accent
-    static let businessColor = accent
-    static let advancedMathColor = accent
-    static let universeColor = accent
+    static let mathColor = teal
+    static let economicsColor = gold
+    static let businessColor = coral
+    static let advancedMathColor = teal
+    static let universeColor = gold
     static let startupsColor = accent
 
     static func subjectColor(for name: String) -> Color {
-        // Neutral discipline: all subjects share inkTertiary/surface treatment.
-        // Keep API but return neutral/accent-adjacent rather than rainbow.
-        accent
+        switch name {
+        case let name where name.contains("Math"): teal
+        case let name where name.contains("English") || name.contains("Business"): coral
+        case let name where name.contains("Economics") || name.contains("Russian"): gold
+        default: accent
+        }
     }
 
     // Code block background for dark chat
@@ -179,7 +183,7 @@ struct IBTypography {
     static let bigStat = Font.system(size: 40, weight: .bold, design: .default).monospacedDigit()
 
     // Page title 24 semibold; eyebrow 11 semibold uppercase tracking ~0.8; section 15 semibold
-    static let pageTitle = Font.system(size: 24, weight: .semibold, design: .default)
+    static let pageTitle = Font.custom("Georgia", size: 34, relativeTo: .largeTitle)
     static let eyebrow = Font.system(size: 11, weight: .semibold, design: .default)
     static let sectionTitle = Font.system(size: 15, weight: .semibold, design: .default)
     static let body13 = Font.system(size: 13, weight: .regular, design: .default)
@@ -203,11 +207,11 @@ struct IBSpacing {
 
 // MARK: - Corner Radii
 struct IBRadius {
-    static let sm: CGFloat = 5
-    static let md: CGFloat = 7
-    static let lg: CGFloat = 8
-    static let xl: CGFloat = 8
-    static let card: CGFloat = 10
+    static let sm: CGFloat = 6
+    static let md: CGFloat = 10
+    static let lg: CGFloat = 14
+    static let xl: CGFloat = 20
+    static let card: CGFloat = 16
 }
 
 // MARK: - Shadows — killed, flat system uses none
@@ -226,7 +230,7 @@ struct IBGradient {
         LinearGradient(colors: [IBColors.accentFill, IBColors.accentFill], startPoint: .top, endPoint: .bottom)
     }
     static func tint(_ color: Color) -> LinearGradient {
-        LinearGradient(colors: [color.opacity(0.0), color.opacity(0.0)], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [color.opacity(0.12), color.opacity(0.12)], startPoint: .top, endPoint: .bottom)
     }
     static var cardSheen: LinearGradient {
         LinearGradient(colors: [IBColors.surface, IBColors.surface], startPoint: .top, endPoint: .bottom)

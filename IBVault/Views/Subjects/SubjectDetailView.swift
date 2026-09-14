@@ -11,13 +11,14 @@ struct SubjectDetailView: View {
     @State private var showReview = false
     @State private var showStudyGuide = false
     @State private var showTopicBrowser = false
+    @State private var showCardStudio = false
     @State private var showAcademicImport = false
     @State private var showMappingReview = false
     // Curriculum subunits shown expanded by default so the per-subunit mastery
     // breakdown is visible without clicking into every topic.
     @State private var expandedUnits: Set<String> = []
 
-    private var color: Color { IBColors.inkTertiary }
+    private var color: Color { IBColors.subjectColor(for: subject.name) }
     private var sortedGrades: [Grade] { subject.grades.sorted { $0.date > $1.date } }
     private var curriculum: [CurriculumUnit] {
         SyllabusSeeder.curriculum(for: subject.name, level: subject.level)
@@ -184,7 +185,7 @@ struct SubjectDetailView: View {
                     .padding(.bottom, 24)
             }
         }
-        .background(.background)
+        .background(IBColors.canvas)
         .navigationTitle(subject.name)
         .onAppear {
             // Show the full sub-unit mastery breakdown by default.
@@ -205,6 +206,15 @@ struct SubjectDetailView: View {
             NavigationStack {
                 TopicBrowserView(subject: subject)
             }
+        }
+        .sheet(isPresented: $showCardStudio) {
+            CardStudioView(initialSubject: subject)
+                .frame(minWidth: 920, minHeight: 720)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") { showCardStudio = false }
+                    }
+                }
         }
         .sheet(isPresented: $showAcademicImport) {
             AcademicImportView()
@@ -267,7 +277,11 @@ struct SubjectDetailView: View {
 
     // MARK: - Actions
     private func actionsBar(dueCount: Int) -> some View {
-        HStack(spacing: 12) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
+            Button { showCardStudio = true } label: {
+                Label("Create flashcards", systemImage: "rectangle.stack.badge.plus")
+                    .frame(maxWidth: .infinity)
+            }.buttonStyle(PrimaryButtonStyle())
             if dueCount > 0 {
                 Button {
                     showReview = true
