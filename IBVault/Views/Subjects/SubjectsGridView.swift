@@ -47,11 +47,13 @@ struct SubjectsGridView: View {
                     StudioPageHeader(
                         eyebrow: "Knowledge library",
                         title: "Subjects",
-                        subtitle: "Open a subject to see its curriculum, recall progress, and the next work worth doing.",
+                        subtitle: "Your curriculum, one subject at a time.",
                         symbol: "books.vertical.fill",
                         tint: IBColors.englishColor
                     ) {
-                        StudioPill(title: "\(subjects.count) SUBJECTS", tint: IBColors.englishColor)
+                        NavigationLink { CardStudioView() } label: {
+                            Label("Create cards", systemImage: "plus")
+                        }.buttonStyle(PrimaryButtonStyle())
                     }
 
                     HStack(spacing: 12) {
@@ -77,20 +79,16 @@ struct SubjectsGridView: View {
                         )
                         .frame(maxWidth: .infinity)
                     } else {
-                        VStack(spacing: 0) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 290), spacing: 20)], spacing: 20) {
                             ForEach(sortedSubjects, id: \.id) { subject in
                                 NavigationLink {
                                     SubjectDetailView(subject: subject)
                                 } label: {
-                                    SubjectWorkspaceRow(subject: subject, dueCount: dueCounts[subject.id] ?? 0, mastery: mastery[subject.id] ?? 0)
+                                    SubjectLibraryTile(subject: subject, dueCount: dueCounts[subject.id] ?? 0, mastery: mastery[subject.id] ?? 0)
                                 }
                                 .buttonStyle(.plain)
-                                if subject.id != sortedSubjects.last?.id {
-                                    Divider().padding(.leading, 72)
-                                }
                             }
                         }
-                        .glassCard()
                     }
                 }
                 .frame(maxWidth: 1240, alignment: .leading)
@@ -132,7 +130,7 @@ struct SubjectWorkspaceRow: View {
     let dueCount: Int
     let mastery: Double
 
-    private var tint: Color { IBColors.inkTertiary }
+    private var tint: Color { IBColors.subjectColor(for: subject.name) }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -220,5 +218,46 @@ struct SubjectWorkspaceRow: View {
         case let name where name.contains("English"): return "text.book.closed.fill"
         default: return "book.closed.fill"
         }
+    }
+}
+
+private struct SubjectLibraryTile: View {
+    let subject: Subject
+    let dueCount: Int
+    let mastery: Double
+    private var tint: Color { IBColors.subjectColor(for: subject.name) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                Text(subject.level).font(IBTypography.captionBold).tracking(1.5)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(tint.opacity(0.1), in: Capsule())
+                Spacer()
+                Image(systemName: "arrow.up.right").font(.system(size: 15, weight: .medium))
+            }.foregroundStyle(tint)
+            Text(subject.name).font(.custom("Georgia", size: 25))
+                .foregroundStyle(IBColors.ink)
+                .frame(height: 64, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(2)
+            HStack {
+                Text("\(subject.cards.count) cards")
+                Spacer()
+                Text(dueCount > 0 ? "\(dueCount) due" : "Queue clear")
+            }.font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+            Divider()
+            HStack {
+                Text("Mastery").font(IBTypography.caption)
+                Spacer()
+                Text("\(Int(mastery * 100))%").font(IBTypography.mono).foregroundStyle(tint)
+            }
+            MasteryBar(progress: mastery, height: 5, color: tint)
+        }
+        .padding(24).surfaceCard()
+        .overlay(alignment: .top) {
+            RoundedRectangle(cornerRadius: 2).fill(tint).frame(height: 3).padding(.horizontal, 24)
+        }
+        .contentShape(Rectangle())
     }
 }
