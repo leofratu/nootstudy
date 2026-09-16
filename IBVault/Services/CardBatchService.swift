@@ -59,6 +59,7 @@ nonisolated struct CardDraft: Identifiable, Sendable {
     }
 
     init(card: StudyCard) {
+        id = card.id
         topic = card.topicName
         subtopic = card.subtopic
         front = card.front
@@ -107,45 +108,70 @@ enum CardBatchService {
 
     struct Result {
         var drafts: [CardDraft] = []
+        var reusedCards: [StudyCard] = []
         var issues: [String] = []
     }
 
     @MainActor
     static func generate(subject: Subject, jobs: [CardBatchJob], options: CardGenerationOptions,
                          context: ModelContext,
+                         reuseExisting: Bool = true,
                          generateCards: Generator? = nil,
                          onProgress: (Int, Int, String) -> Void) async throws -> Result {
         // Use a detached subject so model construction cannot mutate a live
         // inverse relationship before the user saves their drafts.
         let detached = Subject(name: subject.name, level: subject.level, accentColorHex: subject.accentColorHex)
         var result = Result()
-        var known = Set(subject.cards.map { fingerprint(front: $0.front, style: $0.cardStyle) })
+        var known = subject.cards.map(CardDuplicatePolicy.signature)
+        var coveredFronts = subject.cards.map(\.front)
+        var included = Set<UUID>()
         for (index, job) in jobs.enumerated() {
             try Task.checkCancellation()
             onProgress(index, jobs.count, job.scope.label)
+            let reusable = reuseExisting ? StudyLibraryService.cards(in: subject.cards, scopes: [job.scope], styles: [job.style])
+                .filter { !included.contains($0.id) && CardDraft(card: $0).isValid } : []
+            let reused = Array(reusable.prefix(job.count))
+            result.reusedCards.append(contentsOf: reused)
+            included.formUnion(reused.map(\.id))
+            let missing = job.count - reused.count
+            guard missing > 0 else { continue }
+            let missingJob = CardBatchJob(scope: job.scope, style: job.style, count: missing)
             var settings = options
-            settings.count = job.count
+            settings.count = missing
             settings.style = job.style
             do {
                 let cards: [StudyCard]
                 if let generateCards {
-                    cards = try await generateCards(detached, job, settings, context)
+                    cards = try await generateCards(detached, missingJob, settings, context)
                 } else {
                     cards = try await CardGeneratorService.generateCards(
                         subject: detached, topicName: job.scope.topic, subtopic: job.scope.subtopic,
-                        context: context, options: settings, allowsLocalFallback: false)
+                        context: context, options: settings, allowsLocalFallback: false,
+                        excludingFronts: coveredFronts, libraryCards: subject.cards)
                 }
                 try Task.checkCancellation()
                 var added = 0
                 for card in cards {
+                    guard added < missing else { break }
                     let draft = CardDraft(card: card)
-                    if draft.isValid, known.insert(fingerprint(front: draft.front, style: draft.style)).inserted {
+                    let signature = CardDuplicatePolicy.signature(card)
+                    if let existing = subject.cards.first(where: { $0.id == card.id })
+                        ?? CardDuplicatePolicy.existingMatch(for: draft, in: subject.cards) {
+                        if included.insert(existing.id).inserted {
+                            result.reusedCards.append(existing)
+                            added += 1
+                        }
+                        continue
+                    }
+                    if draft.isValid, !known.contains(where: { signature.matches($0) }) {
                         result.drafts.append(draft)
+                        known.append(signature)
+                        coveredFronts.append(draft.front)
                         added += 1
                     }
                 }
-                if added < job.count {
-                    result.issues.append("\(job.scope.label) · \(job.style.label): \(added) of \(job.count) new cards. Duplicate or invalid cards were skipped.")
+                if added < missing {
+                    result.issues.append("\(job.scope.label) · \(job.style.label): \(added + reused.count) of \(job.count) cards available. Repeated or invalid cards were skipped.")
                 }
             } catch {
                 if Task.isCancelled || error is CancellationError { throw CancellationError() }
@@ -157,14 +183,19 @@ enum CardBatchService {
     }
 
     nonisolated static func fingerprint(front: String, style: CardStyle) -> String {
-        style.rawValue + ":" + front.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        style.rawValue + ":" + CardDuplicatePolicy.normalize(front)
     }
 
     @MainActor
     static func save(_ drafts: [CardDraft], subject: Subject, context: ModelContext) throws -> Int {
         guard !drafts.isEmpty, drafts.allSatisfy(\.isValid) else { throw CardBatchError.invalidDraft }
-        var known = Set(subject.cards.map { fingerprint(front: $0.front, style: $0.cardStyle) })
-        let fresh = drafts.filter { known.insert(fingerprint(front: $0.front, style: $0.style)).inserted }
+        var known = subject.cards.map(CardDuplicatePolicy.signature)
+        let fresh = drafts.filter { draft in
+            let signature = CardDuplicatePolicy.Signature(front: draft.front, back: draft.back, style: draft.style)
+            guard !known.contains(where: { signature.matches($0) }) else { return false }
+            known.append(signature)
+            return true
+        }
         let cards = fresh.map { $0.makeCard(subject: subject) }
         cards.forEach(context.insert)
         do { try context.save() }

@@ -3,6 +3,10 @@ import SwiftData
 
 struct SubjectsGridView: View {
     @Query private var subjects: [Subject]
+    @Environment(\.modelContext) private var context
+    @Environment(ReviewQueueManager.self) private var sharedQueue: ReviewQueueManager?
+    @State private var localQueue = ReviewQueueManager()
+    private var queue: ReviewQueueManager { sharedQueue ?? localQueue }
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     @Query private var academicAssessments: [AcademicAssessment]
     @Query private var academicMappings: [AcademicAssessmentMapping]
@@ -59,7 +63,7 @@ struct SubjectsGridView: View {
                     HStack(spacing: 12) {
                         StudioMetricTile(value: "\(subjects.count)", label: "Enrolled", symbol: "books.vertical.fill", tint: IBColors.englishColor, detail: "Your IB syllabus")
                         StudioMetricTile(value: "\(averageMastery(mastery))%", label: "Average mastery", symbol: "chart.bar.fill", tint: IBColors.inkTertiary, detail: "Across active subjects")
-                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + (dueCounts[$1.id] ?? 0) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.inkTertiary, detail: "Within studied scopes")
+                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + (dueCounts[$1.id] ?? 0) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.inkTertiary, detail: "Within your daily allowance")
                     }
 
                     StudioSectionHeader(
@@ -97,6 +101,10 @@ struct SubjectsGridView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(IBColors.canvas)
+            .onAppear { queue.refreshDueCards(context: context) }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+                if sharedQueue == nil { localQueue.refreshDueCards(context: context) }
+            }
             .navigationTitle("Subjects")
             .searchable(text: $searchText, placement: .toolbar, prompt: "Find a subject")
         }
@@ -107,20 +115,8 @@ struct SubjectsGridView: View {
     /// studied scopes and re-scanning every card set once per tile (and again in
     /// the metric row).
     private var dueCountBySubject: [UUID: Int] {
-        let scopes = StudySession.uniqueStudyScopes(from: studySessions)
-        guard !scopes.isEmpty else { return [:] }
-        let scopesBySubject = Dictionary(grouping: scopes, by: \.subjectName)
         var counts: [UUID: Int] = [:]
-        for subject in subjects {
-            guard let subjectScopes = scopesBySubject[subject.name], !subjectScopes.isEmpty else { continue }
-            var count = 0
-            for card in subject.cards where card.isDue {
-                if subjectScopes.contains(where: { $0.matches(card) }) {
-                    count += 1
-                }
-            }
-            counts[subject.id] = count
-        }
+        for subject in subjects { counts[subject.id] = queue.dueCount(for: subject) }
         return counts
     }
 }

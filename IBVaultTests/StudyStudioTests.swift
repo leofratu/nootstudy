@@ -3,6 +3,101 @@ import Foundation
 import SwiftData
 @testable import IBVault
 
+@Suite("Library search and saved-card reuse")
+@MainActor
+struct StudyLibraryTests {
+    private func store() throws -> ModelContainer {
+        try ModelContainer(for: Subject.self, StudyCard.self, Grade.self, ChatMessage.self, ARIAChatSession.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    }
+
+    @Test func findsUnitSubtopicAnswerAndReferenceWithoutExactQuestionWording() {
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "34533B")
+        let card = StudyCard(topicName: "Cells and Cell Structure", subtopic: "Organelles", front: "Where is ATP produced?",
+            back: "Mitochondria supply usable energy.", subject: subject, syllabusReference: "B2.2")
+        #expect(!StudyLibraryService.unit(for: card).isEmpty)
+        #expect(StudyLibraryService.matches(StudyLibraryService.unit(for: card), card: card))
+        #expect(StudyLibraryService.matches("biology ORGANELLES mitochondria", card: card))
+        #expect(StudyLibraryService.matches("B2.2", card: card))
+        #expect(!StudyLibraryService.matches("opportunity cost", card: card))
+    }
+
+    @Test func fullyCoveredRevisionUsesOriginalIDsWithoutCallingGenerator() async throws {
+        let container = try store()
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "34533B")
+        container.mainContext.insert(subject)
+        let card = StudyCard(topicName: "Cells", front: "Which organelle?", back: "Nucleus", subject: subject,
+                             cardStyle: .multipleChoice, choices: ["Nucleus", "Ribosome", "Mitochondrion"])
+        card.totalReviewCount = 7
+        let due = Date(timeIntervalSince1970: 2_000_000_000)
+        card.nextReviewDate = due
+        container.mainContext.insert(card)
+        try container.mainContext.save()
+        let result = try await CardBatchService.generate(subject: subject,
+            jobs: [.init(scope: .init(topic: "Cells"), style: .multipleChoice, count: 1)], options: .default,
+            context: container.mainContext, generateCards: { _, _, _, _ in
+                Issue.record("A covered revision set must not call any model")
+                return []
+            }, onProgress: { _, _, _ in })
+        #expect(result.drafts.isEmpty)
+        #expect(result.reusedCards.map(\.id) == [card.id])
+        #expect(CardDraft(card: card).id == card.id)
+        #expect(card.totalReviewCount == 7 && card.nextReviewDate == due)
+        #expect(try container.mainContext.fetchCount(FetchDescriptor<StudyCard>()) == 1)
+    }
+
+    @Test func onlyMissingCoverageIsGeneratedAndFormatsStaySeparate() async throws {
+        let container = try store()
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "34533B")
+        container.mainContext.insert(subject)
+        let original = StudyCard(topicName: "Cells", front: "What is a cell?", back: "The unit of life.", subject: subject)
+        container.mainContext.insert(original)
+        var requested: [Int] = []
+        let result = try await CardBatchService.generate(subject: subject,
+            jobs: [.init(scope: .init(topic: "Cells"), style: .basic, count: 3)], options: .default,
+            context: container.mainContext, generateCards: { detached, job, options, _ in
+                requested.append(job.count)
+                #expect(options.count == 2)
+                return (0..<2).map { StudyCard(topicName: "Cells", front: "New concept \($0)?", back: "Answer \($0)", subject: detached) }
+            }, onProgress: { _, _, _ in })
+        #expect(requested == [2])
+        #expect(result.reusedCards.map(\.id) == [original.id])
+        #expect(result.drafts.count == 2)
+        #expect(StudyLibraryService.cards(in: subject.cards, scopes: [.init(topic: "Cells")], styles: [.multipleChoice]).isEmpty)
+    }
+
+    @Test func modelSemanticReferencesResolveOnlyRealCardsInRequestedScopeAndFormat() throws {
+        let card = StudyCard(topicName: "Cells", subtopic: "Organelles", front: "Where is ATP made?", back: "Mitochondria")
+        let wrongScope = StudyCard(topicName: "Ecology", front: "What is a population?", back: "Members of one species.")
+        let wrongFormat = StudyCard(topicName: "Cells", front: "The {{c1::nucleus}} contains DNA.", back: "nucleus", cardStyle: .cloze)
+        let response = """
+        [{"existingCardID":"\(card.id)"},{"existingCardID":"\(wrongScope.id)"},
+         {"existingCardID":"\(wrongFormat.id)"},{"existingCardID":"\(UUID())"}]
+        """
+        let dtos = try CardGeneratorService.extractCardDTOs(from: response)
+        let resolved = CardGeneratorService.resolvedReferences(dtos, in: [card, wrongScope, wrongFormat], topic: "Cells", subtopic: "", style: .basic)
+        #expect(resolved.map(\.id) == [card.id])
+        let context = StudyLibraryService.candidateContext([card], query: "energy")
+        #expect(context.contains(card.id.uuidString) && context.contains("Mitochondria"))
+    }
+
+    @Test func testsPersistWithScopeAndUpdatingDoesNotCreateAnotherTest() throws {
+        let container = try store()
+        var test = SavedStudyTest(subject: "Biology", level: "SL", topics: ["Cells and Cell Structure"],
+            subtopics: ["Organelles"], question: "Explain ATP production.", maximumMarks: 4)
+        test = try StudyTestStore.save(test, context: container.mainContext)
+        test.answer = "Respiration supplies ATP."
+        test.feedback = "Add the role of mitochondria."
+        try StudyTestStore.save(test, context: container.mainContext)
+        let freshContext = ModelContext(container)
+        let records = StudyTestStore.read(try freshContext.fetch(FetchDescriptor<ChatMessage>()))
+        #expect(records.count == 1)
+        #expect(records.first?.id == test.id && records.first?.answer == test.answer)
+        #expect(records.first?.topics == test.topics && records.first?.subtopics == test.subtopics)
+        #expect(try freshContext.fetchCount(FetchDescriptor<ARIAChatSession>()) == 1)
+    }
+}
+
 @Suite("Study studio regressions")
 struct StudyStudioTests {
     @MainActor
@@ -190,6 +285,86 @@ struct StudyStudioTests {
         let cards = CardGeneratorService.localStarterCards(subject: subject, topicName: "Cells", subtopic: "", count: 10,
             startingIndex: Int.max, profile: .init(difficulty: .standard, skillMix: [.recall], reason: "test"))
         #expect(cards.isEmpty)
+    }
+}
+
+@Suite("Repeated card regressions")
+@MainActor
+struct CardDuplicateRegressionTests {
+    private let answer = "Capacity utilisation measures actual output as a percentage of maximum possible output. It shows how much productive capacity the business uses during a period and helps managers assess spare capacity."
+
+    @Test func normalizationPreservesOperatorsAndUnicodeWordBoundaries() {
+        #expect(CardDuplicatePolicy.normalize("  EXPLAIN:\n x < 20%, y >= 5; a/b + c^2. ") == "explain x < 20% y >= 5 a/b + c^2")
+        #expect(CardDuplicatePolicy.normalize("Définir l’ÉNERGIE — Δx − 2") == "definir l energie δx − 2")
+        #expect(CardDuplicatePolicy.normalize("\t...!?  ").isEmpty)
+    }
+
+    @Test func exactPromptWithShortAnswerRetainsPreferredHistory() {
+        let subject = Subject(name: "Business Management", level: "HL", accentColorHex: "34533B")
+        let original = StudyCard(topicName: "Operations", front: "Define capacity utilisation in operations management.",
+                                 back: "Actual output relative to capacity.", subject: subject)
+        original.totalReviewCount = 9
+        let related = StudyCard(topicName: "Operations", front: "Define capacity utilisation and state its formula.",
+                                back: answer, subject: subject)
+        related.totalReviewCount = 5
+        let repeated = StudyCard(topicName: "Operations", front: original.front, back: answer, subject: subject)
+        let library = CardDuplicatePolicy.library([repeated, related, original])
+        #expect(library.cards.count == 2)
+        #expect(library.canonicalIDs[repeated.id] == original.id)
+    }
+
+    @Test func paraphrasedQuestionsWithTheSameDetailedAnswerCollapse() {
+        let a = CardDuplicatePolicy.Signature(front: "Define capacity utilisation in operations management.",
+                                              back: answer, style: .basic)
+        let b = CardDuplicatePolicy.Signature(front: "Define capacity utilisation and state its formula.",
+                                              back: answer, style: .basic)
+        #expect(a.matches(b))
+    }
+
+    @Test func distinctConceptsShortAnswersFormatsAndCalculationsRemainSeparate() {
+        let a = CardDuplicatePolicy.Signature(front: "What is signalling as a response to asymmetric information?",
+                                              back: "The informed party provides information.", style: .basic)
+        let b = CardDuplicatePolicy.Signature(front: "What is screening as a response to asymmetric information?",
+                                              back: "The uninformed party collects information.", style: .basic)
+        #expect(!a.matches(b))
+        let less = CardDuplicatePolicy.Signature(front: "Is x < y?", back: "Yes", style: .basic)
+        let greater = CardDuplicatePolicy.Signature(front: "Is x > y?", back: "Yes", style: .basic)
+        #expect(!less.matches(greater))
+        let basic = CardDuplicatePolicy.Signature(front: "Define capacity utilisation.", back: answer, style: .basic)
+        let choice = CardDuplicatePolicy.Signature(front: "Define capacity utilisation.", back: answer, style: .multipleChoice)
+        #expect(!basic.matches(choice))
+        let first = CardDuplicatePolicy.Signature(front: "Calculate capacity utilisation for factory one.",
+            back: answer + " Its capacity utilisation is 70 percent.", style: .basic)
+        let second = CardDuplicatePolicy.Signature(front: "Calculate capacity utilisation for factory two.",
+            back: answer + " Its capacity utilisation is 80 percent.", style: .basic)
+        #expect(!first.matches(second))
+    }
+
+    @Test func savingRechecksNearDuplicatesAddedAfterGeneration() throws {
+        let container = try ModelContainer(for: Subject.self, StudyCard.self,
+                                           configurations: .init(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let subject = Subject(name: "Business Management", level: "HL", accentColorHex: "34533B")
+        context.insert(subject)
+        let draft = CardDraft(card: StudyCard(topicName: "Operations",
+            front: "Define capacity utilisation and state its formula.", back: answer))
+        let existing = StudyCard(topicName: "Operations", front: "Define capacity utilisation in operations management.",
+                                 back: answer, subject: subject)
+        existing.totalReviewCount = 9
+        context.insert(existing)
+        try context.save()
+        #expect(try CardBatchService.save([draft], subject: subject, context: context) == 0)
+        #expect(existing.totalReviewCount == 9)
+        #expect(CardDuplicatePolicy.existingMatch(for: draft, in: subject.cards)?.id == existing.id)
+        #expect(try context.fetchCount(FetchDescriptor<StudyCard>()) == 1)
+    }
+
+    @Test func separateSubjectsDoNotLoseTheirCards() {
+        let a = Subject(name: "Biology", level: "SL", accentColorHex: "000000")
+        let b = Subject(name: "Chemistry", level: "SL", accentColorHex: "000000")
+        let cards = [StudyCard(topicName: "Water", front: "What is a hydrogen bond?", back: "Answer", subject: a),
+                     StudyCard(topicName: "Water", front: "What is a hydrogen bond?", back: "Answer", subject: b)]
+        #expect(CardDuplicatePolicy.library(cards).cards.count == 2)
     }
 }
 

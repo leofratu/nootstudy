@@ -67,6 +67,9 @@ struct ARIAChatView: View {
     @State private var showChatCleanupConfirmation = false
     @State private var chatFailure: ARIAChatFailure?
     @State private var selectedSessionID: UUID?
+    @State private var revisionCards: [StudyCard] = []
+    @State private var showingRevision = false
+    @State private var revisionError: String?
 
     private var visibleSessions: [ARIAChatSession] {
         sessions.filter { !$0.isArchived }
@@ -132,6 +135,21 @@ struct ARIAChatView: View {
                     }
 
                     VStack(spacing: 0) {
+                        if !ariaService.revisionCardIDs.isEmpty {
+                            HStack {
+                                Label("\(ariaService.revisionCardIDs.count) cards from your library", systemImage: "books.vertical")
+                                Spacer()
+                                Button("Revise saved cards") {
+                                    do {
+                                        let ids = Set(ariaService.revisionCardIDs)
+                                        revisionCards = try context.fetch(FetchDescriptor<StudyCard>()).filter { ids.contains($0.id) }
+                                        if revisionCards.isEmpty { revisionError = "These cards are no longer in the library." }
+                                        else { revisionError = nil; showingRevision = true }
+                                    } catch { revisionError = error.localizedDescription }
+                                }.buttonStyle(PrimaryButtonStyle())
+                            }.padding(16).background(IBColors.highlight)
+                            if let revisionError { Text(revisionError).font(.caption).foregroundStyle(IBColors.coral) }
+                        }
                         if let selectedSession {
                             ARIASessionConversationView(
                                 sessionID: selectedSession.id,
@@ -160,6 +178,7 @@ struct ARIAChatView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(IBColors.canvas)
                 .navigationTitle(selectedSession?.title ?? "ARIA")
+                .sheet(isPresented: $showingRevision) { CardPracticeView(cards: revisionCards) }
                 .toolbar {
                     ToolbarItem(placement: .navigation) {
                         if usesExpandedChatLayout {
@@ -728,12 +747,17 @@ struct ARIAChatView: View {
     @MainActor
     private func deleteChatsOlderThan30Days() {
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
-        let staleSessions = sessions.filter { $0.updatedAt < cutoff }
+        guard let messages = try? context.fetch(FetchDescriptor<ChatMessage>()) else {
+            chatFailure = ARIAChatFailure(message: "Couldn't read saved conversations. No chats were deleted.",
+                sessionID: selectedSessionID, provider: selectedProvider)
+            return
+        }
+        let savedTestIDs = Set(messages.filter { $0.role == StudyTestStore.role }.compactMap(\.sessionID))
+        let staleSessions = sessions.filter { $0.updatedAt < cutoff && !savedTestIDs.contains($0.id) }
         guard !staleSessions.isEmpty else { return }
 
         let staleIDs = Set(staleSessions.map(\.id))
-        let messageDescriptor = FetchDescriptor<ChatMessage>()
-        for message in (try? context.fetch(messageDescriptor)) ?? [] where message.sessionID.map(staleIDs.contains) == true {
+        for message in messages where message.sessionID.map(staleIDs.contains) == true {
             context.delete(message)
         }
         for session in staleSessions {

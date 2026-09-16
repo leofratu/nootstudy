@@ -17,6 +17,10 @@ struct CardStudioView: View {
     @State private var task: Task<Void, Never>?
     @State private var savedMessage: String?
     @State private var showLibrary = false
+    @State private var reuseExisting = true
+    @State private var reusedCards: [StudyCard] = []
+    @State private var practiceCards: [StudyCard] = []
+    @State private var showPractice = false
 
     private var subject: Subject? { subjects.first { $0.id == subjectID } }
     private var jobs: [CardBatchJob]? {
@@ -43,7 +47,7 @@ struct CardStudioView: View {
                             Label(savedMessage, systemImage: "checkmark.circle.fill")
                                 .font(IBTypography.body).foregroundStyle(IBColors.success)
                         }
-                        if drafts.isEmpty {
+                        if drafts.isEmpty && reusedCards.isEmpty {
                             setup(width: geometry.size.width - 64)
                         } else {
                             preview
@@ -71,6 +75,7 @@ struct CardStudioView: View {
             .sheet(isPresented: $showLibrary) {
                 NavigationStack { CardLibraryView() }
             }
+            .sheet(isPresented: $showPractice) { CardPracticeView(cards: practiceCards) }
         }
         }
         .onAppear {
@@ -169,6 +174,8 @@ struct CardStudioView: View {
             CardStudioOptionsView(options: $options, compact: true, showsStyle: false)
             Divider()
             VStack(alignment: .leading, spacing: 12) {
+                Toggle("Reuse saved cards first", isOn: $reuseExisting).toggleStyle(.checkbox)
+                Text("Only missing cards need generation.").font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                 Text("\(options.count) cards · \(selection.count) selected")
                     .font(IBTypography.headline)
                 if selectionMinimum > options.count || selectionMinimum > 50 {
@@ -176,7 +183,7 @@ struct CardStudioView: View {
                         .font(IBTypography.caption).foregroundStyle(IBColors.coral)
                 }
                 Button(action: generate) {
-                    Label("Generate & preview", systemImage: "sparkles")
+                    Label(reuseExisting ? "Find & prepare cards" : "Generate new cards", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PrimaryButtonStyle())
@@ -189,15 +196,32 @@ struct CardStudioView: View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Your new set").font(IBTypography.title3)
-                    Text("\(drafts.count) cards · \(subject?.name ?? "") · Not saved yet")
+                    Text("Your practice set").font(IBTypography.title3)
+                    Text("\(reusedCards.count) saved cards · \(drafts.count) new drafts · \(subject?.name ?? "")")
                         .font(IBTypography.body).foregroundStyle(IBColors.inkSecondary)
                 }
                 Spacer()
-                Button("Discard batch") { drafts = []; issues = [] }
+                Button("Back") { drafts = []; reusedCards = []; issues = [] }
                     .buttonStyle(SecondaryButtonStyle())
-                Button("Save \(drafts.count) cards", action: save)
-                    .buttonStyle(PrimaryButtonStyle()).disabled(!drafts.allSatisfy(\.isValid))
+                Button("Start practising") {
+                    practiceCards = reusedCards + drafts.map { $0.makeCard() }
+                    showPractice = true
+                }.buttonStyle(PrimaryButtonStyle()).disabled(!drafts.allSatisfy(\.isValid))
+                if !drafts.isEmpty {
+                    Button("Save \(drafts.count) new cards", action: save)
+                        .buttonStyle(SecondaryButtonStyle()).disabled(!drafts.allSatisfy(\.isValid))
+                }
+            }
+            ForEach(reusedCards) { card in
+                HStack {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("From your library · \(card.topicName)", systemImage: "books.vertical")
+                            .font(IBTypography.caption).foregroundStyle(IBColors.accent)
+                        Text(card.front).font(IBTypography.body)
+                    }
+                    Spacer()
+                    Button("Revise") { practiceCards = [card]; showPractice = true }.buttonStyle(SecondaryButtonStyle())
+                }.padding(20).surfaceCard()
             }
             LazyVStack(spacing: 16) {
                 ForEach($drafts) { $draft in
@@ -217,12 +241,13 @@ struct CardStudioView: View {
         task = Task { @MainActor in
             defer { task = nil; status = nil }
             do {
-                let result = try await CardBatchService.generate(subject: subject, jobs: jobs, options: settings, context: context) { current, total, label in
+                let result = try await CardBatchService.generate(subject: subject, jobs: jobs, options: settings, context: context, reuseExisting: reuseExisting) { current, total, label in
                     progress = Double(current) / Double(max(total, 1))
                     status = "Generating \(current + 1) of \(total) · \(label)"
                 }
                 try Task.checkCancellation()
                 drafts = result.drafts
+                reusedCards = result.reusedCards
                 issues = result.issues
             } catch is CancellationError {
                 status = nil
@@ -234,7 +259,9 @@ struct CardStudioView: View {
         guard let subject else { return }
         do {
             let count = try CardBatchService.save(drafts, subject: subject, context: context)
-            savedMessage = "\(count) cards saved to \(subject.name). Open Your cards to practise."
+            savedMessage = "\(count) cards saved to \(subject.name)."
+            let newIDs = Set(drafts.map(\.id))
+            reusedCards.append(contentsOf: subject.cards.filter { newIDs.contains($0.id) })
             drafts = []
             issues = []
         } catch { issues = [error.localizedDescription] }

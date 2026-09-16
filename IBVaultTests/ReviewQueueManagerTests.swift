@@ -10,7 +10,7 @@ struct ReviewQueueManagerTests {
     @Test("dueCount should return correct count of due cards for a given subject")
     func testDueCountForSubject() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, ReviewSession.self, UserProfile.self, configurations: config)
         let context = container.mainContext
         
         let subject1 = Subject(name: "Mathematics", level: "HL", accentColorHex: "#FF0000")
@@ -47,7 +47,7 @@ struct ReviewQueueManagerTests {
     @Test("dueCardsForSubject falls back to all subject cards when no study scope exists")
     func testDueCardsForSubjectWithoutStudyScopes() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, ReviewSession.self, UserProfile.self, configurations: config)
         let context = container.mainContext
 
         let subject = Subject(name: "Biology", level: "SL", accentColorHex: "#10B981")
@@ -73,7 +73,7 @@ struct ReviewQueueManagerTests {
     @Test("eligibleCardsCount should return exact count of study cards when studied scopes are empty")
     func testEligibleCardsCountWithoutStudySessions() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, ReviewSession.self, UserProfile.self, configurations: config)
         let context = container.mainContext
         
         let card1 = StudyCard(topicName: "Calculus", front: "Front 1", back: "Back 1")
@@ -92,7 +92,7 @@ struct ReviewQueueManagerTests {
     @Test("eligibleCardsCount stays the full pool even when studied scopes exist")
     func testEligibleCardsCountWithStudySessions() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, ReviewSession.self, UserProfile.self, configurations: config)
         let context = container.mainContext
 
         let subject = Subject(name: "Biology", level: "SL", accentColorHex: "#10B981")
@@ -126,7 +126,7 @@ struct ReviewQueueManagerTests {
     @Test("A successful refresh clears the error flag and caches all due counts")
     func testSuccessfulRefreshCachesCounts() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: config)
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, ReviewSession.self, UserProfile.self, configurations: config)
         let context = container.mainContext
 
         let subject1 = Subject(name: "Biology", level: "SL", accentColorHex: "#10B981")
@@ -167,8 +167,8 @@ struct ReviewQueueManagerTests {
     }
 
     @MainActor
-    @Test("All due cards remain available regardless of the profile daily goal")
-    func allDueCardsRemainAvailable() throws {
+    @Test("The daily queue respects the personal goal and defers the backlog")
+    func dailyQueueRespectsProfileGoal() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(
             for: StudyCard.self,
@@ -195,8 +195,8 @@ struct ReviewQueueManagerTests {
         manager.refreshDueCardsSynchronously(context: context)
 
         #expect(manager.totalDueBacklogCount == 56)
-        #expect(manager.dueCards.count == 56)
-        #expect(manager.deferredDueCount == 0)
+        #expect(manager.dueCards.count == 18)
+        #expect(manager.deferredDueCount == 38)
     }
 }
 
@@ -221,9 +221,9 @@ struct ReviewDailyLimitPolicyTests {
 
         let limited = ReviewDailyLimitPolicy.limitedCards(cards, reviewedCardIDs: alreadyReviewed)
 
-        #expect(limited.count == 23)
+        #expect(limited.count == 33)
         #expect(limited.allSatisfy { !alreadyReviewed.contains($0.id) })
-        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: alreadyReviewed) == 23)
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: alreadyReviewed) == 33)
     }
 }
 
@@ -232,7 +232,7 @@ struct ReviewQueueRecoveryTests {
     @MainActor
     @Test("refresh exposes all due cards")
     func refreshExposesAllDueCards() throws {
-        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, UserProfile.self, configurations: .init(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: StudyCard.self, Subject.self, StudySession.self, ReviewSession.self, UserProfile.self, configurations: .init(isStoredInMemoryOnly: true))
         let context = container.mainContext
         for index in 0..<3 {
             let card = StudyCard(topicName: "Topic", front: "Q\(index)", back: "A\(index)")
@@ -267,5 +267,133 @@ struct ReviewQueueRecoveryTests {
     func zeroAllowanceReturnsNoCards() {
         let card = StudyCard(topicName: "Topic", front: "Q", back: "A")
         #expect(ReviewDailyLimitPolicy.limitedCards([card], reviewedCardIDs: [], maximum: 0).isEmpty)
+    }
+}
+
+
+@Suite("Daily allowance regressions")
+@MainActor
+struct DailyAllowanceRegressionTests {
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: StudyCard.self, Subject.self, ReviewSession.self, UserProfile.self,
+                           configurations: .init(isStoredInMemoryOnly: true))
+    }
+
+    @Test func allowanceIsSharedAcrossSubjectsAndIncludesUnsavedReviews() throws {
+        let store = try container()
+        defer { withExtendedLifetime(store) {} }
+        let context = store.mainContext
+        let profile = UserProfile()
+        profile.dailyGoal = 5
+        context.insert(profile)
+        let a = Subject(name: "Biology", level: "SL", accentColorHex: "000000")
+        let b = Subject(name: "Economics", level: "SL", accentColorHex: "000000")
+        context.insert(a)
+        context.insert(b)
+        var cards: [StudyCard] = []
+        for index in 0..<12 {
+            let card = StudyCard(topicName: "Topic", front: "Question \(index)", back: "Answer \(index)",
+                                 subject: index < 6 ? a : b)
+            card.nextReviewDate = .distantPast
+            context.insert(card)
+            cards.append(card)
+        }
+        try context.save()
+        let manager = ReviewQueueManager()
+        #expect(manager.dueCardsForSubject(a, context: context).count == 5)
+        for card in cards.prefix(4) {
+            context.insert(ReviewSession(cardID: card.id, subjectName: a.name, topicName: card.topicName, qualityRating: 0))
+        }
+        manager.refreshDueCardsSynchronously(context: context)
+        #expect(manager.reviewedTodayCount == 4)
+        #expect(manager.dueCards.count == 1)
+        #expect(manager.remainingDailyAllowance == 1)
+        #expect(manager.dueCardsForSubject(b, context: context).count == 1)
+        context.insert(ReviewSession(cardID: cards[6].id, subjectName: b.name, topicName: "Topic", qualityRating: 3))
+        #expect(try ReviewDailyLimitPolicy.day(in: context).canReview(cards[7]) == false)
+        #expect(manager.cardsForReview(from: cards, context: context).isEmpty)
+        manager.refreshDueCardsSynchronously(context: context)
+        #expect(manager.dueCards.isEmpty)
+        #expect(manager.deferredDueCount == 7)
+        #expect(manager.totalDueBacklogCount == 7)
+    }
+
+    @Test func aLargeBacklogCannotExceedFortyEvenWithoutAProfile() throws {
+        let store = try container()
+        defer { withExtendedLifetime(store) {} }
+        let context = store.mainContext
+        for index in 0..<90 {
+            let card = StudyCard(topicName: "Topic", front: "Question \(index)", back: "Answer \(index)")
+            card.nextReviewDate = .distantPast
+            context.insert(card)
+        }
+        let day = try ReviewDailyLimitPolicy.day(in: context)
+        #expect(day.limited(day.backlog).count == 40)
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: [], maximum: 999) == 40)
+        let ids = Set((0..<79).map { _ in UUID() })
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: ids) == 0)
+    }
+
+    @Test func profileChangesRefreshAnOtherwiseUnchangedQueue() throws {
+        let store = try container()
+        defer { withExtendedLifetime(store) {} }
+        let context = store.mainContext
+        let profile = UserProfile()
+        context.insert(profile)
+        for index in 0..<40 {
+            context.insert(StudyCard(topicName: "Topic", front: "Question \(index)", back: "Answer \(index)"))
+        }
+        let manager = ReviewQueueManager()
+        manager.refreshDueCardsSynchronously(context: context)
+        #expect(manager.dueCards.count == 20)
+        profile.dailyGoal = 10
+        manager.refreshDueCardsSynchronously(context: context)
+        #expect(manager.dueCards.count == 10)
+        #expect(manager.deferredDueCount == 30)
+    }
+
+    @Test func localDayBoundariesResetTheAllowanceAcrossDaylightSaving() throws {
+        let store = try container()
+        defer { withExtendedLifetime(store) {} }
+        let context = store.mainContext
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "Europe/Madrid"))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 29, hour: 12)))
+        let start = calendar.startOfDay(for: now)
+        let nextDay = try #require(calendar.date(byAdding: .day, value: 1, to: start))
+        #expect(nextDay.timeIntervalSince(start) == 23 * 3600)
+        let previous = ReviewSession(cardID: UUID(), subjectName: "", topicName: "", qualityRating: 3)
+        previous.timestamp = start.addingTimeInterval(-1)
+        let current = ReviewSession(cardID: UUID(), subjectName: "", topicName: "", qualityRating: 3)
+        current.timestamp = start
+        let future = ReviewSession(cardID: UUID(), subjectName: "", topicName: "", qualityRating: 3)
+        future.timestamp = nextDay
+        [previous, current, future].forEach(context.insert)
+        let today = try ReviewDailyLimitPolicy.day(in: context, now: now, calendar: calendar)
+        #expect(today.reviewedIDs == [current.cardID])
+        let tomorrow = try ReviewDailyLimitPolicy.day(in: context, now: nextDay, calendar: calendar)
+        #expect(tomorrow.reviewedIDs == [future.cardID])
+    }
+
+    @Test func aReviewedDuplicateCannotReturnUnderAnotherCardID() throws {
+        let store = try container()
+        defer { withExtendedLifetime(store) {} }
+        let context = store.mainContext
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "000000")
+        context.insert(subject)
+        let first = StudyCard(topicName: "Cells", front: "What produces ATP?", back: "Mitochondria", subject: subject)
+        let copy = StudyCard(topicName: "Cells", front: "What produces ATP!", back: "Mitochondria", subject: subject)
+        first.nextReviewDate = .distantPast
+        copy.totalReviewCount = 3
+        copy.nextReviewDate = .distantFuture
+        context.insert(first)
+        context.insert(copy)
+        context.insert(ReviewSession(cardID: first.id, subjectName: subject.name, topicName: "Cells", qualityRating: 3))
+        let day = try ReviewDailyLimitPolicy.day(in: context)
+        #expect(day.library.cards.map(\.id) == [copy.id])
+        #expect(day.backlog.isEmpty)
+        #expect(day.canReview(copy) == false)
+        #expect(day.limited([first, copy]).isEmpty)
+        #expect(try context.fetchCount(FetchDescriptor<StudyCard>()) == 2)
     }
 }
