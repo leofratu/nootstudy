@@ -2,9 +2,10 @@ name: macOS Release
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
+
+# Version releases are verified locally and may contain notes only. A tag push
+# must not provision a hosted runner. This workflow is available only when
+# a maintainer deliberately requests a separate hosted build.
 
 jobs:
   build:
