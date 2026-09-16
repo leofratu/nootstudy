@@ -136,13 +136,8 @@ enum NotificationService {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [config.dueCardsReminderID])
         
-        let now = Date()
-        let predicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
-
-        let startOfDay = IBLocalClock.calendar.startOfDay(for: IBLocalClock.now)
-        let reviewedPredicate = #Predicate<ReviewSession> { $0.timestamp >= startOfDay }
-        let reviewedIDs = Set((try? context.fetch(FetchDescriptor<ReviewSession>(predicate: reviewedPredicate)))?.map(\.cardID) ?? [])
-        let dueCards = (try? context.fetch(FetchDescriptor(predicate: predicate)))?.filter { !reviewedIDs.contains($0.id) } ?? []
+        guard let day = try? ReviewDailyLimitPolicy.day(in: context) else { return }
+        let dueCards = day.limited(day.backlog)
 
         guard !dueCards.isEmpty else {
             return

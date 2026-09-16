@@ -3,6 +3,10 @@ import SwiftData
 
 struct SubjectDetailView: View {
     let subject: Subject
+    @Environment(\.modelContext) private var context
+    @Environment(ReviewQueueManager.self) private var sharedQueue: ReviewQueueManager?
+    @State private var localQueue = ReviewQueueManager()
+    private var queue: ReviewQueueManager { sharedQueue ?? localQueue }
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     @Query private var academicAssessments: [AcademicAssessment]
     @Query private var academicMappings: [AcademicAssessmentMapping]
@@ -132,16 +136,7 @@ struct SubjectDetailView: View {
     }
 
     private var reviewableDueCount: Int {
-        let studiedScopes = StudySession.uniqueStudyScopes(from: studySessions)
-            .filter { $0.subjectName == subject.name }
-        guard !studiedScopes.isEmpty else { return 0 }
-        var count = 0
-        for card in subject.cards where card.isDue {
-            if studiedScopes.contains(where: { $0.matches(card) }) {
-                count += 1
-            }
-        }
-        return count
+        queue.dueCount(for: subject)
     }
 
     var body: some View {
@@ -187,7 +182,11 @@ struct SubjectDetailView: View {
         }
         .background(IBColors.canvas)
         .navigationTitle(subject.name)
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+            if sharedQueue == nil { localQueue.refreshDueCards(context: context) }
+        }
         .onAppear {
+            queue.refreshDueCards(context: context)
             // Show the full sub-unit mastery breakdown by default.
             if expandedUnits.isEmpty {
                 expandedUnits = Set(curriculum.map(\.name))

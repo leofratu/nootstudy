@@ -101,7 +101,7 @@ struct DashboardView: View {
 
     private func updateGreeting() {
         let readyCount: Int = queueManager.totalDueCount
-        let greeting: String = ariaService.generateGreeting(readyCount: readyCount, deferredCount: 0)
+        let greeting: String = ariaService.generateGreeting(readyCount: readyCount, deferredCount: queueManager.deferredDueCount)
         greetingText = greeting
     }
 
@@ -136,8 +136,12 @@ struct DashboardView: View {
     }
 
     private var headerSubtitle: String {
-        if dueBacklogCount > 0 {
-            return "\(dueBacklogCount) flashcards are due and available for review."
+        if let error = queueManager.lastRefreshError { return error }
+        if queueManager.remainingDailyAllowance == 0 {
+            return "You're done for today. Your remaining cards will wait until tomorrow."
+        }
+        if !dueCards.isEmpty {
+            return "\(dueCards.count) cards ready today · \(queueManager.dailyMaximum)-card daily allowance."
         }
         if studySessions.isEmpty {
             return "Pick a topic, make a set, and build your understanding."
@@ -292,10 +296,10 @@ struct DashboardView: View {
     private var metricsGrid: some View {
         LazyVGrid(columns: metricColumns, spacing: 12) {
             StudioMetricTile(
-                value: "\(dueBacklogCount)",
-                label: "Due today",
+                value: "\(dueCards.count)",
+                label: "Left today",
                 symbol: "rectangle.stack",
-                detail: dueBacklogCount == 0 ? "No cards due" : "\(dueBacklogCount) to review"
+                detail: "\(queueManager.deferredDueCount) saved for another day"
             )
             StudioMetricTile(
                 value: "\(profile?.currentStreak ?? 0)d",
@@ -375,10 +379,10 @@ struct DashboardView: View {
                         .font(.system(size: 26))
                         .foregroundStyle(IBColors.inkTertiary)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("You are caught up")
+                        Text(queueManager.remainingDailyAllowance == 0 ? "Done for today" : "You are caught up")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(IBColors.ink)
-                        Text("New cards will appear here when they are ready for review.")
+                        Text(queueManager.remainingDailyAllowance == 0 ? "Your daily allowance resets tomorrow." : "New cards will appear here when they are ready for review.")
                             .font(IBTypography.caption11)
                             .foregroundStyle(IBColors.inkSecondary)
                     }
@@ -386,12 +390,12 @@ struct DashboardView: View {
                 .padding(.vertical, 8)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(reviewScheduler.schedules.prefix(4).enumerated()), id: \.element.id) { index, schedule in
+                    ForEach(Array(reviewScheduler.schedules.filter { queueManager.dueCount(for: $0.subject) > 0 }.prefix(4).enumerated()), id: \.element.id) { index, schedule in
                         Button {
                             selectedSubjectForReview = schedule.subject
                             showReview = true
                         } label: {
-                            DashboardQueueRow(schedule: schedule)
+                            DashboardQueueRow(schedule: schedule, dueCount: queueManager.dueCount(for: schedule.subject))
                         }
                         .buttonStyle(.plain)
                         if index < min(reviewScheduler.schedules.count, 4) - 1 {
@@ -403,7 +407,7 @@ struct DashboardView: View {
                     selectedSubjectForReview = nil
                     showReview = true
                 } label: {
-                    Label("Review all due cards", systemImage: "play.fill")
+                    Label("Review today's cards", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PrimaryButtonStyle())
@@ -442,12 +446,15 @@ struct DashboardView: View {
     }
 
     private var fallbackStudySignal: String? {
-        if dueBacklogCount > 0 {
+        if queueManager.remainingDailyAllowance == 0 {
+            return "Your daily review is complete. Take a break; the backlog can wait."
+        }
+        if !dueCards.isEmpty {
             let subjectCount = subjectCountWithDue
             if subjectCount > 1 {
-                return "You have \(dueBacklogCount) cards due across \(subjectCount) subjects. Start with the top queue item to clear the most urgent cards first."
+                return "You have \(dueCards.count) cards ready today across \(subjectCount) subjects."
             }
-            return "You have \(dueBacklogCount) cards due. A quick 15-minute review now will keep your queue healthy."
+            return "You have \(dueCards.count) cards ready within today's allowance."
         }
         if let weakest = evidenceRows.min(by: { $0.mastery < $1.mastery }), weakest.mastery < 0.7 {
             return "\(weakest.subject.name) is your current focus (\(Int(weakest.mastery*100))% mastery). Generate a few fresh cards or review its weakest subunit."
@@ -505,6 +512,7 @@ struct DashboardView: View {
 
 private struct DashboardQueueRow: View {
     let schedule: SubjectReviewSchedule
+    let dueCount: Int
     var body: some View {
         HStack(spacing: 12) {
             Circle()
@@ -519,7 +527,7 @@ private struct DashboardQueueRow: View {
                     .foregroundStyle(IBColors.inkTertiary)
             }
             Spacer()
-            Text("\(schedule.dueCards)")
+            Text("\(dueCount)")
                 .font(.system(size: 20, weight: .semibold).monospacedDigit())
                 .foregroundStyle(IBColors.ink)
             Text("due")

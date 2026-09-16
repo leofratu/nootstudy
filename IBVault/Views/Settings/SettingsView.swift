@@ -684,7 +684,7 @@ struct SettingsView: View {
                     Text("\(p.dailyGoal) cards").foregroundStyle(IBColors.inkSecondary)
                     Stepper("Daily goal", value: Binding(
                         get: { p.dailyGoal }, set: { p.dailyGoal = $0; persistChanges() }
-                    ), in: 5...30, step: 5)
+                    ), in: 5...ReviewDailyLimitPolicy.maximumCards, step: 5)
                     .labelsHidden()
                 }
 

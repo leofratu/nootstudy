@@ -37,6 +37,8 @@ struct ActiveStudySessionView: View {
     @State private var completedStreak = 0
     @State private var revealedCards: Set<Int> = []
     @State private var examMarkdown = ""
+    @State private var savedTestID = UUID()
+    @State private var testSaveStatus: String?
     @State private var isGeneratingExam = false
     @State private var examResponse = ""
     @State private var examMarkScheme = ""
@@ -739,6 +741,10 @@ struct ActiveStudySessionView: View {
                     }
                 }
             }
+        } else if card.style == .multipleChoice,
+                  CardGeneratorService.validatedChoices(back: card.back, choices: card.choices) != nil {
+            Text("Choose an option, then check your answer.")
+                .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
         } else {
             Button("Reveal answer", systemImage: "eye") {
                 _ = withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { revealedCards.insert(index) }
@@ -800,6 +806,8 @@ struct ActiveStudySessionView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
             } else {
+                Button("Save test to Library", systemImage: "square.and.arrow.down", action: savePracticeTest)
+                    .buttonStyle(.bordered).controlSize(.small)
                 Button("New Exam", systemImage: "arrow.clockwise") {
                     clearExamWorkspace()
                     generateExam()
@@ -827,6 +835,7 @@ struct ActiveStudySessionView: View {
             .padding(.vertical, 24)
         } else if !examMarkdown.isEmpty {
             VStack(alignment: .leading, spacing: 16) {
+                if let testSaveStatus { Text(testSaveStatus).font(.caption).foregroundStyle(.secondary) }
                 examPaper
                 examRubricOverview
                 examResponseEditor
@@ -1432,9 +1441,16 @@ struct ActiveStudySessionView: View {
             defer { isGeneratingCards = false; flashcardTask = nil }
             do {
                 let batch = try await CardBatchService.generate(subject: subject, jobs: jobs, options: options,
-                                                                context: context) { _, _, _ in }
+                                                                context: context, reuseExisting: generatedCards.isEmpty) { _, _, _ in }
                 try Task.checkCancellation()
-                generatedCards.append(contentsOf: batch.drafts)
+                let present = Set(generatedCards.map(\.id))
+                let reused = batch.reusedCards.filter { !present.contains($0.id) }
+                generatedCards.append(contentsOf: reused.map(CardDraft.init))
+                for card in reused {
+                    savedCardIDs.insert(card.id)
+                    persistedCardIDs[card.id] = card.id
+                }
+                generatedCards.append(contentsOf: batch.drafts.filter { !present.contains($0.id) })
                 flashcardError = batch.issues.isEmpty ? nil : batch.issues.joined(separator: "\n")
                 // Session cards are saved with their complete format metadata
                 // before rating, and each draft is persisted only once.
@@ -1449,12 +1465,24 @@ struct ActiveStudySessionView: View {
 
     private func clearExamWorkspace() {
         withAnimation(IBAnimation.smooth) {
+            savedTestID = UUID()
+            testSaveStatus = nil
             examMarkdown = ""
             examMarkScheme = ""
             examResponse = ""
             examGradingMarkdown = ""
             examGradingError = nil
         }
+    }
+
+    private func savePracticeTest() {
+        let test = SavedStudyTest(id: savedTestID, subject: plan.subjectName,
+            level: subjects.first(where: { $0.name == plan.subjectName })?.level ?? "",
+            topics: plan.selectedTopicNames, subtopics: plan.selectedSubtopicNames,
+            question: examMarkdown, answer: examResponse, markScheme: examMarkScheme,
+            feedback: examGradingMarkdown, maximumMarks: IBExamRubric.totalMarks(in: examMarkdown))
+        do { _ = try StudyTestStore.save(test, context: context); testSaveStatus = "Saved to Library" }
+        catch { testSaveStatus = "Couldn't save test: \(error.localizedDescription)" }
     }
 
     private func generateExam() {
@@ -1553,6 +1581,11 @@ struct ActiveStudySessionView: View {
            let existing = subject.cards.first(where: { $0.id == persistedID }) {
             return existing
         }
+        if let existing = CardDuplicatePolicy.existingMatch(for: generatedCard, in: subject.cards) {
+            savedCardIDs.insert(generatedCard.id)
+            persistedCardIDs[generatedCard.id] = existing.id
+            return existing
+        }
         let card = generatedCard.makeCard(subject: subject)
         card.sourceStudyPlanID = plan.id
         card.sourceStudySessionID = activeSessionID
@@ -1579,6 +1612,10 @@ struct ActiveStudySessionView: View {
         guard !toSave.isEmpty else { return }
         var inserted: [StudyCard] = []
         for card in toSave {
+            if let existing = CardDuplicatePolicy.existingMatch(for: card, in: subject.cards) {
+                persistedCardIDs[card.id] = existing.id
+                continue
+            }
             let studyCard = card.makeCard(subject: subject)
             studyCard.sourceStudyPlanID = plan.id
             studyCard.sourceStudySessionID = activeSessionID
@@ -1606,6 +1643,13 @@ struct ActiveStudySessionView: View {
         guard cardRatings[generatedCard.id] == nil,
               let card = saveCardToSubject(generatedCard) else { return }
         do {
+            let day = try ReviewDailyLimitPolicy.day(in: context)
+            guard day.canReview(card) else {
+                flashcardError = day.remaining == 0
+                    ? "Today's \(day.maximum)-card allowance is complete. More reviews are available tomorrow."
+                    : "This card or a matching copy has already been reviewed today."
+                return
+            }
             try FSRSScheduler.applyReview(to: card, quality: quality)
             let review = ReviewSession(
                 cardID: card.id,

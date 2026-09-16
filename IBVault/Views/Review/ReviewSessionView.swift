@@ -158,9 +158,9 @@ struct ReviewSessionView: View {
                     .tint(IBColors.accent)
 
                 HStack(spacing: 8) {
-                    Label("\(queueManager.totalDueBacklogCount) flashcards due", systemImage: "rectangle.stack")
+                    Label("\(queueManager.reviewedTodayCount) reviewed today", systemImage: "rectangle.stack")
                     Spacer()
-                    Text("All due cards available")
+                    Text("Daily limit: \(queueManager.dailyMaximum)")
                 }
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(IBColors.inkSecondary)
@@ -201,6 +201,7 @@ struct ReviewSessionView: View {
             Divider()
 
             ScrollView {
+                if let generationError { errorBanner(generationError).padding(.horizontal, 24) }
                 RecallCardView(card: card, revealed: $isFlipped)
                     .id(card.id)
                     .frame(maxWidth: 820)
@@ -225,6 +226,11 @@ struct ReviewSessionView: View {
                         .keyboardShortcut("3", modifiers: [])
                     QualityButton(label: "Easy", color: IBColors.success, detail: fsrsPreviews[.easy]?.intervalLabel) { rateCard(.easy) }
                         .keyboardShortcut("4", modifiers: [])
+                } else if card.cardStyle == .multipleChoice,
+                          CardGeneratorService.validatedChoices(back: card.back, choices: card.choices) != nil {
+                    Text("Choose an option above, then check your answer.")
+                        .font(.callout).foregroundStyle(IBColors.inkSecondary)
+                    Spacer()
                 } else {
                     Spacer()
                     Button {
@@ -253,7 +259,8 @@ struct ReviewSessionView: View {
         // Once a session is complete the queue has been consumed; ignore the
         // post-save @Query reload so the completion screen keeps its snapshot
         // instead of being replaced by an empty state.
-        guard !sessionComplete else { return }
+        guard !sessionComplete, sessionQualities.isEmpty else { return }
+        queueManager.refreshDueCardsSynchronously(context: context)
         // Every load rebuilds the queue from scratch, so park the cursor on the
         // first card. Keeping an old index can point beyond a shorter queue.
         currentIndex = 0
@@ -293,9 +300,7 @@ struct ReviewSessionView: View {
         let scopedDueCards = filteredCards(from: dueCards)
 
         if !scopedDueCards.isEmpty {
-            cards = scopedDueCards
-        } else if activeScope?.hasFilters == true {
-            cards = fallbackScopedCards(from: eligibleCandidates, now: now)
+            cards = queueManager.cardsForReview(from: scopedDueCards, context: context)
         } else {
             cards = []
         }
@@ -335,7 +340,15 @@ struct ReviewSessionView: View {
 
     private func rateCard(_ quality: RecallQuality) {
         guard let card = currentCard else { return }
+        let day: ReviewDailyLimitPolicy.Day
         do {
+            day = try ReviewDailyLimitPolicy.day(in: context)
+            guard day.canReview(card) else {
+                generationError = day.remaining == 0
+                    ? "Today's \(day.maximum)-card allowance is complete. More reviews are available tomorrow."
+                    : "This card or a matching copy has already been reviewed today."
+                return
+            }
             try FSRSScheduler.applyReview(to: card, quality: quality)
         } catch {
             generationError = "Could not schedule this review: \(error.localizedDescription)"
@@ -352,9 +365,13 @@ struct ReviewSessionView: View {
         )
         FSRSScheduler.configure(review, quality: quality)
         context.insert(review)
+        queueManager.refreshDueCardsSynchronously(context: context)
         switch quality { case .again: IBHaptics.warning(); case .hard: IBHaptics.light(); case .good: IBHaptics.medium(); case .easy: IBHaptics.success() }
         isFlipped = false
-        if currentIndex + 1 >= cards.count { completeSession() }
+        if day.remaining <= 1 || currentIndex + 1 >= cards.count {
+            cards = Array(cards.prefix(currentIndex + 1))
+            completeSession()
+        }
         else { withAnimation(IBAnimation.snappy) { currentIndex += 1 } }
     }
 
@@ -488,6 +505,7 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateTitle: String {
+        if queueManager.remainingDailyAllowance == 0 { return "Done for today" }
         return studySessions.isEmpty ? "No Revision Yet" : "All Caught Up"
     }
 
@@ -566,6 +584,10 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateMessage: String {
+        if let error = queueManager.lastRefreshError { return error }
+        if queueManager.remainingDailyAllowance == 0 {
+            return "You've reached today's \(queueManager.dailyMaximum)-card allowance. Your remaining cards will wait until tomorrow."
+        }
         if studySessions.isEmpty {
             return "No revision yet. Complete a study session first, then spaced repetition will use that material."
         }

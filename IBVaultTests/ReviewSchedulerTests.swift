@@ -12,6 +12,7 @@ struct ReviewSchedulerTests {
             for: Subject.self,
             StudyCard.self,
             StudySession.self,
+            ReviewSession.self,
             UserProfile.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )

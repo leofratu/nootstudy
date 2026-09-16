@@ -15,6 +15,9 @@ struct ExamMarkerView: View {
     @State private var error: String?
     @State private var saved = false
     @State private var showHistory = false
+    @State private var scope: Set<CardTopicSelection> = []
+    @State private var savedTestID = UUID()
+    @State private var testSaved = false
 
     private var subject: Subject? { subjects.first { $0.id == subjectID } }
     private var request: ExamMarkingRequest {
@@ -51,6 +54,7 @@ struct ExamMarkerView: View {
             .sheet(isPresented: $showHistory) { ExamMarkingHistoryView() }
         }
         .onAppear { if subjectID == nil { subjectID = subjects.first?.id } }
+        .onChange(of: subjectID) { _, _ in scope = []; testSaved = false }
         .onDisappear { task?.cancel() }
     }
 
@@ -67,6 +71,12 @@ struct ExamMarkerView: View {
             }
             .disabled(task != nil)
             writingField("01", title: "The question", prompt: "Paste the exam question, including any data or context.", text: $question, height: 120)
+            if let subject {
+                DisclosureGroup("Unit & topics · \(scope.count) selected") {
+                    ScrollView { TopicSelectionView(subject: subject, selection: $scope).padding(.top, 12) }
+                        .frame(maxHeight: 300)
+                }.disabled(task != nil)
+            }
             writingField("02", title: "Your answer", prompt: "Write or paste your answer here.", text: $answer, height: 220)
             DisclosureGroup {
                 writingField("03", title: "Mark scheme", prompt: "Paste the marking points or assessment rubric.", text: $scheme, height: 160)
@@ -79,6 +89,9 @@ struct ExamMarkerView: View {
             }
             .disabled(task != nil)
             HStack(spacing: 20) {
+                Button(testSaved ? "Update saved test" : "Save test to Library") { saveTest() }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || subject == nil || task != nil)
                 Text(request.hasScheme ? "AI feedback against your supplied scheme." : "Without a scheme, the score is a practice estimate.")
                     .font(IBTypography.body).foregroundStyle(IBColors.inkSecondary)
                 Spacer()
@@ -209,6 +222,16 @@ struct ExamMarkerView: View {
             context.delete(prompt); context.delete(reply); context.delete(session)
             self.error = "Couldn't save feedback: \(error.localizedDescription)"
         }
+        if saved { saveTest(feedback: result.transcript(hasScheme: request.hasScheme)) }
+    }
+
+    private func saveTest(feedback: String = "") {
+        guard let subject else { return }
+        let test = SavedStudyTest(id: savedTestID, subject: subject.name, level: subject.level,
+            topics: Set(scope.map(\.topic)).sorted(), subtopics: Set(scope.map(\.subtopic)).filter { !$0.isEmpty }.sorted(),
+            question: question, answer: answer, markScheme: scheme, feedback: feedback, maximumMarks: maximumMarks)
+        do { _ = try StudyTestStore.save(test, context: context); testSaved = true; error = nil }
+        catch { self.error = "Couldn't save test: \(error.localizedDescription)" }
     }
 }
 
