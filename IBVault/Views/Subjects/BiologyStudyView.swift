@@ -149,7 +149,7 @@ struct BiologyStudyView: View {
                 Picker("Course level", selection: Binding(get: { level }, set: { changeLevel($0) })) {
                     Text("SL").tag(IBCourseLevel.sl)
                     Text("HL").tag(IBCourseLevel.hl)
-                }.pickerStyle(.segmented).frame(width: 100)
+                }.pickerStyle(.segmented).labelsHidden().frame(width: 100)
                 Button { showReview = true } label: {
                     if compact { Image(systemName: "arrow.clockwise") }
                     else { Label("Scheduled review", systemImage: "arrow.clockwise") }
@@ -174,11 +174,12 @@ struct BiologyStudyView: View {
     }
 
     private var outline: some View {
+        ScrollViewReader { proxy in
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 7) {
                 Picker("Topic status", selection: $topicFilter) {
                     ForEach(TopicFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented)
+                }.pickerStyle(.segmented).labelsHidden()
                 Text("\(visible.count) topics shown").font(.caption).foregroundStyle(IBColors.inkSecondary)
                 if visible.isEmpty {
                     ContentUnavailableView("No matching topics", systemImage: "line.3.horizontal.decrease.circle",
@@ -202,16 +203,19 @@ struct BiologyStudyView: View {
                                     Text(count > 0 ? "\(count) saved mistakes" : topic.hlOnly ? "HL only · Partial coverage" : "Core topic · Partial coverage")
                                         .font(.caption2).foregroundStyle(.secondary)
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(10)
+                                .padding(8).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                                 .background(selectedCode == topic.code ? IBColors.highlight : Color.clear,
                                             in: RoundedRectangle(cornerRadius: 7))
                                 .contentShape(Rectangle())
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.plain).id(topic.code)
                                 .accessibilityAddTraits(selectedCode == topic.code ? .isSelected : [])
                         }
                     }
                 }
             }.padding(12)
+        }
+        .onAppear { proxy.scrollTo(selectedCode, anchor: .center) }
+        .onChange(of: selectedCode) { _, code in proxy.scrollTo(code, anchor: .center) }
         }
     }
 
@@ -250,9 +254,15 @@ struct BiologyStudyView: View {
         }
     }
 
+    private func levelDescription(_ topic: BiologyTopic) -> String {
+        if topic.hlOnly { return "HL only" }
+        if level == .sl { return "SL core" }
+        return topic.sections.contains { $0.hlOnly == true } ? "Core + HL extensions" : "SL + HL core"
+    }
+
     private func topicHeader(_ topic: BiologyTopic) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(topic.code) / \(topic.hlOnly ? "Higher level" : "Core + available HL extensions")")
+            Text("\(topic.code) / \(levelDescription(topic))")
                 .font(.caption.monospaced().weight(.medium)).foregroundStyle(IBColors.accent)
             Text(topic.title).font(.title2.weight(.semibold)).textSelection(.enabled)
             let sections = topic.sections(at: level)
@@ -266,7 +276,7 @@ struct BiologyStudyView: View {
             }.font(.caption)
             Picker("Study mode", selection: $mode) {
                 ForEach(StudyMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented).labelsHidden()
             ViewThatFits(in: .horizontal) {
                 HStack {
                 Button(mode == .flashcards ? "Add flashcards to review" : "Add questions to review") {
@@ -558,7 +568,18 @@ struct BiologyAnswerOption: View {
         return selected ? "largecircle.fill.circle" : "circle"
     }
     var body: some View {
-        Button(action: action) {
+        Group {
+            if revealed {
+                optionContent.accessibilityElement(children: .combine)
+            } else {
+                Button(action: action) { optionContent }.buttonStyle(.plain)
+            }
+        }
+        .accessibilityLabel("Option \(number): \(text)")
+        .accessibilityValue(feedback)
+    }
+
+    private var optionContent: some View {
             HStack(alignment: .top, spacing: 12) {
                 Text(String(number)).font(.caption.monospaced()).foregroundStyle(IBColors.inkSecondary)
                     .frame(width: 18).padding(.top, 3)
@@ -572,8 +593,5 @@ struct BiologyAnswerOption: View {
                             in: RoundedRectangle(cornerRadius: 9))
                 .overlay(RoundedRectangle(cornerRadius: 9)
                     .stroke(selected || (revealed && correct) ? IBColors.accent : IBColors.border, lineWidth: 1))
-        }.buttonStyle(.plain).disabled(revealed)
-            .accessibilityLabel("Option \(number): \(text)")
-            .accessibilityValue(feedback)
     }
 }
