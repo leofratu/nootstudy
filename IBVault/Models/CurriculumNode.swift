@@ -23,6 +23,11 @@ nonisolated final class CurriculumNode {
         set { recordedMasteryRaw = newValue?.rawValue }
     }
 
+    /// Retired and other-level records containing evidence remain user data.
+    var hasRecordedEvidence: Bool {
+        recordedMasteryRaw != nil || masteryUpdatedAt != nil || masterySource != nil || masteryNote != nil
+    }
+
     var stableKey: String {
         Self.stableKey(
             subjectName: subjectName,

@@ -227,10 +227,10 @@ final class ReviewScheduler {
     private func scopedCards(for subject: Subject, scopesBySubject: [String: [StudyScope]]) -> [StudyCard] {
         guard let subjectScopes = scopesBySubject[subject.name], !subjectScopes.isEmpty else {
             // Fallback: If no study scopes exist yet, return all cards in the subject
-            return subject.cards
+            return subject.cards.filter(BiologyStudyService.isEligible)
         }
         return subject.cards.filter { card in
-            subjectScopes.contains { $0.matches(card) }
+            BiologyStudyService.isEligible(card) && subjectScopes.contains { $0.matches(card) }
         }
     }
     

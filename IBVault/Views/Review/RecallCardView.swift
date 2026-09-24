@@ -62,6 +62,9 @@ struct RecallCardView: View {
                 }
                 Text("ANSWER").font(IBTypography.captionBold).tracking(1).foregroundStyle(IBColors.accent)
                 FormattedMessageContent(text: card.back).textSelection(.enabled)
+                if let explanation = BiologyStudyService.explanation(for: card) {
+                    Text(explanation).font(.callout).foregroundStyle(IBColors.inkSecondary).textSelection(.enabled)
+                }
                 if let url = card.sourceURL, let title = card.sourceTitle {
                     Link(destination: url) { Label(title, systemImage: "arrow.up.right") }
                         .font(IBTypography.caption)
@@ -80,6 +83,7 @@ struct RecallCardView: View {
         .surfaceCard()
         .onAppear { resetChoices() }
         .onChange(of: card.id) { _, _ in resetChoices() }
+        .onChange(of: revealed) { _, value in if !value { resetChoices() } }
     }
 
     private func resetChoices() {

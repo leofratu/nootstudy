@@ -1,0 +1,797 @@
+{
+  "reference_checked": "2026-09-24",
+  "first_assessment": 2025,
+  "sources": [
+    "https://www.ibo.org/programmes/diploma-programme/curriculum/sciences/biology/",
+    "https://anatolia.edu.gr/images/highschool/IBDP/Biology%20Guide%202025.pdf"
+  ],
+  "baseline": {
+    "grouped_topic_headings": 22,
+    "bundled_biology_lessons": 0,
+    "bundled_biology_questions": 0,
+    "note": "Repository content only. Existing users may have generated or custom cards."
+  },
+  "canonical_topics": 40,
+  "sl_topics": 34,
+  "hl_topics_including_core": 40,
+  "fully_verified_complete_topics": 0,
+  "partial_topics": 40,
+  "missing_topic_packages": 0,
+  "resource_totals": {
+    "lessons": 103,
+    "flashcards": 103,
+    "mcq": 42,
+    "written": 57,
+    "data": 46,
+    "questions": 145,
+    "sl_lessons": 88,
+    "sl_questions": 124
+  },
+  "distinct_explicit_understanding_references": 87,
+  "total_official_understandings": null,
+  "full_syllabus_coverage_percentage": null,
+  "coverage_note": "Referenced means relevant teaching exists, not that every requirement is complete. No full-syllabus denominator or completeness percentage has been invented.",
+  "topics": [
+    {
+      "code": "A1.1",
+      "title": "Water",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [
+        "A1.1.1",
+        "A1.1.2",
+        "A1.1.3",
+        "A1.1.4",
+        "A1.1.5",
+        "A1.1.6"
+      ],
+      "unmapped_understandings_within_checked_range": [
+        "A1.1.7",
+        "A1.1.8"
+      ],
+      "remaining": "Overview coverage only. HL origin and persistence of water, required organism comparisons and further application practice still need dedicated lessons. Numbered references indicate relevant teaching, not certified complete coverage."
+    },
+    {
+      "code": "A1.2",
+      "title": "Nucleic acids",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add complete molecular drawings, required evidence for DNA as genetic material, directionality and HL extensions. These two concepts do not cover every numbered understanding."
+    },
+    {
+      "code": "A2.1",
+      "title": "Origins of cells",
+      "hl_only": true,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add the full sequence of required origin-of-life evidence, geological context and evaluation of alternative environments. All resources in this topic are HL-only."
+    },
+    {
+      "code": "A2.2",
+      "title": "Cell structure",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add annotated micrographs, atypical cell examples, the full range of cell structures and HL endosymbiosis and differentiation content."
+    },
+    {
+      "code": "A2.3",
+      "title": "Viruses",
+      "hl_only": true,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add required named-virus comparisons, viral origins and more detailed replication and evolutionary examples. All resources in this topic are HL-only."
+    },
+    {
+      "code": "A3.1",
+      "title": "Diversity of organisms",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add the full set of required organism examples, genome comparisons, identification work and HL material."
+    },
+    {
+      "code": "A3.2",
+      "title": "Classification and cladistics",
+      "hl_only": true,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add complete three-domain evidence, required named reclassifications and more complex tree and sequence exercises. All resources in this topic are HL-only."
+    },
+    {
+      "code": "A4.1",
+      "title": "Evolution and speciation",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add required named cases, timing and patterns of speciation, and HL mechanisms. This overview does not replace the complete evidence set."
+    },
+    {
+      "code": "A4.2",
+      "title": "Conservation of biodiversity",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add required extinction and conservation case studies, detailed biodiversity measurement and the full range of conservation trade-offs."
+    },
+    {
+      "code": "B1.1",
+      "title": "Carbohydrates and lipids",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add complete molecular drawings, required named carbohydrate and lipid comparisons, and additional interpretation practice."
+    },
+    {
+      "code": "B1.2",
+      "title": "Proteins",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add the full set of required structural examples, folding interactions and HL protein-structure content."
+    },
+    {
+      "code": "B2.1",
+      "title": "Membranes and membrane transport",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add complete membrane diagrams, the full range of membrane components and HL transport mechanisms."
+    },
+    {
+      "code": "B2.2",
+      "title": "Organelles and compartmentalization",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add complete organelle identification, experimental fractionation evidence and the HL endomembrane-system details."
+    },
+    {
+      "code": "B2.3",
+      "title": "Cell specialization",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [
+        "B2.3.1",
+        "B2.3.2",
+        "B2.3.3",
+        "B2.3.4",
+        "B2.3.5",
+        "B2.3.6"
+      ],
+      "unmapped_understandings_within_checked_range": [
+        "B2.3.7",
+        "B2.3.8",
+        "B2.3.9",
+        "B2.3.10"
+      ],
+      "remaining": "Core concepts are introduced, but further assessment and embryo examples are required. HL adaptations of pneumocytes, muscle cells, gametes and specialized exchange surfaces are not yet taught here."
+    },
+    {
+      "code": "B3.1",
+      "title": "Gas exchange",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add lung-volume measurements, full ventilation mechanics, annotated leaf anatomy and HL gas-exchange adaptations."
+    },
+    {
+      "code": "B3.2",
+      "title": "Transport",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add complete heart and vessel diagrams, required transport investigations and the detailed HL mechanisms."
+    },
+    {
+      "code": "B3.3",
+      "title": "Muscle and motility",
+      "hl_only": true,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add the full diversity of motility, joint and lever examples, and detailed annotated sarcomere diagrams. All resources in this topic are HL-only."
+    },
+    {
+      "code": "B4.1",
+      "title": "Adaptation to environment",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "There is no additional HL content in this topic, but the full set of required named species, distribution examples and fieldwork applications still needs expansion."
+    },
+    {
+      "code": "B4.2",
+      "title": "Ecological niches",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 13,
+      "flashcards": 13,
+      "question_types": {
+        "mcq": 2,
+        "written": 9,
+        "data": 2
+      },
+      "mapped_understandings": [
+        "B4.2.1",
+        "B4.2.10",
+        "B4.2.11",
+        "B4.2.12",
+        "B4.2.13",
+        "B4.2.2",
+        "B4.2.3",
+        "B4.2.4",
+        "B4.2.5",
+        "B4.2.6",
+        "B4.2.7",
+        "B4.2.8",
+        "B4.2.9"
+      ],
+      "unmapped_understandings_within_checked_range": [],
+      "remaining": "All 13 numbered understandings have relevant original teaching and practice, but this is not certified complete coverage: required skull examination, named examples, practical experience and broader assessment depth still need teacher review. There is no additional HL content in B4.2."
+    },
+    {
+      "code": "C1.1",
+      "title": "Enzymes and metabolism",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add full reaction-energy and rate diagrams, experimental practice and HL inhibition and pathway-regulation mechanisms."
+    },
+    {
+      "code": "C1.2",
+      "title": "Cell respiration",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add detailed respirometry and substrate comparisons. HL glycolysis, link reaction, Krebs cycle, electron transport and chemiosmosis require dedicated lessons."
+    },
+    {
+      "code": "C1.3",
+      "title": "Photosynthesis",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add chromatography, complete experimental analysis and HL light-dependent reactions, chemiosmosis and the Calvin cycle."
+    },
+    {
+      "code": "C2.1",
+      "title": "Chemical signalling",
+      "hl_only": true,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add the full set of receptor classes, named pathways, steroid-hormone examples and feedback applications. All resources in this topic are HL-only."
+    },
+    {
+      "code": "C2.2",
+      "title": "Neural signalling",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [
+        "C2.2.1",
+        "C2.2.2",
+        "C2.2.3",
+        "C2.2.4",
+        "C2.2.5",
+        "C2.2.6",
+        "C2.2.7"
+      ],
+      "unmapped_understandings_within_checked_range": [
+        "C2.2.8",
+        "C2.2.9",
+        "C2.2.10",
+        "C2.2.11",
+        "C2.2.12",
+        "C2.2.13",
+        "C2.2.14",
+        "C2.2.15",
+        "C2.2.16"
+      ],
+      "remaining": "Core mechanisms are introduced. Add required correlation analysis and HL action-potential phases, local currents, saltatory conduction, inhibitory signalling and summation."
+    },
+    {
+      "code": "C3.1",
+      "title": "Integration of body systems",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add full named nervous and endocrine control pathways, required brain and spinal-cord details and HL plant integration."
+    },
+    {
+      "code": "C3.2",
+      "title": "Defence against disease",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add the full range of pathogens, blood clotting, antibiotic resistance, disease examples and HL immune mechanisms."
+    },
+    {
+      "code": "C4.1",
+      "title": "Populations and communities",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "There is no additional HL content, but required population models, interaction examples, statistical association and allelopathy or antibiotic-secretion applications still need expansion."
+    },
+    {
+      "code": "C4.2",
+      "title": "Transfers of energy and matter",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 10,
+      "flashcards": 10,
+      "question_types": {
+        "mcq": 2,
+        "written": 7,
+        "data": 5
+      },
+      "mapped_understandings": [
+        "C4.2.1",
+        "C4.2.10",
+        "C4.2.11",
+        "C4.2.12",
+        "C4.2.13",
+        "C4.2.14",
+        "C4.2.15",
+        "C4.2.16",
+        "C4.2.17",
+        "C4.2.18",
+        "C4.2.19",
+        "C4.2.2",
+        "C4.2.20",
+        "C4.2.21",
+        "C4.2.22",
+        "C4.2.3",
+        "C4.2.4",
+        "C4.2.5",
+        "C4.2.6",
+        "C4.2.7",
+        "C4.2.8",
+        "C4.2.9"
+      ],
+      "unmapped_understandings_within_checked_range": [],
+      "remaining": "All 22 numbered understandings have relevant original teaching. Full coverage is not certified: students still need researched local food webs, scaled energy-pyramid construction, actual carbon-cycle drawing, source-data interpretation and teacher-reviewed assessment depth. There is no additional HL content in C4.2."
+    },
+    {
+      "code": "D1.1",
+      "title": "DNA replication",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [
+        "D1.1.1",
+        "D1.1.2",
+        "D1.1.3",
+        "D1.1.4",
+        "D1.1.5"
+      ],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Core mechanisms are introduced. Add experimental interpretation of DNA profiles and HL directionality, leading and lagging strands, primers, fragments and ligase."
+    },
+    {
+      "code": "D1.2",
+      "title": "Protein synthesis",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add genetic-code-table practice, full molecular diagrams and HL RNA processing, regulation and translation details."
+    },
+    {
+      "code": "D1.3",
+      "title": "Mutations and gene editing",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 3,
+      "flashcards": 3,
+      "question_types": {
+        "mcq": 1,
+        "written": 2,
+        "data": 1
+      },
+      "mapped_understandings": [
+        "D1.3.1",
+        "D1.3.2",
+        "D1.3.3",
+        "D1.3.4",
+        "D1.3.5",
+        "D1.3.6",
+        "D1.3.7",
+        "D1.3.8",
+        "D1.3.9"
+      ],
+      "unmapped_understandings_within_checked_range": [
+        "D1.3.10"
+      ],
+      "remaining": "Core mutations are introduced and an HL editing overview is available. Add required successful editing examples, ethical evaluation and conserved-sequence evidence before calling the topic complete."
+    },
+    {
+      "code": "D2.1",
+      "title": "Cell and nuclear division",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add annotated stage identification, cytokinesis mechanisms, chromosome behaviour investigations and HL cell-cycle regulation."
+    },
+    {
+      "code": "D2.2",
+      "title": "Gene expression",
+      "hl_only": true,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add the required regulatory examples, environmental effects and detailed experimental evidence. All resources in this topic are HL-only."
+    },
+    {
+      "code": "D2.3",
+      "title": "Water potential",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 3,
+      "flashcards": 3,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 2
+      },
+      "mapped_understandings": [
+        "D2.3.10",
+        "D2.3.11",
+        "D2.3.2",
+        "D2.3.3",
+        "D2.3.4",
+        "D2.3.5",
+        "D2.3.6",
+        "D2.3.8",
+        "D2.3.9"
+      ],
+      "unmapped_understandings_within_checked_range": [
+        "D2.3.1",
+        "D2.3.7"
+      ],
+      "remaining": "SL and HL material are separately gated. Add solvation, clinical-context applications, uncertainty and error-bar practice, and more tissue-level HL applications."
+    },
+    {
+      "code": "D3.1",
+      "title": "Reproduction",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Major gap remains: human reproductive anatomy, menstrual hormonal control, fertilization and IVF, detailed flower diagrams and HL pregnancy and gametogenesis require dedicated resources. This topic is explicitly an overview, not complete revision."
+    },
+    {
+      "code": "D3.2",
+      "title": "Inheritance",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add pedigrees, sex-linked inheritance, codominance and multiple alleles, environmental and polygenic variation, and HL linkage and statistical testing."
+    },
+    {
+      "code": "D3.3",
+      "title": "Homeostasis",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 4,
+      "flashcards": 4,
+      "question_types": {
+        "mcq": 1,
+        "written": 3,
+        "data": 1
+      },
+      "mapped_understandings": [
+        "D3.3.1",
+        "D3.3.10",
+        "D3.3.2",
+        "D3.3.3",
+        "D3.3.4",
+        "D3.3.5",
+        "D3.3.6",
+        "D3.3.7",
+        "D3.3.8",
+        "D3.3.9"
+      ],
+      "unmapped_understandings_within_checked_range": [
+        "D3.3.11"
+      ],
+      "remaining": "Core feedback, glucose and temperature have teaching and practice. Add full diabetes context, physiological data, kidney diagrams, quantitative osmolality and HL redistribution of blood flow. Numbered references do not certify every requirement within a point."
+    },
+    {
+      "code": "D4.1",
+      "title": "Natural selection",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add required selection examples and HL allele-frequency, equilibrium and selection-pattern applications."
+    },
+    {
+      "code": "D4.2",
+      "title": "Stability and change",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add sustainable-system investigations, detailed succession evidence, required case studies and HL ecosystem change and management."
+    },
+    {
+      "code": "D4.3",
+      "title": "Climate change",
+      "hl_only": false,
+      "coverage": "partial",
+      "lessons": 2,
+      "flashcards": 2,
+      "question_types": {
+        "mcq": 1,
+        "written": 1,
+        "data": 1
+      },
+      "mapped_understandings": [],
+      "unmapped_understandings_within_checked_range": null,
+      "remaining": "Add required climate datasets, ocean and ecosystem case studies, mitigation evaluation and HL feedback and change mechanisms. Numerical examples in this pack are exercises rather than live climate observations."
+    }
+  ]
+}
