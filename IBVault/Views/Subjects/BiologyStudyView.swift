@@ -86,7 +86,7 @@ struct BiologyStudyView: View {
                     Text("\(available.count) topics · First assessment 2025").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Picker("Course level", selection: Binding(get: { level }, set: changeLevel)) {
+                Picker("Course level", selection: Binding(get: { level }, set: { changeLevel($0) })) {
                     Text("SL").tag(IBCourseLevel.sl)
                     Text("HL").tag(IBCourseLevel.hl)
                 }.pickerStyle(.segmented).frame(width: 120)
