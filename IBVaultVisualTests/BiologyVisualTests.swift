@@ -62,8 +62,10 @@ struct BiologyVisualTests {
 
     private func render<V: View>(_ view: V, width: Int, height: Int, dark: Bool, name: String) async throws {
         let size = NSSize(width: width, height: height)
-        let hosting = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light)
-            .frame(width: CGFloat(width), height: CGFloat(height)))
+        let hosting = NSHostingView(rootView: view
+            .frame(width: CGFloat(width), height: CGFloat(height))
+            .background(IBColors.canvas)
+            .environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
