@@ -47,7 +47,7 @@ jobs:
           run-id: 35995407219
           github-token: ${{ github.token }}
           path: evidence/before
-      - name: Publish reviewed artifacts with explicit outstanding timing failures
+      - name: Publish reviewed application artifacts without changing workflow permissions
         id: publication
         working-directory: app
         run: |
@@ -59,7 +59,12 @@ jobs:
           old = "git('add', 'IBVault/Materials/Biology/C.json', 'scripts/audit_biology.py', 'docs/biology-coverage.json')"
           new = "git('add', '-f', 'IBVault/Materials/Biology/C.json', 'scripts/audit_biology.py', 'docs/biology-coverage.json')"
           assert text.count(old) == 1
-          p.write_text(text.replace(old, new))
+          text = text.replace(old, new)
+          start = text.index('# Keep visual checks active on future changes')
+          end = text.index("shots = Path('docs/screenshots/biology')", start)
+          text = text[:start] + text[end:]
+          text = text.replace('The ongoing study workflow now includes a separate `native-visual-tests` job and watches visual-test/project changes. This CI-wiring addition does not change the tested application or assertions.', 'The isolated visual scheme and tests are included in this application publication. Ongoing visual-CI wiring is recorded separately from the byte-verified application source.')
+          p.write_text(text)
           PY
           python3 ../tools/.github/tools/publish_verified_continuation.py \
             --curriculum "$GITHUB_WORKSPACE/evidence/curriculum" \
