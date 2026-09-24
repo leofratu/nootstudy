@@ -25,9 +25,10 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
           brew install xcodegen
           xcodegen generate
-      - name: Measure each implementation on the same runner without unrelated tests
+      - name: Measure each implementation against the same unchanged assertions
         working-directory: app
         run: |
+          set +e
           set -uo pipefail
           for variant in baseline signatures registered; do
             if [ "$variant" = signatures ]; then
