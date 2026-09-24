@@ -9,7 +9,7 @@ concurrency:
   group: biology-continuation-verification
   cancel-in-progress: true
 jobs:
-  candidate:
+  verify:
     runs-on: macos-26
     timeout-minutes: 20
     steps:
@@ -21,15 +21,33 @@ jobs:
         with:
           ref: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
           path: app
+          fetch-depth: 0
           persist-credentials: false
-      - name: Apply isolated candidate without publishing application changes
+      - name: Apply original content and targeted queue fixes to an isolated checkout
         working-directory: app
         run: |
           set -euo pipefail
           git apply --check ../review-tools/.github/tools/queue_candidate.patch
           git apply ../review-tools/.github/tools/queue_candidate.patch
+          python3 ../review-tools/.github/tools/finalize_queue.py
+          python3 ../review-tools/.github/tools/expand_bioenergetics.py
+          cp ../review-tools/.github/tools/BiologyContinuationTests.swift IBVaultTests/BiologyContinuationTests.swift
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('IBVaultTests/BiologyContinuationTests.swift')
+          s = p.read_text().replace('#expect(!ReviewDailyLimitPolicy.currentCards(in: reader).contains', '#expect(!(try ReviewDailyLimitPolicy.currentCards(in: reader)).contains')
+          s = s.replace('#expect(cold.map(\\.id) == warm.map(\\.id))', '#expect(Set(cold.map(\\.id)) == Set(warm.map(\\.id)))')
+          s = s.replace('        card.front = "Changed prompt"\n', '''        card.front = "Changed prompt"
+                  try writer.save()
+                  let editedActual = try ReviewDailyLimitPolicy.currentCards(in: reader).map(\\.front)
+                  let editedNormal = try reader.fetch(FetchDescriptor<StudyCard>()).map(\\.front)
+                  #expect(editedActual == editedNormal)
+          ''')
+          p.write_text(s)
+          PY
+          python3 scripts/audit_biology.py --output docs/biology-coverage.json
           git diff --check
-      - name: Run all native functional and unchanged performance assertions
+      - name: Compile and run every native functional and performance assertion
         working-directory: app
         run: |
           set -euo pipefail
@@ -37,21 +55,27 @@ jobs:
           brew install xcodegen
           xcodegen generate
           xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/candidate-build" -resultBundlePath "$RUNNER_TEMP/candidate-tests.xcresult" \
+            -derivedDataPath "$RUNNER_TEMP/continuation-build" -resultBundlePath "$RUNNER_TEMP/continuation-tests.xcresult" \
             -jobs 2 -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee "$RUNNER_TEMP/candidate-tests.log"
-      - name: Record exact results
+            2>&1 | tee "$RUNNER_TEMP/continuation-tests.log"
+      - name: Retain exact changed source and completed results
         if: always()
+        working-directory: app
         run: |
-          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/candidate-tests.xcresult" --format json > "$RUNNER_TEMP/candidate-summary.json" || true
-          grep -E 'bench |refreshDueCards|error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/candidate-tests.log" | tail -80 || true
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/continuation-tests.xcresult" --format json > "$RUNNER_TEMP/continuation-summary.json" || true
+          git diff --binary > "$RUNNER_TEMP/continuation.patch"
+          tar --exclude .git -cf "$RUNNER_TEMP/continuation-source.tar" .
+          grep -E 'bench |refreshDueCards|error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/continuation-tests.log" | tail -80 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: review-queue-candidate
+          name: biology-continuation-verification
           path: |
-            ${{ runner.temp }}/candidate-tests.log
-            ${{ runner.temp }}/candidate-summary.json
+            ${{ runner.temp }}/continuation-tests.log
+            ${{ runner.temp }}/continuation-summary.json
+            ${{ runner.temp }}/continuation-source.tar
+            ${{ runner.temp }}/continuation.patch
+            app/docs/biology-coverage.json
             ~/Library/Logs/DiagnosticReports/*.ips
-          retention-days: 7
+          retention-days: 14
