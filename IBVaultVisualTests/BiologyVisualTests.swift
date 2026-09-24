@@ -39,7 +39,11 @@ struct BiologyVisualTests {
             let view = BiologyStudyView(subject: subject, initialCode: "C4.2", initialMode: mode).modelContainer(store)
             try await render(view, width: 768, height: 900, dark: false, name: "after-\(mode.rawValue.lowercased())-768")
         }
+        let photosynthesis = BiologyStudyView(subject: subject, initialCode: "C1.3").modelContainer(store)
+        try await render(photosynthesis, width: 420, height: 900, dark: false, name: "after-photosynthesis-sl-420")
         subject.level = "HL"
+        let respiration = BiologyStudyView(subject: subject, initialCode: "C1.2").modelContainer(store)
+        try await render(respiration, width: 1280, height: 900, dark: false, name: "after-respiration-hl-1280")
         let hl = BiologyStudyView(subject: subject, initialCode: "D2.3").modelContainer(store)
         try await render(hl, width: 1280, height: 900, dark: false, name: "after-hl-water-potential")
         #endif
