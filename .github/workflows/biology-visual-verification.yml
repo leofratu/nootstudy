@@ -1,4 +1,4 @@
-name: Biology visual verification
+name: Biology continuation verification
 on:
   push:
     branches: [tools/biology-visual-20260924]
@@ -6,125 +6,59 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: biology-visual-verification
+  group: biology-continuation-verification
   cancel-in-progress: true
 jobs:
-  apply:
+  profile:
     runs-on: macos-26
-    permissions:
-      contents: write
-    timeout-minutes: 8
-    outputs:
-      source_sha: ${{ steps.commit.outputs.sha }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          path: review-tools
-      - uses: actions/checkout@v4
-        with:
-          ref: design/biology-study-experience
-          path: app
-      - name: Apply exact screenshot-driven fixes
-        working-directory: app
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = 717a28eb35dd04a4d20666337b33bb389a3d7506
-          test -z "$(git status --porcelain)"
-          python3 ../review-tools/.github/tools/fix_visual.py
-          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
-          brew install xcodegen
-          xcodegen generate
-          git diff --check
-          git diff -- IBVault/Views/Subjects/BiologyStudyView.swift project.yml
-      - name: Commit and push without rewriting history
-        id: commit
-        working-directory: app
-        run: |
-          set -euo pipefail
-          git config user.name 'Leo Fratu'
-          git config user.email '181772404+leofratu@users.noreply.github.com'
-          git add IBVault/Views/Subjects/BiologyStudyView.swift
-          git commit -m 'fix: keep level controls compact, selected topics visible and feedback readable'
-          git add IBVaultTests/BiologyVisualTests.swift IBVaultVisualTests/BiologyVisualTests.swift project.yml IBVault.xcodeproj/project.pbxproj IBVault.xcodeproj/xcshareddata/xcschemes/IBVaultVisual.xcscheme
-          git commit -m 'test: isolate native-window rendering from SwiftData bridge fixtures'
-          git push origin HEAD:design/biology-study-experience
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          git archive --format=tar HEAD > "$RUNNER_TEMP/design-source.tar"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: corrected-design-source
-          path: ${{ runner.temp }}/design-source.tar
-          retention-days: 14
-
-  functional:
-    needs: apply
-    runs-on: macos-26
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.apply.outputs.source_sha }}
+          ref: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
           persist-credentials: false
-      - name: Compile and run every functional and performance test
+      - name: Add temporary phase timing to the isolated checkout
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('IBVault/Services/CardDuplicatePolicy.swift')
+          text = p.read_text()
+          text = text.replace('        let preferred = cards.map { card in', '        let profileStart = Date()\n        let preferred = cards.map { card in')
+          text = text.replace('        for (rank, item) in preferred.enumerated() {', '        print("PROFILE preference-sort-ms", -profileStart.timeIntervalSinceNow * 1000)\n        var signatureMS = 0.0\n        var scopeMS = 0.0\n        var matchingMS = 0.0\n        for (rank, item) in preferred.enumerated() {\n            let itemStart = Date()')
+          text = text.replace('            let subjectID = card.subject?.id', '            signatureMS += -itemStart.timeIntervalSinceNow * 1000\n            let scopeStart = Date()\n            let subjectID = card.subject?.id')
+          text = text.replace('            let exact = exactPrompts[scope]?[signature.question]', '            scopeMS += -scopeStart.timeIntervalSinceNow * 1000\n            let matchStart = Date()\n            let exact = exactPrompts[scope]?[signature.question]')
+          text = text.replace('                unique.append(card)\n            }\n        }', '                unique.append(card)\n            }\n            matchingMS += -matchStart.timeIntervalSinceNow * 1000\n        }\n        print("PROFILE signature-ms", signatureMS, "scope-ms", scopeMS, "matching-ms", matchingMS)')
+          p.write_text(text)
+          p = Path('IBVault/Engine/ReviewQueueManager.swift')
+          text = p.read_text()
+          text = text.replace('        let all = try context.fetch(FetchDescriptor<StudyCard>())', '        let profileStart = Date()\n        let all = try context.fetch(FetchDescriptor<StudyCard>())\n        print("PROFILE fetch-ms", -profileStart.timeIntervalSinceNow * 1000)\n        let libraryStart = Date()')
+          text = text.replace('        let start = calendar.startOfDay(for: now)', '        print("PROFILE library-ms", -libraryStart.timeIntervalSinceNow * 1000)\n        let reviewStart = Date()\n        let start = calendar.startOfDay(for: now)')
+          text = text.replace('        return Day(library: library,', '        print("PROFILE reviews-profile-ms", -reviewStart.timeIntervalSinceNow * 1000)\n        return Day(library: library,')
+          p.write_text(text)
+          PY
+      - name: Run unchanged queue assertions with phase measurements
         run: |
           set -euo pipefail
           sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
           brew install xcodegen
           xcodegen generate
-          python3 scripts/audit_biology.py --output "$RUNNER_TEMP/biology-coverage.json"
           xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/unit-build" -resultBundlePath "$RUNNER_TEMP/unit-tests.xcresult" \
+            -derivedDataPath "$RUNNER_TEMP/profile-build" -resultBundlePath "$RUNNER_TEMP/profile-tests.xcresult" \
             -jobs 2 -parallel-testing-enabled NO \
+            -only-testing:IBVaultTests/ReviewQueueBulkTests \
+            -only-testing:IBVaultTests/PerformanceBenchmarks \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee "$RUNNER_TEMP/unit-tests.log"
-      - name: Record actual results
+            2>&1 | tee "$RUNNER_TEMP/profile-tests.log"
+      - name: Record exact results
         if: always()
         run: |
-          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/unit-tests.xcresult" --format json > "$RUNNER_TEMP/unit-summary.json" || true
-          grep -E 'error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/unit-tests.log" | tail -50 || true
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/profile-tests.xcresult" --format json > "$RUNNER_TEMP/profile-summary.json" || true
+          grep -E 'PROFILE|bench |refreshDueCards|error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/profile-tests.log" | tail -80 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: corrected-design-functional-evidence
+          name: review-queue-profile
           path: |
-            ${{ runner.temp }}/unit-tests.log
-            ${{ runner.temp }}/unit-summary.json
-            ${{ runner.temp }}/biology-coverage.json
-            ~/Library/Logs/DiagnosticReports/*.ips
-          retention-days: 14
-
-  visual:
-    needs: apply
-    runs-on: macos-26
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.apply.outputs.source_sha }}
-          persist-credentials: false
-      - name: Render all native fixtures in their dedicated host
-        run: |
-          set -euo pipefail
-          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
-          brew install xcodegen
-          xcodegen generate
-          xcodebuild test -project IBVault.xcodeproj -scheme IBVaultVisual -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/visual-build" -resultBundlePath "$RUNNER_TEMP/visual-tests.xcresult" \
-            -jobs 2 -parallel-testing-enabled NO \
-            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee "$RUNNER_TEMP/visual-tests.log"
-      - name: Record visual results
-        if: always()
-        run: |
-          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/visual-tests.xcresult" --format json > "$RUNNER_TEMP/visual-summary.json" || true
-          find /tmp/nootstudy-snapshots -type f -name '*.png' -print || true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: corrected-design-visual-evidence
-          path: |
-            ${{ runner.temp }}/visual-tests.log
-            ${{ runner.temp }}/visual-summary.json
-            /tmp/nootstudy-snapshots
-            ~/Library/Logs/DiagnosticReports/*.ips
-          retention-days: 14
+            ${{ runner.temp }}/profile-tests.log
+            ${{ runner.temp }}/profile-summary.json
+          retention-days: 7
