@@ -1,6 +1,6 @@
 # Biology curriculum and reliability audit
 
-Reference date: 24 September 2026. App baseline: `c65af39d06b5e8bb69d5757d9097e2158933f547`. Native-tested implementation: `33f4874c10fcf3144cb15046d94e217a2e6b969f`.
+Reference date: 24 September 2026. App baseline: `c65af39d06b5e8bb69d5757d9097e2158933f547`. Initial native-tested implementation: `33f4874c10fcf3144cb15046d94e217a2e6b969f`. Completed continuation results are in `biology-continuation-validation.md`.
 
 ## Reference and method
 
@@ -31,20 +31,20 @@ Run `python3 scripts/audit_biology.py --output docs/biology-coverage.json` to re
 | Metric | Baseline | This revision |
 | --- | ---: | ---: |
 | Grouped legacy headings / canonical topic packages | 22 grouped headings | 40 canonical packages |
-| Bundled lesson sections | 0 | 103 |
-| Derived concept flashcards | 0 | 103 |
-| MCQs | 0 | 42 |
-| Written questions | 0 | 57 |
-| Data/application/experimental questions | 0 | 46 |
-| Total practice questions | 0 | 145 |
-| SL-accessible lesson sections | 0 | 88 |
-| SL-accessible questions | 0 | 124 |
-| Distinct explicit understanding references | Not mapped | 87 |
+| Bundled lesson sections | 0 | 126 |
+| Derived concept flashcards | 0 | 126 |
+| MCQs | 0 | 55 |
+| Written questions | 0 | 74 |
+| Data/application/experimental questions | 0 | 65 |
+| Total practice questions | 0 | 194 |
+| SL-accessible lesson sections | 0 | 93 |
+| SL-accessible questions | 0 | 137 |
+| Distinct explicit understanding references | Not mapped | 123 |
 | Topics certified fully complete | Not established | 0 |
 
 Every topic is explicitly **partial**. Topic presence, question counts and references do not certify complete teaching. The whole-syllabus understanding denominator and completeness percentage remain `null`.
 
-B4.2 has teaching linked to all 13 numbered understandings and C4.2 to all 22. This still does not certify completion of every required named example, practical task or assessment demand within those points. Every lesson has associated practice and each topic exposes its remaining gaps.
+B4.2 has teaching linked to all 13 numbered understandings, C4.2 to all 22, C1.2 to all 17 and C1.3 to all 19. This still does not certify completion of every required named example, practical task or assessment demand within those points. Every lesson has associated practice and each topic exposes its remaining gaps.
 
 ## Student workflow and persistence
 
@@ -58,7 +58,7 @@ Recorded curriculum evidence survives catalog retirement and SL/HL switching. Du
 
 Ambiguous old topic names are not silently reassigned: several combine multiple official topics. Existing history is retained but may not automatically contribute to a newly named topic. Narrowly equivalent labels, such as Cells and Cell Structure, can resolve to their canonical topic. Existing explicit syllabus references support legacy library lookup. AI topic commands accept official names/codes, and their end-to-end fixtures now use the actual current curriculum without weakening the original assertions.
 
-## Completed validation
+## Initial completed validation
 
 Evidence: https://github.com/leofratu/nootstudy/actions/runs/35994816730
 
@@ -83,9 +83,23 @@ The new tests cover roadmap/resource integrity, SL/HL boundaries, missing/malfor
 
 The Python audit passed. It validates topic titles/codes, checked understanding boundaries, missing resources, duplicate IDs/prompts, invalid references, prerequisite cycles, commands and question structure. Independent Swift/Foundation catalog loading, Swift syntax parsing and `git diff --check` also passed. These are complementary checks, not substitutes for native compilation.
 
+## Continuation: bioenergetics and stable evidence
+
+The current guide's printed pages 67–71 (PDF pages 73–77) were checked directly: C1.2 has core understandings 1–6 and additional HL understandings 7–17; C1.3 has core 1–8 and additional HL 9–19. These independent boundaries are now enforced by the audit and native tests.
+
+C1.2 now has 12 lesson sections and 25 questions, including ATP turnover, respirometry, redox carriers, glycolysis, fermentation, the link reaction, Krebs-cycle accounting, electron transport, oxygen's terminal-acceptor role, chemiosmosis and fuel comparisons. C1.3 now has 15 sections and 30 questions, including Rf, absorption/action spectra, controlled and FACE experiments, photosystems, photolysis, cyclic/non-cyclic flow, chloroplast compartments and Calvin-cycle carbon/ATP/NADPH accounting. Every section has at least two linked questions. The new numerical examples are synthetic practice material; these are original questions, not past-paper reproductions.
+
+The continuation adds 23 sections and 49 questions to the earlier pack. It does not change the honest partial-coverage classification or invent a whole-syllabus denominator. Chromatography and respirometry remain accessible to SL; detailed yeast fermentation and HL bioenergetics are correctly gated. In particular, the existing yeast question keeps its `C1.2#w1` identity but is no longer exposed at SL.
+
+Existing section titles and resource IDs are retained where possible. HL-prefixed curriculum labels and old plain imported-card labels now resolve to the same section. Owned-card mastery follows the stable question/lesson reference rather than an outdated display label, so moving a question to its correct section preserves its review history without crediting the wrong core lesson. Empty curriculum scaffolding cannot obscure a recorded assessment under the equivalent older label.
+
+Duplicate signatures avoid constructing fuzzy-match sets for short answers that cannot use fuzzy matching. Structured scope keys avoid repeated UUID formatting. Scope-label normalization is memoized only within one library calculation, so subsequent edits are immediately visible. The more complex projected/registered-model fetching experiments were not included. Existing timing assertions are unchanged and remain a separate, explicitly reported limitation when a native run exceeds them.
+
+Thirteen added regressions exercise understanding ranges, search/import gates, four-option MCQs, retained review metadata, cold/warm/pending/cross-context queue behaviour, duplicate boundaries and history preference, and old/new HL mastery mappings. Native continuation results are recorded separately in `biology-continuation-validation.md`; the initial historical run above must not be mistaken for a test of the expanded content.
+
 ## Remaining limitations
 
-This is a substantial expansion, not a complete independent IB revision course. Dedicated HL respiration/photosynthesis, human reproductive physiology, further inheritance material, named case studies, diagrams/micrographs, practical investigations and broader exam-depth assessment remain. Independent teacher validation is outstanding. The scientific investigation, collaborative sciences project and full practical programme are not claimed covered by the 40-topic pack.
+This is a substantial expansion, not a complete independent IB revision course. Human reproductive physiology, further inheritance material, named case studies, diagrams/micrographs, practical investigations and broader exam-depth assessment remain. The new respiration/photosynthesis lessons now teach the HL mechanisms, but still need diagrams, more unfamiliar datasets, practical execution and independent teacher review. Independent teacher validation is outstanding. The scientific investigation, collaborative sciences project and full practical programme are not claimed covered by the 40-topic pack.
 
 A complete independent list of every numbered understanding has not yet been mapped. Resource counts cannot establish that missing denominator.
 
