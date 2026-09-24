@@ -46,6 +46,8 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # The native visual fixtures run once in biology-visual-tests.yml, in a
+  # separate host from this functional/SwiftData suite.
   native-tests:
     runs-on: macos-26
     timeout-minutes: 25
@@ -90,40 +92,3 @@ jobs:
             IBVault.xcodeproj/project.pbxproj
           retention-days: 7
           if-no-files-found: warn
-
-  native-visual-tests:
-    runs-on: macos-26
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Select Xcode and generate the native visual scheme
-        run: |
-          set -euo pipefail
-          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
-          brew install xcodegen
-          xcodegen generate
-      - name: Render and test every native Biology fixture
-        run: |
-          set -euo pipefail
-          xcodebuild test -project IBVault.xcodeproj -scheme IBVaultVisual -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/visual-build" -resultBundlePath "$RUNNER_TEMP/visual-tests.xcresult" \
-            -jobs 2 -parallel-testing-enabled NO \
-            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee "$RUNNER_TEMP/visual-tests.log"
-      - name: Record visual test summary
-        if: always()
-        run: xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/visual-tests.xcresult" --format json > "$RUNNER_TEMP/visual-summary.json"
-      - name: Retain visual evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-visual-evidence-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/visual-tests.log
-            ${{ runner.temp }}/visual-summary.json
-            ${{ runner.temp }}/visual-tests.xcresult
-            /tmp/nootstudy-snapshots
-          retention-days: 7
-          if-no-files-found: error
