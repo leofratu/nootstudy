@@ -7,9 +7,7 @@ nonisolated enum BiologyStudyService {
             let topics = BiologyCatalog.topics.filter { $0.theme == theme }.map { topic in
                 CurriculumTopic(
                     name: topic.name,
-                    subtopics: topic.sections.map { section in
-                        section.hlOnly == true ? "HL: \(section.title)" : section.title
-                    },
+                    subtopics: topic.sections.map(\.curriculumTitle),
                     levels: topic.hlOnly ? [.hl] : Set(IBCourseLevel.allCases)
                 )
             }
@@ -33,6 +31,21 @@ nonisolated enum BiologyStudyService {
             return topic.sections(at: level).contains { $0.key == key }
         }
         return topic.questions(at: level).contains { $0.key == parts[1] }
+    }
+
+    /// Resolve owned-card evidence by its stable reference, not the visible
+    /// subtopic label saved by an earlier revision of the content pack.
+    static func sectionKey(for card: StudyCard, in topic: BiologyTopic) -> String? {
+        guard card.generationSource == BiologyCatalog.sourceID,
+              let reference = card.syllabusReference else { return nil }
+        let prefix = topic.code + "#"
+        guard reference.hasPrefix(prefix) else { return nil }
+        let key = String(reference.dropFirst(prefix.count))
+        if key.hasPrefix("lesson:") {
+            let sectionKey = String(key.dropFirst("lesson:".count))
+            return topic.sections.contains { $0.key == sectionKey } ? sectionKey : nil
+        }
+        return topic.questions.first { $0.key == key }?.sectionKey
     }
 
     static func explanation(for card: StudyCard) -> String? {
@@ -62,7 +75,7 @@ nonisolated enum BiologyStudyService {
             let reference = BiologyCatalog.resourceID(topic: topic.code, key: key)
             guard references.insert(reference).inserted else { return }
             let card = StudyCard(
-                topicName: topic.name, subtopic: section.title, front: front, back: back,
+                topicName: topic.name, subtopic: section.curriculumTitle, front: front, back: back,
                 subject: subject, isCustom: false, isAIGenerated: true,
                 generationSource: source, hint: section.pitfall, cognitiveSkill: skill,
                 cardStyle: style, choices: choices, sourceTitle: BiologyCatalog.sourceName,

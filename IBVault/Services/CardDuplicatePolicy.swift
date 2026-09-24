@@ -18,12 +18,20 @@ nonisolated enum CardDuplicatePolicy {
 
         init(front: String, back: String, style: CardStyle) {
             question = normalize(front)
-            questionWords = Set(question.split(separator: " ").map(String.init)).subtracting(stopWords)
             answerWords = normalize(back).split(separator: " ").map(String.init)
-            answerPairs = Set(zip(answerWords, answerWords.dropFirst()).map { $0 + " " + $1 })
-            protectedWords = answerWords.filter { word in
-                contrasts.contains(word) || word.contains(where: \.isNumber)
-                    || word.contains(where: { "+−-=<>/%^".contains($0) })
+            // A short answer can only match an exact prompt. Do not build the
+            // fuzzy-match sets that matches(_:) will never inspect for it.
+            if answerWords.count >= 12 {
+                questionWords = Set(question.split(separator: " ").map(String.init)).subtracting(stopWords)
+                answerPairs = Set(zip(answerWords, answerWords.dropFirst()).map { $0 + " " + $1 })
+                protectedWords = answerWords.filter { word in
+                    contrasts.contains(word) || word.contains(where: \.isNumber)
+                        || word.contains(where: { "+−-=<>/%^".contains($0) })
+                }
+            } else {
+                questionWords = []
+                answerPairs = []
+                protectedWords = []
             }
             self.style = style
         }
@@ -77,9 +85,25 @@ nonisolated enum CardDuplicatePolicy {
         Signature(front: card.front, back: card.back, style: card.cardStyle)
     }
 
+    private struct Scope: Hashable {
+        let subjectID: UUID?
+        let style: CardStyle
+        let topic: String?
+        let subtopic: String?
+    }
+
     static func library(_ cards: [StudyCard]) -> Library {
-        var groups: [String: [(id: UUID, rank: Int, signature: Signature)]] = [:]
-        var exactPrompts: [String: [String: (id: UUID, rank: Int)]] = [:]
+        var groups: [Scope: [(id: UUID, rank: Int, signature: Signature)]] = [:]
+        var exactPrompts: [Scope: [String: (id: UUID, rank: Int)]] = [:]
+        // This memo lives for one refresh only, so renamed topics and edited
+        // cards are immediately reflected without a persistent cache to expire.
+        var normalizedLabels: [String: String] = [:]
+        func normalizedLabel(_ label: String) -> String {
+            if let value = normalizedLabels[label] { return value }
+            let value = normalize(label)
+            normalizedLabels[label] = value
+            return value
+        }
         var aliases: [UUID: UUID] = [:]
         var unique: [StudyCard] = []
         // Keep the copy with the strongest review history; prefer a stable
@@ -99,11 +123,13 @@ nonisolated enum CardDuplicatePolicy {
             let card = item.card
             let signature = signature(card)
             let subjectID = card.subject?.id
-            var scope = (subjectID?.uuidString ?? "unassigned") + "|" + signature.style.rawValue
             // Very short prompts need their topic to disambiguate context.
-            if signature.question.count < 12 || subjectID == nil {
-                scope += "|" + normalize(card.topicName) + "|" + normalize(card.subtopic)
-            }
+            // Hash native IDs instead of formatting the same subject UUID for
+            // every card. Keep topic and subtopic as separate structured keys.
+            let scoped = signature.question.count < 12 || subjectID == nil
+            let scope = Scope(subjectID: subjectID, style: signature.style,
+                              topic: scoped ? normalizedLabel(card.topicName) : nil,
+                              subtopic: scoped ? normalizedLabel(card.subtopic) : nil)
             let exact = exactPrompts[scope]?[signature.question]
             // Short answers can only match an exact prompt. Long-answer
             // candidates retain preference order for conservative fuzzy reuse.

@@ -113,18 +113,35 @@ nonisolated enum CurriculumProgressService: Sendable {
         nodes: [CurriculumNode]
     ) -> Double {
         guard !subtopics.isEmpty else { return 0 }
+        let biology = normalized(subject.name).caseInsensitiveCompare("Biology") == .orderedSame
+            ? BiologyCatalog.topic(named: topicName, at: subject.courseLevel) : nil
+        let topicCards = subject.cards.filter {
+            $0.topicName == topicName && BiologyStudyService.isEligible($0)
+        }
         let score = subtopics.reduce(0.0) { partial, subtopic in
-            let cards = subject.cards.filter {
-                $0.topicName == topicName && $0.subtopic == subtopic
+            let section = biology?.sections(at: subject.courseLevel).first {
+                $0.title == subtopic || $0.curriculumTitle == subtopic
             }
-            let node = node(
-                in: nodes,
-                subjectName: subject.name,
-                level: subject.level,
-                topicName: topicName,
-                subtopicName: subtopic
-            )
-            return partial + effectiveMastery(cards: cards, node: node)
+            let names = section.map { [$0.curriculumTitle, $0.title] } ?? [subtopic]
+            let cards = topicCards.filter { card in
+                if let biology, let section, card.generationSource == BiologyCatalog.sourceID {
+                    return BiologyStudyService.sectionKey(for: card, in: biology) == section.key
+                }
+                return names.contains(card.subtopic)
+            }
+            // Recognize old plain labels and the canonical HL-prefixed label.
+            // An empty scaffold must not obscure a separately recorded result.
+            let matches = names.compactMap { name in
+                node(in: nodes, subjectName: subject.name, level: subject.level,
+                     topicName: topicName, subtopicName: name)
+            }
+            let recorded = matches.filter { $0.recordedProficiency != nil }.max { lhs, rhs in
+                let left = lhs.masteryUpdatedAt ?? lhs.updatedAt
+                let right = rhs.masteryUpdatedAt ?? rhs.updatedAt
+                if left != right { return left < right }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            return partial + effectiveMastery(cards: cards, node: recorded ?? matches.first)
         }
         return score / Double(subtopics.count)
     }

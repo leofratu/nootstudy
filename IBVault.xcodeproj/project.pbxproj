@@ -26,6 +26,7 @@
 		191EAB5615D9F2EAF1B780D0 /* FSRSSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74CAC7B208256AACF431A37 /* FSRSSchedulerTests.swift */; };
 		1C14D164525849C978E9410A /* CardGeneratorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 446D13271DE10B8BFF1B7107 /* CardGeneratorService.swift */; };
 		1D74C1986F68005ABAF59E08 /* PerformanceSignposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E2640C5BF22FEA695396CB3 /* PerformanceSignposts.swift */; };
+		1D89D18D2426990E23F9974A /* BiologyContinuationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB51E94BAA7CA7C44A61D1B /* BiologyContinuationTests.swift */; };
 		1DA0FB10424E5E2BAAD31C77 /* CardDuplicatePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B3E04BBDDC21F440CF774B /* CardDuplicatePolicy.swift */; };
 		1E2A3F1506E5793FFABAC75C /* ExamMarkingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D4BB561DB401B764D757937 /* ExamMarkingService.swift */; };
 		2001F4FD7F63976CBFCF8A08 /* ProgressEvidenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F13D6842DC40308A4B0D7A3 /* ProgressEvidenceService.swift */; };
@@ -85,6 +86,7 @@
 		6BB5BE578A9C086D50A42E0B /* StudyPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F435DA61625312BA239140B /* StudyPlan.swift */; };
 		6BD4E18E615166A8145BF3A6 /* ReviewSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC41E2FCE8152E61CC560A4 /* ReviewSessionView.swift */; };
 		6E2010CC9F8C266D3152AF16 /* ARIAStreamCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28916FD3115FC19C1937AC72 /* ARIAStreamCoalescer.swift */; };
+		6F27E429D50C4CC5BC49DD4F /* BiologyMasteryMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32223990B48E540CA350F320 /* BiologyMasteryMappingTests.swift */; };
 		6FF95C5BFE1FBBF4E953D44C /* AchievementRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D9F64EDCEC91CEE062BA91 /* AchievementRule.swift */; };
 		7215EC5FDD0DD7F314750917 /* RecallCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6619E77356D387840DE2DF7D /* RecallCardView.swift */; };
 		721EEBF0877E1F4567E0A3EF /* SnapshotBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A509D28E1909411F56D71D14 /* SnapshotBuilder.swift */; };
@@ -215,6 +217,7 @@
 		2E35660C03DF798E31D19F3B /* BridgeDTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeDTOs.swift; sourceTree = "<group>"; };
 		2FC67ED6A820C1F1B5A3651A /* FormattedMessageFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormattedMessageFormatter.swift; sourceTree = "<group>"; };
 		321F851CD24538BC63099454 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		32223990B48E540CA350F320 /* BiologyMasteryMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiologyMasteryMappingTests.swift; sourceTree = "<group>"; };
 		32D17D7E917936131C22F2ED /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		32E59F06A5BB239E59A6F86C /* UnitState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitState.swift; sourceTree = "<group>"; };
 		349F1CBB7C178EC42E6B64F7 /* BackupListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupListView.swift; sourceTree = "<group>"; };
@@ -335,6 +338,7 @@
 		EBF47C21D3B7DD60DACE5B06 /* GeminiServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiServiceTests.swift; sourceTree = "<group>"; };
 		ED97CD9D635EAE250C259E5F /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		EE371911024D9342022E60F5 /* LocalBridgeServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalBridgeServer.swift; sourceTree = "<group>"; };
+		EFB51E94BAA7CA7C44A61D1B /* BiologyContinuationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiologyContinuationTests.swift; sourceTree = "<group>"; };
 		F21E537CAF1636491C074A8A /* AcademicRecordImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicRecordImporter.swift; sourceTree = "<group>"; };
 		F2B3FD673726F5C6639FD59F /* SyllabusSeederTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyllabusSeederTests.swift; sourceTree = "<group>"; };
 		F517B43E54AED053C435C31B /* FormattedTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormattedTableView.swift; sourceTree = "<group>"; };
@@ -654,7 +658,9 @@
 				795209407B02C1090FCD06AE /* ARIAStreamCoalescerTests.swift */,
 				36F56DE8FE46360EDE84E832 /* BackupEarlyOutTests.swift */,
 				C7D7DCA5B36607009F4CB0D8 /* BackupServiceTests.swift */,
+				EFB51E94BAA7CA7C44A61D1B /* BiologyContinuationTests.swift */,
 				E3BA2D467939D7D8EF21C7F2 /* BiologyCurriculumTests.swift */,
+				32223990B48E540CA350F320 /* BiologyMasteryMappingTests.swift */,
 				909162F38CAE7020F7B6A53F /* BridgeAuthServiceTests.swift */,
 				26AB33530CCB0B6496ACF4C3 /* BridgeRouterTests.swift */,
 				90C12E8304F72A610E04B382 /* CardGenerationOptionsTests.swift */,
@@ -954,7 +960,9 @@
 				AE24B8801C0F6336AEC74B5A /* AchievementEvaluatorTests.swift in Sources */,
 				413DA62A48CBED92CA81D53D /* BackupEarlyOutTests.swift in Sources */,
 				3CBC10115E77C6CDCB02F9DD /* BackupServiceTests.swift in Sources */,
+				1D89D18D2426990E23F9974A /* BiologyContinuationTests.swift in Sources */,
 				7DDD8B7393B3DCE31D2FA77F /* BiologyCurriculumTests.swift in Sources */,
+				6F27E429D50C4CC5BC49DD4F /* BiologyMasteryMappingTests.swift in Sources */,
 				46664F3E4ACBE4436AAFB02B /* BridgeAuthServiceTests.swift in Sources */,
 				3F8A827733EF37B01F231B8C /* BridgeRouterTests.swift in Sources */,
 				8002E34EB904D0B3884E67A2 /* CardGenerationOptionsTests.swift in Sources */,
