@@ -52,6 +52,15 @@ jobs:
         working-directory: app
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('../tools/.github/tools/publish_verified_continuation.py')
+          text = p.read_text()
+          old = "git('add', 'IBVault/Materials/Biology/C.json', 'scripts/audit_biology.py', 'docs/biology-coverage.json')"
+          new = "git('add', '-f', 'IBVault/Materials/Biology/C.json', 'scripts/audit_biology.py', 'docs/biology-coverage.json')"
+          assert text.count(old) == 1
+          p.write_text(text.replace(old, new))
+          PY
           python3 ../tools/.github/tools/publish_verified_continuation.py \
             --curriculum "$GITHUB_WORKSPACE/evidence/curriculum" \
             --design "$GITHUB_WORKSPACE/evidence/design" \
