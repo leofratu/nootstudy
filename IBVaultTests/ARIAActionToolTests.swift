@@ -10,7 +10,7 @@ struct ARIARevisionTests {
         let container = try ARIAAppToolE2ETests().makeContainer()
         let subject = Subject(name: "Biology", level: "SL", accentColorHex: "34533B")
         container.mainContext.insert(subject)
-        let card = StudyCard(topicName: "Cells and Cell Structure", front: "Where is ATP produced?", back: "Mitochondria", subject: subject)
+        let card = StudyCard(topicName: "A2.2 Cell structure", front: "Where is ATP produced?", back: "Mitochondria", subject: subject)
         card.totalReviewCount = 12
         let due = Date(timeIntervalSince1970: 2_000_000_000)
         card.nextReviewDate = due
@@ -30,11 +30,11 @@ struct ARIARevisionTests {
         let container = try ARIAAppToolE2ETests().makeContainer()
         let subject = Subject(name: "Biology", level: "SL", accentColorHex: "34533B")
         container.mainContext.insert(subject)
-        let card = StudyCard(topicName: "Cells and Cell Structure", front: "What is a cell?", back: "The smallest living unit.", subject: subject)
+        let card = StudyCard(topicName: "A2.2 Cell structure", front: "What is a cell?", back: "The smallest living unit.", subject: subject)
         container.mainContext.insert(card)
         try container.mainContext.save()
         let service = ARIAService()
-        let result = try await service.applyAppToolPlan(#"[{"type":"generate_flashcards","subjectName":"Biology","topics":["Cells and Cell Structure"],"cardCount":1}]"#,
+        let result = try await service.applyAppToolPlan(#"[{"type":"generate_flashcards","subjectName":"Biology","topics":["A2.2 Cell structure"],"cardCount":1}]"#,
             userMessage: "Make one card for revising cells", context: container.mainContext)
         #expect(result.failed.isEmpty)
         #expect(service.revisionCardIDs == [card.id])
@@ -193,7 +193,7 @@ struct ARIAReviewLimitTests {
         for card in cards { card.nextReviewDate = .distantFuture }
         try context.save()
         let (completed, failed, _) = try await ARIAService().applyAppToolPlan(
-            #"[{"type":"create_review_session","subjectName":"Biology","topics":["Cells and Cell Structure"]}]"#,
+            #"[{"type":"create_review_session","subjectName":"Biology","topics":["A2.2 Cell structure"]}]"#,
             userMessage: "Set up a review session for my Biology cards", context: context)
         #expect(failed.isEmpty)
         #expect(completed.joined().contains("allowance is complete"))
@@ -218,19 +218,19 @@ nonisolated enum E2EScenarioLibrary {
         let eco = Subject(name: "Economics", level: "HL", accentColorHex: "#F59E0B")
         context.insert(eco)
 
-        let card1 = StudyCard(topicName: "Cells and Cell Structure", subtopic: "Cell theory", front: "What is the cell theory?", back: "All living things are made of cells.", subject: bio)
+        let card1 = StudyCard(topicName: "A2.2 Cell structure", subtopic: "Comparing cellular organization", front: "What is the cell theory?", back: "All living things are made of cells.", subject: bio)
         card1.proficiency = .developing
-        let card2 = StudyCard(topicName: "Cells and Cell Structure", subtopic: "Prokaryotes", front: "What is a prokaryote?", back: "A cell without a nucleus.", subject: bio)
+        let card2 = StudyCard(topicName: "A2.2 Cell structure", subtopic: "Prokaryotes", front: "What is a prokaryote?", back: "A cell without a nucleus.", subject: bio)
         card2.proficiency = .novice
-        let card3 = StudyCard(topicName: "Genetics", subtopic: "", front: "Who is Mendel?", back: "Father of genetics.", subject: bio)
+        let card3 = StudyCard(topicName: "D3.2 Inheritance", subtopic: "", front: "Who is Mendel?", back: "Father of genetics.", subject: bio)
         card3.proficiency = .proficient
         context.insert(card1)
         context.insert(card2)
         context.insert(card3)
 
         let node = CurriculumNode(
-            subjectName: "Biology", level: "HL", unitName: "Cells and Cell Structure",
-            topicName: "Cells and Cell Structure", subtopicName: "Prokaryotic cell structure",
+            subjectName: "Biology", level: "HL", unitName: "A2.2 Cell structure",
+            topicName: "A2.2 Cell structure", subtopicName: "Comparing cellular organization",
             catalogVersion: "2026.1", sourceTitle: "IB Biology", sourceURLString: "https://www.ibo.org/"
         )
         context.insert(node)
@@ -239,7 +239,7 @@ nonisolated enum E2EScenarioLibrary {
         context.insert(grade)
 
         let plan = StudyPlan(
-            subjectName: "Biology", topicName: "Cells and Cell Structure",
+            subjectName: "Biology", topicName: "A2.2 Cell structure",
             scheduledDate: Date().addingTimeInterval(86400), durationMinutes: 60
         )
         context.insert(plan)
@@ -249,7 +249,7 @@ nonisolated enum E2EScenarioLibrary {
         )
         context.insert(memory)
 
-        context.insert(UnitState(subjectName: "Biology", unitName: "Cells and Cell Structure", isTaught: false))
+        context.insert(UnitState(subjectName: "Biology", unitName: "A2.2 Cell structure", isTaught: false))
     }
 
     static func all() -> [ToolScenario] {
@@ -273,7 +273,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "assessment-01", name: "record_assessment calibrates subject and subunit evidence",
             userMessage: "Record my 18/20 Biology cell theory test as assessment evidence",
-            modelJSON: #"[{"type":"record_assessment","subjectName":"Biology","assessmentTitle":"Cell theory test","assessmentType":"Test","category":"Summative","achievedPoints":18,"maxPoints":20,"topics":["Cells and Cell Structure"],"subtopics":["Prokaryotic cell structure"]}]"#,
+            modelJSON: #"[{"type":"record_assessment","subjectName":"Biology","assessmentTitle":"Comparing cellular organization test","assessmentType":"Test","category":"Summative","achievedPoints":18,"maxPoints":20,"topics":["A2.2 Cell structure"],"subtopics":["Comparing cellular organization"]}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let assessments = try ctx.fetch(FetchDescriptor<AcademicAssessment>())
@@ -287,8 +287,8 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "assessment-02", name: "delete_assessment requires explicit request",
-            userMessage: "Delete the Cell theory test assessment",
-            modelJSON: #"[{"type":"delete_assessment","subjectName":"Biology","assessmentTitle":"Cell theory test"}]"#,
+            userMessage: "Delete the Comparing cellular organization test assessment",
+            modelJSON: #"[{"type":"delete_assessment","subjectName":"Biology","assessmentTitle":"Comparing cellular organization test"}]"#,
             seed: { ctx in
                 try standardSeed(ctx)
                 ctx.insert(AcademicAssessment(
@@ -298,7 +298,7 @@ nonisolated enum E2EScenarioLibrary {
                     courseLevel: "HL",
                     sourceClassLabel: "IB Biology HL",
                     assessmentDate: Date(),
-                    title: "Cell theory test",
+                    title: "Comparing cellular organization test",
                     assessmentType: "Test",
                     category: "Summative",
                     status: "Graded",
@@ -337,7 +337,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "card-11", name: "create_flashcard with subtopic and skill",
             userMessage: "Add an Apply-level card on eukaryotic ultrastructure",
-            modelJSON: #"[{"type":"create_flashcard","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Eukaryotic cell ultrastructure"],"frontText":"Role of mitochondria?","backText":"ATP production","cognitiveSkill":"Apply","difficulty":"Stretch"}]"#,
+            modelJSON: #"[{"type":"create_flashcard","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Magnification and resolution"],"frontText":"Role of mitochondria?","backText":"ATP production","cognitiveSkill":"Apply","difficulty":"Stretch"}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let bio = try ctx.fetch(FetchDescriptor<Subject>()).first { $0.name == "Biology" }!
@@ -348,7 +348,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "card-12", name: "edit_flashcard by topic and subtopic",
             userMessage: "Update the prokaryote card back text",
-            modelJSON: #"[{"type":"edit_flashcard","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Prokaryotes"],"backText":"Single-celled organism without a nucleus"}]"#,
+            modelJSON: #"[{"type":"edit_flashcard","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Prokaryotes"],"backText":"Single-celled organism without a nucleus"}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let bio = try ctx.fetch(FetchDescriptor<Subject>()).first { $0.name == "Biology" }!
@@ -417,13 +417,13 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "mastery-09", name: "set_mastery multiple subtopics",
-            userMessage: "Mark both prokaryote and eukaryote structure as mastered",
-            modelJSON: #"[{"type":"set_mastery","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Prokaryotic cell structure","Eukaryotic cell ultrastructure"],"masteryLevel":"mastered"}]"#,
+            userMessage: "Mark both cellular organization and microscopy as mastered",
+            modelJSON: #"[{"type":"set_mastery","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Comparing cellular organization","Magnification and resolution"],"masteryLevel":"mastered"}]"#,
             seed: { ctx in
                 try standardSeed(ctx)
                 let existing = try ctx.fetch(FetchDescriptor<CurriculumNode>())
                 guard existing.count == 1 else { return }
-                contextInsertNode(ctx, subject: "Biology", level: "HL", topic: "Cells and Cell Structure", subtopic: "Eukaryotic cell ultrastructure")
+                contextInsertNode(ctx, subject: "Biology", level: "HL", topic: "A2.2 Cell structure", subtopic: "Magnification and resolution")
             },
             verify: { ctx in
                 let nodes = try ctx.fetch(FetchDescriptor<CurriculumNode>())
@@ -458,7 +458,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "progress-06", name: "update_progress minutes and mastery together",
             userMessage: "Logged 30 min on prokaryotes and rate it developing",
-            modelJSON: #"[{"type":"update_progress","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Prokaryotic cell structure"],"minutesStudied":30,"masteryLevel":"developing"}]"#,
+            modelJSON: #"[{"type":"update_progress","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Comparing cellular organization"],"minutesStudied":30,"masteryLevel":"developing"}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let nodes = try ctx.fetch(FetchDescriptor<CurriculumNode>())
@@ -527,18 +527,18 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "session-14", name: "create_study_session with subtopics",
             userMessage: "Create a session on prokaryotes",
-            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Prokaryotic cell structure"],"durationMinutes":30}]"#,
+            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Comparing cellular organization"],"durationMinutes":30}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
-                return plans.contains { $0.subtopicName.contains("Prokaryotic cell structure") }
+                return plans.contains { $0.subtopicName.contains("Comparing cellular organization") }
             }
         ))
 
         out.append(ToolScenario(
             id: "session-15", name: "complete_study_session clamps duration",
             userMessage: "Complete my Biology session, I did 300 minutes",
-            modelJSON: #"[{"type":"complete_study_session","subjectName":"Biology","topics":["Cells and Cell Structure"],"durationMinutes":300}]"#,
+            modelJSON: #"[{"type":"complete_study_session","subjectName":"Biology","topics":["A2.2 Cell structure"],"durationMinutes":300}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let sessions = try ctx.fetch(FetchDescriptor<StudySession>())
@@ -550,7 +550,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "gate-07", name: "destructive blocked while non-destructive runs",
             userMessage: "Create a session and tell me about my weak cards",
-            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["Genetics"]},{"type":"delete_flashcards","subjectName":"Biology","topics":["Genetics"]}]"#,
+            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["D3.2 Inheritance"]},{"type":"delete_flashcards","subjectName":"Biology","topics":["D3.2 Inheritance"]}]"#,
             seed: standardSeed,
             expectedCompleted: 1, expectedFailed: 1,
             verify: { ctx in
@@ -564,7 +564,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "gate-08", name: "two non-destructive actions both execute",
             userMessage: "Create two different study sessions",
-            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["Genetics"]},{"type":"create_study_session","subjectName":"Economics","topics":["Demand"]}]"#,
+            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["D3.2 Inheritance"]},{"type":"create_study_session","subjectName":"Economics","topics":["Demand"]}]"#,
             seed: standardSeed,
             expectedCompleted: 2, expectedFailed: 0,
             verify: { ctx in
@@ -575,8 +575,8 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "gate-09", name: "delete_flashcards blocked when the learner says NOT to delete",
-            userMessage: "Do not delete my Genetics flashcards",
-            modelJSON: #"[{"type":"delete_flashcards","subjectName":"Biology","topics":["Genetics"]}]"#,
+            userMessage: "Do not delete my D3.2 Inheritance flashcards",
+            modelJSON: #"[{"type":"delete_flashcards","subjectName":"Biology","topics":["D3.2 Inheritance"]}]"#,
             seed: standardSeed,
             expectedCompleted: 0, expectedFailed: 1,
             verify: { ctx in
@@ -589,7 +589,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "gate-10", name: "cancel_study_session blocked on a negated request",
             userMessage: "Please don't cancel my Biology session",
-            modelJSON: #"[{"type":"cancel_study_session","subjectName":"Biology","topics":["Cells and Cell Structure"]}]"#,
+            modelJSON: #"[{"type":"cancel_study_session","subjectName":"Biology","topics":["A2.2 Cell structure"]}]"#,
             seed: standardSeed,
             expectedCompleted: 0, expectedFailed: 1,
             verify: { ctx in (try ctx.fetch(FetchDescriptor<StudyPlan>())).count == 1 },
@@ -624,7 +624,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "cross-02", name: "subject card insertion persists",
             userMessage: "Create two cards in Biology",
-            modelJSON: #"[{"type":"create_flashcard","subjectName":"Biology","topics":["Genetics"],"frontText":"Define gene","backText":"Unit of heredity"},{"type":"create_flashcard","subjectName":"Biology","topics":["Genetics"],"frontText":"Define allele","backText":"Gene variant"}]"#,
+            modelJSON: #"[{"type":"create_flashcard","subjectName":"Biology","topics":["D3.2 Inheritance"],"frontText":"Define gene","backText":"Unit of heredity"},{"type":"create_flashcard","subjectName":"Biology","topics":["D3.2 Inheritance"],"frontText":"Define allele","backText":"Gene variant"}]"#,
             seed: standardSeed,
             expectedCompleted: 2, expectedFailed: 0,
             verify: { ctx in
@@ -897,7 +897,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "plan-01", name: "delete_study_plan confirmed",
             userMessage: "Delete my Biology study session",
-            modelJSON: #"[{"type":"delete_study_plan","subjectName":"Biology","topics":["Cells and Cell Structure"]}]"#,
+            modelJSON: #"[{"type":"delete_study_plan","subjectName":"Biology","topics":["A2.2 Cell structure"]}]"#,
             seed: standardSeed,
             verify: { ctx in (try ctx.fetch(FetchDescriptor<StudyPlan>())).isEmpty },
             summaryContains: ["Deleted"]
@@ -906,7 +906,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "plan-02", name: "delete_study_plan blocked without confirmation",
             userMessage: "Show me my study sessions",
-            modelJSON: #"[{"type":"delete_study_plan","subjectName":"Biology","topics":["Cells and Cell Structure"]}]"#,
+            modelJSON: #"[{"type":"delete_study_plan","subjectName":"Biology","topics":["A2.2 Cell structure"]}]"#,
             seed: standardSeed,
             expectedCompleted: 0, expectedFailed: 1,
             verify: { ctx in (try ctx.fetch(FetchDescriptor<StudyPlan>())).count == 1 },
@@ -951,7 +951,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "gate-03", name: "dedupes identical actions",
             userMessage: "Create two identical Biology sessions",
-            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["Genetics"]},{"type":"create_study_session","subjectName":"Biology","topics":["Genetics"]}]"#,
+            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["D3.2 Inheritance"]},{"type":"create_study_session","subjectName":"Biology","topics":["D3.2 Inheritance"]}]"#,
             seed: standardSeed,
             expectedCompleted: 1, expectedFailed: 0,
             verify: { ctx in (try ctx.fetch(FetchDescriptor<StudyPlan>())).count == 2 }
@@ -960,7 +960,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "gate-04", name: "caps at two actions and reports truncation",
             userMessage: "Create three sessions for me",
-            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["Genetics"]},{"type":"create_study_session","subjectName":"Biology","topics":["Cells and Cell Structure"]},{"type":"create_study_session","subjectName":"Economics","topics":["Demand"]}]"#,
+            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["D3.2 Inheritance"]},{"type":"create_study_session","subjectName":"Biology","topics":["A2.2 Cell structure"]},{"type":"create_study_session","subjectName":"Economics","topics":["Demand"]}]"#,
             seed: standardSeed,
             expectedCompleted: 2, expectedFailed: 0,
             verify: { ctx in (try ctx.fetch(FetchDescriptor<StudyPlan>())).count == 3 },
@@ -982,7 +982,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "gate-06", name: "single subject fallback resolution",
             userMessage: "Create a session for cells",
-            modelJSON: #"[{"type":"create_study_session","topics":["Genetics"]}]"#,
+            modelJSON: #"[{"type":"create_study_session","topics":["D3.2 Inheritance"]}]"#,
             seed: { ctx in
                 try standardSeed(ctx)
                 let subjects = try ctx.fetch(FetchDescriptor<Subject>())
@@ -992,7 +992,7 @@ nonisolated enum E2EScenarioLibrary {
             },
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
-                return plans.contains { $0.subjectName == "Biology" && $0.topicName.contains("Genetics") }
+                return plans.contains { $0.subjectName == "Biology" && $0.topicName.contains("D3.2 Inheritance") }
             }
         ))
     }
@@ -1013,8 +1013,8 @@ nonisolated enum E2EScenarioLibrary {
     static func masteryScenarios(_ out: inout [ToolScenario]) {
         out.append(ToolScenario(
             id: "mastery-01", name: "set_mastery on curriculum node",
-            userMessage: "I have mastered prokaryotic cell structure in Biology",
-            modelJSON: #"[{"type":"set_mastery","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Prokaryotic cell structure"],"masteryLevel":"mastered","notes":"Confident in prokaryote structure"}]"#,
+            userMessage: "I have mastered cellular organization in Biology",
+            modelJSON: #"[{"type":"set_mastery","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Comparing cellular organization"],"masteryLevel":"mastered","notes":"Confident in prokaryote structure"}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let nodes = try ctx.fetch(FetchDescriptor<CurriculumNode>())
@@ -1043,8 +1043,8 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "mastery-04", name: "set_mastery rejects bad level",
-            userMessage: "Mark Cell theory as legendary",
-            modelJSON: #"[{"type":"set_mastery","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Cell theory"],"masteryLevel":"legendary"}]"#,
+            userMessage: "Mark Comparing cellular organization as legendary",
+            modelJSON: #"[{"type":"set_mastery","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Comparing cellular organization"],"masteryLevel":"legendary"}]"#,
             seed: standardSeed,
             expectedCompleted: 0, expectedFailed: 1,
             summaryContains: ["unsupported mastery"]
@@ -1052,8 +1052,8 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "mastery-05", name: "set_mastery clear",
-            userMessage: "Clear my mastery on prokaryotic cell structure",
-            modelJSON: #"[{"type":"set_mastery","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Prokaryotic cell structure"],"clearMastery":true}]"#,
+            userMessage: "Clear my mastery on cellular organization",
+            modelJSON: #"[{"type":"set_mastery","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Comparing cellular organization"],"clearMastery":true}]"#,
             seed: { ctx in
                 try standardSeed(ctx)
                 let nodes = try ctx.fetch(FetchDescriptor<CurriculumNode>())
@@ -1099,8 +1099,8 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "progress-01", name: "update_progress logs minutes and XP",
-            userMessage: "I studied Biology Cells and Cell Structure for 40 minutes",
-            modelJSON: #"[{"type":"update_progress","subjectName":"Biology","topics":["Cells and Cell Structure"],"minutesStudied":40}]"#,
+            userMessage: "I studied Biology A2.2 Cell structure for 40 minutes",
+            modelJSON: #"[{"type":"update_progress","subjectName":"Biology","topics":["A2.2 Cell structure"],"minutesStudied":40}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let sessions = try ctx.fetch(FetchDescriptor<StudySession>())
@@ -1116,8 +1116,8 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "progress-02", name: "update_progress with mastery level",
-            userMessage: "Rate myself as developing on prokaryotic cell structure",
-            modelJSON: #"[{"type":"update_progress","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Prokaryotic cell structure"],"masteryLevel":"developing"}]"#,
+            userMessage: "Rate myself as developing on cellular organization",
+            modelJSON: #"[{"type":"update_progress","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Comparing cellular organization"],"masteryLevel":"developing"}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let nodes = try ctx.fetch(FetchDescriptor<CurriculumNode>())
@@ -1138,31 +1138,31 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "progress-04", name: "update_progress rejects invented subtopic",
             userMessage: "Log 10 minutes studying imaginary stuff in Biology",
-            modelJSON: #"[{"type":"update_progress","subjectName":"Biology","topics":["Cells and Cell Structure"],"subtopics":["Quantum bioflux"],"minutesStudied":10}]"#,
+            modelJSON: #"[{"type":"update_progress","subjectName":"Biology","topics":["A2.2 Cell structure"],"subtopics":["Quantum bioflux"],"minutesStudied":10}]"#,
             seed: standardSeed,
             expectedCompleted: 0, expectedFailed: 1
         ))
 
         out.append(ToolScenario(
             id: "unit-01", name: "update_unit_state taught",
-            userMessage: "Mark the Cells and Cell Structure unit as taught",
-            modelJSON: #"[{"type":"update_unit_state","subjectName":"Biology","unitName":"Cells and Cell Structure","isTaught":true}]"#,
+            userMessage: "Mark the A2.2 Cell structure unit as taught",
+            modelJSON: #"[{"type":"update_unit_state","subjectName":"Biology","unitName":"A2.2 Cell structure","isTaught":true}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let states = try ctx.fetch(FetchDescriptor<UnitState>())
-                return states.contains { $0.unitName == "Cells and Cell Structure" && $0.isTaught }
+                return states.contains { $0.unitName == "A2.2 Cell structure" && $0.isTaught }
             },
             summaryContains: ["taught"]
         ))
 
         out.append(ToolScenario(
             id: "unit-02", name: "update_unit_state not taught",
-            userMessage: "Mark the Genetics unit as not yet taught",
-            modelJSON: #"[{"type":"update_unit_state","subjectName":"Biology","unitName":"Genetics","isTaught":false}]"#,
+            userMessage: "Mark the D3.2 Inheritance unit as not yet taught",
+            modelJSON: #"[{"type":"update_unit_state","subjectName":"Biology","unitName":"D3.2 Inheritance","isTaught":false}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let states = try ctx.fetch(FetchDescriptor<UnitState>())
-                return states.contains { $0.unitName == "Genetics" && !$0.isTaught }
+                return states.contains { $0.unitName == "D3.2 Inheritance" && !$0.isTaught }
             }
         ))
 
@@ -1328,8 +1328,8 @@ nonisolated enum E2EScenarioLibrary {
     static func flashcardScenarios(_ out: inout [ToolScenario]) {
         out.append(ToolScenario(
             id: "card-01", name: "create_flashcard happy path",
-            userMessage: "Create a flashcard for Biology on Genetics: front 'What is an allele?' back 'A variant of a gene'",
-            modelJSON: #"[{"type":"create_flashcard","subjectName":"Biology","topics":["Genetics"],"frontText":"What is an allele?","backText":"A variant of a gene","hint":"Think of variants","difficulty":"Exam","cognitiveSkill":"Recall"}]"#,
+            userMessage: "Create a flashcard for Biology on D3.2 Inheritance: front 'What is an allele?' back 'A variant of a gene'",
+            modelJSON: #"[{"type":"create_flashcard","subjectName":"Biology","topics":["D3.2 Inheritance"],"frontText":"What is an allele?","backText":"A variant of a gene","hint":"Think of variants","difficulty":"Exam","cognitiveSkill":"Recall"}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let subjects = try ctx.fetch(FetchDescriptor<Subject>())
@@ -1348,7 +1348,7 @@ nonisolated enum E2EScenarioLibrary {
             verify: { ctx in
                 let subjects = try ctx.fetch(FetchDescriptor<Subject>())
                 let bio = subjects.first { $0.name == "Biology" }!
-                return bio.cards.contains { $0.front == "Define enzyme" && $0.topicName == "Cells and Cell Structure" }
+                return bio.cards.contains { $0.front == "Define enzyme" && $0.topicName == "A2.2 Cell structure" }
             }
         ))
 
@@ -1411,13 +1411,13 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "card-08", name: "delete_flashcards confirmed by topic",
-            userMessage: "Delete all my Genetics flashcards",
-            modelJSON: #"[{"type":"delete_flashcards","subjectName":"Biology","topics":["Genetics"]}]"#,
+            userMessage: "Delete all my D3.2 Inheritance flashcards",
+            modelJSON: #"[{"type":"delete_flashcards","subjectName":"Biology","topics":["D3.2 Inheritance"]}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let subjects = try ctx.fetch(FetchDescriptor<Subject>())
                 let bio = subjects.first { $0.name == "Biology" }!
-                return bio.cards.count == 2 && !bio.cards.contains { $0.topicName == "Genetics" }
+                return bio.cards.count == 2 && !bio.cards.contains { $0.topicName == "D3.2 Inheritance" }
             },
             summaryContains: ["Deleted"]
         ))
@@ -1425,7 +1425,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "card-09", name: "delete_flashcards blocked without confirmation",
             userMessage: "Can you explain my Biology cards to me?",
-            modelJSON: #"[{"type":"delete_flashcards","subjectName":"Biology","topics":["Genetics"]}]"#,
+            modelJSON: #"[{"type":"delete_flashcards","subjectName":"Biology","topics":["D3.2 Inheritance"]}]"#,
             seed: standardSeed,
             expectedCompleted: 0, expectedFailed: 1,
             verify: { ctx in
@@ -1451,8 +1451,8 @@ nonisolated enum E2EScenarioLibrary {
     static func studySessionScenarios(_ out: inout [ToolScenario]) {
         out.append(ToolScenario(
             id: "session-01", name: "create_study_session happy path",
-            userMessage: "Create a study session for Biology on Cells and Cell Structure tomorrow at 4pm",
-            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["Cells and Cell Structure"],"scheduledAt":"2026-08-10T16:00:00Z","durationMinutes":45,"notes":"Focus on cell theory"}]"#,
+            userMessage: "Create a study session for Biology on A2.2 Cell structure tomorrow at 4pm",
+            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["A2.2 Cell structure"],"scheduledAt":"2026-08-10T16:00:00Z","durationMinutes":45,"notes":"Focus on cell theory"}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
@@ -1464,7 +1464,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "session-02", name: "create_study_session clamps long duration",
             userMessage: "Schedule a 500 minute Biology session",
-            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["Genetics"],"durationMinutes":500}]"#,
+            modelJSON: #"[{"type":"create_study_session","subjectName":"Biology","topics":["D3.2 Inheritance"],"durationMinutes":500}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
@@ -1511,7 +1511,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "session-07", name: "create_review_session",
             userMessage: "Set up a review session for my Biology cards",
-            modelJSON: #"[{"type":"create_review_session","subjectName":"Biology","topics":["Cells and Cell Structure"],"durationMinutes":30}]"#,
+            modelJSON: #"[{"type":"create_review_session","subjectName":"Biology","topics":["A2.2 Cell structure"],"durationMinutes":30}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
@@ -1530,7 +1530,7 @@ nonisolated enum E2EScenarioLibrary {
             seed: standardSeed,
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
-                guard let plan = plans.first(where: { $0.subjectName == "Biology" && $0.topicName.contains("Cells and Cell Structure") }) else { return false }
+                guard let plan = plans.first(where: { $0.subjectName == "Biology" && $0.topicName.contains("A2.2 Cell structure") }) else { return false }
                 let formatter = ISO8601DateFormatter()
                 return formatter.string(from: plan.scheduledDate).hasPrefix("2026-08-12T18:00:00")
             },
@@ -1549,7 +1549,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "session-10", name: "complete_study_session logs work",
             userMessage: "Mark my Biology session complete, I worked 30 minutes",
-            modelJSON: #"[{"type":"complete_study_session","subjectName":"Biology","topics":["Cells and Cell Structure"],"durationMinutes":30}]"#,
+            modelJSON: #"[{"type":"complete_study_session","subjectName":"Biology","topics":["A2.2 Cell structure"],"durationMinutes":30}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
@@ -1573,7 +1573,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "session-12", name: "cancel_study_session confirmed",
             userMessage: "Please cancel my Biology study session",
-            modelJSON: #"[{"type":"cancel_study_session","subjectName":"Biology","topics":["Cells and Cell Structure"]}]"#,
+            modelJSON: #"[{"type":"cancel_study_session","subjectName":"Biology","topics":["A2.2 Cell structure"]}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let plans = try ctx.fetch(FetchDescriptor<StudyPlan>())
@@ -1585,7 +1585,7 @@ nonisolated enum E2EScenarioLibrary {
         out.append(ToolScenario(
             id: "session-13", name: "cancel_study_session not confirmed is blocked",
             userMessage: "Tell me about my Biology session",
-            modelJSON: #"[{"type":"cancel_study_session","subjectName":"Biology","topics":["Cells and Cell Structure"]}]"#,
+            modelJSON: #"[{"type":"cancel_study_session","subjectName":"Biology","topics":["A2.2 Cell structure"]}]"#,
             seed: standardSeed,
             expectedCompleted: 0, expectedFailed: 1,
             verify: { ctx in (try ctx.fetch(FetchDescriptor<StudyPlan>())).count == 1 },

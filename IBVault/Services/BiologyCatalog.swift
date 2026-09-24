@@ -75,6 +75,24 @@ nonisolated enum BiologyCatalog {
     static func topics(at level: IBCourseLevel) -> [BiologyTopic] {
         topics.filter { level == .hl || !$0.hlOnly }
     }
+    /// Resolve exact official codes/titles and narrowly equivalent old labels.
+    /// Broad retired groups such as Genetics are deliberately not mapped to one
+    /// new topic: doing so could assign mastery to material never assessed.
+    static func topic(named name: String, at level: IBCourseLevel) -> BiologyTopic? {
+        let query = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let aliases = ["cells and cell structure": "a2.2"]
+        let resolved = aliases[query] ?? query
+        return topics(at: level).first {
+            $0.code.lowercased() == resolved || $0.title.lowercased() == resolved || $0.name.lowercased() == resolved
+        }
+    }
+
+    static func topic(reference: String) -> BiologyTopic? {
+        let code = reference.split(separator: "#", maxSplits: 1).first.map(String.init) ?? ""
+        let prefix = code.split(separator: ".").prefix(2).joined(separator: ".")
+        return topics.first { $0.code.caseInsensitiveCompare(prefix) == .orderedSame }
+    }
+
     static func themeName(_ code: String) -> String {
         switch code {
         case "A": return "Unity and diversity"

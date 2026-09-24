@@ -18,6 +18,15 @@ struct BiologyCurriculumTests {
         #expect(topics.allSatisfy { !$0.remaining.isEmpty })
     }
 
+    @Test func exactAndLegacyTopicResolutionDoesNotGuessAmbiguousGroups() throws {
+        #expect(BiologyCatalog.topic(named: "cells and cell structure", at: .sl)?.code == "A2.2")
+        #expect(BiologyCatalog.topic(named: " b4.2 ", at: .sl)?.title == "Ecological niches")
+        #expect(BiologyCatalog.topic(named: "Viruses", at: .sl) == nil)
+        #expect(BiologyCatalog.topic(named: "Genetics", at: .hl) == nil)
+        #expect(BiologyCatalog.topic(reference: "B2.2.3")?.code == "B2.2")
+        #expect(BiologyCatalog.topic(reference: "invented#key") == nil)
+    }
+
     @Test func realResourcesExistAtEveryTopicAndLesson() throws {
         for topic in try BiologyCatalog.result.get() {
             #expect(!topic.sections.isEmpty && !topic.questions.isEmpty)
