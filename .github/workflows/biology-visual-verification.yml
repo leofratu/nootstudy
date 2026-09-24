@@ -9,56 +9,49 @@ concurrency:
   group: biology-continuation-verification
   cancel-in-progress: true
 jobs:
-  profile:
+  candidate:
     runs-on: macos-26
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
+          path: review-tools
           persist-credentials: false
-      - name: Add temporary phase timing to the isolated checkout
+      - uses: actions/checkout@v4
+        with:
+          ref: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
+          path: app
+          persist-credentials: false
+      - name: Apply isolated candidate without publishing application changes
+        working-directory: app
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('IBVault/Services/CardDuplicatePolicy.swift')
-          text = p.read_text()
-          text = text.replace('        let preferred = cards.map { card in', '        let profileStart = Date()\n        let preferred = cards.map { card in')
-          text = text.replace('        for (rank, item) in preferred.enumerated() {', '        print("PROFILE preference-sort-ms", -profileStart.timeIntervalSinceNow * 1000)\n        var signatureMS = 0.0\n        var scopeMS = 0.0\n        var matchingMS = 0.0\n        for (rank, item) in preferred.enumerated() {\n            let itemStart = Date()')
-          text = text.replace('            let subjectID = card.subject?.id', '            signatureMS += -itemStart.timeIntervalSinceNow * 1000\n            let scopeStart = Date()\n            let subjectID = card.subject?.id')
-          text = text.replace('            let exact = exactPrompts[scope]?[signature.question]', '            scopeMS += -scopeStart.timeIntervalSinceNow * 1000\n            let matchStart = Date()\n            let exact = exactPrompts[scope]?[signature.question]')
-          text = text.replace('                unique.append(card)\n            }\n        }', '                unique.append(card)\n            }\n            matchingMS += -matchStart.timeIntervalSinceNow * 1000\n        }\n        print("PROFILE signature-ms", signatureMS, "scope-ms", scopeMS, "matching-ms", matchingMS)')
-          p.write_text(text)
-          p = Path('IBVault/Engine/ReviewQueueManager.swift')
-          text = p.read_text()
-          text = text.replace('        let all = try context.fetch(FetchDescriptor<StudyCard>())', '        let profileStart = Date()\n        let all = try context.fetch(FetchDescriptor<StudyCard>())\n        print("PROFILE fetch-ms", -profileStart.timeIntervalSinceNow * 1000)\n        let libraryStart = Date()')
-          text = text.replace('        let start = calendar.startOfDay(for: now)', '        print("PROFILE library-ms", -libraryStart.timeIntervalSinceNow * 1000)\n        let reviewStart = Date()\n        let start = calendar.startOfDay(for: now)')
-          text = text.replace('        return Day(library: library,', '        print("PROFILE reviews-profile-ms", -reviewStart.timeIntervalSinceNow * 1000)\n        return Day(library: library,')
-          p.write_text(text)
-          PY
-      - name: Run unchanged queue assertions with phase measurements
+          set -euo pipefail
+          git apply --check ../review-tools/.github/tools/queue_candidate.patch
+          git apply ../review-tools/.github/tools/queue_candidate.patch
+          git diff --check
+      - name: Run all native functional and unchanged performance assertions
+        working-directory: app
         run: |
           set -euo pipefail
           sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
           brew install xcodegen
           xcodegen generate
           xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/profile-build" -resultBundlePath "$RUNNER_TEMP/profile-tests.xcresult" \
+            -derivedDataPath "$RUNNER_TEMP/candidate-build" -resultBundlePath "$RUNNER_TEMP/candidate-tests.xcresult" \
             -jobs 2 -parallel-testing-enabled NO \
-            -only-testing:IBVaultTests/ReviewQueueBulkTests \
-            -only-testing:IBVaultTests/PerformanceBenchmarks \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee "$RUNNER_TEMP/profile-tests.log"
+            2>&1 | tee "$RUNNER_TEMP/candidate-tests.log"
       - name: Record exact results
         if: always()
         run: |
-          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/profile-tests.xcresult" --format json > "$RUNNER_TEMP/profile-summary.json" || true
-          grep -E 'PROFILE|bench |refreshDueCards|error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/profile-tests.log" | tail -80 || true
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/candidate-tests.xcresult" --format json > "$RUNNER_TEMP/candidate-summary.json" || true
+          grep -E 'bench |refreshDueCards|error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/candidate-tests.log" | tail -80 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: review-queue-profile
+          name: review-queue-candidate
           path: |
-            ${{ runner.temp }}/profile-tests.log
-            ${{ runner.temp }}/profile-summary.json
+            ${{ runner.temp }}/candidate-tests.log
+            ${{ runner.temp }}/candidate-summary.json
+            ~/Library/Logs/DiagnosticReports/*.ips
           retention-days: 7
