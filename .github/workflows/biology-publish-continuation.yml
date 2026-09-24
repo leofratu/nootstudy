@@ -1,0 +1,70 @@
+name: Publish reviewed Biology continuation
+on:
+  push:
+    branches: [tools/biology-visual-20260924]
+    paths: ['.github/workflows/biology-publish-continuation.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: biology-continuation-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: macos-26
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
+          path: app
+          fetch-depth: 0
+      - name: Retrieve the exact tested curriculum source and results
+        uses: actions/download-artifact@v4
+        with:
+          name: final-curriculum-evidence
+          run-id: 36007838225
+          github-token: ${{ github.token }}
+          path: evidence/curriculum
+      - name: Retrieve the exact tested sidebar source and native renders
+        uses: actions/download-artifact@v4
+        with:
+          name: final-sidebar-evidence
+          run-id: 36008781883
+          github-token: ${{ github.token }}
+          path: evidence/design
+      - name: Retrieve original native before screenshots
+        uses: actions/download-artifact@v4
+        with:
+          name: biology-before-screenshots
+          run-id: 35995407219
+          github-token: ${{ github.token }}
+          path: evidence/before
+      - name: Publish reviewed artifacts with explicit outstanding timing failures
+        id: publication
+        working-directory: app
+        run: |
+          set -euo pipefail
+          python3 ../tools/.github/tools/publish_verified_continuation.py \
+            --curriculum "$GITHUB_WORKSPACE/evidence/curriculum" \
+            --design "$GITHUB_WORKSPACE/evidence/design" \
+            --before "$GITHUB_WORKSPACE/evidence/before" \
+            --design-patch-sha 840b62d4a80a8c61012b3980b1e23d06714e9245f66980c21adfdc2a5a28e06b \
+            --design-run 36008781883 \
+            2>&1 | tee "$RUNNER_TEMP/publication.log"
+      - name: Retain published commit identities and verification record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: biology-continuation-publication
+          path: |
+            ${{ runner.temp }}/publication.json
+            ${{ runner.temp }}/publication.log
+          retention-days: 14
