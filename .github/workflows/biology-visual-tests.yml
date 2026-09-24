@@ -8,6 +8,7 @@ on:
     paths:
       - 'IBVault/**'
       - 'IBVaultVisualTests/**'
+      - 'IBVault.xcodeproj/**'
       - 'project.yml'
       - '.github/workflows/biology-visual-tests.yml'
   workflow_dispatch:
@@ -45,6 +46,9 @@ jobs:
             -jobs 2 -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/visual-tests.log"
+      - name: Record visual test summary
+        if: always()
+        run: xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/visual-tests.xcresult" --format json > "$RUNNER_TEMP/visual-summary.json"
       - name: Retain actual rendered windows and test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,6 +57,7 @@ jobs:
           path: |
             /tmp/nootstudy-snapshots
             ${{ runner.temp }}/visual-tests.log
+            ${{ runner.temp }}/visual-summary.json
             ${{ runner.temp }}/visual-tests.xcresult
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
