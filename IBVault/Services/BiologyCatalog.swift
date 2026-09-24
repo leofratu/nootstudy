@@ -40,6 +40,9 @@ nonisolated struct BiologySection: Codable, Identifiable, Sendable {
     let syllabusPoints: [String]?
     let hlOnly: Bool?
     var id: String { key }
+    /// The existing syllabus filter and recorded curriculum nodes use this
+    /// prefix. Keep a single definition for navigation and newly imported cards.
+    var curriculumTitle: String { hlOnly == true ? "HL: \(title)" : title }
 }
 
 nonisolated struct BiologyQuestion: Codable, Identifiable, Sendable {

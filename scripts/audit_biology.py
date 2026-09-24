@@ -58,6 +58,7 @@ HL_ONLY = {'A2.1', 'A2.3', 'A3.2', 'B3.3', 'C2.1', 'D2.2'}
 # deliberately not assigned a fabricated numbered-understanding denominator.
 POINT_BOUNDARIES = {
     'A1.1': (6, 8), 'B2.3': (6, 10), 'B4.2': (13, 13),
+    'C1.2': (6, 17), 'C1.3': (8, 19),
     'C2.2': (7, 16), 'C4.2': (22, 22), 'D1.3': (7, 10),
     'D2.3': (7, 11), 'D3.3': (6, 11),
 }
