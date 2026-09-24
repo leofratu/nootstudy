@@ -14,30 +14,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          path: integration-tools
+      - uses: actions/checkout@v4
+        with:
           ref: fix/biology-curriculum-and-reliability
           fetch-depth: 0
-      - name: Apply reviewed binding fix
+          path: app
+      - name: Apply reviewed compatibility fixes
+        working-directory: app
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = ca8bd0ddc2182880271ed39483a29eaf36e4c3b7
+          test "$(git rev-parse HEAD)" = 9ceb13f9cc1895f89c15d6eaa027ae5757fcf8fe
           test -z "$(git status --porcelain)"
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('IBVault/Views/Subjects/BiologyStudyView.swift')
-          text = p.read_text()
-          old = 'Binding(get: { level }, set: changeLevel)'
-          assert text.count(old) == 1
-          p.write_text(text.replace(old, 'Binding(get: { level }, set: { changeLevel($0) })'))
-          PY
+          python3 ../integration-tools/.github/tools/biology_compat.py
           git diff --check
           git diff
           git config user.name 'Leo Fratu'
           git config user.email '181772404+leofratu@users.noreply.github.com'
-          git add IBVault/Views/Subjects/BiologyStudyView.swift
-          git commit -m 'fix: use an explicit level binding closure to avoid Swift compiler crash'
+          git add IBVault/Services/BiologyCatalog.swift IBVault/Services/StudyLibraryService.swift IBVault/Services/ARIAService.swift IBVault/Engine/SubjectKnowledge.swift IBVaultTests/ARIAActionToolTests.swift IBVaultTests/BiologyCurriculumTests.swift
+          git commit -m 'fix: resolve canonical Biology topics in AI tools and preserve legacy library lookup'
           git push origin HEAD:fix/biology-curriculum-and-reliability
           git archive --format=tar HEAD > "$RUNNER_TEMP/integrated-source.tar"
-      - name: Build and run regressions on the installed SDK
+      - name: Build and run all tests
+        working-directory: app
         run: |
           set -euo pipefail
           sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
@@ -53,15 +52,47 @@ jobs:
         if: always()
         run: |
           xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/biology-tests.xcresult" --format json > "$RUNNER_TEMP/test-summary.json" || true
-          grep -E 'error:|failed|passed|Test run with|Testing failed' "$RUNNER_TEMP/biology-tests.log" | tail -80 || true
+          grep -E 'error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/biology-tests.log" | tail -60 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: biology-integration-evidence
           path: |
             ${{ runner.temp }}/biology-tests.log
-            ${{ runner.temp }}/biology-tests.xcresult
             ${{ runner.temp }}/test-summary.json
             ${{ runner.temp }}/integrated-source.tar
             ${{ runner.temp }}/biology-coverage.json
+          retention-days: 7
+
+  baseline:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c65af39d06b5e8bb69d5757d9097e2158933f547
+          persist-credentials: false
+      - name: Run unchanged baseline with the same SDK and settings
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/baseline-build" -resultBundlePath "$RUNNER_TEMP/baseline-tests.xcresult" \
+            -jobs 2 -parallel-testing-enabled NO \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/baseline-tests.log"
+      - name: Extract baseline summary
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/baseline-tests.xcresult" --format json > "$RUNNER_TEMP/baseline-summary.json" || true
+          grep -E 'error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/baseline-tests.log" | tail -60 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unchanged-baseline-test-evidence
+          path: |
+            ${{ runner.temp }}/baseline-tests.log
+            ${{ runner.temp }}/baseline-summary.json
           retention-days: 7
