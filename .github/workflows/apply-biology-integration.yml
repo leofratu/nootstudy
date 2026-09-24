@@ -1,4 +1,4 @@
-name: Apply Biology integration
+name: Biology integration verification
 on:
   push:
     branches: [tools/biology-integration-20260924]
@@ -8,66 +8,52 @@ concurrency:
   group: biology-integration
   cancel-in-progress: true
 jobs:
-  integrate:
+  verify:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
-          path: integration-tools
-      - uses: actions/checkout@v4
-        with:
           ref: fix/biology-curriculum-and-reliability
           fetch-depth: 0
-          path: app
-      - name: Apply locally verified integration
-        working-directory: app
+      - name: Apply reviewed binding fix
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = e959bbc7bfeb306e1169d4afa8c86caf6fe0b4b1
+          test "$(git rev-parse HEAD)" = ca8bd0ddc2182880271ed39483a29eaf36e4c3b7
           test -z "$(git status --porcelain)"
-          python3 ../integration-tools/.github/tools/apply_biology.py
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('IBVault/Services/SyllabusSeeder.swift')
+          p = Path('IBVault/Views/Subjects/BiologyStudyView.swift')
           text = p.read_text()
-          old = 'let legacyNames = ["founder academy", "startups & venture capital", "Theory of Knowledge"]'
+          old = 'Binding(get: { level }, set: changeLevel)'
           assert text.count(old) == 1
-          p.write_text(text.replace(old, 'let legacyNames = ["Founder Academy", "Startups & Venture Capital", "Theory of Knowledge"]'))
+          p.write_text(text.replace(old, 'Binding(get: { level }, set: { changeLevel($0) })'))
           PY
-          git restore .github/workflows/study-validation.yml
-          test -d /Applications/Xcode_26.4.app/Contents/Developer
-          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
-          xcodebuild -version
-          xcodebuild -showsdks
-          brew install xcodegen
-          xcodegen generate
-          python3 scripts/audit_biology.py --output docs/biology-coverage.json
           git diff --check
-          git diff --stat
-          git diff -- IBVault/Services/SyllabusSeeder.swift IBVault/Models/CurriculumNode.swift IBVault/Models/Subject.swift IBVault/Engine IBVault/Views/Subjects/TopicBrowserView.swift IBVault/Views/Review IBVaultTests/SyllabusSeederTests.swift
-      - name: Commit reviewed source without rewriting history
-        working-directory: app
-        run: |
-          set -euo pipefail
+          git diff
           git config user.name 'Leo Fratu'
           git config user.email '181772404+leofratu@users.noreply.github.com'
-          git add IBVault/Services/SyllabusSeeder.swift IBVault/Models/CurriculumNode.swift IBVault/Models/Subject.swift IBVault/Engine/ProficiencyTracker.swift IBVault/Engine/ReviewQueueManager.swift IBVault/Engine/ReviewScheduler.swift IBVault/Views/Review/ReviewSessionView.swift IBVault/Views/Review/RecallCardView.swift IBVault/Views/Subjects/TopicBrowserView.swift IBVaultTests/SyllabusSeederTests.swift IBVault.xcodeproj/project.pbxproj docs/biology-coverage.json
-          git commit -m 'fix: preserve curriculum evidence, gate Biology review levels and activate offline study'
+          git add IBVault/Views/Subjects/BiologyStudyView.swift
+          git commit -m 'fix: use an explicit level binding closure to avoid Swift compiler crash'
           git push origin HEAD:fix/biology-curriculum-and-reliability
           git archive --format=tar HEAD > "$RUNNER_TEMP/integrated-source.tar"
-      - name: Build and run focused regressions
-        working-directory: app
+      - name: Build and run regressions on the installed SDK
         run: |
           set -euo pipefail
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          brew install xcodegen
+          xcodegen generate
+          python3 scripts/audit_biology.py --output "$RUNNER_TEMP/biology-coverage.json"
           xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
             -derivedDataPath "$RUNNER_TEMP/biology-build" -resultBundlePath "$RUNNER_TEMP/biology-tests.xcresult" \
             -jobs 2 -parallel-testing-enabled NO \
-            -only-testing:IBVaultTests/BiologyCurriculumTests -only-testing:IBVaultTests/SyllabusSeederTests \
-            -only-testing:IBVaultTests/ReviewQueueManagerTests -only-testing:IBVaultTests/ProficiencyTrackerTests \
-            -only-testing:IBVaultTests/FSRSSchedulerTests \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/biology-tests.log"
+      - name: Extract test summary
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/biology-tests.xcresult" --format json > "$RUNNER_TEMP/test-summary.json" || true
+          grep -E 'error:|failed|passed|Test run with|Testing failed' "$RUNNER_TEMP/biology-tests.log" | tail -80 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -75,6 +61,7 @@ jobs:
           path: |
             ${{ runner.temp }}/biology-tests.log
             ${{ runner.temp }}/biology-tests.xcresult
+            ${{ runner.temp }}/test-summary.json
             ${{ runner.temp }}/integrated-source.tar
-            app/docs/biology-coverage.json
+            ${{ runner.temp }}/biology-coverage.json
           retention-days: 7
