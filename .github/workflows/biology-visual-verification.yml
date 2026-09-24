@@ -1,4 +1,4 @@
-name: Biology final candidate verification
+name: Biology final sidebar verification
 on:
   push:
     branches: [tools/biology-visual-20260924]
@@ -6,18 +6,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: biology-final-candidate-verification
+  group: biology-final-sidebar-verification
   cancel-in-progress: true
 jobs:
   verify:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - layer: curriculum
-            source: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
-          - layer: design
-            source: c2aed9303338d716f27644c5696affb63bfa0b7e
     runs-on: macos-26
     timeout-minutes: 25
     steps:
@@ -27,10 +19,10 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.source }}
+          ref: c2aed9303338d716f27644c5696affb63bfa0b7e
           path: app
           persist-credentials: false
-      - name: Prepare final source without publishing application changes
+      - name: Prepare the reviewed design source
         working-directory: app
         run: |
           set -euo pipefail
@@ -38,27 +30,27 @@ jobs:
           git apply --check --exclude=IBVault/Engine/ReviewQueueManager.swift ../tools/.github/tools/queue_candidate.patch
           git apply --exclude=IBVault/Engine/ReviewQueueManager.swift ../tools/.github/tools/queue_candidate.patch
           python3 ../tools/.github/tools/finish_functional.py
+          python3 ../tools/.github/tools/finalize_outline.py
           sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
           brew install xcodegen
           xcodegen generate
           git diff --check
-          git diff --stat
       - name: Run every native functional and unchanged performance assertion
         working-directory: app
         run: |
           set -euo pipefail
           xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/final-build" -resultBundlePath "$RUNNER_TEMP/functional.xcresult" \
+            -derivedDataPath "$RUNNER_TEMP/sidebar-build" -resultBundlePath "$RUNNER_TEMP/functional.xcresult" \
             -jobs 2 -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/functional.log"
-      - name: Render every native visual fixture in its isolated host
-        if: always() && matrix.layer == 'design'
+      - name: Render every visual fixture including SL and HL bioenergetics
+        if: always()
         working-directory: app
         run: |
           set -euo pipefail
           xcodebuild test -project IBVault.xcodeproj -scheme IBVaultVisual -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/final-build" -resultBundlePath "$RUNNER_TEMP/visual.xcresult" \
+            -derivedDataPath "$RUNNER_TEMP/sidebar-build" -resultBundlePath "$RUNNER_TEMP/visual.xcresult" \
             -jobs 2 -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/visual.log"
@@ -67,16 +59,14 @@ jobs:
         working-directory: app
         run: |
           xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/functional.xcresult" --format json > "$RUNNER_TEMP/functional-summary.json" || true
-          if [ -d "$RUNNER_TEMP/visual.xcresult" ]; then
-            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/visual.xcresult" --format json > "$RUNNER_TEMP/visual-summary.json" || true
-          fi
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/visual.xcresult" --format json > "$RUNNER_TEMP/visual-summary.json" || true
           git diff --binary > "$RUNNER_TEMP/final.patch"
           tar --exclude .git -cf "$RUNNER_TEMP/final-source.tar" .
           grep -E 'bench |refreshDueCards|error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/functional.log" | tail -50 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: final-${{ matrix.layer }}-evidence
+          name: final-sidebar-evidence
           path: |
             ${{ runner.temp }}/functional.log
             ${{ runner.temp }}/functional-summary.json
