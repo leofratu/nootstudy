@@ -1,0 +1,63 @@
+name: Isolated queue measurements
+on:
+  push:
+    branches: [tools/biology-visual-20260924]
+    paths: ['.github/workflows/biology-queue-measure.yml']
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
+          path: app
+          persist-credentials: false
+      - name: Prepare the native build
+        working-directory: app
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          brew install xcodegen
+          xcodegen generate
+      - name: Measure each implementation on the same runner without unrelated tests
+        working-directory: app
+        run: |
+          set -uo pipefail
+          for variant in baseline signatures registered; do
+            if [ "$variant" = signatures ]; then
+              git apply --exclude=IBVault/Engine/ReviewQueueManager.swift ../tools/.github/tools/queue_candidate.patch || exit 1
+            elif [ "$variant" = registered ]; then
+              git apply --include=IBVault/Engine/ReviewQueueManager.swift ../tools/.github/tools/queue_candidate.patch || exit 1
+              python3 ../tools/.github/tools/finalize_queue.py || exit 1
+            fi
+            xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
+              -derivedDataPath "$RUNNER_TEMP/measure-build" -resultBundlePath "$RUNNER_TEMP/$variant.xcresult" \
+              -jobs 2 -parallel-testing-enabled NO \
+              -only-testing:IBVaultTests/PerformanceBenchmarks \
+              -only-testing:IBVaultTests/ReviewQueueBulkTests \
+              CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+              2>&1 | tee "$RUNNER_TEMP/$variant.log"
+            result=$?
+            echo "$variant exit=$result" | tee -a "$RUNNER_TEMP/variant-exits.txt"
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$variant.xcresult" --format json > "$RUNNER_TEMP/$variant-summary.json"
+            grep -E 'bench |refreshDueCards|recorded an issue|Test run with' "$RUNNER_TEMP/$variant.log" | tail -40
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-queue-comparison
+          path: |
+            ${{ runner.temp }}/baseline.log
+            ${{ runner.temp }}/baseline-summary.json
+            ${{ runner.temp }}/signatures.log
+            ${{ runner.temp }}/signatures-summary.json
+            ${{ runner.temp }}/registered.log
+            ${{ runner.temp }}/registered-summary.json
+            ${{ runner.temp }}/variant-exits.txt
+          retention-days: 14
