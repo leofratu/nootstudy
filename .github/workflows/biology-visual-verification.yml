@@ -1,0 +1,106 @@
+name: Biology visual verification
+on:
+  push:
+    branches: [tools/biology-visual-20260924]
+permissions:
+  contents: write
+concurrency:
+  group: biology-visual-verification
+  cancel-in-progress: true
+jobs:
+  design:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: review-tools
+      - uses: actions/checkout@v4
+        with:
+          ref: design/biology-study-experience
+          path: app
+          fetch-depth: 0
+      - name: Apply the exact locally reviewed design
+        working-directory: app
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 33f4874c10fcf3144cb15046d94e217a2e6b969f
+          test -z "$(git status --porcelain)"
+          python3 ../review-tools/.github/tools/design_biology.py
+          cp ../review-tools/.github/tools/BiologyVisualTests.swift IBVaultTests/BiologyVisualTests.swift
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          brew install xcodegen
+          xcodegen generate
+          git diff --check
+          git diff --stat
+          git diff -- IBVault/Views/Subjects/BiologyStudyView.swift
+          git config user.name 'Leo Fratu'
+          git config user.email '181772404+leofratu@users.noreply.github.com'
+          git add IBVault/Views/Subjects/BiologyStudyView.swift
+          git commit -m 'design: make Biology study adaptive, focused and keyboard-friendly'
+          git add IBVaultTests/BiologyVisualTests.swift IBVault.xcodeproj/project.pbxproj
+          git commit -m 'test: render Biology lessons and feedback in native light and dark windows'
+          git push origin HEAD:design/biology-study-experience
+          git archive --format=tar HEAD > "$RUNNER_TEMP/design-source.tar"
+      - name: Build and run the complete suite including native renders
+        working-directory: app
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_biology.py --output "$RUNNER_TEMP/biology-coverage.json"
+          xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/design-build" -resultBundlePath "$RUNNER_TEMP/design-tests.xcresult" \
+            -jobs 2 -parallel-testing-enabled NO \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/design-tests.log"
+      - name: Extract results
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/design-tests.xcresult" --format json > "$RUNNER_TEMP/design-summary.json" || true
+          grep -E 'error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/design-tests.log" | tail -60 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: biology-design-evidence
+          path: |
+            ${{ runner.temp }}/design-tests.log
+            ${{ runner.temp }}/design-summary.json
+            ${{ runner.temp }}/design-source.tar
+            ${{ runner.temp }}/biology-coverage.json
+            /tmp/nootstudy-snapshots
+          retention-days: 14
+
+  before:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: review-tools
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 33f4874c10fcf3144cb15046d94e217a2e6b969f
+          path: app
+          persist-credentials: false
+      - name: Render unchanged PR1 study workspace for comparison
+        working-directory: app
+        run: |
+          set -euo pipefail
+          cp ../review-tools/.github/tools/BiologyVisualTests.swift IBVaultTests/BiologyVisualTests.swift
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/before-build" -resultBundlePath "$RUNNER_TEMP/before-tests.xcresult" \
+            -jobs 2 -parallel-testing-enabled NO -only-testing:IBVaultTests/BiologyVisualTests \
+            OTHER_SWIFT_FLAGS='$(inherited) -D BIOLOGY_BASELINE' \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/before-tests.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: biology-before-screenshots
+          path: |
+            ${{ runner.temp }}/before-tests.log
+            /tmp/nootstudy-snapshots
+          retention-days: 14
