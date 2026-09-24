@@ -18,6 +18,7 @@
 		08A1B11EAB0B6F9F0E5B71F4 /* ARIAContentContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1E5E2E369BCEE329EE4F90 /* ARIAContentContract.swift */; };
 		0E96826E1AD1E91EDDA393BB /* ARIAStreamStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABE6BCA090F3C7CCDABEA81E /* ARIAStreamStore.swift */; };
 		0F1260A002F65A252ABCD3C1 /* tex-svg.js in Resources */ = {isa = PBXBuildFile; fileRef = C6CE8EAB80FB636A55EE5742 /* tex-svg.js */; };
+		0FC2A57EACE1EE15A94752A5 /* BiologyVisualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 344894D7823113085389A0C6 /* BiologyVisualTests.swift */; };
 		10BDA9F05429CA565BE2AA9A /* ProgressionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D91CC409D22DBFA50EB73E /* ProgressionService.swift */; };
 		10CC766826E31BEB74A6A705 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED97CD9D635EAE250C259E5F /* KeychainService.swift */; };
 		14FC8AF088F886C4AFDAA596 /* BackupListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349F1CBB7C178EC42E6B64F7 /* BackupListView.swift */; };
@@ -175,6 +176,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		43F406A0B82A362D74AD84DF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1185FF401091B49F1A50E3D6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 684498CDF33C5635505DD8F8;
+			remoteInfo = IBVault;
+		};
 		770D5E8EC9C1B29E66A85CF2 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1185FF401091B49F1A50E3D6 /* Project object */;
@@ -220,6 +228,7 @@
 		32223990B48E540CA350F320 /* BiologyMasteryMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiologyMasteryMappingTests.swift; sourceTree = "<group>"; };
 		32D17D7E917936131C22F2ED /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		32E59F06A5BB239E59A6F86C /* UnitState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitState.swift; sourceTree = "<group>"; };
+		344894D7823113085389A0C6 /* BiologyVisualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiologyVisualTests.swift; sourceTree = "<group>"; };
 		349F1CBB7C178EC42E6B64F7 /* BackupListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupListView.swift; sourceTree = "<group>"; };
 		356C03478024E03D9AA7E505 /* ReleaseScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseScreenshotTests.swift; sourceTree = "<group>"; };
 		36F56DE8FE46360EDE84E832 /* BackupEarlyOutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupEarlyOutTests.swift; sourceTree = "<group>"; };
@@ -272,6 +281,7 @@
 		88FC6557D278D7C5D2150576 /* TopicBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicBrowserView.swift; sourceTree = "<group>"; };
 		8919A698994D163B66CBA44A /* CardStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStudioView.swift; sourceTree = "<group>"; };
 		8AEA214A2A21601C291639B0 /* ReviewQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewQueueManager.swift; sourceTree = "<group>"; };
+		8FACF99F7BD6B4254E328643 /* IBVaultVisualTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IBVaultVisualTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8FC0BEE8C53871F4088A7A9B /* StudyLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyLibraryService.swift; sourceTree = "<group>"; };
 		908ECDE117349ED5E8B3004B /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		909162F38CAE7020F7B6A53F /* BridgeAuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeAuthServiceTests.swift; sourceTree = "<group>"; };
@@ -423,6 +433,7 @@
 			children = (
 				64866ADFA36E9AE318F56941 /* IBVault.app */,
 				4ED01AD46D3FF1E35B15C4F1 /* IBVaultTests.xctest */,
+				8FACF99F7BD6B4254E328643 /* IBVaultVisualTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -465,6 +476,14 @@
 				11E3ECDA9467076C27A14FE2 /* Progression */,
 			);
 			path = Engine;
+			sourceTree = "<group>";
+		};
+		858ACBABC4901DD61662CF1D /* IBVaultVisualTests */ = {
+			isa = PBXGroup;
+			children = (
+				344894D7823113085389A0C6 /* BiologyVisualTests.swift */,
+			);
+			path = IBVaultVisualTests;
 			sourceTree = "<group>";
 		};
 		8EB7098890A7EFA7A82CAD79 /* Materials */ = {
@@ -574,6 +593,7 @@
 				BB9713AFE0115FF39ABB53ED /* Materials */,
 				B3FA2135BB201DAECA8EB957 /* IBVault */,
 				F107B8C42C3A4D4A8DE93982 /* IBVaultTests */,
+				858ACBABC4901DD61662CF1D /* IBVaultVisualTests */,
 				5379DB9129801993AA64E0B9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -754,6 +774,24 @@
 			productReference = 64866ADFA36E9AE318F56941 /* IBVault.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D3C79F4FC6D3C2B3C93D8E65 /* IBVaultVisualTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 12B8C13A9D98F49E43E20C91 /* Build configuration list for PBXNativeTarget "IBVaultVisualTests" */;
+			buildPhases = (
+				40D4863AF6A40B27952203B6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A52BF49C58D5A3FD93D663E8 /* PBXTargetDependency */,
+			);
+			name = IBVaultVisualTests;
+			packageProductDependencies = (
+			);
+			productName = IBVaultVisualTests;
+			productReference = 8FACF99F7BD6B4254E328643 /* IBVaultVisualTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		E3DCFADEE88BDE36812215B2 /* IBVaultTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2D7FC7FBE29C57D47A3ABEAE /* Build configuration list for PBXNativeTarget "IBVaultTests" */;
@@ -784,6 +822,9 @@
 					684498CDF33C5635505DD8F8 = {
 						DevelopmentTeam = "";
 					};
+					D3C79F4FC6D3C2B3C93D8E65 = {
+						DevelopmentTeam = "";
+					};
 					E3DCFADEE88BDE36812215B2 = {
 						DevelopmentTeam = "";
 					};
@@ -809,6 +850,7 @@
 			targets = (
 				684498CDF33C5635505DD8F8 /* IBVault */,
 				E3DCFADEE88BDE36812215B2 /* IBVaultTests */,
+				D3C79F4FC6D3C2B3C93D8E65 /* IBVaultVisualTests */,
 			);
 		};
 /* End PBXProject section */
@@ -949,6 +991,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		40D4863AF6A40B27952203B6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0FC2A57EACE1EE15A94752A5 /* BiologyVisualTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		905BEE2689F2CD6FC78B80FC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1004,6 +1054,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		A52BF49C58D5A3FD93D663E8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 684498CDF33C5635505DD8F8 /* IBVault */;
+			targetProxy = 43F406A0B82A362D74AD84DF /* PBXContainerItemProxy */;
+		};
 		E1B2DD57EA05357B773B3DAC /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 684498CDF33C5635505DD8F8 /* IBVault */;
@@ -1072,6 +1127,34 @@
 			};
 			name = Release;
 		};
+		3A453389744F3D4238C2798B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.visualtests;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Noot Study.app/Contents/MacOS/Noot Study";
+			};
+			name = Release;
+		};
 		ACF38D8C52E9F10464855C29 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1101,6 +1184,34 @@
 				SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AF7140FDD2127A4E2493175F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=800";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nootstudy.ibvault.visualtests;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Noot Study.app/Contents/MacOS/Noot Study";
 			};
 			name = Debug;
 		};
@@ -1254,6 +1365,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		12B8C13A9D98F49E43E20C91 /* Build configuration list for PBXNativeTarget "IBVaultVisualTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AF7140FDD2127A4E2493175F /* Debug */,
+				3A453389744F3D4238C2798B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		2D7FC7FBE29C57D47A3ABEAE /* Build configuration list for PBXNativeTarget "IBVaultTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

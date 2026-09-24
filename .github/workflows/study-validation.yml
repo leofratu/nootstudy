@@ -10,6 +10,8 @@ on:
     paths:
       - 'IBVault/**'
       - 'IBVaultTests/**'
+      - 'IBVaultVisualTests/**'
+      - 'IBVault.xcodeproj/**'
       - 'project.yml'
       - 'scripts/**'
       - '.github/workflows/study-validation.yml'
@@ -44,6 +46,8 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # The native visual fixtures run once in biology-visual-tests.yml, in a
+  # separate host from this functional/SwiftData suite.
   native-tests:
     runs-on: macos-26
     timeout-minutes: 25
@@ -73,6 +77,9 @@ jobs:
             -jobs 2 -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/study-tests.log"
+      - name: Record functional test summary
+        if: always()
+        run: xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/study-tests.xcresult" --format json > "$RUNNER_TEMP/study-summary.json"
       - name: Retain test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -80,6 +87,7 @@ jobs:
           name: native-test-evidence-${{ github.sha }}
           path: |
             ${{ runner.temp }}/study-tests.log
+            ${{ runner.temp }}/study-summary.json
             ${{ runner.temp }}/study-tests.xcresult
             IBVault.xcodeproj/project.pbxproj
           retention-days: 7
