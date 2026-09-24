@@ -106,6 +106,7 @@ struct ReviewSessionView: View {
             }
         }
         .onAppear { loadCards() }
+        .onChange(of: currentCard?.subject?.level) { _, _ in loadCards() }
         .onChange(of: reloadSignature) { _, _ in
             loadCards()
         }

@@ -1,0 +1,86 @@
+name: Study validation
+
+on:
+  push:
+    branches:
+      - fix/biology-curriculum-and-reliability
+      - design/biology-study-experience
+  pull_request:
+    branches: [main, fix/biology-curriculum-and-reliability]
+    paths:
+      - 'IBVault/**'
+      - 'IBVaultTests/**'
+      - 'project.yml'
+      - 'scripts/**'
+      - '.github/workflows/study-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: study-validation-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  curriculum-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate canonical codes, levels and resource integrity
+        run: python3 scripts/audit_biology.py --output "$RUNNER_TEMP/biology-coverage.json"
+      - name: Archive the exact reviewed source
+        run: git archive --format=tar HEAD > "$RUNNER_TEMP/review-source.tar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reviewed-source-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/review-source.tar
+            ${{ runner.temp }}/biology-coverage.json
+          retention-days: 7
+          if-no-files-found: error
+
+  native-tests:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Select installed stable Xcode SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d /Applications/Xcode_26.4.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build and run regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild test -project IBVault.xcodeproj -scheme IBVault \
+            -destination 'platform=macOS' -derivedDataPath "$RUNNER_TEMP/nootstudy-build" \
+            -resultBundlePath "$RUNNER_TEMP/study-tests.xcresult" \
+            -jobs 2 -parallel-testing-enabled NO \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/study-tests.log"
+      - name: Retain test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-test-evidence-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/study-tests.log
+            ${{ runner.temp }}/study-tests.xcresult
+            IBVault.xcodeproj/project.pbxproj
+          retention-days: 7
+          if-no-files-found: warn

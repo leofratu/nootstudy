@@ -7,7 +7,7 @@ nonisolated enum IBCourseLevel: String, CaseIterable, Codable, Hashable, Sendabl
     case hl = "HL"
 
     init(_ rawValue: String) {
-        self = rawValue.uppercased() == "HL" ? .hl : .sl
+        self = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "HL" ? .hl : .sl
     }
 }
 
@@ -75,18 +75,18 @@ nonisolated struct SyllabusSeeder {
         curriculumCacheLock.unlock()
 
         let result: [CurriculumUnit]
-        switch subjectName {
-        case "English B": result = englishBCurriculum
-        case "Russian A Literature": result = russianLitCurriculum
-        case "Biology": result = biologyCurriculum
-        case "Mathematics AA": result = mathAACurriculum
-        case "Economics": result = economicsCurriculum
-        case "Business Management": result = businessCurriculum
-        case "Advanced Mathematics": result = advancedMathCurriculum
-        case "Fundamentals of the Universe": result = universeCurriculum
-        case lifeCourseName: result = lifeCurriculum
+        switch subjectName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "english b": result = englishBCurriculum
+        case "russian a literature": result = russianLitCurriculum
+        case "biology": result = biologyCurriculum
+        case "mathematics aa": result = mathAACurriculum
+        case "economics": result = economicsCurriculum
+        case "business management": result = businessCurriculum
+        case "advanced mathematics": result = advancedMathCurriculum
+        case "fundamentals of the universe": result = universeCurriculum
+        case "life": result = lifeCurriculum
         // Read-only aliases keep older backups and in-flight migrations legible.
-        case "Founder Academy", "Startups & Venture Capital": result = lifeCurriculum
+        case "founder academy", "startups & venture capital": result = lifeCurriculum
         default: result = []
         }
 
@@ -119,58 +119,59 @@ nonisolated struct SyllabusSeeder {
     }
 
     static func metadata(for subjectName: String) -> CurriculumMetadata {
-        switch subjectName {
-        case "Biology":
-            return metadata(
+        switch subjectName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "biology":
+            return CurriculumMetadata(
+                catalogVersion: BiologyCatalog.version,
                 firstAssessment: "2025",
-                title: "IB Diploma Programme Biology",
-                path: "programmes/diploma-programme/curriculum/sciences/biology/"
+                sourceTitle: "IB Diploma Programme Biology",
+                sourceURL: URL(string: BiologyCatalog.sourceURL) ?? URL(fileURLWithPath: "/")
             )
-        case "Mathematics AA":
+        case "mathematics aa":
             return metadata(
                 firstAssessment: "2021",
                 title: "IB Mathematics: analysis and approaches",
                 path: "programmes/diploma-programme/curriculum/mathematics/"
             )
-        case "Economics":
+        case "economics":
             return metadata(
                 firstAssessment: "2022",
                 title: "IB Diploma Programme Economics",
                 path: "programmes/diploma-programme/curriculum/individuals-and-societies/economics/"
             )
-        case "Business Management":
+        case "business management":
             return metadata(
                 firstAssessment: "2024",
                 title: "IB Diploma Programme Business management",
                 path: "programmes/diploma-programme/curriculum/individuals-and-societies/business-management/"
             )
-        case "English B":
+        case "english b":
             return metadata(
                 firstAssessment: "2020",
                 title: "IB Diploma Programme Language acquisition",
                 path: "programmes/diploma-programme/curriculum/language-acquisition/"
             )
-        case "Russian A Literature":
+        case "russian a literature":
             return metadata(
                 firstAssessment: "2021",
                 title: "IB Diploma Programme Language and literature",
                 path: "programmes/diploma-programme/curriculum/language-and-literature/"
             )
-        case "Advanced Mathematics":
+        case "advanced mathematics":
             return CurriculumMetadata(
                 catalogVersion: "2026.1 / personal course",
                 firstAssessment: "Self-paced",
                 sourceTitle: "Advanced Mathematics — Proofs and Foundations",
                 sourceURL: URL(string: "https://www.ibo.org/") ?? URL(fileURLWithPath: "/")
             )
-        case "Fundamentals of the Universe":
+        case "fundamentals of the universe":
             return CurriculumMetadata(
                 catalogVersion: "2026.1 / personal course",
                 firstAssessment: "Self-paced",
                 sourceTitle: "Fundamentals of the Universe",
                 sourceURL: URL(string: "https://www.ibo.org/") ?? URL(fileURLWithPath: "/")
             )
-        case lifeCourseName, "Founder Academy", "Startups & Venture Capital":
+        case "life", "founder academy", "startups & venture capital":
             return CurriculumMetadata(
                 catalogVersion: "2026.2 / personal course",
                 firstAssessment: "Self-paced",
@@ -188,8 +189,19 @@ nonisolated struct SyllabusSeeder {
             let subjects = try? context.fetch(FetchDescriptor<Subject>()),
             let existingNodes = try? context.fetch(FetchDescriptor<CurriculumNode>())
         else { return false }
+        // A missing bundle must not be mistaken for a deliberately empty syllabus.
+        if subjects.contains(where: { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "biology" }),
+           BiologyCatalog.failure != nil { return false }
         var nodesByKey: [String: CurriculumNode] = [:]
-        for node in existingNodes {
+        // Keep the latest recorded evidence rather than an arbitrary fetch-order row.
+        let orderedNodes = existingNodes.sorted {
+            if $0.hasRecordedEvidence != $1.hasRecordedEvidence { return $0.hasRecordedEvidence }
+            let left = $0.masteryUpdatedAt ?? $0.updatedAt
+            let right = $1.masteryUpdatedAt ?? $1.updatedAt
+            if left != right { return left > right }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+        for node in orderedNodes {
             if nodesByKey[node.stableKey] == nil {
                 nodesByKey[node.stableKey] = node
             } else {
@@ -240,7 +252,7 @@ nonisolated struct SyllabusSeeder {
             }
         }
 
-        for (key, node) in nodesByKey where !expectedKeys.contains(key) {
+        for (key, node) in nodesByKey where !expectedKeys.contains(key) && !node.hasRecordedEvidence {
             context.delete(node)
         }
 
@@ -795,178 +807,9 @@ nonisolated struct SyllabusSeeder {
     // MARK: - IB Biology SL (First assessment 2025)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    private static var biologyCurriculum: [CurriculumUnit] {
-        [
-            CurriculumUnit(name: "Theme A — Unity and Diversity", topics: [
-                CurriculumTopic(name: "Water and Biomolecules", subtopics: [
-                    "Hydrogen bonding in water",
-                    "Thermal properties of water",
-                    "Solvent properties of water",
-                    "Carbohydrates — monosaccharides, disaccharides, polysaccharides",
-                    "Lipids — triglycerides, phospholipids",
-                    "Proteins — amino acids, peptide bonds, levels of structure"
-                ]),
-                CurriculumTopic(name: "DNA and Nucleic Acids", subtopics: [
-                    "DNA structure and base pairing",
-                    "RNA types and structure",
-                    "Semi-conservative DNA replication",
-                    "Transcription and translation",
-                    "Gene expression and regulation"
-                ]),
-                CurriculumTopic(name: "Evolution", subtopics: [
-                    "Evidence for evolution",
-                    "Natural selection mechanism",
-                    "Speciation (allopatric and sympatric)",
-                    "Classification and taxonomy",
-                    "Cladistics and phylogenetic trees"
-                ]),
-                CurriculumTopic(name: "Biodiversity", subtopics: [
-                    "Measuring biodiversity",
-                    "Threats to biodiversity",
-                    "Conservation biology strategies",
-                    "Keystone species and indicator species",
-                    "In situ and ex situ conservation"
-                ]),
-            ]),
+    private static var biologyCurriculum: [CurriculumUnit] { BiologyStudyService.curriculum }
 
-            CurriculumUnit(name: "Theme B — Form and Function", topics: [
-                CurriculumTopic(name: "Cells and Cell Structure", subtopics: [
-                    "Prokaryotic cell structure",
-                    "Eukaryotic cell ultrastructure",
-                    "Organelle functions (mitochondria, chloroplasts, ER, Golgi)",
-                    "Comparing prokaryotes and eukaryotes",
-                    "Origins of cells and endosymbiotic theory",
-                    "Electron microscopy interpretation"
-                ]),
-                CurriculumTopic(name: "Membranes and Transport", subtopics: [
-                    "Fluid mosaic model",
-                    "Membrane proteins and their functions",
-                    "Simple and facilitated diffusion",
-                    "Osmosis",
-                    "Active transport",
-                    "Endocytosis and exocytosis"
-                ]),
-                CurriculumTopic(name: "Enzymes and Metabolism", subtopics: [
-                    "Enzyme structure and function",
-                    "Enzyme-substrate specificity",
-                    "Factors affecting enzyme activity",
-                    "Competitive and non-competitive inhibition",
-                    "Metabolic pathways — anabolism and catabolism"
-                ]),
-                CurriculumTopic(name: "Human Physiology Systems", subtopics: [
-                    "Digestion and absorption",
-                    "The circulatory system",
-                    "Gas exchange in the lungs",
-                    "Defence against infectious disease",
-                    "Neurons and synaptic transmission",
-                    "Hormonal regulation (endocrine system)",
-                    "Homeostasis and feedback mechanisms"
-                ]),
-            ]),
-
-            CurriculumUnit(name: "Theme C — Interaction and Interdependence", topics: [
-                CurriculumTopic(name: "Ecosystems", subtopics: [
-                    "Species, communities and ecosystems",
-                    "Biotic and abiotic factors",
-                    "Trophic levels and food webs",
-                    "Habitat and ecological niches"
-                ]),
-                CurriculumTopic(name: "Energy Flow in Ecosystems", subtopics: [
-                    "Energy flow through trophic levels",
-                    "Productivity (GPP, NPP)",
-                    "Energy pyramids",
-                    "Photosynthesis — light-dependent and light-independent reactions",
-                    "Cell respiration — glycolysis, Krebs cycle, oxidative phosphorylation"
-                ]),
-                CurriculumTopic(name: "Population Biology", subtopics: [
-                    "Population growth curves (S and J curves)",
-                    "Carrying capacity and limiting factors",
-                    "Predator-prey relationships",
-                    "Sampling techniques for populations"
-                ]),
-                CurriculumTopic(name: "Sustainability", subtopics: [
-                    "Carbon cycling and climate change",
-                    "Nitrogen cycling",
-                    "Human impact on ecosystems",
-                    "Sustainable development and resource management"
-                ]),
-            ]),
-
-            CurriculumUnit(name: "Theme D — Continuity and Change", topics: [
-                CurriculumTopic(name: "Genetics", subtopics: [
-                    "Genes, alleles and the genome",
-                    "Chromosomes and karyotypes",
-                    "DNA profiling and biotechnology",
-                    "Gene mutations"
-                ]),
-                CurriculumTopic(name: "Inheritance", subtopics: [
-                    "Mendel's laws of inheritance",
-                    "Monohybrid crosses and Punnett squares",
-                    "Codominance and multiple alleles",
-                    "Sex-linked inheritance",
-                    "Pedigree analysis",
-                    "Dihybrid crosses"
-                ]),
-                CurriculumTopic(name: "Natural Selection", subtopics: [
-                    "Variation within populations",
-                    "Directional and stabilising selection",
-                    "Antibiotic resistance as example",
-                    "Sexual selection"
-                ]),
-                CurriculumTopic(name: "Evolutionary Change", subtopics: [
-                    "Gradualism vs punctuated equilibrium",
-                    "Adaptive radiation",
-                    "Convergent and divergent evolution",
-                    "Human evolution"
-                ]),
-            ]),
-
-            CurriculumUnit(name: "Higher Level Extension", topics: [
-                CurriculumTopic(name: "Advanced Molecular Biology", subtopics: [
-                    "HL: DNA replication and the roles of polymerases",
-                    "HL: Transcription regulation and RNA processing",
-                    "HL: Translation, ribosome structure and polypeptide synthesis",
-                    "HL: Gene expression, epigenetics and environmental influence"
-                ], levels: [.hl]),
-                CurriculumTopic(name: "Advanced Physiology", subtopics: [
-                    "HL: Muscle contraction and the sliding filament model",
-                    "HL: Kidney function, osmoregulation and hormonal control",
-                    "HL: Reproduction, gametogenesis and hormonal regulation",
-                    "HL: Immune response, antibody production and vaccination"
-                ], levels: [.hl]),
-                CurriculumTopic(name: "Advanced Ecology and Evolution", subtopics: [
-                    "HL: Gene pools, allele frequencies and population change",
-                    "HL: Speciation mechanisms and reproductive isolation",
-                    "HL: Community succession and ecosystem stability",
-                    "HL: Statistical testing and interpretation in biological investigations"
-                ], levels: [.hl]),
-            ]),
-
-            CurriculumUnit(name: "Additional Components", topics: [
-                CurriculumTopic(name: "Nature of Science", subtopics: [
-                    "Observations and hypotheses",
-                    "Experimental design",
-                    "Variables and controls",
-                    "Falsifiability and paradigm shifts"
-                ]),
-                CurriculumTopic(name: "Experimental Investigations", subtopics: [
-                    "Planning and designing experiments",
-                    "Data collection and processing",
-                    "Conclusions and evaluation",
-                    "Scientific report writing"
-                ]),
-                CurriculumTopic(name: "Collaborative Science Project", subtopics: [
-                    "Group research project",
-                    "Interdisciplinary approaches",
-                    "Communication of findings"
-                ]),
-            ]),
-        ]
-    }
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - IB Mathematics: Analysis & Approaches SL (2021)
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Mathematics: Analysis and Approaches
 
     private static var mathAACurriculum: [CurriculumUnit] {
         [

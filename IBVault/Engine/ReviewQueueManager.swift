@@ -50,7 +50,7 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
             guard remaining > 0 else { return [] }
             var seen = reviewedCanonicalIDs
             var unique: [StudyCard] = []
-            for card in candidates {
+            for card in candidates where BiologyStudyService.isEligible(card) {
                 let id = card.id
                 let canonicalID = library.canonicalIDs[id] ?? id
                 guard canonicalID == id && seen.insert(canonicalID).inserted else { continue }
@@ -61,7 +61,7 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
         }
 
         func canReview(_ card: StudyCard) -> Bool {
-            remaining > 0 && !reviewedCanonicalIDs.contains(library.canonicalIDs[card.id] ?? card.id)
+            BiologyStudyService.isEligible(card) && remaining > 0 && !reviewedCanonicalIDs.contains(library.canonicalIDs[card.id] ?? card.id)
         }
     }
 
@@ -69,7 +69,7 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
     static func day(in context: ModelContext, now: Date = IBLocalClock.now,
                     calendar: Calendar = IBLocalClock.calendar) throws -> Day {
         let all = try context.fetch(FetchDescriptor<StudyCard>())
-        let library = CardDuplicatePolicy.library(all)
+        let library = CardDuplicatePolicy.library(all.filter(BiologyStudyService.isEligible))
         let start = calendar.startOfDay(for: now)
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? now
         let reviews = try context.fetch(FetchDescriptor<ReviewSession>(
@@ -169,7 +169,7 @@ final class ReviewQueueManager {
 
     func eligibleCards(context: ModelContext) -> [StudyCard] {
         guard let cards = try? context.fetch(FetchDescriptor<StudyCard>()) else { return [] }
-        return CardDuplicatePolicy.library(cards).cards
+        return CardDuplicatePolicy.library(cards.filter(BiologyStudyService.isEligible)).cards
     }
 
     /// Retained for existing tests; snapshots now recompute when data changes.

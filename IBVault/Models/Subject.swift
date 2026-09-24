@@ -24,7 +24,7 @@ nonisolated final class Subject {
     /// schema field to stay consistent, which is out of scope.
     var dueCardsCount: Int {
         let now = Date()
-        return cards.filter { $0.nextReviewDate <= now }.count
+        return cards.filter { BiologyStudyService.isEligible($0) && $0.nextReviewDate <= now }.count
     }
 
     var masteryProgress: Double {
@@ -47,7 +47,7 @@ nonisolated final class Subject {
 
     var overallProficiencyBreakdown: [ProficiencyLevel: Int] {
         var breakdown: [ProficiencyLevel: Int] = [:]
-        for card in cards {
+        for card in cards where BiologyStudyService.isEligible(card) {
             breakdown[card.proficiency, default: 0] += 1
         }
         return breakdown
