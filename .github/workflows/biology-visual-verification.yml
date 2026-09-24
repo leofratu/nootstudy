@@ -1,4 +1,4 @@
-name: Biology continuation verification
+name: Biology final candidate verification
 on:
   push:
     branches: [tools/biology-visual-20260924]
@@ -6,76 +6,84 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: biology-continuation-verification
+  group: biology-final-candidate-verification
   cancel-in-progress: true
 jobs:
   verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - layer: curriculum
+            source: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
+          - layer: design
+            source: c2aed9303338d716f27644c5696affb63bfa0b7e
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
-          path: review-tools
+          path: tools
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 4bf9d72d0063ab06b7502d36f664105227f1ce0b
+          ref: ${{ matrix.source }}
           path: app
-          fetch-depth: 0
           persist-credentials: false
-      - name: Apply original content and targeted queue fixes to an isolated checkout
+      - name: Prepare final source without publishing application changes
         working-directory: app
         run: |
           set -euo pipefail
-          git apply --check ../review-tools/.github/tools/queue_candidate.patch
-          git apply ../review-tools/.github/tools/queue_candidate.patch
-          python3 ../review-tools/.github/tools/finalize_queue.py
-          python3 ../review-tools/.github/tools/expand_bioenergetics.py
-          cp ../review-tools/.github/tools/BiologyContinuationTests.swift IBVaultTests/BiologyContinuationTests.swift
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('IBVaultTests/BiologyContinuationTests.swift')
-          s = p.read_text().replace('#expect(!ReviewDailyLimitPolicy.currentCards(in: reader).contains', '#expect(!(try ReviewDailyLimitPolicy.currentCards(in: reader)).contains')
-          s = s.replace('#expect(cold.map(\\.id) == warm.map(\\.id))', '#expect(Set(cold.map(\\.id)) == Set(warm.map(\\.id)))')
-          s = s.replace('        card.front = "Changed prompt"\n', '''        card.front = "Changed prompt"
-                  try writer.save()
-                  let editedActual = try ReviewDailyLimitPolicy.currentCards(in: reader).map(\\.front)
-                  let editedNormal = try reader.fetch(FetchDescriptor<StudyCard>()).map(\\.front)
-                  #expect(editedActual == editedNormal)
-          ''')
-          p.write_text(s)
-          PY
-          python3 scripts/audit_biology.py --output docs/biology-coverage.json
-          git diff --check
-      - name: Compile and run every native functional and performance assertion
-        working-directory: app
-        run: |
-          set -euo pipefail
+          test -z "$(git status --porcelain)"
+          git apply --check --exclude=IBVault/Engine/ReviewQueueManager.swift ../tools/.github/tools/queue_candidate.patch
+          git apply --exclude=IBVault/Engine/ReviewQueueManager.swift ../tools/.github/tools/queue_candidate.patch
+          python3 ../tools/.github/tools/finish_functional.py
           sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
           brew install xcodegen
           xcodegen generate
+          git diff --check
+          git diff --stat
+      - name: Run every native functional and unchanged performance assertion
+        working-directory: app
+        run: |
+          set -euo pipefail
           xcodebuild test -project IBVault.xcodeproj -scheme IBVault -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/continuation-build" -resultBundlePath "$RUNNER_TEMP/continuation-tests.xcresult" \
+            -derivedDataPath "$RUNNER_TEMP/final-build" -resultBundlePath "$RUNNER_TEMP/functional.xcresult" \
             -jobs 2 -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee "$RUNNER_TEMP/continuation-tests.log"
-      - name: Retain exact changed source and completed results
+            2>&1 | tee "$RUNNER_TEMP/functional.log"
+      - name: Render every native visual fixture in its isolated host
+        if: always() && matrix.layer == 'design'
+        working-directory: app
+        run: |
+          set -euo pipefail
+          xcodebuild test -project IBVault.xcodeproj -scheme IBVaultVisual -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/final-build" -resultBundlePath "$RUNNER_TEMP/visual.xcresult" \
+            -jobs 2 -parallel-testing-enabled NO \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/visual.log"
+      - name: Preserve exact source and results
         if: always()
         working-directory: app
         run: |
-          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/continuation-tests.xcresult" --format json > "$RUNNER_TEMP/continuation-summary.json" || true
-          git diff --binary > "$RUNNER_TEMP/continuation.patch"
-          tar --exclude .git -cf "$RUNNER_TEMP/continuation-source.tar" .
-          grep -E 'bench |refreshDueCards|error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/continuation-tests.log" | tail -80 || true
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/functional.xcresult" --format json > "$RUNNER_TEMP/functional-summary.json" || true
+          if [ -d "$RUNNER_TEMP/visual.xcresult" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/visual.xcresult" --format json > "$RUNNER_TEMP/visual-summary.json" || true
+          fi
+          git diff --binary > "$RUNNER_TEMP/final.patch"
+          tar --exclude .git -cf "$RUNNER_TEMP/final-source.tar" .
+          grep -E 'bench |refreshDueCards|error:|recorded an issue|failed after|Test run with' "$RUNNER_TEMP/functional.log" | tail -50 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: biology-continuation-verification
+          name: final-${{ matrix.layer }}-evidence
           path: |
-            ${{ runner.temp }}/continuation-tests.log
-            ${{ runner.temp }}/continuation-summary.json
-            ${{ runner.temp }}/continuation-source.tar
-            ${{ runner.temp }}/continuation.patch
+            ${{ runner.temp }}/functional.log
+            ${{ runner.temp }}/functional-summary.json
+            ${{ runner.temp }}/visual.log
+            ${{ runner.temp }}/visual-summary.json
+            ${{ runner.temp }}/final-source.tar
+            ${{ runner.temp }}/final.patch
             app/docs/biology-coverage.json
-            ~/Library/Logs/DiagnosticReports/*.ips
+            /tmp/nootstudy-snapshots
           retention-days: 14
