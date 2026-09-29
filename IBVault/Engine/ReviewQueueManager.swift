@@ -41,24 +41,29 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
         var remaining: Int { allowance(reviewedCardIDs: reviewedIDs, maximum: maximum) }
 
         var backlog: [StudyCard] {
-            library.cards.filter { $0.nextReviewDate <= now && !reviewedCanonicalIDs.contains($0.id) }
-                .sorted {
-                    if $0.nextReviewDate != $1.nextReviewDate { return $0.nextReviewDate < $1.nextReviewDate }
-                    if $0.easeFactor != $1.easeFactor { return $0.easeFactor < $1.easeFactor }
-                    return $0.id.uuidString < $1.id.uuidString
-                }
+            library.cards.compactMap { card -> (card: StudyCard, due: Date, ease: Double, id: String)? in
+                let due = card.nextReviewDate
+                guard due <= now else { return nil }
+                let id = card.id
+                guard !reviewedCanonicalIDs.contains(id) else { return nil }
+                return (card, due, card.easeFactor, id.uuidString)
+            }.sorted {
+                if $0.due != $1.due { return $0.due < $1.due }
+                if $0.ease != $1.ease { return $0.ease < $1.ease }
+                return $0.id < $1.id
+            }.map(\.card)
         }
 
         func limited(_ candidates: [StudyCard]) -> [StudyCard] {
-            let limit = remaining
-            guard limit > 0 else { return [] }
+            guard remaining > 0 else { return [] }
             var seen = reviewedCanonicalIDs
             var unique: [StudyCard] = []
             for card in candidates {
-                let canonicalID = library.canonicalIDs[card.id] ?? card.id
-                guard canonicalID == card.id && seen.insert(canonicalID).inserted else { continue }
+                let id = card.id
+                let canonicalID = library.canonicalIDs[id] ?? id
+                guard canonicalID == id && seen.insert(canonicalID).inserted else { continue }
                 unique.append(card)
-                if unique.count == limit { break }
+                if unique.count == remaining { break }
             }
             return unique
         }

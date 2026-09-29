@@ -48,6 +48,10 @@ struct ContentView: View {
     @State private var progressionEvents = ProgressionEventCenter()
     @Namespace private var sidebarSelectionNamespace
 
+    init(initialTab: NavigationTab = .dashboard) {
+        _selectedTab = State(initialValue: initialTab)
+    }
+
     private var dueCount: Int {
         reviewQueueManager.totalDueCount
     }
@@ -83,6 +87,12 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             reviewQueueManager.scheduleRefresh(context: context)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            reviewQueueManager.refreshDueCards(context: context)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            reviewQueueManager.refreshDueCards(context: context)
         }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .ibVaultAppCommand)) { notification in

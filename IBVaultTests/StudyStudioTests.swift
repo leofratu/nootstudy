@@ -293,6 +293,26 @@ struct StudyStudioTests {
 struct CardDuplicateRegressionTests {
     private let answer = "Capacity utilisation measures actual output as a percentage of maximum possible output. It shows how much productive capacity the business uses during a period and helps managers assess spare capacity."
 
+    @Test func normalizationPreservesOperatorsAndUnicodeWordBoundaries() {
+        #expect(CardDuplicatePolicy.normalize("  EXPLAIN:\n x < 20%, y >= 5; a/b + c^2. ") == "explain x < 20% y >= 5 a/b + c^2")
+        #expect(CardDuplicatePolicy.normalize("Définir l’ÉNERGIE — Δx − 2") == "definir l energie δx − 2")
+        #expect(CardDuplicatePolicy.normalize("\t...!?  ").isEmpty)
+    }
+
+    @Test func exactPromptWithShortAnswerRetainsPreferredHistory() {
+        let subject = Subject(name: "Business Management", level: "HL", accentColorHex: "34533B")
+        let original = StudyCard(topicName: "Operations", front: "Define capacity utilisation in operations management.",
+                                 back: "Actual output relative to capacity.", subject: subject)
+        original.totalReviewCount = 9
+        let related = StudyCard(topicName: "Operations", front: "Define capacity utilisation and state its formula.",
+                                back: answer, subject: subject)
+        related.totalReviewCount = 5
+        let repeated = StudyCard(topicName: "Operations", front: original.front, back: answer, subject: subject)
+        let library = CardDuplicatePolicy.library([repeated, related, original])
+        #expect(library.cards.count == 2)
+        #expect(library.canonicalIDs[repeated.id] == original.id)
+    }
+
     @Test func paraphrasedQuestionsWithTheSameDetailedAnswerCollapse() {
         let a = CardDuplicatePolicy.Signature(front: "Define capacity utilisation in operations management.",
                                               back: answer, style: .basic)

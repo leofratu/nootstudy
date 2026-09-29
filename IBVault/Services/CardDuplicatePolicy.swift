@@ -3,6 +3,11 @@ import Foundation
 /// Collapses only exact prompts or strongly overlapping question/answer pairs.
 /// Originals remain in storage so their review history is never discarded.
 nonisolated enum CardDuplicatePolicy {
+    private static let stopWords: Set<String> = ["what", "is", "a", "an", "the", "of", "in", "and", "to", "it",
+                                                "define", "state", "explain", "describe", "give", "how", "used"]
+    private static let contrasts: Set<String> = ["not", "no", "never", "without", "non", "above", "below",
+                                                "increase", "decrease", "positive", "negative", "less", "greater"]
+
     struct Signature {
         let question: String
         let questionWords: Set<String>
@@ -13,13 +18,9 @@ nonisolated enum CardDuplicatePolicy {
 
         init(front: String, back: String, style: CardStyle) {
             question = normalize(front)
-            let stopWords: Set<String> = ["what", "is", "a", "an", "the", "of", "in", "and", "to", "it",
-                                         "define", "state", "explain", "describe", "give", "how", "used"]
             questionWords = Set(question.split(separator: " ").map(String.init)).subtracting(stopWords)
             answerWords = normalize(back).split(separator: " ").map(String.init)
             answerPairs = Set(zip(answerWords, answerWords.dropFirst()).map { $0 + " " + $1 })
-            let contrasts: Set<String> = ["not", "no", "never", "without", "non", "above", "below",
-                                         "increase", "decrease", "positive", "negative", "less", "greater"]
             protectedWords = answerWords.filter { word in
                 contrasts.contains(word) || word.contains(where: \.isNumber)
                     || word.contains(where: { "+−-=<>/%^".contains($0) })
@@ -48,7 +49,26 @@ nonisolated enum CardDuplicatePolicy {
     }
 
     static func normalize(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+        // Most prompts use ASCII. Avoid Foundation's Unicode transformations
+        // for these while preserving the same word and operator boundaries.
+        if text.utf8.allSatisfy({ $0 < 128 }) {
+            var result: [UInt8] = []
+            result.reserveCapacity(text.utf8.count)
+            var needsSpace = false
+            for byte in text.utf8 {
+                let lowered = (65...90).contains(byte) ? byte + 32 : byte
+                switch lowered {
+                case 97...122, 48...57, 43, 45, 61, 60, 62, 47, 37, 94:
+                    if needsSpace && !result.isEmpty { result.append(32) }
+                    result.append(lowered)
+                    needsSpace = false
+                default:
+                    needsSpace = true
+                }
+            }
+            return String(decoding: result, as: UTF8.self)
+        }
+        return text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
             .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "+−-=<>/%^")).inverted)
             .filter { !$0.isEmpty }.joined(separator: " ")
     }
@@ -58,31 +78,36 @@ nonisolated enum CardDuplicatePolicy {
     }
 
     static func library(_ cards: [StudyCard]) -> Library {
-        var groups: [String: [(card: StudyCard, signature: Signature)]] = [:]
-        var exactQuestions: [String: [String: Int]] = [:]
+        var groups: [String: [(id: UUID, rank: Int, signature: Signature)]] = [:]
+        var exactPrompts: [String: [String: (id: UUID, rank: Int)]] = [:]
         var questionIndex: [String: [String: Set<Int>]] = [:]
         var aliases: [UUID: UUID] = [:]
         var unique: [StudyCard] = []
         // Keep the copy with the strongest review history; prefer a stable
         // original when neither copy has been studied.
-        let preferred = cards.sorted {
-            if $0.totalReviewCount != $1.totalReviewCount { return $0.totalReviewCount > $1.totalReviewCount }
-            if $0.lastReviewedDate != $1.lastReviewedDate {
-                return ($0.lastReviewedDate ?? .distantPast) > ($1.lastReviewedDate ?? .distantPast)
-            }
-            if $0.createdDate != $1.createdDate { return $0.createdDate < $1.createdDate }
+        // Snapshot sort keys once: reading SwiftData properties inside every
+        // comparison makes a large library refresh noticeably slower.
+        let preferred = cards.map { card in
+            (card: card, count: card.totalReviewCount, reviewed: card.lastReviewedDate ?? .distantPast,
+             created: card.createdDate, id: card.id)
+        }.sorted {
+            if $0.count != $1.count { return $0.count > $1.count }
+            if $0.reviewed != $1.reviewed { return $0.reviewed > $1.reviewed }
+            if $0.created != $1.created { return $0.created < $1.created }
             return $0.id.uuidString < $1.id.uuidString
         }
-        for card in preferred {
+        for (rank, item) in preferred.enumerated() {
+            let card = item.card
             let signature = signature(card)
-            var scope = (card.subject?.id.uuidString ?? "unassigned") + "|" + card.cardStyle.rawValue
+            let subjectID = card.subject?.id
+            var scope = (subjectID?.uuidString ?? "unassigned") + "|" + signature.style.rawValue
             // Very short prompts need their topic to disambiguate context.
-            if signature.question.count < 12 || card.subject == nil {
+            if signature.question.count < 12 || subjectID == nil {
                 scope += "|" + normalize(card.topicName) + "|" + normalize(card.subtopic)
             }
-            // A fuzzy match requires at least two shared question words.
-            // Use postings to avoid comparing every card in a subject, while
-            // retaining the same preferred-original ordering and match rules.
+            let exact = exactPrompts[scope]?[signature.question]
+            // Short answers can only match an exact prompt. Long-answer
+            // candidates retain preference order for conservative fuzzy reuse.
             var sharedCounts: [Int: Int] = [:]
             if signature.answerWords.count >= 12 {
                 for word in signature.questionWords {
@@ -91,24 +116,27 @@ nonisolated enum CardDuplicatePolicy {
                     }
                 }
             }
-            var candidates = Set(sharedCounts.compactMap { $0.value >= 2 ? $0.key : nil })
-            if let exact = exactQuestions[scope]?[signature.question] { candidates.insert(exact) }
-            let match = candidates.sorted().first { index in
-                guard let existing = groups[scope]?[index] else { return false }
-                return signature.matches(existing.signature)
+            let candidates = sharedCounts.compactMap { $0.value >= 2 ? $0.key : nil }.sorted()
+            let nearIndex = candidates.first { index in
+                guard let candidate = groups[scope]?[index] else { return false }
+                return signature.matches(candidate.signature)
             }
-            if let match {
-                aliases[card.id] = groups[scope]?[match].card.id
+            let near = nearIndex.flatMap { groups[scope]?[$0] }
+            let existingID: UUID?
+            if let exact, let near { existingID = exact.rank < near.rank ? exact.id : near.id }
+            else { existingID = exact?.id ?? near?.id }
+            if let existingID {
+                aliases[item.id] = existingID
             } else {
-                let index = groups[scope]?.count ?? 0
-                groups[scope, default: []].append((card, signature))
-                exactQuestions[scope, default: [:]][signature.question] = index
                 if signature.answerWords.count >= 12 {
+                    let index = groups[scope]?.count ?? 0
+                    groups[scope, default: []].append((item.id, rank, signature))
                     for word in signature.questionWords {
                         questionIndex[scope, default: [:]][word, default: []].insert(index)
                     }
                 }
-                aliases[card.id] = card.id
+                exactPrompts[scope, default: [:]][signature.question] = (item.id, rank)
+                aliases[item.id] = item.id
                 unique.append(card)
             }
         }

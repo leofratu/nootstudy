@@ -128,7 +128,7 @@ struct CardGeneratorService {
                                    subtopic: String, style: CardStyle) -> [StudyCard] {
         let requested = Set(dtos.compactMap(\.existingCardID))
         return StudyLibraryService.cards(in: cards, scopes: [.init(topic: topic, subtopic: subtopic)], styles: [style])
-            .filter { requested.contains($0.id) && CardDraft(card: $0).isValid && isNonNumericQuestion($0.front) }
+            .filter { requested.contains($0.id) && CardDraft(card: $0).isValid }
     }
 
     /// Generate flashcards for a specific topic using ARIA/Gemini.
@@ -268,7 +268,7 @@ struct CardGeneratorService {
                 Before writing each card, compare its meaning with the saved questions AND answers.
                 If a saved card in the requested scope and format already tests the same learning point,
                 return {"existingCardID":"its exact id"} instead of rewording or regenerating it.
-                Related topics alone are not duplicates: keep different contrasts and applications distinct.
+                Related topics alone are not duplicates: keep different calculations, contrasts and applications distinct.
                 Never invent an ID. New concepts use the normal card schema. Reused cards count toward the requested total.
                 """
 
@@ -283,8 +283,7 @@ struct CardGeneratorService {
                         try Self.extractCardDTOs(from: response)
                     }.value
                     let reused = resolvedReferences(dtos, in: savedCards, topic: topicName, subtopic: subtopic, style: effectiveOptions.style)
-                    let parsed = (reused + cardsFromDTOs(dtos.filter { $0.existingCardID == nil }, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile, options: effectiveOptions))
-                        .filter { isNonNumericQuestion($0.front) }
+                    let parsed = reused + cardsFromDTOs(dtos.filter { $0.existingCardID == nil }, subject: subject, topicName: topicName, subtopic: subtopic, profile: profile, options: effectiveOptions)
                     guard !parsed.isEmpty else { throw CardGeneratorError.invalidFormat }
                     let merged = mergeUnique(existing: collectedCards, incoming: parsed)
                     let addedCount = merged.count - collectedCards.count
