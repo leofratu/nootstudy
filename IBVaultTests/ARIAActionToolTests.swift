@@ -3,6 +3,64 @@ import Foundation
 import SwiftData
 @testable import IBVault
 
+@Suite("ARIA saved-card revision")
+@MainActor
+struct ARIARevisionTests {
+    @Test func semanticSelectionReopensOriginalWithoutChangingProgress() async throws {
+        let container = try ARIAAppToolE2ETests().makeContainer()
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "34533B")
+        container.mainContext.insert(subject)
+        let card = StudyCard(topicName: "Cells and Cell Structure", front: "Where is ATP produced?", back: "Mitochondria", subject: subject)
+        card.totalReviewCount = 12
+        let due = Date(timeIntervalSince1970: 2_000_000_000)
+        card.nextReviewDate = due
+        container.mainContext.insert(card)
+        try container.mainContext.save()
+        let service = ARIAService()
+        let result = try await service.applyAppToolPlan("""
+        [{"type":"reuse_flashcards","subjectName":"Biology","cardID":"\(card.id)"}]
+        """, userMessage: "Help me revise the organelle that supplies cellular energy", context: container.mainContext)
+        #expect(result.failed.isEmpty)
+        #expect(service.revisionCardIDs == [card.id])
+        let fresh = try ModelContext(container).fetch(FetchDescriptor<StudyCard>())
+        #expect(fresh.count == 1 && fresh.first?.totalReviewCount == 12 && fresh.first?.nextReviewDate == due)
+    }
+
+    @Test func generationRequestWithExistingCoverageMakesNoModelCallOrDuplicate() async throws {
+        let container = try ARIAAppToolE2ETests().makeContainer()
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "34533B")
+        container.mainContext.insert(subject)
+        let card = StudyCard(topicName: "Cells and Cell Structure", front: "What is a cell?", back: "The smallest living unit.", subject: subject)
+        container.mainContext.insert(card)
+        try container.mainContext.save()
+        let service = ARIAService()
+        let result = try await service.applyAppToolPlan(#"[{"type":"generate_flashcards","subjectName":"Biology","topics":["Cells and Cell Structure"],"cardCount":1}]"#,
+            userMessage: "Make one card for revising cells", context: container.mainContext)
+        #expect(result.failed.isEmpty)
+        #expect(service.revisionCardIDs == [card.id])
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<StudyCard>()) == 1)
+    }
+
+    @Test func chatCleanupLeavesSavedTestsIntact() async throws {
+        let container = try ARIAAppToolE2ETests().makeContainer()
+        let test = SavedStudyTest(subject: "Biology", level: "SL", topics: ["Cells"], subtopics: [], question: "Describe a cell.", maximumMarks: 4)
+        try StudyTestStore.save(test, context: container.mainContext)
+        let old = Date(timeIntervalSince1970: 1_000_000)
+        let sessions = try container.mainContext.fetch(FetchDescriptor<ARIAChatSession>())
+        sessions.forEach { $0.updatedAt = old }
+        let chat = ARIAChatSession(title: "Old chat")
+        chat.updatedAt = old
+        container.mainContext.insert(chat)
+        try container.mainContext.save()
+        let result = try await ARIAService().applyAppToolPlan(#"[{"type":"delete_old_chats","olderThanDays":30}]"#,
+            userMessage: "Delete old chats older than 30 days", context: container.mainContext)
+        #expect(result.failed.isEmpty)
+        let fresh = ModelContext(container)
+        #expect(StudyTestStore.read(try fresh.fetch(FetchDescriptor<ChatMessage>())).map(\.id) == [test.id])
+        #expect(try fresh.fetchCount(FetchDescriptor<ARIAChatSession>()) == 1)
+    }
+}
+
 /// One end-to-end tool scenario: a user message plus the JSON plan the model
 /// would return, seeded into a fresh in-memory store. Each scenario runs through
 /// the exact production pipeline (parse, dedupe, destructive gate, scratch-context
@@ -45,7 +103,7 @@ nonisolated struct ToolScenario: Sendable {
 @Suite("ARIA Tool E2E — every data point malleable")
 struct ARIAAppToolE2ETests {
 
-    private func makeContainer() throws -> ModelContainer {
+    fileprivate func makeContainer() throws -> ModelContainer {
         try ModelContainer(for:
             UserProfile.self,
             Subject.self,
@@ -111,6 +169,35 @@ struct ARIAAppToolE2ETests {
 
     nonisolated static var scenarios: [ToolScenario] {
         E2EScenarioLibrary.all()
+    }
+}
+
+@MainActor
+@Suite("ARIA review allowance")
+struct ARIAReviewLimitTests {
+    @Test(arguments: ARIAAppToolE2ETests.scenarios.filter { ["profile-03", "session-07"].contains($0.id) })
+    func profileAndReviewActions(_ scenario: ToolScenario) async throws {
+        try await ARIAAppToolE2ETests().scenario(scenario)
+    }
+
+    @Test func reviewActionCannotReopenAnExhaustedDailyQueue() async throws {
+        let container = try ARIAAppToolE2ETests().makeContainer()
+        let context = container.mainContext
+        try E2EScenarioLibrary.standardSeed(context)
+        let profile = try #require(context.fetch(FetchDescriptor<UserProfile>()).first)
+        profile.dailyGoal = 5
+        for _ in 0..<5 {
+            context.insert(ReviewSession(cardID: UUID(), subjectName: "Economics", topicName: "Markets", qualityRating: 3))
+        }
+        let cards = try context.fetch(FetchDescriptor<StudyCard>())
+        for card in cards { card.nextReviewDate = .distantFuture }
+        try context.save()
+        let (completed, failed, _) = try await ARIAService().applyAppToolPlan(
+            #"[{"type":"create_review_session","subjectName":"Biology","topics":["Cells and Cell Structure"]}]"#,
+            userMessage: "Set up a review session for my Biology cards", context: context)
+        #expect(failed.isEmpty)
+        #expect(completed.joined().contains("allowance is complete"))
+        #expect(cards.allSatisfy { $0.nextReviewDate == .distantFuture })
     }
 }
 
@@ -581,12 +668,12 @@ nonisolated enum E2EScenarioLibrary {
 
         out.append(ToolScenario(
             id: "profile-03", name: "update_profile daily goal",
-            userMessage: "Change my daily card goal to 35",
-            modelJSON: #"[{"type":"update_profile","dailyGoal":35}]"#,
+            userMessage: "Change my daily card goal to 55",
+            modelJSON: #"[{"type":"update_profile","dailyGoal":55}]"#,
             seed: standardSeed,
             verify: { ctx in
                 let profile = try ctx.fetch(FetchDescriptor<UserProfile>()).first
-                return profile?.dailyGoal == 30
+                return profile?.dailyGoal == 40
             },
             summaryContains: ["daily goal"]
         ))

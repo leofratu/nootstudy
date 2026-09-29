@@ -4,8 +4,11 @@ import SwiftUI
 struct RecallCardView: View {
     let card: StudyCard
     @Binding var revealed: Bool
+    var onAnswer: (Bool) -> Void = { _ in }
     @State private var selectedChoice: String?
+    @State private var choiceOrder: [String] = []
     @State private var showHint = false
+    @AppStorage("showMasteryPercent") private var showMasteryPercent = true
 
     private var validChoices: [String]? {
         guard card.cardStyle == .multipleChoice else { return nil }
@@ -25,17 +28,39 @@ struct RecallCardView: View {
                 Spacer()
                 StudioPill(title: card.difficulty.rawValue)
             }
-            Text(card.topicName).font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+            HStack(alignment: .firstTextBaseline) {
+                Text(card.topicName).font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+                Spacer()
+                if showMasteryPercent {
+                    Text("\(Int((ProficiencyTracker.masteryValue(for: card) * 100).rounded()))% · \(card.proficiency.rawValue)")
+                        .font(IBTypography.captionBold).foregroundStyle(IBColors.inkSecondary)
+                }
+            }
+            Text(card.cardStyle == .cloze ? "FILL IN THE BLANK" : "QUESTION")
+                .font(IBTypography.captionBold).tracking(1).foregroundStyle(IBColors.inkSecondary)
             FormattedMessageContent(text: prompt)
                 .font(.custom("Georgia", size: 25))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let choices = validChoices {
                 VStack(spacing: 10) {
-                    ForEach(Array(choices.enumerated()), id: \.offset) { index, choice in
+                    ForEach(Array((choiceOrder.isEmpty ? choices : choiceOrder).enumerated()), id: \.offset) { index, choice in
                         choiceButton(choice, index: index)
                     }
+                    if !revealed {
+                        Button("Check answer") {
+                            guard let selectedChoice else { return }
+                            onAnswer(CardRecallPresentation.isCorrect(selectedChoice, answer: card.back))
+                            revealed = true
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(selectedChoice == nil)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
                 }
+            } else if card.cardStyle == .multipleChoice {
+                Label("This card has incomplete options. You can still reveal its answer.", systemImage: "exclamationmark.triangle")
+                    .font(IBTypography.caption).foregroundStyle(IBColors.coral)
             }
             if revealed {
                 Divider()
@@ -46,33 +71,44 @@ struct RecallCardView: View {
                         .foregroundStyle(CardRecallPresentation.isCorrect(selectedChoice, answer: card.back) ? IBColors.success : IBColors.coral)
                 }
                 Text("ANSWER").font(IBTypography.captionBold).tracking(1).foregroundStyle(IBColors.accent)
-                FormattedMessageContent(text: card.back).textSelection(.enabled)
+                FormattedMessageContent(text: card.back)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(IBColors.highlight, in: RoundedRectangle(cornerRadius: IBRadius.md))
                 if let url = card.sourceURL, let title = card.sourceTitle {
                     Link(destination: url) { Label(title, systemImage: "arrow.up.right") }
                         .font(IBTypography.caption)
                 }
             } else if let hint = card.hint, !hint.isEmpty {
                 if showHint {
-                    Text(hint).font(IBTypography.body).foregroundStyle(IBColors.inkSecondary)
+                    Label(hint, systemImage: "lightbulb")
+                        .font(IBTypography.body).foregroundStyle(IBColors.inkSecondary)
                 } else {
                     Button("Show hint") { showHint = true }.buttonStyle(.borderless)
                 }
             }
         }
         .foregroundStyle(IBColors.ink)
-        .padding(32)
+        .padding(24)
         .frame(maxWidth: .infinity, minHeight: 320, alignment: .topLeading)
         .surfaceCard()
-        .onChange(of: card.id) { _, _ in selectedChoice = nil; showHint = false }
+        .onAppear { resetChoices() }
+        .onChange(of: card.id) { _, _ in resetChoices() }
+    }
+
+    private func resetChoices() {
+        selectedChoice = nil
+        showHint = false
+        choiceOrder = (validChoices ?? []).shuffled()
     }
 
     private func choiceButton(_ choice: String, index: Int) -> some View {
         let correct = CardRecallPresentation.isCorrect(choice, answer: card.back)
         let selected = selectedChoice == choice
-        let tint = revealed && correct ? IBColors.success : revealed && selected ? IBColors.coral : IBColors.inkSecondary
+        let tint = revealed && correct ? IBColors.success : revealed && selected ? IBColors.coral : selected ? IBColors.accent : IBColors.inkSecondary
         return Button {
             selectedChoice = choice
-            revealed = true
         } label: {
             HStack(alignment: .top, spacing: 14) {
                 Text(String(UnicodeScalar(65 + index)!)).font(IBTypography.mono)
@@ -81,11 +117,13 @@ struct RecallCardView: View {
                     .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
                 if revealed && (correct || selected) {
                     Image(systemName: correct ? "checkmark.circle.fill" : "xmark.circle.fill")
+                } else {
+                    Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                 }
             }
             .foregroundStyle(tint)
             .padding(16)
-            .background(revealed && correct ? IBColors.highlight : IBColors.canvas, in: RoundedRectangle(cornerRadius: IBRadius.md))
+            .background((revealed && correct) || selected ? IBColors.highlight : IBColors.canvas, in: RoundedRectangle(cornerRadius: IBRadius.md))
             .overlay(RoundedRectangle(cornerRadius: IBRadius.md).stroke(tint, lineWidth: 1))
             .contentShape(Rectangle())
         }

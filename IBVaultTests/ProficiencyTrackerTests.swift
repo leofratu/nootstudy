@@ -5,6 +5,25 @@ import Foundation
 
 @Suite("ProficiencyTracker Tests")
 struct ProficiencyTrackerTests {
+
+    @Test("First successful recall earns partial mastery before a proficiency milestone")
+    func firstRecallEarnsMastery() throws {
+        let card = createTestCard()
+        try FSRSScheduler.applyReviewSync(to: card, quality: .good)
+        let mastery = ProficiencyTracker.masteryPercentage(for: [card])
+        #expect(mastery > 0)
+        #expect(mastery < 0.33)
+        #expect(card.proficiency == .novice)
+    }
+
+    @Test("Repeated unsuccessful reviews do not earn recall mastery")
+    func failuresDoNotEarnMastery() throws {
+        let card = createTestCard()
+        let now = Date()
+        try FSRSScheduler.applyReviewSync(to: card, quality: .again, now: now)
+        try FSRSScheduler.applyReviewSync(to: card, quality: .again, now: now.addingTimeInterval(60))
+        #expect(ProficiencyTracker.masteryPercentage(for: [card]) == 0)
+    }
     
     @Test("Empty cards should return zero mastery")
     func testEmptyCardsMastery() {

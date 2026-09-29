@@ -87,17 +87,22 @@ final class ReviewScheduler {
     var totalOverdue: Int = 0
     var recommendedStudyOrder: [Subject] = []
     
-    func analyze(context: ModelContext, config: ReviewScheduleConfig = .default) {
+    func analyze(context: ModelContext, config: ReviewScheduleConfig = .default, availableCards: [StudyCard]? = nil) {
         let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
-        let scopes = studiedScopes(in: context)
-        let scopesBySubject = Dictionary(grouping: scopes, by: \.subjectName)
+        let dailyCards: [StudyCard]
+        if let availableCards {
+            dailyCards = Array(availableCards.prefix(max(0, config.maximumDailyCards)))
+        } else {
+            let day = try? ReviewDailyLimitPolicy.day(in: context)
+            dailyCards = day.map { Array($0.limited($0.backlog).prefix(max(0, config.maximumDailyCards))) } ?? []
+        }
         let now = Date()
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
         // Same for every subject, so compute once instead of per schedule row.
         let nextOptimal = findNextOptimalSlot(from: now, config: config)
         
         schedules = subjects.compactMap { subject -> SubjectReviewSchedule? in
-            let reviewableCards = scopedCards(for: subject, scopesBySubject: scopesBySubject)
+            let reviewableCards = dailyCards.filter { $0.subject?.id == subject.id }
             var dueCards = 0
             var overdueCards = 0
             for card in reviewableCards {
@@ -140,15 +145,8 @@ final class ReviewScheduler {
     }
     
     func cardsDueToday(for subject: Subject, context: ModelContext) -> [StudyCard] {
-        let now = Date()
-        return scopedCards(for: subject, scopesBySubject: Dictionary(grouping: studiedScopes(in: context), by: \.subjectName))
-            .filter { $0.nextReviewDate <= now }
-            .sorted {
-                if $0.nextReviewDate != $1.nextReviewDate {
-                    return $0.nextReviewDate < $1.nextReviewDate
-                }
-                return $0.easeFactor < $1.easeFactor
-            }
+        guard let day = try? ReviewDailyLimitPolicy.day(in: context) else { return [] }
+        return day.limited(day.backlog.filter { $0.subject?.id == subject.id })
     }
     
     func upcomingCards(for subject: Subject, context: ModelContext, days: Int = 7) -> [StudyCard] {

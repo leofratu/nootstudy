@@ -14,9 +14,9 @@ struct NewStudySessionView: View {
     @State private var durationMinutes = 60
     @State private var prepareFlashcards = true
     @State private var flashcardOnly = false
-    @State private var flashcardTargetCount = 10
-    @State private var flashcardDifficulty: CardDifficulty = .exam
-    @State private var cardStudioOptions = CardGenerationOptions(count: 10, difficulty: .exam, style: .basic, tone: .exam, cognitiveSkills: [], useInternalTools: false)
+    @State private var flashcardTargetCount = CardGenerationOptions.preferred.count
+    @State private var flashcardDifficulty = CardGenerationOptions.preferred.difficulty
+    @State private var cardStudioOptions = CardGenerationOptions.preferred
     @State private var planMarkdown = ""
     @State private var planTasks: [StudyPlanTask] = []
     @State private var isGeneratingPlan = false

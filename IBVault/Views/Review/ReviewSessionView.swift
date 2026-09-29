@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 
 struct ReviewSessionView: View {
+    @AppStorage("autoPlayNext") private var autoPlayNext = false
+    @AppStorage("reviewOrder") private var reviewOrder = "spaced"
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ProgressionEventCenter.self) private var progressionEvents
@@ -15,12 +17,16 @@ struct ReviewSessionView: View {
     var filterSubject: Subject? = nil
     var filterPlan: StudyPlan? = nil
     var reviewScopeSession: StudySession? = nil
+    /// Explicit saved-set review may include cards not yet due. The normal
+    /// daily allowance and duplicate-review checks still apply.
+    var practiceCards: [StudyCard]? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var cardFlipNamespace
     @State private var cards: [StudyCard] = []
     @State private var currentIndex = 0
     @State private var isFlipped = false
+    @State private var awaitingNextCard = false
     @State private var sessionComplete = false
     @State private var sessionXP = 0
     @State private var sessionQualities: [RecallQuality] = []
@@ -158,9 +164,9 @@ struct ReviewSessionView: View {
                     .tint(IBColors.accent)
 
                 HStack(spacing: 8) {
-                    Label("\(queueManager.totalDueBacklogCount) flashcards due", systemImage: "rectangle.stack")
+                    Label("\(queueManager.reviewedTodayCount) reviewed today", systemImage: "rectangle.stack")
                     Spacer()
-                    Text("All due cards available")
+                    Text("Daily limit: \(queueManager.dailyMaximum)")
                 }
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(IBColors.inkSecondary)
@@ -201,6 +207,7 @@ struct ReviewSessionView: View {
             Divider()
 
             ScrollView {
+                if let generationError { errorBanner(generationError).padding(.horizontal, 24) }
                 RecallCardView(card: card, revealed: $isFlipped)
                     .id(card.id)
                     .frame(maxWidth: 820)
@@ -212,19 +219,32 @@ struct ReviewSessionView: View {
 
             // Action bar
             HStack(spacing: 12) {
-                if isFlipped {
+                if awaitingNextCard {
+                    Label("Rating recorded", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(IBColors.success)
+                    Spacer()
+                    Button("Next card") { advanceCard() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.space, modifiers: [])
+                } else if isFlipped {
+                    let previews = fsrsPreviews
                     Text("How well did you recall?")
                         .font(.callout)
                         .foregroundStyle(IBColors.inkSecondary)
                     Spacer()
-                    QualityButton(label: "Again", color: IBColors.danger, detail: fsrsPreviews[.again]?.intervalLabel) { rateCard(.again) }
+                    QualityButton(label: "Again", color: IBColors.danger, detail: previews[.again]?.intervalLabel) { rateCard(.again) }
                         .keyboardShortcut("1", modifiers: [])
-                    QualityButton(label: "Hard", color: IBColors.warning, detail: fsrsPreviews[.hard]?.intervalLabel) { rateCard(.hard) }
+                    QualityButton(label: "Hard", color: IBColors.warning, detail: previews[.hard]?.intervalLabel) { rateCard(.hard) }
                         .keyboardShortcut("2", modifiers: [])
-                    QualityButton(label: "Good", color: IBColors.accent, detail: fsrsPreviews[.good]?.intervalLabel) { rateCard(.good) }
+                    QualityButton(label: "Good", color: IBColors.accent, detail: previews[.good]?.intervalLabel) { rateCard(.good) }
                         .keyboardShortcut("3", modifiers: [])
-                    QualityButton(label: "Easy", color: IBColors.success, detail: fsrsPreviews[.easy]?.intervalLabel) { rateCard(.easy) }
+                    QualityButton(label: "Easy", color: IBColors.success, detail: previews[.easy]?.intervalLabel) { rateCard(.easy) }
                         .keyboardShortcut("4", modifiers: [])
+                } else if card.cardStyle == .multipleChoice,
+                          CardGeneratorService.validatedChoices(back: card.back, choices: card.choices) != nil {
+                    Text("Choose an option above, then check your answer.")
+                        .font(.callout).foregroundStyle(IBColors.inkSecondary)
+                    Spacer()
                 } else {
                     Spacer()
                     Button {
@@ -253,18 +273,27 @@ struct ReviewSessionView: View {
         // Once a session is complete the queue has been consumed; ignore the
         // post-save @Query reload so the completion screen keeps its snapshot
         // instead of being replaced by an empty state.
-        guard !sessionComplete else { return }
+        guard !sessionComplete, sessionQualities.isEmpty else { return }
+        guard let day = queueManager.refreshDueCardsSynchronously(context: context) else {
+            cards = []
+            return
+        }
         // Every load rebuilds the queue from scratch, so park the cursor on the
         // first card. Keeping an old index can point beyond a shorter queue.
         currentIndex = 0
         isFlipped = false
         let now = Date()
         let startingEmpty = cards.isEmpty
+        if let practiceCards {
+            cards = orderedForReview(day.limited(practiceCards))
+            if startingEmpty { sessionStartTime = Date() }
+            return
+        }
         // The global session must display exactly the cards counted by the
         // sidebar and dashboard. Scoped sessions keep their explicit filter
         // and fallback behavior below.
         if filterSubject == nil, activeScope == nil {
-            cards = queueManager.dueCards
+            cards = orderedForReview(queueManager.dueCards)
             if startingEmpty { sessionStartTime = Date() }
             return
         }
@@ -293,9 +322,7 @@ struct ReviewSessionView: View {
         let scopedDueCards = filteredCards(from: dueCards)
 
         if !scopedDueCards.isEmpty {
-            cards = scopedDueCards
-        } else if activeScope?.hasFilters == true {
-            cards = fallbackScopedCards(from: eligibleCandidates, now: now)
+            cards = orderedForReview(day.limited(scopedDueCards))
         } else {
             cards = []
         }
@@ -313,6 +340,29 @@ struct ReviewSessionView: View {
         }
 
         return scopedCards.sorted { $0.nextReviewDate < $1.nextReviewDate }
+    }
+
+    private func orderedForReview(_ candidates: [StudyCard]) -> [StudyCard] {
+        switch reviewOrder {
+        case "random": return candidates.shuffled()
+        case "weakest":
+            return candidates.sorted {
+                if $0.proficiency.sortOrder != $1.proficiency.sortOrder {
+                    return $0.proficiency.sortOrder < $1.proficiency.sortOrder
+                }
+                if $0.easeFactor != $1.easeFactor { return $0.easeFactor < $1.easeFactor }
+                return $0.nextReviewDate < $1.nextReviewDate
+            }
+        default: return candidates
+        }
+    }
+
+    private func advanceCard() {
+        guard awaitingNextCard, currentIndex + 1 < cards.count else { return }
+        awaitingNextCard = false
+        isFlipped = false
+        if reduceMotion { currentIndex += 1 }
+        else { withAnimation(IBAnimation.snappy) { currentIndex += 1 } }
     }
 
     private func fallbackScopedCards(from candidates: [StudyCard], now: Date) -> [StudyCard] {
@@ -334,8 +384,16 @@ struct ReviewSessionView: View {
     }
 
     private func rateCard(_ quality: RecallQuality) {
-        guard let card = currentCard else { return }
+        guard !awaitingNextCard, let card = currentCard else { return }
+        let day: ReviewDailyLimitPolicy.Day
         do {
+            day = try ReviewDailyLimitPolicy.day(in: context)
+            guard day.canReview(card) else {
+                generationError = day.remaining == 0
+                    ? "Today's \(day.maximum)-card allowance is complete. More reviews are available tomorrow."
+                    : "This card or a matching copy has already been reviewed today."
+                return
+            }
             try FSRSScheduler.applyReview(to: card, quality: quality)
         } catch {
             generationError = "Could not schedule this review: \(error.localizedDescription)"
@@ -352,10 +410,16 @@ struct ReviewSessionView: View {
         )
         FSRSScheduler.configure(review, quality: quality)
         context.insert(review)
+        queueManager.recordReview(of: card, checkedDay: day)
         switch quality { case .again: IBHaptics.warning(); case .hard: IBHaptics.light(); case .good: IBHaptics.medium(); case .easy: IBHaptics.success() }
-        isFlipped = false
-        if currentIndex + 1 >= cards.count { completeSession() }
-        else { withAnimation(IBAnimation.snappy) { currentIndex += 1 } }
+        if day.remaining <= 1 || currentIndex + 1 >= cards.count {
+            cards = Array(cards.prefix(currentIndex + 1))
+            completeSession()
+        }
+        else {
+            awaitingNextCard = true
+            if autoPlayNext { advanceCard() }
+        }
     }
 
     private func completeSession() {
@@ -383,7 +447,9 @@ struct ReviewSessionView: View {
         } else {
             Set(cards.compactMap { $0.topicName }).sorted().joined(separator: ", ")
         }
-        let subjectName = filterSubject?.name ?? activeScope?.subjectName ?? cards.first?.subject?.name ?? "Mixed"
+        let subjectNames = Set(cards.compactMap { $0.subject?.name })
+        let subjectName = filterSubject?.name ?? activeScope?.subjectName
+            ?? (subjectNames.count == 1 ? subjectNames.first ?? "Mixed" : "Mixed")
         let groupedRatings = Dictionary(grouping: Array(zip(cards, sessionQualities))) {
             "\($0.0.topicName)|\($0.0.subtopic)"
         }
@@ -488,6 +554,7 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateTitle: String {
+        if queueManager.remainingDailyAllowance == 0 { return "Done for today" }
         return studySessions.isEmpty ? "No Revision Yet" : "All Caught Up"
     }
 
@@ -566,6 +633,13 @@ struct ReviewSessionView: View {
     }
 
     private var emptyStateMessage: String {
+        if let error = queueManager.lastRefreshError { return error }
+        if queueManager.remainingDailyAllowance == 0 {
+            return "You've reached today's \(queueManager.dailyMaximum)-card allowance. Your remaining cards will wait until tomorrow."
+        }
+        if practiceCards != nil {
+            return "These cards have already been reviewed today. You can still use free practice without changing mastery or your schedule."
+        }
         if studySessions.isEmpty {
             return "No revision yet. Complete a study session first, then spaced repetition will use that material."
         }

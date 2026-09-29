@@ -6,6 +6,54 @@ import SwiftData
 @Suite("CardGenerationOptions Tests")
 struct CardGenerationOptionsTests {
 
+    @Test("Generation choices survive reopening and invalid stored values are bounded")
+    func savedPreferencesRoundTrip() throws {
+        let suite = "CardGenerationOptionsTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let choice = CardGenerationOptions(count: 17, difficulty: .foundation, style: .cloze, tone: .concise)
+        choice.savePreferences(in: defaults)
+        #expect(CardGenerationOptions.preferences(in: defaults) == choice)
+        defaults.set(1000, forKey: "cardDefaultCount")
+        defaults.set("unrecognized", forKey: "cardDefaultTone")
+        #expect(CardGenerationOptions.preferences(in: defaults).count == 50)
+        #expect(CardGenerationOptions.preferences(in: defaults).tone == .balanced)
+    }
+
+    @Test("Balanced generation skips verbose answers without truncating valid answers")
+    func balancedAnswerBudget() throws {
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")
+        let shortAnswer = "Osmosis is the net movement of water across a selectively permeable membrane."
+        let payload = [
+            ["front": "What is osmosis?", "back": shortAnswer],
+            ["front": "How does membrane transport work?", "back": Array(repeating: "Transport", count: 61).joined(separator: " ")]
+        ]
+        let response = String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self)
+        let cards = try CardGeneratorService.parseFlashcards(from: response, subject: subject,
+            topicName: "Cells", subtopic: "", options: CardGenerationOptions(tone: .balanced))
+        #expect(cards.count == 1)
+        #expect(cards.first?.back == shortAnswer)
+    }
+
+    @Test("Existing serialized exam generation settings remain readable")
+    func legacyGenerationSettings() throws {
+        let json = #"{"count":10,"difficulty":"Exam","style":"basic","tone":"exam","cognitiveSkills":[],"useInternalTools":false}"#
+        // Use the persisted difficulty value rather than depending on its display capitalization.
+        let data = Data(json.replacingOccurrences(of: "\"Exam\"", with: "\"\(CardDifficulty.exam.rawValue)\"").utf8)
+        let options = try JSONDecoder().decode(CardGenerationOptions.self, from: data)
+        #expect(options.count == 10)
+        #expect(options.tone == .exam)
+        #expect(CardGenerationOptions.default.tone == .balanced)
+    }
+
+    @Test("Generated question fronts exclude numerals but allow cloze markup")
+    func nonNumericQuestions() {
+        #expect(CardGeneratorService.isNonNumericQuestion("Why does demand shift?"))
+        #expect(!CardGeneratorService.isNonNumericQuestion("What happens at 95% capacity?"))
+        #expect(CardGeneratorService.isNonNumericQuestion("The {{c1::mitochondrion}} produces ATP."))
+        #expect(!CardGeneratorService.isNonNumericQuestion("The {{c1::CO2}} level rises."))
+    }
+
     @Test("Cloze valid front preserves cloze style")
     func clozeValidPreservesStyle() throws {
         let subject = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")

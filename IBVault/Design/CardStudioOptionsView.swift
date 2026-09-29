@@ -5,13 +5,14 @@ struct CardStudioOptionsView: View {
     var showsCount = true
     var compact = false
     var showsStyle = true
+    var showsTone = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 16 : 24) {
             if showsStyle {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Format").font(IBTypography.headline)
-                    Picker("Card format", selection: $options.style) {
+                    Picker("Card format", selection: preference(\.style)) {
                         ForEach(CardStyle.allCases) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.segmented)
@@ -21,31 +22,28 @@ struct CardStudioOptionsView: View {
                 }
             }
             if showsCount {
-                HStack {
-                    Text("Total cards").font(IBTypography.headline)
-                    Spacer()
-                    Stepper(value: $options.count, in: 1...50, step: 1) {
-                        Text("\(options.count)").monospacedDigit().font(IBTypography.title3)
-                            .frame(minWidth: 32)
-                    }
-                    .fixedSize()
-                }
+                CardCountControl(count: preference(\.count))
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text("Difficulty").font(IBTypography.headline)
-                Picker("Difficulty", selection: $options.difficulty) {
+                Picker("Difficulty", selection: preference(\.difficulty)) {
                     ForEach(CardDifficulty.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
-            HStack {
-                Text("Writing style").font(IBTypography.headline)
-                Spacer()
-                Picker("Writing style", selection: $options.tone) {
-                    ForEach(CardTone.allCases) { Text($0.label).tag($0) }
+            if showsTone {
+                HStack {
+                    Text("Writing style").font(IBTypography.headline)
+                    Spacer()
+                    Picker("Writing style", selection: preference(\.tone)) {
+                        ForEach(CardTone.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden().frame(maxWidth: 160)
                 }
-                .labelsHidden().frame(maxWidth: 160)
+                Text(options.tone.summary)
+                    .font(IBTypography.caption)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -67,6 +65,36 @@ struct CardStudioOptionsView: View {
             }
         }
         .foregroundStyle(IBColors.ink)
+    }
+
+    private func preference<Value>(_ path: WritableKeyPath<CardGenerationOptions, Value>) -> Binding<Value> {
+        Binding(get: { options[keyPath: path] }, set: {
+            options[keyPath: path] = $0
+            options.savePreferences()
+        })
+    }
+}
+
+struct CardCountControl: View {
+    @Binding var count: Int
+
+    private var boundedCount: Binding<Int> {
+        Binding(get: { count }, set: { count = min(max($0, 1), 50) })
+    }
+
+    var body: some View {
+        HStack {
+            Text("Cards per set").font(IBTypography.headline)
+            Spacer()
+            TextField("Count", value: boundedCount, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .monospacedDigit()
+                .frame(width: 64)
+                .accessibilityLabel("Cards per set")
+            Stepper("Cards per set", value: boundedCount, in: 1...50)
+                .labelsHidden().fixedSize()
+        }
     }
 }
 

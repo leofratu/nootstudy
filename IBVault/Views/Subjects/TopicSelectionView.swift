@@ -13,6 +13,7 @@ struct TopicSelectionView: View {
     private func matches(_ topic: CurriculumTopic) -> Bool {
         search.isEmpty || topic.name.localizedCaseInsensitiveContains(search)
             || topic.subtopics.contains { $0.localizedCaseInsensitiveContains(search) }
+            || (SyllabusSeeder.unitName(for: subject.name, level: subject.level, topicName: topic.name)?.localizedCaseInsensitiveContains(search) == true)
     }
 
     var body: some View {
@@ -26,7 +27,7 @@ struct TopicSelectionView: View {
                     Button("Clear") { selection.removeAll() }.buttonStyle(.borderless)
                 }
             }
-            TextField("Search topics or subtopics", text: $search)
+            TextField("Search units, topics or subtopics", text: $search)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Search topics or subtopics")
             if curriculum.isEmpty {

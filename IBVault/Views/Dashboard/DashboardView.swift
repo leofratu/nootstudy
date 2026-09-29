@@ -6,7 +6,6 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var context
     @Environment(ReviewQueueManager.self) private var queueManager
     @Query private var profiles: [UserProfile]
-    @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
     @Query private var subjects: [Subject]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     @Query private var academicAssessments: [AcademicAssessment]
@@ -19,7 +18,6 @@ struct DashboardView: View {
     @State private var selectedSubjectForReview: Subject?
     @State private var greetingText = ""
     @State private var cachedEvidence: [EvidenceRow] = []
-    @State private var evidenceFingerprint = ""
     @State private var dueRefreshTask: Task<Void, Never>?
 
     private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
@@ -47,7 +45,7 @@ struct DashboardView: View {
     }
 
     private var newCardsCount: Int {
-        allCards.filter { $0.totalReviewCount == 0 }.count
+        queueManager.newCardCount
     }
 
     init() {
@@ -75,33 +73,36 @@ struct DashboardView: View {
             .background(IBColors.canvas)
             .navigationTitle("Today")
             .sheet(isPresented: $showReview, onDismiss: {
-                reviewScheduler.analyze(context: context)
                 recomputeDueCards()
+                refreshEvidenceIfNeeded()
             }) {
                 ReviewSessionView(filterSubject: selectedSubjectForReview)
             }
             .task {
-                reviewScheduler.analyze(context: context)
+                await Task.yield()
+                guard !Task.isCancelled else { return }
                 recomputeDueCards()
                 refreshEvidenceIfNeeded()
             }
-            .onChange(of: allCards) { _, _ in scheduleDueRefresh() }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in scheduleDueRefresh() }
             .onChange(of: studySessions) { _, _ in scheduleDueRefresh() }
             .onChange(of: subjects) { _, _ in refreshEvidenceIfNeeded() }
             .onChange(of: academicAssessments) { _, _ in refreshEvidenceIfNeeded() }
             .onChange(of: academicMappings) { _, _ in refreshEvidenceIfNeeded() }
             .onChange(of: academicReports) { _, _ in refreshEvidenceIfNeeded() }
+            .onDisappear { dueRefreshTask?.cancel() }
         }
     }
 
     private func recomputeDueCards() {
-        queueManager.refreshDueCards(context: context)
+        queueManager.ensureLoaded(context: context)
+        reviewScheduler.analyze(context: context, availableCards: queueManager.dueCards)
         updateGreeting()
     }
 
     private func updateGreeting() {
         let readyCount: Int = queueManager.totalDueCount
-        let greeting: String = ariaService.generateGreeting(readyCount: readyCount, deferredCount: 0)
+        let greeting: String = ariaService.generateGreeting(readyCount: readyCount, deferredCount: queueManager.deferredDueCount)
         greetingText = greeting
     }
 
@@ -136,8 +137,12 @@ struct DashboardView: View {
     }
 
     private var headerSubtitle: String {
-        if dueBacklogCount > 0 {
-            return "\(dueBacklogCount) flashcards are due and available for review."
+        if let error = queueManager.lastRefreshError { return error }
+        if queueManager.remainingDailyAllowance == 0 {
+            return "You're done for today. Your remaining cards will wait until tomorrow."
+        }
+        if !dueCards.isEmpty {
+            return "\(dueCards.count) cards ready today · \(queueManager.dailyMaximum)-card daily allowance."
         }
         if studySessions.isEmpty {
             return "Pick a topic, make a set, and build your understanding."
@@ -191,59 +196,27 @@ struct DashboardView: View {
     }
 
     private var evidenceRows: [EvidenceRow] {
-        if !cachedEvidence.isEmpty { return cachedEvidence }
-        if sortedSubjects.isEmpty { return [] }
-        let state = PerformanceSignposts.signposter.beginInterval("dashboard.evidence")
-        defer { PerformanceSignposts.signposter.endInterval("dashboard.evidence", state) }
-        return sortedSubjects.map { subject in
-            EvidenceRow(
-                subject: subject,
-                evidence: ProgressEvidenceService.score(
-                    subjectName: subject.name,
-                    courseLevel: subject.level,
-                    cards: subject.cards,
-                    assessments: academicAssessments,
-                    mappings: academicMappings,
-                    reports: academicReports,
-                    workSessions: studySessions
-                )
-            )
-        }
-    }
-
-    private var evidenceFingerprintValue: String {
-        let subjectKey = sortedSubjects.map { "\($0.id.uuidString)-\($0.cards.count)-\($0.level)" }.joined(separator: "|")
-        return "\(subjectKey)#\(academicAssessments.count)#\(academicMappings.count)#\(academicReports.count)#\(studySessions.count)"
+        cachedEvidence
     }
 
     private func refreshEvidenceIfNeeded() {
-        let fingerprint = evidenceFingerprintValue
-        guard fingerprint != evidenceFingerprint else { return }
-        evidenceFingerprint = fingerprint
         let state = PerformanceSignposts.signposter.beginInterval("dashboard.evidence")
         defer { PerformanceSignposts.signposter.endInterval("dashboard.evidence", state) }
-        cachedEvidence = sortedSubjects.map { subject in
-            EvidenceRow(
-                subject: subject,
-                evidence: ProgressEvidenceService.score(
-                    subjectName: subject.name,
-                    courseLevel: subject.level,
-                    cards: subject.cards,
-                    assessments: academicAssessments,
-                    mappings: academicMappings,
-                    reports: academicReports,
-                    workSessions: studySessions
-                )
-            )
+        let scores = ProgressEvidenceService.scoreBySubject(subjects: subjects,
+            assessments: academicAssessments, mappings: academicMappings,
+            reports: academicReports, workSessions: studySessions)
+        cachedEvidence = sortedSubjects.compactMap { subject in
+            scores[subject.id].map { EvidenceRow(subject: subject, evidence: $0) }
         }
     }
 
     private func scheduleDueRefresh() {
         dueRefreshTask?.cancel()
         dueRefreshTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(120))
+            try? await Task.sleep(for: .milliseconds(180))
             if Task.isCancelled { return }
             recomputeDueCards()
+            refreshEvidenceIfNeeded()
         }
     }
 
@@ -292,10 +265,10 @@ struct DashboardView: View {
     private var metricsGrid: some View {
         LazyVGrid(columns: metricColumns, spacing: 12) {
             StudioMetricTile(
-                value: "\(dueBacklogCount)",
-                label: "Due today",
+                value: "\(dueCards.count)",
+                label: "Left today",
                 symbol: "rectangle.stack",
-                detail: dueBacklogCount == 0 ? "No cards due" : "\(dueBacklogCount) to review"
+                detail: "\(queueManager.deferredDueCount) saved for another day"
             )
             StudioMetricTile(
                 value: "\(profile?.currentStreak ?? 0)d",
@@ -375,10 +348,10 @@ struct DashboardView: View {
                         .font(.system(size: 26))
                         .foregroundStyle(IBColors.inkTertiary)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("You are caught up")
+                        Text(queueManager.remainingDailyAllowance == 0 ? "Done for today" : "You are caught up")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(IBColors.ink)
-                        Text("New cards will appear here when they are ready for review.")
+                        Text(queueManager.remainingDailyAllowance == 0 ? "Your daily allowance resets tomorrow." : "New cards will appear here when they are ready for review.")
                             .font(IBTypography.caption11)
                             .foregroundStyle(IBColors.inkSecondary)
                     }
@@ -386,12 +359,12 @@ struct DashboardView: View {
                 .padding(.vertical, 8)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(reviewScheduler.schedules.prefix(4).enumerated()), id: \.element.id) { index, schedule in
+                    ForEach(Array(reviewScheduler.schedules.filter { queueManager.dueCount(for: $0.subject) > 0 }.prefix(4).enumerated()), id: \.element.id) { index, schedule in
                         Button {
                             selectedSubjectForReview = schedule.subject
                             showReview = true
                         } label: {
-                            DashboardQueueRow(schedule: schedule)
+                            DashboardQueueRow(schedule: schedule, dueCount: queueManager.dueCount(for: schedule.subject))
                         }
                         .buttonStyle(.plain)
                         if index < min(reviewScheduler.schedules.count, 4) - 1 {
@@ -403,7 +376,7 @@ struct DashboardView: View {
                     selectedSubjectForReview = nil
                     showReview = true
                 } label: {
-                    Label("Review all due cards", systemImage: "play.fill")
+                    Label("Review today's cards", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PrimaryButtonStyle())
@@ -442,12 +415,15 @@ struct DashboardView: View {
     }
 
     private var fallbackStudySignal: String? {
-        if dueBacklogCount > 0 {
+        if queueManager.remainingDailyAllowance == 0 {
+            return "Your daily review is complete. Take a break; the backlog can wait."
+        }
+        if !dueCards.isEmpty {
             let subjectCount = subjectCountWithDue
             if subjectCount > 1 {
-                return "You have \(dueBacklogCount) cards due across \(subjectCount) subjects. Start with the top queue item to clear the most urgent cards first."
+                return "You have \(dueCards.count) cards ready today across \(subjectCount) subjects."
             }
-            return "You have \(dueBacklogCount) cards due. A quick 15-minute review now will keep your queue healthy."
+            return "You have \(dueCards.count) cards ready within today's allowance."
         }
         if let weakest = evidenceRows.min(by: { $0.mastery < $1.mastery }), weakest.mastery < 0.7 {
             return "\(weakest.subject.name) is your current focus (\(Int(weakest.mastery*100))% mastery). Generate a few fresh cards or review its weakest subunit."
@@ -505,6 +481,7 @@ struct DashboardView: View {
 
 private struct DashboardQueueRow: View {
     let schedule: SubjectReviewSchedule
+    let dueCount: Int
     var body: some View {
         HStack(spacing: 12) {
             Circle()
@@ -519,7 +496,7 @@ private struct DashboardQueueRow: View {
                     .foregroundStyle(IBColors.inkTertiary)
             }
             Spacer()
-            Text("\(schedule.dueCards)")
+            Text("\(dueCount)")
                 .font(.system(size: 20, weight: .semibold).monospacedDigit())
                 .foregroundStyle(IBColors.ink)
             Text("due")

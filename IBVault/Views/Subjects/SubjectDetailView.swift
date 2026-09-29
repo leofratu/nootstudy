@@ -3,6 +3,10 @@ import SwiftData
 
 struct SubjectDetailView: View {
     let subject: Subject
+    @Environment(\.modelContext) private var context
+    @Environment(ReviewQueueManager.self) private var sharedQueue: ReviewQueueManager?
+    @State private var localQueue = ReviewQueueManager()
+    private var queue: ReviewQueueManager { sharedQueue ?? localQueue }
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     @Query private var academicAssessments: [AcademicAssessment]
     @Query private var academicMappings: [AcademicAssessmentMapping]
@@ -59,7 +63,7 @@ struct SubjectDetailView: View {
         )
     }
 
-    private var masteryDescriptor: String {
+    private func masteryDescriptor(for subjectProgress: ProgressEvidence) -> String {
         if subjectProgress.assessmentEvidence != nil { return "assessment-backed mastery" }
         if subjectProgress.recallMastery != nil { return "recall mastery" }
         return "no mastery evidence yet"
@@ -132,24 +136,16 @@ struct SubjectDetailView: View {
     }
 
     private var reviewableDueCount: Int {
-        let studiedScopes = StudySession.uniqueStudyScopes(from: studySessions)
-            .filter { $0.subjectName == subject.name }
-        guard !studiedScopes.isEmpty else { return 0 }
-        var count = 0
-        for card in subject.cards where card.isDue {
-            if studiedScopes.contains(where: { $0.matches(card) }) {
-                count += 1
-            }
-        }
-        return count
+        queue.dueCount(for: subject)
     }
 
     var body: some View {
         let dueCount = reviewableDueCount
+        let progress = subjectProgress
         return ScrollView {
             LazyVStack(spacing: 16) {
                 // Hero with ring
-                heroCard(dueCount: dueCount)
+                heroCard(dueCount: dueCount, subjectProgress: progress)
                     .padding(.horizontal, 24)
                     .padding(.top, 20)
 
@@ -157,7 +153,7 @@ struct SubjectDetailView: View {
                 actionsBar(dueCount: dueCount)
                     .padding(.horizontal, 24)
 
-                progressSignalCard
+                progressSignalCard(subjectProgress: progress)
                     .padding(.horizontal, 24)
 
                 // Proficiency breakdown
@@ -165,7 +161,7 @@ struct SubjectDetailView: View {
                     .padding(.horizontal, 24)
 
                 // Topics
-                topicsCard
+                topicsCard(subjectProgress: progress)
                     .padding(.horizontal, 24)
 
                 // Exam-ready domain knowledge (curated per subject)
@@ -187,7 +183,11 @@ struct SubjectDetailView: View {
         }
         .background(IBColors.canvas)
         .navigationTitle(subject.name)
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+            if sharedQueue == nil { localQueue.refreshDueCards(context: context) }
+        }
         .onAppear {
+            queue.ensureLoaded(context: context)
             // Show the full sub-unit mastery breakdown by default.
             if expandedUnits.isEmpty {
                 expandedUnits = Set(curriculum.map(\.name))
@@ -225,7 +225,7 @@ struct SubjectDetailView: View {
     }
 
     // MARK: - Hero
-    private func heroCard(dueCount: Int) -> some View {
+    private func heroCard(dueCount: Int, subjectProgress: ProgressEvidence) -> some View {
         let mastery = subjectProgress.blendedMastery ?? 0
         return HStack(spacing: 20) {
             ProgressRing(
@@ -265,7 +265,7 @@ struct SubjectDetailView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-                Text("\(Int(mastery * 100))% \(masteryDescriptor)")
+                Text("\(Int(mastery * 100))% \(masteryDescriptor(for: subjectProgress))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -347,7 +347,7 @@ struct SubjectDetailView: View {
         }
     }
 
-    private var progressSignalCard: some View {
+    private func progressSignalCard(subjectProgress: ProgressEvidence) -> some View {
         HStack(spacing: 0) {
             progressSignal("Recall", value: subjectProgress.recallMastery, detail: subject.cards.isEmpty ? "No cards yet" : "\(subject.cards.count) FSRS cards", tint: color)
             Divider().frame(height: 42)
@@ -437,7 +437,7 @@ struct SubjectDetailView: View {
     }
 
     // MARK: - Topics
-    private var topicsCard: some View {
+    private func topicsCard(subjectProgress: ProgressEvidence) -> some View {
         let index = cardIndex
         let sessionsByTopic = workSessionsByTopic
         return LazyVStack(alignment: .leading, spacing: 12) {
@@ -447,7 +447,7 @@ struct SubjectDetailView: View {
                 Text("Curriculum Mastery")
                     .font(.headline)
                 Spacer()
-                Text("\(Int((subjectProgress.blendedMastery ?? weightedCurriculumMastery(index: index)) * 100))% \(masteryDescriptor) · \(subjectWorkSessions.count) work sessions")
+                Text("\(Int((subjectProgress.blendedMastery ?? weightedCurriculumMastery(index: index)) * 100))% \(masteryDescriptor(for: subjectProgress)) · \(subjectWorkSessions.count) work sessions")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

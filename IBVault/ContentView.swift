@@ -10,6 +10,7 @@ enum NavigationTab: String, CaseIterable, Hashable {
     case studySessions = "Sessions"
     case review = "Review"
     case cardStudio = "Card studio"
+    case library = "Library"
     case examMarker = "Exam marker"
     case aria = "ARIA"
     case analytics = "Progress"
@@ -25,6 +26,7 @@ enum NavigationTab: String, CaseIterable, Hashable {
         case .studySessions: return "calendar.badge.clock"
         case .review: return "brain.head.profile"
         case .cardStudio: return "rectangle.stack.badge.plus"
+        case .library: return "books.vertical"
         case .examMarker: return "checkmark.bubble"
         case .aria: return "sparkles"
         case .analytics: return "chart.bar.fill"
@@ -37,6 +39,7 @@ enum NavigationTab: String, CaseIterable, Hashable {
 }
 
 struct ContentView: View {
+    @AppStorage("showDueCountBadge") private var showDueCountBadge = true
     @Environment(\.modelContext) private var context
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var profiles: [UserProfile]
@@ -46,11 +49,11 @@ struct ContentView: View {
     @Namespace private var sidebarSelectionNamespace
 
     private var dueCount: Int {
-        reviewQueueManager.totalDueBacklogCount
+        reviewQueueManager.totalDueCount
     }
 
     private func sidebarBadge(for tab: NavigationTab) -> Text? {
-        guard tab == .review, dueCount > 0 else { return nil }
+        guard showDueCountBadge, tab == .review, dueCount > 0 else { return nil }
         return Text("\(dueCount)")
     }
 
@@ -67,16 +70,19 @@ struct ContentView: View {
         .environment(progressionEvents)
         .tint(IBColors.accent)
         .onAppear {
-            reviewQueueManager.refreshDueCards(context: context)
-        }
-        .onChange(of: selectedTab) { _, _ in
-            reviewQueueManager.refreshDueCards(context: context)
+            reviewQueueManager.ensureLoaded(context: context)
         }
         // Refresh whenever SwiftData persists a change; observing every
         // card/session through @Query held whole tables in memory and
         // re-rendered the shell on each rating.
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            reviewQueueManager.refreshDueCards(context: context)
+            reviewQueueManager.scheduleRefresh(context: context)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            reviewQueueManager.scheduleRefresh(context: context)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            reviewQueueManager.scheduleRefresh(context: context)
         }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .ibVaultAppCommand)) { notification in
@@ -150,7 +156,7 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     sidebarSection("WORKSPACE", tabs: [.dashboard, .subjects, .studySessions])
-                    sidebarSection("PRACTICE", tabs: [.cardStudio, .review, .examMarker, .aria])
+                    sidebarSection("PRACTICE", tabs: [.library, .cardStudio, .review, .examMarker, .aria])
                     sidebarSection("YOUR PROGRESS", tabs: [.analytics, .recommendations, .predictions])
                 }
                 .padding(.horizontal, 12).padding(.bottom, 20)
@@ -233,6 +239,20 @@ struct ContentView: View {
     }
 
     private var detailPane: some View {
+        ZStack {
+            pageContent
+                .id(selectedTab)
+                .transition(reduceMotion ? .opacity : .asymmetric(
+                    insertion: .opacity.combined(with: .offset(y: 8)), removal: .opacity
+                ))
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selectedTab)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(IBColors.canvas)
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
         Group {
             switch selectedTab {
             case .dashboard: DashboardView()
@@ -240,6 +260,7 @@ struct ContentView: View {
             case .studySessions: StudyPlannerView()
             case .review: ReviewLaunchView()
             case .cardStudio: CardStudioView()
+            case .library: NavigationStack { CardLibraryView(embedded: true) }
             case .examMarker: ExamMarkerView()
             case .aria: ARIAChatView()
             case .analytics: ProgressHubView()
@@ -301,17 +322,17 @@ struct ReviewLaunchView: View {
                         subtitle: reviewSubtitle,
                         symbol: "brain.head.profile"
                     ) {
-                        StudioPill(title: dueBacklogCount == 0 ? "QUEUE CLEAR" : "\(dueBacklogCount) DUE", semantic: .neutral)
+                        StudioPill(title: dueCardsCount == 0 ? "DONE FOR TODAY" : "\(dueCardsCount) TODAY", semantic: .neutral)
                     }
 
                     HStack(spacing: 12) {
-                        StudioMetricTile(value: "\(dueBacklogCount)", label: "Flashcards due", symbol: "rectangle.stack", detail: "All available to review")
+                        StudioMetricTile(value: "\(dueCardsCount)", label: "Left today", symbol: "rectangle.stack", detail: "\(queueManager.dailyMaximum)-card daily limit")
                         StudioMetricTile(value: "\(queueManager.reviewedTodayCount)", label: "Reviewed today", symbol: "checkmark.circle", detail: "Completed")
-                        StudioMetricTile(value: "\(eligibleCount)", label: "Saved cards", symbol: "square.stack", detail: "Studied material")
+                        StudioMetricTile(value: "\(queueManager.deferredDueCount)", label: "For another day", symbol: "calendar", detail: "\(eligibleCount) unique saved cards")
                     }
 
                     VStack(alignment: .leading, spacing: 16) {
-                        StudioSectionHeader("Your next review", subtitle: dueBacklogCount == 0 ? "There are no flashcards due right now." : "All \(dueBacklogCount) due cards are available now.", symbol: "play.rectangle") {
+                        StudioSectionHeader("Your next review", subtitle: reviewSubtitle, symbol: "play.rectangle") {
                             EmptyView()
                         }
                         HStack(alignment: .center, spacing: 18) {
@@ -335,7 +356,7 @@ struct ReviewLaunchView: View {
                                 }
                                 .buttonStyle(PrimaryButtonStyle())
                                 .controlSize(.large)
-                                .disabled(studySessions.isEmpty || dueCardsCount == 0)
+                                .disabled(dueCardsCount == 0)
 
                                 Button {
                                     IBHaptics.soft()
@@ -363,15 +384,16 @@ struct ReviewLaunchView: View {
             }) { ReviewSessionView() }
             .sheet(isPresented: $showGuide) { StudyGuideView(subject: nil, mode: .preSession) }
             .task {
-                queueManager.refreshDueCards(context: context)
+                queueManager.ensureLoaded(context: context)
             }
         }
     }
 
     private var reviewSubtitle: String {
-        if studySessions.isEmpty {
-            return "Finish a study session first. Revision should only come from material you actually studied."
+        if let error = queueManager.lastRefreshError { return error }
+        if queueManager.remainingDailyAllowance == 0 {
+            return "Today's allowance is complete. The remaining cards will wait until tomorrow."
         }
-        return "Review every flashcard currently due for spaced repetition."
+        return "\(dueCardsCount) cards ready today, within your \(queueManager.dailyMaximum)-card allowance."
     }
 }
