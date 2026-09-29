@@ -9,7 +9,8 @@ struct CardStudioView: View {
     @State private var subjectID: UUID?
     @State private var selection: Set<CardTopicSelection> = []
     @State private var formats: Set<CardStyle> = [.basic]
-    @State private var options = CardGenerationOptions.default
+    @State private var options = CardGenerationOptions.preferred
+    @State private var showAdvancedOptions = false
     @State private var drafts: [CardDraft] = []
     @State private var issues: [String] = []
     @State private var status: String?
@@ -34,7 +35,7 @@ struct CardStudioView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     StudioPageHeader(eyebrow: "Practice / Create", title: "Card studio",
-                                     subtitle: "A little recall. A lot of progress.", symbol: "rectangle.stack.badge.plus", tint: IBColors.accent) {
+                                     subtitle: "Turn a topic into short questions you can actually recall.", symbol: "rectangle.stack.badge.plus", tint: IBColors.accent) {
                         Button { showLibrary = true } label: {
                             Label("Your cards", systemImage: "rectangle.stack")
                         }.buttonStyle(SecondaryButtonStyle())
@@ -59,7 +60,7 @@ struct CardStudioView: View {
                                 ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
                                     Text(issue).font(IBTypography.body).textSelection(.enabled)
                                 }
-                                NavigationLink("Open AI settings") { SettingsView() }
+                                NavigationLink("Open AI settings") { SettingsView(initialSection: .assistant) }
                                     .font(IBTypography.body)
                             }
                             .foregroundStyle(IBColors.inkSecondary)
@@ -82,9 +83,14 @@ struct CardStudioView: View {
             if subjectID == nil {
                 subjectID = (initialSubject ?? subjects.first)?.id
                 selection = initialSelection
+                formats = [options.style]
             }
         }
         .onDisappear { task?.cancel() }
+        .onChange(of: options) { _, value in value.savePreferences() }
+        .onChange(of: formats) { _, value in
+            if value.count == 1, let format = value.first { options.style = format }
+        }
         .tint(IBColors.accent)
     }
 
@@ -93,10 +99,14 @@ struct CardStudioView: View {
         let layout = narrow ? AnyLayout(VStackLayout(alignment: .leading, spacing: 24))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 28))
         return VStack(alignment: .leading, spacing: 24) {
-            HStack(spacing: 16) {
-                Text("01").font(IBTypography.mono).foregroundStyle(IBColors.accent)
-                Text("Choose your material").font(IBTypography.title3)
-                Spacer()
+            let headingLayout = narrow ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                : AnyLayout(HStackLayout(spacing: 16))
+            headingLayout {
+                HStack(spacing: 16) {
+                    Text("01").font(IBTypography.mono).foregroundStyle(IBColors.accent)
+                    Text("Choose your material").font(IBTypography.title3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Picker("Subject", selection: $subjectID) {
                     Text("Choose a subject").tag(Optional<UUID>.none)
                     ForEach(subjects) { subject in
@@ -117,6 +127,10 @@ struct CardStudioView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: narrow ? 360 : 720)
                         .surfaceCard()
+                    } else {
+                        ContentUnavailableView("Choose a subject", systemImage: "books.vertical",
+                                               description: Text("Then select the topics you want to practise."))
+                            .frame(maxWidth: .infinity)
                     }
                     configuration
                         .frame(width: narrow ? nil : 330)
@@ -145,7 +159,20 @@ struct CardStudioView: View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 12) {
                 Text("02").font(IBTypography.mono).foregroundStyle(IBColors.accent)
-                Text("Make it yours").font(IBTypography.title3)
+                Text("Build your set").font(IBTypography.title3)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Answer style").font(IBTypography.headline)
+                Picker("Answer style", selection: $options.tone) {
+                    ForEach(CardTone.allCases) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+                Text(options.tone.summary)
+                    .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+                CardCountControl(count: $options.count)
+                Text("Your count and answer style are saved for the next set.")
+                    .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text("Card formats").font(IBTypography.headline)
@@ -171,16 +198,30 @@ struct CardStudioView: View {
                     .accessibilityValue(formats.contains(style) ? "Selected" : "Not selected")
                 }
             }
-            CardStudioOptionsView(options: $options, compact: true, showsStyle: false)
+            DisclosureGroup("Difficulty & practice skills", isExpanded: $showAdvancedOptions) {
+                CardStudioOptionsView(options: $options, showsCount: false, compact: true, showsStyle: false, showsTone: false)
+                    .padding(.top, 12)
+            }
             Divider()
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Reuse saved cards first", isOn: $reuseExisting).toggleStyle(.checkbox)
                 Text("Only missing cards need generation.").font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
-                Text("\(options.count) cards · \(selection.count) selected")
+                Text("\(options.count) cards · \(selection.count) topics · \(formats.count) formats")
                     .font(IBTypography.headline)
+                if selection.isEmpty {
+                    Text("Select at least one topic to prepare a set.")
+                        .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+                } else if formats.isEmpty {
+                    Text("Choose at least one card format.")
+                        .font(IBTypography.caption).foregroundStyle(IBColors.coral)
+                }
                 if selectionMinimum > options.count || selectionMinimum > 50 {
                     Text(selectionMinimum > 50 ? "Choose fewer topics or formats to fit a 50-card batch." : "Increase the count to at least \(selectionMinimum) to include every topic and format.")
                         .font(IBTypography.caption).foregroundStyle(IBColors.coral)
+                    if selectionMinimum <= 50 {
+                        Button("Use \(selectionMinimum) cards") { options.count = selectionMinimum }
+                            .buttonStyle(.borderless)
+                    }
                 }
                 Button(action: generate) {
                     Label(reuseExisting ? "Find & prepare cards" : "Generate new cards", systemImage: "sparkles")
@@ -194,22 +235,15 @@ struct CardStudioView: View {
 
     private var preview: some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack {
+            VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your practice set").font(IBTypography.title3)
                     Text("\(reusedCards.count) saved cards · \(drafts.count) new drafts · \(subject?.name ?? "")")
                         .font(IBTypography.body).foregroundStyle(IBColors.inkSecondary)
                 }
-                Spacer()
-                Button("Back") { drafts = []; reusedCards = []; issues = [] }
-                    .buttonStyle(SecondaryButtonStyle())
-                Button("Start practising") {
-                    practiceCards = reusedCards + drafts.map { $0.makeCard() }
-                    showPractice = true
-                }.buttonStyle(PrimaryButtonStyle()).disabled(!drafts.allSatisfy(\.isValid))
-                if !drafts.isEmpty {
-                    Button("Save \(drafts.count) new cards", action: save)
-                        .buttonStyle(SecondaryButtonStyle()).disabled(!drafts.allSatisfy(\.isValid))
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) { previewActions }
+                    VStack(alignment: .leading, spacing: 12) { previewActions }
                 }
             }
             ForEach(reusedCards) { card in
@@ -228,6 +262,24 @@ struct CardStudioView: View {
                     CardDraftEditor(draft: $draft) { drafts.removeAll { $0.id == draft.id } }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var previewActions: some View {
+        Button("Edit setup") { drafts = []; reusedCards = []; issues = [] }
+            .buttonStyle(SecondaryButtonStyle())
+        Button(drafts.isEmpty ? "Review this set" : "Save & review") {
+            if !drafts.isEmpty {
+                save()
+                guard drafts.isEmpty else { return }
+            }
+            practiceCards = reusedCards
+            showPractice = true
+        }.buttonStyle(PrimaryButtonStyle()).disabled(!drafts.allSatisfy(\.isValid))
+        if !drafts.isEmpty {
+            Button("Save \(drafts.count) new cards", action: save)
+                .buttonStyle(SecondaryButtonStyle()).disabled(!drafts.allSatisfy(\.isValid))
         }
     }
 
@@ -281,10 +333,14 @@ struct CardDraftEditor: View {
                 Button(action: remove) { Image(systemName: "trash") }
                     .buttonStyle(.borderless).accessibilityLabel("Remove card from batch")
             }
+            Text("QUESTION").font(IBTypography.captionBold).tracking(1)
+                .foregroundStyle(IBColors.accent)
             TextField("Question", text: $draft.front, axis: .vertical)
                 .font(.custom("Georgia", size: 19)).textFieldStyle(.plain)
                 .accessibilityLabel("Card question")
             Divider()
+            Text("ANSWER").font(IBTypography.captionBold).tracking(1)
+                .foregroundStyle(IBColors.accent)
             TextField("Answer", text: $draft.back, axis: .vertical)
                 .textFieldStyle(.roundedBorder).accessibilityLabel("Correct answer")
             if draft.style == .multipleChoice {

@@ -3,7 +3,16 @@ import SwiftData
 
 struct CardGeneratorService {
     private static let fallbackModels = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
-    nonisolated static let promptVersion = 3
+    nonisolated static let promptVersion = 5
+
+    nonisolated static func isNonNumericQuestion(_ front: String) -> Bool {
+        // Cloze markers contain an internal index (for example c1) that is not
+        // part of the question shown to the learner.
+        let visibleFront = front.replacingOccurrences(
+            of: #"\{\{c\d+::"#, with: "{{c::", options: .regularExpression
+        )
+        return visibleFront.unicodeScalars.allSatisfy { !CharacterSet.decimalDigits.contains($0) }
+    }
 
     struct AdaptiveProfile: Equatable, Sendable {
         let difficulty: CardDifficulty
@@ -176,7 +185,7 @@ struct CardGeneratorService {
             count: count,
             difficulty: profile.difficulty,
             style: .basic,
-            tone: .exam,
+            tone: CardGenerationOptions.preferred.tone,
             cognitiveSkills: profile.skillMix,
             useInternalTools: false
         )
@@ -200,7 +209,7 @@ struct CardGeneratorService {
                 startingIndex: localStartingIndex,
                 profile: profile,
                 options: effectiveOptions
-            )
+            ).filter { isNonNumericQuestion($0.front) }
         }
         let isPersonalCourse = subject.name == SyllabusSeeder.lifeCourseName ||
             subject.name == "Advanced Mathematics" || subject.name == "Fundamentals of the Universe"
@@ -212,10 +221,11 @@ struct CardGeneratorService {
 
         Success criteria:
         - every card tests one clear idea
+        - question fronts contain no numerals or numerical exercises; ask qualitative recall and reasoning questions
         - questions span the requested cognitive skills
         - every back is a self-contained answer, not an instruction to go and produce an answer
-        - answers teach the definition, mechanism, example, or reasoning needed to self-correct
-        - equations use valid LaTeX with $...$ inline and $$...$$ for display math
+        - each answer teaches only the learning point asked for; split definitions, mechanisms, and examples into separate cards within the requested total
+        - when an answer needs an equation, use valid LaTeX with $...$ inline or $$...$$ for display math
         - no invented citations, syllabus codes, quotations, or statistics
         - output only a valid JSON array matching the requested schema
         """
@@ -313,8 +323,9 @@ struct CardGeneratorService {
             profile: adaptiveProfile(for: subject, topicName: topicName, subtopic: subtopic),
             options: localOptions
         )
-        if !localCards.isEmpty {
-            return localCards
+        let nonNumericLocalCards = localCards.filter { isNonNumericQuestion($0.front) }
+        if !nonNumericLocalCards.isEmpty {
+            return nonNumericLocalCards
         }
         throw lastError ?? CardGeneratorError.noCardsGenerated
     }
@@ -583,6 +594,9 @@ struct CardGeneratorService {
             let front = normalizedMath(payload.front ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let back = normalizedMath(payload.back ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard isUsefulAnswer(front: front, back: back) else { return nil }
+            if let options, back.split(whereSeparator: { $0.isWhitespace }).count > options.tone.maximumAnswerWords {
+                return nil
+            }
             let requestedStyle = options?.style ?? parsedCardStyle(payload.cardStyle) ?? .basic
             let difficulty = clampDifficulty(parsedDifficulty(payload.difficulty) ?? profile.difficulty, options: options, profile: profile)
             let parsed = parsedSkill(payload.skill)
@@ -723,13 +737,13 @@ struct CardGeneratorService {
         let levelRules = isPersonalCourse
             ? "- Treat this as a practical personal curriculum; do not invent IB exams, mark schemes, or assessment rules"
             : "- Match IB exam style where useful and do not include HL-only content for an SL subject"
-        let effectiveOptions = options ?? CardGenerationOptions(count: count, difficulty: profile.difficulty, style: .basic, tone: .exam, cognitiveSkills: profile.skillMix, useInternalTools: false)
+        let effectiveOptions = options ?? CardGenerationOptions(count: count, difficulty: profile.difficulty, style: .basic, tone: .balanced, cognitiveSkills: profile.skillMix, useInternalTools: false)
         let styleLine: String = switch effectiveOptions.style {
         case .basic: "- Card style: basic — front is a clear question, back is the answer."
         case .cloze: "- Card style: cloze — front must contain a single deletion as {{c1::answer}} where the deletion text equals the back exactly (trimmed). Example: front \"The {{c1::mitochondrion}} is the powerhouse...\" with back \"mitochondrion\"."
         case .multipleChoice: "- Card style: multiple_choice — front is the stem, back is the correct answer, and choices must be 3-4 unique options with exactly one equal to the back (case-insensitive trimmed)."
         }
-        let toneLine = "- Tone: \(effectiveOptions.tone.rawValue) — adapt phrasing to this voice while keeping accuracy."
+        let toneLine = "- Tone: \(effectiveOptions.tone.rawValue). \(effectiveOptions.tone.promptInstructions) Preserve essential qualifications and valid math; never pad an answer to meet a word target."
         let internalToolsLine = effectiveOptions.useInternalTools
             ? "- The app performs curriculum-reference lookup, duplicate detection, and scheduling with its internal tools. Focus on content quality; the app will assign syllabusReference, deduplicate by normalized front, and clamp difficulty to \(effectiveOptions.difficulty.rawValue)."
             : ""
@@ -770,15 +784,16 @@ struct CardGeneratorService {
         REQUIREMENTS:
         - Each card must test a SPECIFIC concept, fact, definition, or application
         - Every card must stay anchored to the named unit/topic and avoid unrelated areas
-        - The back must directly answer the front with the actual definition, mechanism, worked step, example, or reason
+        - The back must directly answer the front with the actual definition, mechanism, example, or reason
         - Never use an instruction-only back such as "draw a diagram", "define the term", "state the model", or "explain why"
         - Answers should be concise but complete enough to self-correct without another source
         - Use the requested cognitive-skill mix instead of making every card simple recall
         - Include a short useful hint that does not reveal the answer
-        - For science/math: include formulas, calculations, units, assumptions, and diagram interpretation where relevant
+        - For science/math: ask about concepts, assumptions, and diagram interpretation without numerical calculations
+        - Question fronts must contain no numerals (0–9), numeric examples, or equations to solve; use qualitative wording instead
         - For humanities: include precise concepts, application, counterarguments, and evaluation where relevant
         \(levelRules)
-        - Use $...$ for inline equations and $$...$$ for display equations; never use Unicode-only equation substitutes when LaTeX is clearer
+        - If an answer needs a formula, use $...$ for inline math and $$...$$ for display math
         \(styleLine)
         \(toneLine)
         \(internalToolsLine)

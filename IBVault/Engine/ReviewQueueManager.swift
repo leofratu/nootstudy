@@ -10,7 +10,9 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
     }
 
     static func maximumCards(for intensity: StudyIntensity, dailyGoal: Int) -> Int {
-        min(max(dailyGoal, 1), maximumCards(for: intensity))
+        // Intensity supplies a suggestion; an explicitly saved goal is the
+        // actual allowance, still bounded by the app-wide daily maximum.
+        min(max(dailyGoal, 1), maximumCards)
     }
 
     static func allowance(reviewedCardIDs: Set<UUID>, maximum: Int = maximumCards) -> Int {
@@ -19,8 +21,14 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
 
     static func limitedCards(_ cards: [StudyCard], reviewedCardIDs: Set<UUID>, maximum: Int = maximumCards) -> [StudyCard] {
         let remaining = allowance(reviewedCardIDs: reviewedCardIDs, maximum: maximum)
+        guard remaining > 0 else { return [] }
         var seen = reviewedCardIDs
-        return Array(cards.filter { seen.insert($0.id).inserted }.prefix(remaining))
+        var result: [StudyCard] = []
+        for card in cards where seen.insert(card.id).inserted {
+            result.append(card)
+            if result.count == remaining { break }
+        }
+        return result
     }
 
     struct Day {
@@ -99,8 +107,28 @@ final class ReviewQueueManager {
     private(set) var duplicateCardCount = 0
     private(set) var dueCountCache: [String: Int] = [:]
     private(set) var eligibleCardCount = 0
+    private(set) var newCardCount = 0
     private(set) var lastRefreshError: String?
     private var isRefreshing = false
+    private var hasLoaded = false
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+
+    /// Reuse the shared snapshot on page entry; saves and day changes refresh it.
+    func ensureLoaded(context: ModelContext) {
+        guard !hasLoaded else { return }
+        refreshDueCards(context: context)
+    }
+
+    func scheduleRefresh(context: ModelContext) {
+        refreshTask?.cancel()
+        refreshTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(120)) }
+            catch { return }
+            guard let self else { return }
+            self.refreshTask = nil
+            self.refreshDueCards(context: context)
+        }
+    }
 
     func refreshDueCards(context: ModelContext) {
         let state = PerformanceSignposts.signposter.beginInterval("reviewQueue.refresh")
@@ -113,27 +141,14 @@ final class ReviewQueueManager {
 
     func loadDueCards(context: ModelContext) { refreshDueCards(context: context) }
 
-    func refreshDueCardsSynchronously(context: ModelContext) {
+    @discardableResult
+    func refreshDueCardsSynchronously(context: ModelContext) -> ReviewDailyLimitPolicy.Day? {
+        refreshTask?.cancel()
+        refreshTask = nil
         do {
             let day = try ReviewDailyLimitPolicy.day(in: context)
-            let backlog = day.backlog
-            let available = day.limited(backlog)
-            reviewedTodayCount = day.reviewedIDs.count
-            dailyMaximum = day.maximum
-            remainingDailyAllowance = day.remaining
-            backlogDueCount = backlog.count
-            totalDueBacklogCount = backlog.count
-            deferredDueCount = backlog.count - available.count
-            eligibleCardCount = day.library.cards.count
-            duplicateCardCount = day.library.canonicalIDs.count - day.library.cards.count
-            dueCards = available
-            totalDueCount = available.count
-            var cache: [String: Int] = [:]
-            for card in available {
-                if let id = card.subject?.id.uuidString { cache[id, default: 0] += 1 }
-            }
-            dueCountCache = cache
-            lastRefreshError = nil
+            apply(day)
+            return day
         } catch {
             // Do not offer more reviews when the allowance cannot be checked.
             dueCards = []
@@ -141,7 +156,43 @@ final class ReviewQueueManager {
             dueCountCache = [:]
             remainingDailyAllowance = 0
             lastRefreshError = "Could not load today's review allowance: \(error.localizedDescription)"
+            hasLoaded = false
+            return nil
         }
+    }
+
+    /// Called immediately after a review is inserted on the main actor. Reuse
+    /// the allowance just checked, avoiding a second full-store fetch/dedup.
+    func recordReview(of card: StudyCard, checkedDay day: ReviewDailyLimitPolicy.Day) {
+        var reviewed = day.reviewedIDs
+        reviewed.insert(card.id)
+        var canonical = day.reviewedCanonicalIDs
+        canonical.insert(day.library.canonicalIDs[card.id] ?? card.id)
+        apply(.init(library: day.library, reviewedIDs: reviewed, reviewedCanonicalIDs: canonical,
+                    maximum: day.maximum, now: day.now))
+    }
+
+    private func apply(_ day: ReviewDailyLimitPolicy.Day) {
+        let backlog = day.backlog
+        let available = day.limited(backlog)
+        reviewedTodayCount = day.reviewedIDs.count
+        dailyMaximum = day.maximum
+        remainingDailyAllowance = day.remaining
+        backlogDueCount = backlog.count
+        totalDueBacklogCount = backlog.count
+        deferredDueCount = backlog.count - available.count
+        eligibleCardCount = day.library.cards.count
+        newCardCount = day.library.cards.lazy.filter { $0.totalReviewCount == 0 }.count
+        duplicateCardCount = day.library.canonicalIDs.count - day.library.cards.count
+        dueCards = available
+        totalDueCount = available.count
+        var cache: [String: Int] = [:]
+        for card in available {
+            if let id = card.subject?.id.uuidString { cache[id, default: 0] += 1 }
+        }
+        dueCountCache = cache
+        lastRefreshError = nil
+        hasLoaded = true
     }
 
     func cardsForReview(from candidates: [StudyCard], context: ModelContext) -> [StudyCard] {

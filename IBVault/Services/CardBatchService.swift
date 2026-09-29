@@ -122,13 +122,16 @@ enum CardBatchService {
         // inverse relationship before the user saves their drafts.
         let detached = Subject(name: subject.name, level: subject.level, accentColorHex: subject.accentColorHex)
         var result = Result()
+        // Reuse the index within each synchronous batch, refreshing after
+        // provider awaits so edits made while generation runs remain visible.
+        var savedLibrary = CardDuplicatePolicy.library(subject.cards)
         var known = subject.cards.map(CardDuplicatePolicy.signature)
         var coveredFronts = subject.cards.map(\.front)
         var included = Set<UUID>()
         for (index, job) in jobs.enumerated() {
             try Task.checkCancellation()
             onProgress(index, jobs.count, job.scope.label)
-            let reusable = reuseExisting ? StudyLibraryService.cards(in: subject.cards, scopes: [job.scope], styles: [job.style])
+            let reusable = reuseExisting ? StudyLibraryService.cards(in: savedLibrary, scopes: [job.scope], styles: [job.style])
                 .filter { !included.contains($0.id) && CardDraft(card: $0).isValid } : []
             let reused = Array(reusable.prefix(job.count))
             result.reusedCards.append(contentsOf: reused)
@@ -150,13 +153,14 @@ enum CardBatchService {
                         excludingFronts: coveredFronts, libraryCards: subject.cards)
                 }
                 try Task.checkCancellation()
+                savedLibrary = CardDuplicatePolicy.library(subject.cards)
                 var added = 0
                 for card in cards {
                     guard added < missing else { break }
                     let draft = CardDraft(card: card)
                     let signature = CardDuplicatePolicy.signature(card)
                     if let existing = subject.cards.first(where: { $0.id == card.id })
-                        ?? CardDuplicatePolicy.existingMatch(for: draft, in: subject.cards) {
+                        ?? CardDuplicatePolicy.existingMatch(for: draft, in: savedLibrary) {
                         if included.insert(existing.id).inserted {
                             result.reusedCards.append(existing)
                             added += 1

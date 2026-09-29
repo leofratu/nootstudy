@@ -29,8 +29,8 @@ struct ActiveStudySessionView: View {
     @State private var flashcardTopicName = ""
     @State private var flashcardSubtopicName = ""
     @State private var flashcardSelection: Set<CardTopicSelection> = []
-    @State private var flashcardDifficulty: CardDifficulty = .exam
-    @State private var cardStudioOptions = CardGenerationOptions(count: 10, difficulty: .exam, style: .basic, tone: .exam, cognitiveSkills: [], useInternalTools: false)
+    @State private var flashcardDifficulty = CardGenerationOptions.preferred.difficulty
+    @State private var cardStudioOptions = CardGenerationOptions.preferred
     @State private var completedTaskIDs: Set<UUID> = []
     @State private var showRewardPulse = false
     @State private var previousStreak = 0
@@ -283,7 +283,7 @@ struct ActiveStudySessionView: View {
         guard (plan.prepareFlashcards == true || plan.flashcardOnly == true), !didPrepareFlashcards else { return }
         didPrepareFlashcards = true
         selectedTab = .flashcards
-        flashcardBatchSize = min(max(plan.flashcardTargetCount ?? 10, 5), 50)
+        flashcardBatchSize = min(max(plan.flashcardTargetCount ?? CardGenerationOptions.preferred.count, 1), 50)
         cardStudioOptions.count = flashcardBatchSize
         if let raw = plan.flashcardDifficultyRaw, let value = CardDifficulty(rawValue: raw) {
             flashcardDifficulty = value

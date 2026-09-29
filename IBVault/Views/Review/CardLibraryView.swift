@@ -8,6 +8,13 @@ struct CardLibraryView: View {
     @Query(filter: #Predicate<ChatMessage> { $0.role == "study_test" }) private var testMessages: [ChatMessage]
     @State private var showingTests = false
     @State private var search = ""
+    @State private var searchQuery = ""
+    @State private var uniqueCards: [StudyCard] = []
+    @State private var tests: [SavedStudyTest] = []
+    @State private var searchIndex: [UUID: String] = [:]
+    @State private var unitIndex: [UUID: String] = [:]
+    @State private var refreshTask: Task<Void, Never>?
+    @State private var isLoading = true
     @State private var subjectName = ""
     @State private var selectedTopics: Set<String> = []
     @State private var style: CardStyle?
@@ -23,34 +30,29 @@ struct CardLibraryView: View {
         _selectedTopics = State(initialValue: initialTopics)
     }
 
-    private var tests: [SavedStudyTest] { StudyTestStore.read(testMessages) }
-
-    private var uniqueCards: [StudyCard] {
-        CardDuplicatePolicy.library(cards).cards.sorted { $0.createdDate > $1.createdDate }
-    }
-
     private var subjects: [String] { Set(cards.compactMap { $0.subject?.name } + tests.map(\.subject)).sorted() }
     private var units: [String] {
-        let cardUnits = cards.filter { subjectName.isEmpty || $0.subject?.name == subjectName }.map { StudyLibraryService.unit(for: $0) }
+        let cardUnits = cards.filter { subjectName.isEmpty || $0.subject?.name == subjectName }.compactMap { unitIndex[$0.id] }
         let testUnits = tests.filter { subjectName.isEmpty || $0.subject == subjectName }.flatMap { test in
             test.topics.compactMap { SyllabusSeeder.unitName(for: test.subject, level: test.level, topicName: $0) }
         }
         return Set(cardUnits + testUnits).filter { !$0.isEmpty }.sorted()
     }
     private var topics: [String] {
-        let cardTopics = cards.filter { (subjectName.isEmpty || $0.subject?.name == subjectName) && (unitName.isEmpty || StudyLibraryService.unit(for: $0) == unitName) }.map(\.topicName)
+        let cardTopics = cards.filter { (subjectName.isEmpty || $0.subject?.name == subjectName) && (unitName.isEmpty || unitIndex[$0.id] == unitName) }.map(\.topicName)
         let testTopics = tests.filter { subjectName.isEmpty || $0.subject == subjectName }.flatMap { test in
             test.topics.filter { unitName.isEmpty || SyllabusSeeder.unitName(for: test.subject, level: test.level, topicName: $0) == unitName }
         }
         return Set(cardTopics + testTopics).sorted()
     }
-    private var filtered: [StudyCard] {
-        (showRepeatedCards ? cards : uniqueCards).filter {
-            (subjectName.isEmpty || $0.subject?.name == subjectName)
-                && (selectedTopics.isEmpty || selectedTopics.contains($0.topicName))
-                && (unitName.isEmpty || StudyLibraryService.unit(for: $0) == unitName)
-                && (style == nil || $0.cardStyle == style)
-                && StudyLibraryService.matches(search, card: $0)
+    private func filteredCards(from uniqueCards: [StudyCard]) -> [StudyCard] {
+        let words = StudyLibraryService.terms(searchQuery)
+        return (showRepeatedCards ? cards : uniqueCards).filter { card in
+            (subjectName.isEmpty || card.subject?.name == subjectName)
+                && (selectedTopics.isEmpty || selectedTopics.contains(card.topicName))
+                && (unitName.isEmpty || unitIndex[card.id] == unitName)
+                && (style == nil || card.cardStyle == style)
+                && words.allSatisfy { searchIndex[card.id]?.contains($0) == true }
         }
     }
     private var filteredTests: [SavedStudyTest] {
@@ -59,11 +61,15 @@ struct CardLibraryView: View {
             return (subjectName.isEmpty || test.subject == subjectName)
                 && (unitName.isEmpty || testUnits.contains(unitName))
                 && (selectedTopics.isEmpty || !selectedTopics.isDisjoint(with: test.topics))
-                && StudyLibraryService.matches(search, fields: [test.subject, test.question, test.answer, test.feedback] + testUnits + test.topics + test.subtopics)
+                && StudyLibraryService.matches(searchQuery, fields: [test.subject, test.question, test.answer, test.feedback] + testUnits + test.topics + test.subtopics)
         }
     }
 
     var body: some View {
+        // Reuse one library/filter snapshot throughout this render. Repeated
+        // computed-property reads used to deduplicate and scan the full store.
+        let uniqueCards = self.uniqueCards
+        let filtered = filteredCards(from: uniqueCards)
         VStack(spacing: 0) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 5) {
@@ -103,7 +109,9 @@ struct CardLibraryView: View {
                 }.frame(maxWidth: .infinity) }
             }.padding(24)
             Divider()
-            if showingTests {
+            if isLoading {
+                ProgressView("Loading your library…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if showingTests {
                 testResults
             } else if filtered.isEmpty {
                 ContentUnavailableView("No cards here yet", systemImage: "rectangle.stack",
@@ -161,6 +169,43 @@ struct CardLibraryView: View {
         .onChange(of: unitName) { _, _ in selectedTopics.removeAll() }
         .sheet(isPresented: $showingPractice) { CardPracticeView(cards: practiceCards) }
         .sheet(item: $selectedTest) { SavedTestPracticeView(test: $0) }
+        .task {
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            rebuildIndex()
+        }
+        .task(id: search) {
+            do { try await Task.sleep(for: .milliseconds(150)) }
+            catch { return }
+            searchQuery = search
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+            refreshTask?.cancel()
+            refreshTask = Task { @MainActor in
+                do { try await Task.sleep(for: .milliseconds(150)) }
+                catch { return }
+                rebuildIndex()
+            }
+        }
+        .onDisappear { refreshTask?.cancel() }
+    }
+
+    private func rebuildIndex() {
+        var units: [UUID: String] = [:]
+        var index: [UUID: String] = [:]
+        for card in cards {
+            let unit = StudyLibraryService.unit(for: card)
+            units[card.id] = unit
+            index[card.id] = CardDuplicatePolicy.normalize(
+                [card.front, card.back, card.subject?.name ?? "", unit, card.topicName,
+                 card.subtopic, card.syllabusReference ?? ""].joined(separator: " ")
+            )
+        }
+        unitIndex = units
+        searchIndex = index
+        uniqueCards = CardDuplicatePolicy.library(cards).cards.sorted { $0.createdDate > $1.createdDate }
+        tests = StudyTestStore.read(testMessages)
+        isLoading = false
     }
 
     private var testResults: some View {
@@ -194,6 +239,37 @@ struct CardLibraryView: View {
 
 struct CardPracticeView: View {
     let cards: [StudyCard]
+    @Environment(ReviewQueueManager.self) private var sharedQueue: ReviewQueueManager?
+    @Environment(ProgressionEventCenter.self) private var sharedEvents: ProgressionEventCenter?
+    @State private var localQueue = ReviewQueueManager()
+    @State private var localEvents = ProgressionEventCenter()
+    @State private var usesFreePractice = false
+
+    var body: some View {
+        Group {
+            if usesFreePractice || cards.contains(where: { $0.modelContext == nil }) {
+                FreeCardPracticeView(cards: cards)
+            } else {
+                ReviewSessionView(practiceCards: cards)
+                    .safeAreaInset(edge: .bottom) {
+                        HStack {
+                            Text("Rate each answer to update mastery.")
+                                .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+                            Spacer()
+                            Button("Switch to free practice") { usesFreePractice = true }
+                                .buttonStyle(.borderless)
+                        }
+                        .padding(16).background(IBColors.surface)
+                    }
+            }
+        }
+        .environment(sharedQueue ?? localQueue)
+        .environment(sharedEvents ?? localEvents)
+    }
+}
+
+private struct FreeCardPracticeView: View {
+    let cards: [StudyCard]
     @Environment(\.dismiss) private var dismiss
     @State private var index = 0
     @State private var revealed = false
@@ -215,6 +291,8 @@ struct CardPracticeView: View {
                         Text("\(index + 1) / \(cards.count)").monospacedDigit()
                     }
                     ProgressView(value: Double(index) / Double(max(cards.count, 1)))
+                    Text("Free practice does not change mastery or review dates. Save draft cards first to record a rated review.")
+                        .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                     ScrollView {
                         RecallCardView(card: cards[index], revealed: $revealed) { correct in
                             answers[cards[index].id] = correct
