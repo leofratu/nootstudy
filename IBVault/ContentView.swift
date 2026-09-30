@@ -39,6 +39,7 @@ enum NavigationTab: String, CaseIterable, Hashable {
 }
 
 struct ContentView: View {
+    @AppStorage("showDueCountBadge") private var showDueCountBadge = true
     @Environment(\.modelContext) private var context
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var profiles: [UserProfile]
@@ -56,7 +57,7 @@ struct ContentView: View {
     }
 
     private func sidebarBadge(for tab: NavigationTab) -> Text? {
-        guard tab == .review, dueCount > 0 else { return nil }
+        guard showDueCountBadge, tab == .review, dueCount > 0 else { return nil }
         return Text("\(dueCount)")
     }
 
@@ -73,22 +74,19 @@ struct ContentView: View {
         .environment(progressionEvents)
         .tint(IBColors.accent)
         .onAppear {
-            reviewQueueManager.refreshDueCards(context: context)
-        }
-        .onChange(of: selectedTab) { _, _ in
-            reviewQueueManager.refreshDueCards(context: context)
+            reviewQueueManager.ensureLoaded(context: context)
         }
         // Refresh whenever SwiftData persists a change; observing every
         // card/session through @Query held whole tables in memory and
         // re-rendered the shell on each rating.
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            reviewQueueManager.refreshDueCards(context: context)
+            reviewQueueManager.scheduleRefresh(context: context)
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
-            reviewQueueManager.refreshDueCards(context: context)
+            reviewQueueManager.scheduleRefresh(context: context)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            reviewQueueManager.refreshDueCards(context: context)
+            reviewQueueManager.scheduleRefresh(context: context)
         }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .ibVaultAppCommand)) { notification in
@@ -245,6 +243,20 @@ struct ContentView: View {
     }
 
     private var detailPane: some View {
+        ZStack {
+            pageContent
+                .id(selectedTab)
+                .transition(reduceMotion ? .opacity : .asymmetric(
+                    insertion: .opacity.combined(with: .offset(y: 8)), removal: .opacity
+                ))
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selectedTab)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(IBColors.canvas)
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
         Group {
             switch selectedTab {
             case .dashboard: DashboardView()
@@ -376,7 +388,7 @@ struct ReviewLaunchView: View {
             }) { ReviewSessionView() }
             .sheet(isPresented: $showGuide) { StudyGuideView(subject: nil, mode: .preSession) }
             .task {
-                queueManager.refreshDueCards(context: context)
+                queueManager.ensureLoaded(context: context)
             }
         }
     }

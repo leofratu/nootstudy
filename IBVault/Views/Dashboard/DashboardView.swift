@@ -6,7 +6,6 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var context
     @Environment(ReviewQueueManager.self) private var queueManager
     @Query private var profiles: [UserProfile]
-    @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
     @Query private var subjects: [Subject]
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
     @Query private var academicAssessments: [AcademicAssessment]
@@ -19,7 +18,6 @@ struct DashboardView: View {
     @State private var selectedSubjectForReview: Subject?
     @State private var greetingText = ""
     @State private var cachedEvidence: [EvidenceRow] = []
-    @State private var evidenceFingerprint = ""
     @State private var dueRefreshTask: Task<Void, Never>?
 
     private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
@@ -47,7 +45,7 @@ struct DashboardView: View {
     }
 
     private var newCardsCount: Int {
-        allCards.filter { $0.totalReviewCount == 0 }.count
+        queueManager.newCardCount
     }
 
     init() {
@@ -75,27 +73,30 @@ struct DashboardView: View {
             .background(IBColors.canvas)
             .navigationTitle("Today")
             .sheet(isPresented: $showReview, onDismiss: {
-                reviewScheduler.analyze(context: context)
                 recomputeDueCards()
+                refreshEvidenceIfNeeded()
             }) {
                 ReviewSessionView(filterSubject: selectedSubjectForReview)
             }
             .task {
-                reviewScheduler.analyze(context: context)
+                await Task.yield()
+                guard !Task.isCancelled else { return }
                 recomputeDueCards()
                 refreshEvidenceIfNeeded()
             }
-            .onChange(of: allCards) { _, _ in scheduleDueRefresh() }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in scheduleDueRefresh() }
             .onChange(of: studySessions) { _, _ in scheduleDueRefresh() }
             .onChange(of: subjects) { _, _ in refreshEvidenceIfNeeded() }
             .onChange(of: academicAssessments) { _, _ in refreshEvidenceIfNeeded() }
             .onChange(of: academicMappings) { _, _ in refreshEvidenceIfNeeded() }
             .onChange(of: academicReports) { _, _ in refreshEvidenceIfNeeded() }
+            .onDisappear { dueRefreshTask?.cancel() }
         }
     }
 
     private func recomputeDueCards() {
-        queueManager.refreshDueCards(context: context)
+        queueManager.ensureLoaded(context: context)
+        reviewScheduler.analyze(context: context, availableCards: queueManager.dueCards)
         updateGreeting()
     }
 
@@ -195,59 +196,27 @@ struct DashboardView: View {
     }
 
     private var evidenceRows: [EvidenceRow] {
-        if !cachedEvidence.isEmpty { return cachedEvidence }
-        if sortedSubjects.isEmpty { return [] }
-        let state = PerformanceSignposts.signposter.beginInterval("dashboard.evidence")
-        defer { PerformanceSignposts.signposter.endInterval("dashboard.evidence", state) }
-        return sortedSubjects.map { subject in
-            EvidenceRow(
-                subject: subject,
-                evidence: ProgressEvidenceService.score(
-                    subjectName: subject.name,
-                    courseLevel: subject.level,
-                    cards: subject.cards,
-                    assessments: academicAssessments,
-                    mappings: academicMappings,
-                    reports: academicReports,
-                    workSessions: studySessions
-                )
-            )
-        }
-    }
-
-    private var evidenceFingerprintValue: String {
-        let subjectKey = sortedSubjects.map { "\($0.id.uuidString)-\($0.cards.count)-\($0.level)" }.joined(separator: "|")
-        return "\(subjectKey)#\(academicAssessments.count)#\(academicMappings.count)#\(academicReports.count)#\(studySessions.count)"
+        cachedEvidence
     }
 
     private func refreshEvidenceIfNeeded() {
-        let fingerprint = evidenceFingerprintValue
-        guard fingerprint != evidenceFingerprint else { return }
-        evidenceFingerprint = fingerprint
         let state = PerformanceSignposts.signposter.beginInterval("dashboard.evidence")
         defer { PerformanceSignposts.signposter.endInterval("dashboard.evidence", state) }
-        cachedEvidence = sortedSubjects.map { subject in
-            EvidenceRow(
-                subject: subject,
-                evidence: ProgressEvidenceService.score(
-                    subjectName: subject.name,
-                    courseLevel: subject.level,
-                    cards: subject.cards,
-                    assessments: academicAssessments,
-                    mappings: academicMappings,
-                    reports: academicReports,
-                    workSessions: studySessions
-                )
-            )
+        let scores = ProgressEvidenceService.scoreBySubject(subjects: subjects,
+            assessments: academicAssessments, mappings: academicMappings,
+            reports: academicReports, workSessions: studySessions)
+        cachedEvidence = sortedSubjects.compactMap { subject in
+            scores[subject.id].map { EvidenceRow(subject: subject, evidence: $0) }
         }
     }
 
     private func scheduleDueRefresh() {
         dueRefreshTask?.cancel()
         dueRefreshTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(120))
+            try? await Task.sleep(for: .milliseconds(180))
             if Task.isCancelled { return }
             recomputeDueCards()
+            refreshEvidenceIfNeeded()
         }
     }
 

@@ -101,7 +101,7 @@ struct SubjectsGridView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(IBColors.canvas)
-            .onAppear { queue.refreshDueCards(context: context) }
+            .onAppear { queue.ensureLoaded(context: context) }
             .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
                 if sharedQueue == nil { localQueue.refreshDueCards(context: context) }
             }

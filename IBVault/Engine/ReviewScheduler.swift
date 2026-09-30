@@ -87,10 +87,15 @@ final class ReviewScheduler {
     var totalOverdue: Int = 0
     var recommendedStudyOrder: [Subject] = []
     
-    func analyze(context: ModelContext, config: ReviewScheduleConfig = .default) {
+    func analyze(context: ModelContext, config: ReviewScheduleConfig = .default, availableCards: [StudyCard]? = nil) {
         let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
-        let day = try? ReviewDailyLimitPolicy.day(in: context)
-        let dailyCards = day.map { Array($0.limited($0.backlog).prefix(max(0, config.maximumDailyCards))) } ?? []
+        let dailyCards: [StudyCard]
+        if let availableCards {
+            dailyCards = Array(availableCards.prefix(max(0, config.maximumDailyCards)))
+        } else {
+            let day = try? ReviewDailyLimitPolicy.day(in: context)
+            dailyCards = day.map { Array($0.limited($0.backlog).prefix(max(0, config.maximumDailyCards))) } ?? []
+        }
         let now = Date()
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
         // Same for every subject, so compute once instead of per schedule row.

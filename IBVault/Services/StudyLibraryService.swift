@@ -19,17 +19,24 @@ enum StudyLibraryService {
     }
 
     nonisolated static func matches(_ query: String, fields: [String]) -> Bool {
+        let words = terms(query)
+        guard !words.isEmpty else { return true }
         let haystack = CardDuplicatePolicy.normalize(fields.joined(separator: " "))
-        return terms(query).allSatisfy { haystack.contains($0) }
+        return words.allSatisfy { haystack.contains($0) }
     }
 
     static func matches(_ query: String, card: StudyCard) -> Bool {
-        matches(query, fields: [card.front, card.back, card.subject?.name ?? "", unit(for: card),
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return true }
+        return matches(query, fields: [card.front, card.back, card.subject?.name ?? "", unit(for: card),
                                card.topicName, card.subtopic, card.syllabusReference ?? ""])
     }
 
     static func cards(in cards: [StudyCard], scopes: [CardTopicSelection], styles: Set<CardStyle> = []) -> [StudyCard] {
-        CardDuplicatePolicy.library(cards).cards.filter { card in
+        self.cards(in: CardDuplicatePolicy.library(cards), scopes: scopes, styles: styles)
+    }
+
+    static func cards(in library: CardDuplicatePolicy.Library, scopes: [CardTopicSelection], styles: Set<CardStyle> = []) -> [StudyCard] {
+        library.cards.filter { card in
             (styles.isEmpty || styles.contains(card.cardStyle)) && (scopes.isEmpty || scopes.contains {
                 $0.topic.caseInsensitiveCompare(card.topicName) == .orderedSame
                     && ($0.subtopic.isEmpty || $0.subtopic.caseInsensitiveCompare(card.subtopic) == .orderedSame)

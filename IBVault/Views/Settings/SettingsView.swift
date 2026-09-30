@@ -7,9 +7,10 @@ struct SettingsView: View {
     private static let fixedTargetIBScore = 40
 
     @Environment(\.modelContext) private var context
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var profiles: [UserProfile]
     @Query private var subjects: [Subject]
-    @Query(sort: \StudyPlan.scheduledDate, order: .forward) private var studyPlans: [StudyPlan]
+    @State private var syncedPlanCount = 0
     @State private var apiKey = ""
     @State private var junaliAPIKey = ""
     @State private var showAPIKey = false
@@ -33,6 +34,9 @@ struct SettingsView: View {
     @State private var profileSaveTask: Task<Void, Never>?
     @State private var settingsSaveError: String?
     @State private var credentialError: String?
+    @State private var settingsSearch = ""
+    @State private var initializedProfile = false
+    @State private var loadedSections: Set<SettingsSection> = []
 
     // ARIA Settings
     @AppStorage("geminiModel") private var selectedModel = "gemini-2.0-flash"
@@ -50,10 +54,13 @@ struct SettingsView: View {
 
     // Study Settings
     @AppStorage("showMasteryPercent") private var showMasteryPercent = true
-    @AppStorage("hapticFeedback") private var hapticFeedback = true
     @AppStorage("autoPlayNext") private var autoPlayNext = false
     @AppStorage("showDueCountBadge") private var showDueCountBadge = true
     @AppStorage("reviewOrder") private var reviewOrder = "spaced"
+    @AppStorage("cardDefaultCount") private var cardDefaultCount = 6
+    @AppStorage("cardDefaultTone") private var cardDefaultTone = "balanced"
+    @AppStorage("cardDefaultStyle") private var cardDefaultStyle = "basic"
+    @AppStorage("cardDefaultDifficulty") private var cardDefaultDifficulty = CardDifficulty.exam.rawValue
     @AppStorage(CalendarSyncPreferences.isEnabledKey) private var calendarSyncEnabled = false
     @AppStorage("appAppearance") private var appAppearanceRaw = IBAppearance.dark.rawValue
     @AppStorage(CalendarSyncPreferences.calendarIdentifierKey) private var selectedCalendarIdentifier = ""
@@ -72,6 +79,7 @@ struct SettingsView: View {
         case general = "General"
         case assistant = "AI & Memory"
         case subjects = "Subjects"
+        case flashcards = "Flashcards & Review"
         case study = "Study"
         case integrations = "Integrations"
         case data = "Data & Backup"
@@ -84,10 +92,24 @@ struct SettingsView: View {
             case .general: return "person.crop.circle"
             case .assistant: return "sparkles"
             case .subjects: return "books.vertical"
+            case .flashcards: return "rectangle.on.rectangle"
             case .study: return "calendar"
             case .integrations: return "link"
             case .data: return "externaldrive"
             case .about: return "info.circle"
+            }
+        }
+
+        var searchTerms: String {
+            switch self {
+            case .general: return "name profile year intensity theme appearance grades report target"
+            case .assistant: return "AI provider model memory API key connection reasoning verbosity temperature creativity context web search"
+            case .subjects: return "curriculum subjects level syllabus HL SL"
+            case .flashcards: return "cards count number batch format basic cloze multiple choice balanced concise tone difficulty review daily goal order mastery badge auto advance"
+            case .study: return "calendar Google sync focus ADHD medication notification reminder streak"
+            case .integrations: return "bridge NotebookLM external integrations"
+            case .data: return "backup restore export import reset delete recovery"
+            case .about: return "version platform installed app"
             }
         }
     }
@@ -103,11 +125,19 @@ struct SettingsView: View {
 
     private var profile: UserProfile? { profiles.first }
 
+    private var matchingSections: [SettingsSection] {
+        let query = settingsSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        return SettingsSection.allCases.filter {
+            query.isEmpty || "\($0.rawValue) \($0.searchTerms)".localizedCaseInsensitiveContains(query)
+        }
+    }
+
     private var sectionSummary: String {
         switch selectedSection {
         case .general: return "Your study identity, target, and report data"
         case .assistant: return "Provider, model, and response controls"
         case .subjects: return "Curriculum and subject configuration"
+        case .flashcards: return "Shorter cards, practice defaults, and your review routine"
         case .study: return "Workload, calendar, focus, and reminders"
         case .integrations: return "Local bridge, external work, and NotebookLM pack"
         case .data: return "Backups, recovery, and reset controls"
@@ -163,113 +193,167 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("YOUR WORKSPACE")
-                        .font(.caption.weight(.semibold))
-                        .tracking(1.8)
-                        .foregroundStyle(IBColors.accent)
-                    Text("Settings")
-                        .font(IBTypography.pageTitle)
-                        .foregroundStyle(IBColors.ink)
+        GeometryReader { geometry in
+            if geometry.size.width >= 820 {
+                HStack(spacing: 0) {
+                    settingsNavigation(compact: false)
+                        .frame(width: 232)
+                    Rectangle().fill(IBColors.border).frame(width: 1)
+                    settingsDetail
                 }
-                Spacer()
-                Label("Preferences save automatically", systemImage: "checkmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(IBColors.inkSecondary)
+            } else {
+                VStack(spacing: 0) {
+                    settingsNavigation(compact: true)
+                    Rectangle().fill(IBColors.border).frame(height: 1)
+                    settingsDetail
+                }
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 24)
-            .padding(.bottom, 20)
-
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) {
-                    ForEach(SettingsSection.allCases) { section in
-                        Button {
-                            selectedSection = section
-                        } label: {
-                            Label(section.rawValue, systemImage: section.icon)
-                                .font(.callout.weight(.medium))
-                                .foregroundStyle(selectedSection == section ? IBColors.ink : IBColors.inkSecondary)
-                                .padding(.horizontal, 13)
-                                .frame(height: 38)
-                                .background(selectedSection == section ? IBColors.highlight : Color.clear,
-                                            in: RoundedRectangle(cornerRadius: 9))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
-                    }
-                }
-                .padding(.horizontal, 28)
-                .fixedSize(horizontal: true, vertical: false)
-
-                Picker("Settings category", selection: $selectedSection) {
-                    ForEach(SettingsSection.allCases) { section in
-                        Label(section.rawValue, systemImage: section.icon).tag(section)
-                    }
-                }
-                .labelsHidden()
-                .controlSize(.large)
-                .padding(.horizontal, 28)
-            }
-            .padding(.bottom, 16)
-
-            Rectangle().fill(IBColors.border).frame(height: 1)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    if let settingsSaveError {
-                        HStack {
-                            Label(settingsSaveError, systemImage: "exclamationmark.triangle")
-                                .font(.callout)
-                                .foregroundStyle(IBColors.danger)
-                            Spacer()
-                            Button("Retry save") { persistChanges() }
-                        }
-                    }
-                    Text(sectionSummary)
-                        .font(.callout)
-                        .foregroundStyle(IBColors.inkSecondary)
-                    sectionContent
-                }
-                .frame(maxWidth: 880, alignment: .leading)
-                .padding(28)
-                .frame(maxWidth: .infinity)
-            }
-            .id(selectedSection)
         }
         .background(IBColors.canvas)
         .tint(IBColors.accent)
         .navigationTitle("Settings")
         .sheet(isPresented: $showReportUpload) { ReportUploadView() }
         .sheet(isPresented: $showModelPicker) { GeminiModelPickerView(selectedModel: $selectedModel) }
-        .onAppear {
-            guard loadsExternalState else { return }
+        .task {
+            guard loadsExternalState, !initializedProfile else { return }
+            initializedProfile = true
             enforceFixedTarget()
             if let profile, profile.dailyGoal > ReviewDailyLimitPolicy.maximumCards {
                 profile.dailyGoal = ReviewDailyLimitPolicy.maximumCards
                 persistChanges()
             }
-            refreshViewState()
-            adhdMedSettings = ADHDMedicationSettings.loadFromDefaults()
-            refreshGoogleCalendarState()
-            if isGoogleConnected {
-                if let lastError = UserDefaults.standard.string(forKey: CalendarSyncPreferences.lastErrorKey) {
-                    calendarSyncStatus = lastError
-                } else if let lastSyncDate = UserDefaults.standard.object(forKey: CalendarSyncPreferences.lastSyncDateKey) as? Date {
-                    calendarSyncStatus = "Last synced \(lastSyncDate.formatted(date: .abbreviated, time: .shortened))."
-                }
-                Task { await loadCalendarOptions() }
-            }
         }
+        .task(id: selectedSection) { await loadSectionState() }
         .onDisappear {
             profileSaveTask?.cancel()
-            if loadsExternalState { persistChanges() }
+            if loadsExternalState, context.hasChanges { persistChanges() }
         }
         .sheet(isPresented: $showMedicationPicker) {
             MedicationPickerView(settings: $adhdMedSettings)
         }
+    }
+
+    private func settingsNavigation(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Settings").font(IBTypography.title).foregroundStyle(IBColors.ink)
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(IBColors.inkSecondary)
+                TextField("Find a setting", text: $settingsSearch)
+                    .textFieldStyle(.plain)
+                    .accessibilityLabel("Find a settings category")
+                if !settingsSearch.isEmpty {
+                    Button { settingsSearch = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).accessibilityLabel("Clear settings search")
+                }
+            }
+            .padding(10)
+            .background(IBColors.canvas, in: RoundedRectangle(cornerRadius: 8))
+
+            if matchingSections.isEmpty {
+                Text("No matching settings. Try ‘cards’, ‘model’, or ‘theme’.")
+                    .font(.callout).foregroundStyle(IBColors.inkSecondary)
+            } else if compact {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(matchingSections) { section in
+                            categoryButton(section).fixedSize(horizontal: true, vertical: false)
+                        }
+                    }
+                }
+                .frame(height: 44)
+            } else {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(matchingSections) { section in categoryButton(section) }
+                    }
+                }
+            }
+            if !compact {
+                Label("Changes save automatically", systemImage: "checkmark.circle")
+                    .font(.caption).foregroundStyle(IBColors.inkSecondary)
+            }
+        }
+        .padding(20)
+        .frame(maxHeight: compact ? nil : .infinity, alignment: .topLeading)
+        .background(IBColors.surface)
+    }
+
+    private func categoryButton(_ section: SettingsSection) -> some View {
+        Button { selectedSection = section } label: {
+            Label(section.rawValue, systemImage: section.icon)
+                .font(.callout.weight(selectedSection == section ? .semibold : .regular))
+                .foregroundStyle(selectedSection == section ? IBColors.ink : IBColors.inkSecondary)
+                .padding(.horizontal, 12).padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(selectedSection == section ? IBColors.highlight : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
+    }
+
+    private var settingsDetail: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(selectedSection.rawValue).font(IBTypography.pageTitle)
+                        Text(sectionSummary).font(.callout).foregroundStyle(IBColors.inkSecondary)
+                    }
+                    .id("settings-top")
+                    if let settingsSaveError {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(settingsSaveError, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(IBColors.danger)
+                            Button("Retry save") { persistChanges() }
+                        }
+                    }
+                    sectionContent
+                        .id(selectedSection)
+                        .transition(.opacity)
+                }
+                .frame(maxWidth: 820, alignment: .leading)
+                .padding(28)
+                .frame(maxWidth: .infinity)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: selectedSection)
+            }
+            .onChange(of: selectedSection) { _, _ in proxy.scrollTo("settings-top", anchor: .top) }
+        }
+    }
+
+    @MainActor
+    private func loadSectionState() async {
+        guard loadsExternalState, !loadedSections.contains(selectedSection) else { return }
+        let section = selectedSection
+        switch section {
+        case .assistant:
+            refreshKeychainState()
+        case .data:
+            refreshBackupState()
+        case .study:
+            adhdMedSettings = ADHDMedicationSettings.loadFromDefaults()
+            refreshGoogleCalendarState()
+            if isGoogleConnected {
+                do {
+                    try await loadCalendarOptions(keepProgressVisible: false)
+                    if let lastError = UserDefaults.standard.string(forKey: CalendarSyncPreferences.lastErrorKey) {
+                        calendarSyncStatus = lastError
+                    } else if let lastSync = UserDefaults.standard.object(forKey: CalendarSyncPreferences.lastSyncDateKey) as? Date {
+                        calendarSyncStatus = "Last synced \(lastSync.formatted(date: .abbreviated, time: .shortened))."
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    calendarSyncStatus = error.localizedDescription
+                    return
+                }
+            }
+        default:
+            break
+        }
+        guard !Task.isCancelled else { return }
+        loadedSections.insert(section)
     }
 
     @ViewBuilder
@@ -283,12 +367,13 @@ struct SettingsView: View {
             assistantMemorySection
         case .subjects:
             curriculumSection
-        case .study:
+        case .flashcards:
+            flashcardDefaultsSection
             studySection
+        case .study:
             calendarSyncSection
             adhdSection
             notificationSection
-            appearanceSection
         case .integrations:
             IntegrationSettingsSection()
         case .data:
@@ -630,6 +715,11 @@ struct SettingsView: View {
 
     private var curriculumSection: some View {
         SettingsGroup {
+            if subjects.isEmpty {
+                Label("No subjects yet", systemImage: "books.vertical")
+                Text("Add your subjects during onboarding to choose their curriculum level here.")
+                    .font(.callout).foregroundStyle(IBColors.inkSecondary)
+            }
             ForEach(subjects.sorted { $0.name < $1.name }, id: \.id) { subject in
                 HStack(spacing: 12) {
                     Circle()
@@ -675,6 +765,38 @@ struct SettingsView: View {
     }
 
     // MARK: - Study Settings
+    private var flashcardDefaultsSection: some View {
+        SettingsGroup {
+            SettingsField("Cards per set") {
+                SettingsChoices(values: [4, 6, 10, 20], selection: $cardDefaultCount,
+                                label: { "\($0) cards" })
+                CardCountControl(count: $cardDefaultCount)
+                Text("Saved automatically. This is the total across your selected topics and formats.")
+                    .font(.caption).foregroundStyle(IBColors.inkSecondary)
+            }
+            SettingsField("Answer style") {
+                SettingsChoices(values: CardTone.allCases, selection: $cardDefaultTone,
+                                value: { $0.rawValue }, label: { $0.label })
+                Text((CardTone(rawValue: cardDefaultTone) ?? .balanced).summary)
+                    .font(.caption).foregroundStyle(IBColors.inkSecondary)
+            }
+            SettingsField("Default format") {
+                SettingsChoices(values: CardStyle.allCases, selection: $cardDefaultStyle,
+                                value: { $0.rawValue }, label: { $0.label })
+            }
+            SettingsField("Difficulty") {
+                SettingsChoices(values: CardDifficulty.allCases, selection: $cardDefaultDifficulty,
+                                value: { $0.rawValue }, label: { $0.rawValue })
+            }
+            Divider()
+            Label("\(cardDefaultCount) cards · \((CardTone(rawValue: cardDefaultTone) ?? .balanced).label) · \((CardStyle(rawValue: cardDefaultStyle) ?? .basic).label)",
+                  systemImage: "checkmark.circle")
+                .font(.callout).foregroundStyle(IBColors.accent)
+        } header: {
+            Label("Flashcard defaults", systemImage: "rectangle.on.rectangle")
+        }
+    }
+
     private var studySection: some View {
         SettingsGroup {
             if let p = profile {
@@ -688,6 +810,9 @@ struct SettingsView: View {
                     .labelsHidden()
                 }
 
+                Text("This goal controls your daily review allowance, up to \(ReviewDailyLimitPolicy.maximumCards) cards. It is separate from cards per generated set.")
+                    .font(.caption).foregroundStyle(IBColors.inkSecondary)
+
                 HStack {
                     Text("Streak Freezes"); Spacer()
                     Text("\(p.streakFreezes)")
@@ -697,19 +822,24 @@ struct SettingsView: View {
                 }
             }
 
-            Picker("Review Order", selection: $reviewOrder) {
-                Text("Spaced (FSRS)").tag("spaced")
-                Text("Weakest First").tag("weakest")
-                Text("Random Shuffle").tag("random")
+            SettingsField("Review order") {
+                SettingsChoices(values: ["spaced", "weakest", "random"], selection: $reviewOrder,
+                                label: { order in
+                    switch order {
+                    case "weakest": return "Weakest first"
+                    case "random": return "Shuffled"
+                    default: return "Due first"
+                    }
+                })
             }
 
             SettingsToggle("Auto-advance cards", detail: "Show the next card after rating", isOn: $autoPlayNext)
 
             SettingsToggle("Show mastery on cards", isOn: $showMasteryPercent)
 
-            SettingsToggle("Show due-card count", isOn: $showDueCountBadge)
+            SettingsToggle("Show due-card count", detail: "Display the review backlog in the sidebar", isOn: $showDueCountBadge)
         } header: {
-            Label("Study", systemImage: "book.fill")
+            Label("Daily review", systemImage: "book.fill")
         }
     }
 
@@ -858,7 +988,7 @@ struct SettingsView: View {
                 selectedCalendarIdentifier = calendarOptions[0].id
             }
             calendarSyncEnabled = true
-            try await CalendarSyncService.shared.sync(plans: studyPlans)
+            try await syncCurrentStudyPlans()
             calendarSyncStatus = syncSuccessMessage()
             NotificationCenter.default.post(name: .calendarSyncRequested, object: nil)
         } catch {
@@ -939,7 +1069,7 @@ struct SettingsView: View {
         defer { isConfiguringCalendar = false }
 
         do {
-            try await CalendarSyncService.shared.sync(plans: studyPlans)
+            try await syncCurrentStudyPlans()
             calendarSyncStatus = syncSuccessMessage()
         } catch {
             CalendarSyncPreferences.recordFailure(error)
@@ -948,7 +1078,14 @@ struct SettingsView: View {
     }
 
     private func syncSuccessMessage() -> String {
-        "Synced \(studyPlans.count) study session\(studyPlans.count == 1 ? "" : "s") just now."
+        "Synced \(syncedPlanCount) study session\(syncedPlanCount == 1 ? "" : "s") just now."
+    }
+
+    @MainActor
+    private func syncCurrentStudyPlans() async throws {
+        let plans = try context.fetch(FetchDescriptor<StudyPlan>(sortBy: [SortDescriptor(\StudyPlan.scheduledDate)]))
+        try await CalendarSyncService.shared.sync(plans: plans)
+        syncedPlanCount = plans.count
     }
 
     // MARK: - ADHD Section
@@ -1181,15 +1318,6 @@ struct SettingsView: View {
             }
         } header: {
             Label("Notifications", systemImage: "bell.fill")
-        }
-    }
-
-    // MARK: - Appearance
-    private var appearanceSection: some View {
-        SettingsGroup {
-            SettingsToggle("Haptic feedback", isOn: $hapticFeedback)
-        } header: {
-            Label("Appearance & Feel", systemImage: "paintbrush.fill")
         }
     }
 

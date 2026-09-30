@@ -69,6 +69,25 @@ nonisolated enum ProficiencyTracker {
         case .mastered: return 1
         }
     }
+
+    /// Give successful early recalls credit between proficiency milestones.
+    /// Legacy imports without counters retain their explicitly stored level.
+    static func masteryValue(for card: StudyCard) -> Double {
+        guard card.totalReviewCount > 0 else { return masteryValue(for: card.proficiency) }
+        let accuracy = min(max(card.effectivenessRate, 0), 1)
+        let correct = Double(max(0, card.consecutiveCorrect))
+        let interval = Double(max(0, card.interval))
+        switch card.proficiency {
+        case .novice:
+            return 0.33 * min(correct / 2, 1) * accuracy
+        case .developing:
+            return (0.33 + 0.33 * min(min(correct / 3, interval / 7), 1)) * accuracy
+        case .proficient:
+            return (0.66 + 0.34 * min(min(correct / 6, interval / 21), 1)) * accuracy
+        case .mastered:
+            return 1
+        }
+    }
     
     static func weakTopics(for subject: Subject) -> [StudyCard] {
         subject.cards
@@ -123,7 +142,7 @@ nonisolated enum ProficiencyTracker {
         guard !cards.isEmpty else { return 0 }
         
         let score = cards.reduce(0.0) { sum, card in
-            sum + masteryValue(for: card.proficiency)
+            sum + masteryValue(for: card)
         }
         
         return score / Double(cards.count)

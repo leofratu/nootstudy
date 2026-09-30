@@ -8,6 +8,7 @@ struct RecallCardView: View {
     @State private var selectedChoice: String?
     @State private var choiceOrder: [String] = []
     @State private var showHint = false
+    @AppStorage("showMasteryPercent") private var showMasteryPercent = true
 
     private var validChoices: [String]? {
         guard card.cardStyle == .multipleChoice else { return nil }
@@ -27,7 +28,16 @@ struct RecallCardView: View {
                 Spacer()
                 StudioPill(title: card.difficulty.rawValue)
             }
-            Text(card.topicName).font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+            HStack(alignment: .firstTextBaseline) {
+                Text(card.topicName).font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+                Spacer()
+                if showMasteryPercent {
+                    Text("\(Int((ProficiencyTracker.masteryValue(for: card) * 100).rounded()))% · \(card.proficiency.rawValue)")
+                        .font(IBTypography.captionBold).foregroundStyle(IBColors.inkSecondary)
+                }
+            }
+            Text(card.cardStyle == .cloze ? "FILL IN THE BLANK" : "QUESTION")
+                .font(IBTypography.captionBold).tracking(1).foregroundStyle(IBColors.inkSecondary)
             FormattedMessageContent(text: prompt)
                 .font(.custom("Georgia", size: 25))
                 .textSelection(.enabled)
@@ -61,7 +71,11 @@ struct RecallCardView: View {
                         .foregroundStyle(CardRecallPresentation.isCorrect(selectedChoice, answer: card.back) ? IBColors.success : IBColors.coral)
                 }
                 Text("ANSWER").font(IBTypography.captionBold).tracking(1).foregroundStyle(IBColors.accent)
-                FormattedMessageContent(text: card.back).textSelection(.enabled)
+                FormattedMessageContent(text: card.back)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(IBColors.highlight, in: RoundedRectangle(cornerRadius: IBRadius.md))
                 if let explanation = BiologyStudyService.explanation(for: card) {
                     Text(explanation).font(.callout).foregroundStyle(IBColors.inkSecondary).textSelection(.enabled)
                 }
@@ -71,14 +85,15 @@ struct RecallCardView: View {
                 }
             } else if let hint = card.hint, !hint.isEmpty {
                 if showHint {
-                    Text(hint).font(IBTypography.body).foregroundStyle(IBColors.inkSecondary)
+                    Label(hint, systemImage: "lightbulb")
+                        .font(IBTypography.body).foregroundStyle(IBColors.inkSecondary)
                 } else {
                     Button("Show hint") { showHint = true }.buttonStyle(.borderless)
                 }
             }
         }
         .foregroundStyle(IBColors.ink)
-        .padding(32)
+        .padding(24)
         .frame(maxWidth: .infinity, minHeight: 320, alignment: .topLeading)
         .surfaceCard()
         .onAppear { resetChoices() }

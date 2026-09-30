@@ -95,6 +95,7 @@ nonisolated enum CardDuplicatePolicy {
     static func library(_ cards: [StudyCard]) -> Library {
         var groups: [Scope: [(id: UUID, rank: Int, signature: Signature)]] = [:]
         var exactPrompts: [Scope: [String: (id: UUID, rank: Int)]] = [:]
+        var questionIndex: [Scope: [String: Set<Int>]] = [:]
         // This memo lives for one refresh only, so renamed topics and edited
         // cards are immediately reflected without a persistent cache to expire.
         var normalizedLabels: [String: String] = [:]
@@ -133,15 +134,33 @@ nonisolated enum CardDuplicatePolicy {
             let exact = exactPrompts[scope]?[signature.question]
             // Short answers can only match an exact prompt. Long-answer
             // candidates retain preference order for conservative fuzzy reuse.
-            let near = signature.answerWords.count >= 12
-                ? groups[scope]?.first(where: { signature.matches($0.signature) }) : nil
+            var sharedCounts: [Int: Int] = [:]
+            if signature.answerWords.count >= 12 {
+                for word in signature.questionWords {
+                    for index in questionIndex[scope]?[word] ?? [] {
+                        sharedCounts[index, default: 0] += 1
+                    }
+                }
+            }
+            let candidates = sharedCounts.compactMap { $0.value >= 2 ? $0.key : nil }.sorted()
+            let nearIndex = candidates.first { index in
+                guard let candidate = groups[scope]?[index] else { return false }
+                return signature.matches(candidate.signature)
+            }
+            let near = nearIndex.flatMap { groups[scope]?[$0] }
             let existingID: UUID?
             if let exact, let near { existingID = exact.rank < near.rank ? exact.id : near.id }
             else { existingID = exact?.id ?? near?.id }
             if let existingID {
                 aliases[item.id] = existingID
             } else {
-                if signature.answerWords.count >= 12 { groups[scope, default: []].append((item.id, rank, signature)) }
+                if signature.answerWords.count >= 12 {
+                    let index = groups[scope]?.count ?? 0
+                    groups[scope, default: []].append((item.id, rank, signature))
+                    for word in signature.questionWords {
+                        questionIndex[scope, default: [:]][word, default: []].insert(index)
+                    }
+                }
                 exactPrompts[scope, default: [:]][signature.question] = (item.id, rank)
                 aliases[item.id] = item.id
                 unique.append(card)
@@ -151,7 +170,11 @@ nonisolated enum CardDuplicatePolicy {
     }
 
     static func existingMatch(for draft: CardDraft, in cards: [StudyCard]) -> StudyCard? {
+        existingMatch(for: draft, in: library(cards))
+    }
+
+    static func existingMatch(for draft: CardDraft, in library: Library) -> StudyCard? {
         let signature = Signature(front: draft.front, back: draft.back, style: draft.style)
-        return library(cards).cards.first { signature.matches(Self.signature($0)) }
+        return library.cards.first { signature.matches(Self.signature($0)) }
     }
 }
