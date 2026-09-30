@@ -1,0 +1,63 @@
+name: Biology native visual checks
+
+on:
+  push:
+    branches: [design/biology-study-experience]
+  pull_request:
+    branches: [main, fix/biology-curriculum-and-reliability]
+    paths:
+      - 'IBVault/**'
+      - 'IBVaultVisualTests/**'
+      - 'IBVault.xcodeproj/**'
+      - 'project.yml'
+      - '.github/workflows/biology-visual-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: biology-visual-tests-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-rendering:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate the native visual-test target
+        run: |
+          set -euo pipefail
+          test -d /Applications/Xcode_26.4.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          brew install xcodegen
+          xcodegen generate
+      - name: Run every visual fixture in its dedicated host
+        run: |
+          set -euo pipefail
+          # Native window creation is intentionally separate from the IBVault
+          # functional/bridge suite. Both workflows run; no tests are skipped.
+          xcodebuild test -project IBVault.xcodeproj -scheme IBVaultVisual \
+            -destination 'platform=macOS' -derivedDataPath "$RUNNER_TEMP/visual-build" \
+            -resultBundlePath "$RUNNER_TEMP/visual-tests.xcresult" \
+            -jobs 2 -parallel-testing-enabled NO \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/visual-tests.log"
+      - name: Record visual test summary
+        if: always()
+        run: xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/visual-tests.xcresult" --format json > "$RUNNER_TEMP/visual-summary.json"
+      - name: Retain actual rendered windows and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: biology-native-windows-${{ github.sha }}
+          path: |
+            /tmp/nootstudy-snapshots
+            ${{ runner.temp }}/visual-tests.log
+            ${{ runner.temp }}/visual-summary.json
+            ${{ runner.temp }}/visual-tests.xcresult
+          retention-days: 14
+          if-no-files-found: error

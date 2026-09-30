@@ -6,6 +6,11 @@ import SwiftData
 enum StudyLibraryService {
     static func unit(for card: StudyCard) -> String {
         guard let subject = card.subject else { return "" }
+        if subject.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "biology" {
+            let topic = card.syllabusReference.flatMap { BiologyCatalog.topic(reference: $0) }
+                ?? BiologyCatalog.topic(named: card.topicName, at: subject.courseLevel)
+            if let topic { return "\(topic.theme). \(BiologyCatalog.themeName(topic.theme))" }
+        }
         return SyllabusSeeder.unitName(for: subject.name, level: subject.level, topicName: card.topicName) ?? ""
     }
 

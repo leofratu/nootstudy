@@ -19,7 +19,7 @@ nonisolated struct ProficiencyConfig: Sendable {
 nonisolated enum ProficiencyTracker {
     static func updateProficiency(for card: StudyCard, config: ProficiencyConfig = .default) {
         let successRate = card.effectivenessRate
-        let reviewCount = card.totalReviewCount
+        let reviewCount = card.successfulReviewCount // Failed attempts alone do not demonstrate learning.
         
         let level: ProficiencyLevel
         
@@ -42,7 +42,7 @@ nonisolated enum ProficiencyTracker {
     }
     
     static func masteryPercentage(for subject: Subject) -> Double {
-        calculateMastery(for: subject.cards)
+        calculateMastery(for: subject.cards.filter(BiologyStudyService.isEligible))
     }
     
     static func masteryPercentage(for subject: Subject, topicName: String) -> Double {

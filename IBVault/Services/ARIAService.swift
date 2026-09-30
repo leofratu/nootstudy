@@ -2548,7 +2548,10 @@ class ARIAService {
         let requested = (topics ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         guard !requested.isEmpty else { return [] }
         let valid = SyllabusSeeder.curriculum(for: subjectName, level: subjectLevel).flatMap { $0.topics.map(\.name) }
-        return canonicalCurriculumMatches(requested, validValues: valid)
+        let resolved = subjectName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "biology"
+            ? requested.map { BiologyCatalog.topic(named: $0, at: IBCourseLevel(subjectLevel))?.name ?? $0 }
+            : requested
+        return canonicalCurriculumMatches(resolved, validValues: valid)
     }
 
     private func sanitizedSubtopics(_ subtopics: [String]?, subjectName: String, subjectLevel: String, topics: [String]) -> [String] {

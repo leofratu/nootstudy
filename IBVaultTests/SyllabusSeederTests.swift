@@ -35,7 +35,7 @@ struct SyllabusSeederTests {
         let math = SyllabusSeeder.curriculum(for: "Mathematics AA", level: "HL")
         let russian = SyllabusSeeder.curriculum(for: "Russian A Literature", level: "HL")
 
-        #expect(biology.contains { $0.name == "Higher Level Extension" })
+        #expect(biology.flatMap(\.topics).contains { $0.name == "A2.3 Viruses" })
         #expect(math.contains { $0.name == "Higher Level Extension" })
         #expect(russian.flatMap(\.topics).contains { $0.name == "Higher Level Essay" })
         #expect(!biology.flatMap(\.topics).flatMap(\.subtopics).contains { $0.hasPrefix("HL:") })

@@ -46,7 +46,15 @@ struct TopicBrowserView: View {
                 $0.level.caseInsensitiveCompare(subject.level) == .orderedSame
         }
     }
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if subject.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "biology" {
+            BiologyStudyView(subject: subject)
+        } else {
+            legacyBrowser
+        }
+    }
+
+    private var legacyBrowser: some View {
         VStack(spacing: 0) {
             browserHeader
             Divider()
@@ -68,6 +76,7 @@ struct TopicBrowserView: View {
         }
         .onAppear { synchronizeSelection() }
         .onChange(of: searchText) { _, _ in synchronizeSelection() }
+        .onChange(of: subject.level) { _, _ in synchronizeSelection() }
         .sheet(isPresented: $showStudio) {
             CardStudioView(initialSubject: subject, initialSelection: studioSelection)
                 .frame(minWidth: 920, minHeight: 720)
@@ -249,9 +258,11 @@ struct TopicBrowserView: View {
     ) -> some View {
         let cards = cards(for: topic, subtopic: subtopic, in: cardsIndex)
         let count = cards.count
-        let mastery = ProficiencyTracker.masteryPercentage(for: cards)
+        let recorded = CurriculumProgressService.node(in: nodes, subjectName: subject.name,
+            level: subject.level, topicName: topic, subtopicName: subtopic)
+        let mastery = CurriculumProgressService.effectiveMastery(cards: cards, node: recorded)
         let workSessions = workSessionsFor(topic: topic, subtopic: subtopic, in: sessionsByTopic)
-        let hasProgress = count > 0 || !workSessions.isEmpty
+        let hasProgress = mastery >= 1 // Opening pages or creating cards does not complete a concept.
         let isHovered = hoveredSubtopic == subtopic
 
         return HStack(spacing: 12) {
@@ -281,7 +292,7 @@ struct TopicBrowserView: View {
                     if !workSessions.isEmpty {
                         Text("\(workSessions.count) work")
                     }
-                    if count > 0 {
+                    if count > 0 || recorded?.recordedProficiency != nil {
                         MasteryBar(progress: mastery, height: 3, color: accent)
                             .frame(width: 58)
                         Text("\(Int(mastery * 100))% mastery")

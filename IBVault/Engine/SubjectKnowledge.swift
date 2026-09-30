@@ -66,20 +66,20 @@ nonisolated struct SubjectKnowledge: Sendable {
         keyConcepts: [
             "Cell structure and function, including membrane transport",
             "Molecular biology: DNA, RNA, proteins, enzymes and metabolism",
-            "Genetics and inheritance, including linkage and pedigree analysis",
+            "D3.2 Inheritance: alleles, genotype, phenotype and inheritance probability",
             "Evolution, biodiversity and natural selection",
             "Human physiology: homeostasis, gas exchange, circulation",
-            "Ecology: ecosystems, energy flow and sustainability"
+            "C4.1 Populations and communities; C4.2 Transfers of energy and matter"
         ],
         highYieldTopics: [
             "Membranes and transport",
             "DNA replication, transcription and translation",
             "Photosynthesis and cellular respiration",
-            "Mendelian and linked inheritance",
+            "D3.2 Inheritance: alleles, genotype and phenotype",
             "Homeostasis and feedback mechanisms"
         ],
         commonMisconceptions: [
-            "ATP is stored in cells — it is produced on demand and used immediately",
+            "ATP is a long-term energy store — cells maintain a small, continually regenerated ATP pool; lipids and carbohydrates provide longer-term stores",
             "All bacteria are harmful — many are mutualistic or beneficial",
             "DNA mutations are always harmful — many are neutral or beneficial",
             "Bigger organisms have bigger cells — cell size is not tied to body size",
@@ -89,7 +89,8 @@ nonisolated struct SubjectKnowledge: Sendable {
             "Match the depth of your answer to the command term (state vs explain vs evaluate)",
             "Label diagrams accurately with the exact biological terms",
             "Include units on all quantitative answers",
-            "For extended-response questions, plan the chain of reasoning before writing"
+            "For extended-response questions, plan the chain of reasoning before writing",
+            "Use current numbered topic names and the learner's SL/HL level. The bundled Biology pack is partial; inspect each topic's remaining coverage before claiming a requirement is taught."
         ],
         commandTerms: ["State", "Outline", "Describe", "Explain", "Compare", "Contrast", "Evaluate", "Draw", "Label", "Annotate", "Calculate", "Predict"]
     )

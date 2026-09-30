@@ -1,0 +1,1602 @@
+[
+  {
+    "code": "C1.1",
+    "title": "Enzymes and metabolism",
+    "hlOnly": false,
+    "prerequisites": [
+      "B1.2"
+    ],
+    "sections": [
+      {
+        "key": "catalysis",
+        "title": "Catalysis and specificity",
+        "body": "Enzymes accelerate reactions by lowering activation energy. They do not supply the overall energy released by a reaction or change its equilibrium position. Substrates interact with an active site whose shape and chemical properties support binding and catalysis. Binding can change the shapes of both enzyme and substrate, described by induced fit. Metabolism contains many linked reactions: anabolic reactions build larger molecules, while catabolic reactions break substances down.",
+        "pitfall": "An enzyme makes a reaction faster; it does not make an energetically unfavourable reaction favourable simply by being present."
+      },
+      {
+        "key": "rates",
+        "title": "Interpreting enzyme experiments",
+        "body": "At low substrate concentration, increasing substrate usually increases the frequency of productive interactions with active sites. At high substrate concentration, a fixed quantity of enzyme can become saturated, so rate approaches a maximum. Temperature initially increases molecular motion, but excessive heating can disrupt protein structure. Changes in pH can also affect activity. An experiment should control enzyme quantity, pH and temperature while varying the chosen independent variable and measuring an initial rate.",
+        "pitfall": "A plateau in a substrate-concentration experiment is not necessarily caused by denaturation."
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "catalysis",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "What does an enzyme lower?",
+        "answer": "The activation energy of a reaction",
+        "distractors": [
+          "The number of atoms conserved in the reaction",
+          "The equilibrium constant in every reaction",
+          "The total amount of matter in the system"
+        ],
+        "explanation": "Catalysts provide a lower-activation-energy route while leaving the overall reaction equilibrium unchanged."
+      },
+      {
+        "key": "w1",
+        "sectionKey": "rates",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why increasing substrate concentration eventually has little effect on rate when enzyme concentration is fixed.",
+        "answer": "At high substrate concentration, most active sites are occupied much of the time.~The amount and turnover rate of the enzyme then limit the overall reaction rate.",
+        "distractors": [],
+        "explanation": "Use saturation of a fixed enzyme supply, not an unsupported claim that substrate destroys the enzyme."
+      },
+      {
+        "key": "d1",
+        "sectionKey": "rates",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "An enzyme reaction produces 18 µmol of product in the first 30 seconds. Calculate the mean rate over this interval in µmol min⁻¹. State one reason to prefer an initial interval over a much later interval.",
+        "answer": "30 seconds = 0.5 minutes, so rate = 18/0.5 = 36 µmol min⁻¹.~Later measurements may be affected by substrate depletion or product accumulation.",
+        "distractors": [],
+        "explanation": "Convert time before calculating rate. Initial rates reduce, but do not remove, experimental complications."
+      }
+    ],
+    "remaining": "Add full reaction-energy and rate diagrams, experimental practice and HL inhibition and pathway-regulation mechanisms."
+  },
+  {
+    "code": "C1.2",
+    "title": "Cell respiration",
+    "hlOnly": false,
+    "prerequisites": [
+      "B1.1",
+      "C1.1"
+    ],
+    "sections": [
+      {
+        "key": "atp",
+        "title": "ATP and energy transfer",
+        "syllabusPoints": [
+          "C1.2.1",
+          "C1.2.2"
+        ],
+        "body": "ATP (adenosine triphosphate) is a nucleotide containing adenine, ribose and three phosphate groups. Cells use ATP as an immediately available energy carrier, not as their main long-term energy reserve. Both autotrophs and heterotrophs use it.\n\nATP-dependent reactions support active transport against concentration gradients, synthesis of larger molecules from smaller ones, and movement such as muscle contraction or movement along a cytoskeleton. Enzymes couple ATP use to these processes rather than releasing energy at an unrelated location. Plants continue to require ATP for cellular work in darkness as well as in light.",
+        "pitfall": "ATP is neither an enzyme nor a store of energy that is used only by animals.",
+        "hlOnly": false
+      },
+      {
+        "key": "atp-cycle",
+        "title": "ATP use and regeneration",
+        "syllabusPoints": [
+          "C1.2.3"
+        ],
+        "body": "ATP + water → ADP + inorganic phosphate is an energy-releasing hydrolysis overall. The reverse conversion, ADP + phosphate → ATP, requires an energy input. Respiration supplies energy for much of this regeneration; photosynthesis also produces ATP within chloroplasts.\n\nATP and ADP are continually recycled. A small ATP pool can support extensive cellular work because its molecules are regenerated repeatedly. An ATP concentration that remains steady therefore does not imply that ATP is unused. If ATP production stops while ATP-dependent work continues, the ATP pool falls.\n\nBond breaking itself requires energy. ATP hydrolysis releases energy overall because the complete reaction, including formation and stabilization of products, is energetically favourable.",
+        "pitfall": "Do not explain ATP hydrolysis as energy being released simply by breaking a bond.",
+        "hlOnly": false
+      },
+      {
+        "key": "pathways",
+        "title": "Aerobic and anaerobic routes",
+        "syllabusPoints": [
+          "C1.2.4",
+          "C1.2.5"
+        ],
+        "body": "Cell respiration is a sequence of enzyme-controlled reactions transferring energy from carbon compounds into ATP and heat. It is not the same process as ventilation or exchange of oxygen and carbon dioxide. Glucose and, in aerobic pathways, fatty acids can be respiratory substrates.\n\nA simplified aerobic equation is C6H12O6 + 6 O2 → 6 CO2 + 6 H2O. In human cells, glucose breakdown starts in the cytoplasm and aerobic stages continue in mitochondria. Aerobic respiration has a much larger ATP yield per glucose than the anaerobic route.\n\nHuman cells can obtain a small amount of ATP by converting glucose to lactate without using oxygen. This occurs in the cytoplasm, helps working muscles when demand exceeds oxygen supply, and supplies mature red blood cells, which have no mitochondria. Lactate formation does not release carbon dioxide.",
+        "pitfall": "Aerobic and anaerobic pathways are not simply switched on and off throughout the whole body together.",
+        "hlOnly": false
+      },
+      {
+        "key": "respirometry",
+        "title": "Measuring a respiration rate",
+        "syllabusPoints": [
+          "C1.2.6"
+        ],
+        "body": "A respirometer can estimate oxygen uptake from a change in gas volume. An absorbent removes carbon dioxide so that its release does not offset oxygen uptake. Keep the absorbent separate from living tissue. Check seals and allow temperature and pressure to equilibrate before measuring.\n\nRate = change in oxygen volume / elapsed time. Divide by tissue mass when comparing unequal samples. For example, uptake of 0.48 cm³ in 4 minutes by 2.0 g of seeds is 0.060 cm³ g⁻¹ min⁻¹. With a capillary, volume change equals movement distance multiplied by its cross-sectional area.\n\nAn identical apparatus containing inert beads or killed tissue helps detect physical changes unrelated to living respiration. Match occupied volume, hold temperature and other conditions constant, use independent replicates, and report variation. Oxygen uptake alone does not measure anaerobic ATP production.",
+        "pitfall": "Gas contraction is not automatically oxygen uptake if carbon dioxide, leaks or temperature changes are uncontrolled.",
+        "hlOnly": false
+      },
+      {
+        "key": "redox",
+        "title": "Hydrogen and electron carriers",
+        "syllabusPoints": [
+          "C1.2.7"
+        ],
+        "body": "Oxidation is loss of electrons; reduction is gain of electrons. During respiration, removal of hydrogen from a carbon compound is an oxidation, and a carrier accepts the electrons. NAD+ is the oxidized form of a carrier. NAD+ + 2 electrons + H+ → NADH represents its reduction; another hydrogen ion may be released into the surrounding solution during substrate oxidation.\n\nNADH carries reducing power to another reaction and is oxidized back to NAD+. These are forms of the same recyclable carrier, not different energy sources created from nothing. Continued oxidation of substrate requires a supply of the oxidized carrier. NADH is not ATP and does not directly substitute for ATP in most ATP-dependent work.",
+        "pitfall": "Reduced NAD means NAD has gained electrons, not that its quantity has decreased.",
+        "hlOnly": true
+      },
+      {
+        "key": "glycolysis",
+        "title": "Following glucose through glycolysis",
+        "syllabusPoints": [
+          "C1.2.8"
+        ],
+        "body": "Glycolysis occurs in the cytoplasm. A six-carbon glucose molecule is phosphorylated using two ATP, then split into two three-carbon intermediates. Their oxidation reduces NAD+ to NADH. Subsequent reactions transfer phosphate directly from intermediates to ADP, producing four ATP by substrate-level phosphorylation.\n\nPer glucose, the net result is two pyruvate, two NADH and two ATP: four ATP are made but two were invested. The six carbon atoms remain in the two three-carbon pyruvate molecules, so glycolysis releases no carbon dioxide. It does not use oxygen directly, but it can continue only if NAD+ is regenerated from NADH.",
+        "pitfall": "Four ATP formed is the gross output, not the net ATP yield of glycolysis.",
+        "hlOnly": true
+      },
+      {
+        "key": "fermentation",
+        "title": "Keeping glycolysis supplied with NAD+",
+        "syllabusPoints": [
+          "C1.2.9",
+          "C1.2.10"
+        ],
+        "body": "When pyruvate is reduced to lactate in human cells, NADH is oxidized to NAD+. This regenerates the carrier required by glycolysis. The conversion to lactate adds no extra ATP; the net yield remains two ATP per glucose from glycolysis.\n\nIn yeast, pyruvate loses carbon dioxide and the remaining two-carbon compound is reduced to ethanol, regenerating NAD+. Ethanol and carbon dioxide are useful products in brewing and bread making: carbon dioxide expands dough, while ethanol is the desired product in alcoholic fermentation.\n\nThe human lactate pathway and yeast ethanol pathway therefore differ in carbon products, although both maintain glycolytic ATP production without oxygen. If the NAD+ pool is exhausted, glycolysis cannot sustain ATP production merely because glucose remains.",
+        "pitfall": "Human lactate formation does not generate the carbon dioxide produced in the yeast pathway.",
+        "hlOnly": true
+      },
+      {
+        "key": "link",
+        "title": "From pyruvate to acetyl-CoA",
+        "syllabusPoints": [
+          "C1.2.11"
+        ],
+        "body": "In eukaryotic cells, pyruvate enters the mitochondrial matrix. Each three-carbon pyruvate loses one carbon as carbon dioxide, is oxidized while NAD+ becomes NADH, and supplies a two-carbon acetyl group that joins coenzyme A. This oxidative decarboxylation is the link reaction.\n\nFor the two pyruvate produced from one glucose, the link reaction produces two acetyl-CoA, two carbon dioxide and two NADH. It does not directly produce ATP. Coenzyme A temporarily carries an acetyl group; its whole molecule is not consumed as a two-carbon respiratory substrate. Acetyl-CoA feeds the acetyl group into the Krebs cycle.",
+        "pitfall": "Do not count link-reaction carbon dioxide as a product of glycolysis.",
+        "hlOnly": true
+      },
+      {
+        "key": "krebs",
+        "title": "Carbon and carriers in the Krebs cycle",
+        "syllabusPoints": [
+          "C1.2.12"
+        ],
+        "body": "In the mitochondrial matrix, a two-carbon acetyl group combines with four-carbon oxaloacetate to form six-carbon citrate. Reactions involving oxidation and two decarboxylations regenerate the four-carbon acceptor, enabling another turn.\n\nOne turn per acetyl group releases two carbon dioxide and forms three NADH, one reduced FAD (FADH2), and one ATP equivalent by substrate-level phosphorylation. Reduced FAD accounts for a fourth oxidation, alongside the three that reduce NAD+. One glucose supplies two acetyl groups, so these quantities double per glucose. Most of the energy transferred at this stage is in reduced carriers rather than directly formed ATP.\n\nThe cycle regenerates oxaloacetate; it does not double the starting acceptor on each turn. Oxygen is not directly consumed in the cycle, but continued operation depends on reoxidation of its reduced carriers.",
+        "pitfall": "Two carbon atoms enter and two leave per turn, but they need not be the very same atoms in the first turn.",
+        "hlOnly": true
+      },
+      {
+        "key": "electron-transport",
+        "title": "Electron flow and the proton gradient",
+        "syllabusPoints": [
+          "C1.2.13",
+          "C1.2.14",
+          "C1.2.16"
+        ],
+        "body": "NADH donates electrons to carriers in the inner mitochondrial membrane and is oxidized to NAD+. Reduced FAD also supplies electrons. Successive electron transfers release energy that drives proton movement from the matrix into the intermembrane space. The membrane restricts free proton movement, allowing an electrochemical gradient to form.\n\nOxygen is the final electron acceptor. It combines with electrons and protons from the matrix to form water. Removing oxygen blocks sustained electron flow, inhibits regeneration of oxidized carriers and eventually slows the link reaction and Krebs cycle.\n\nElectron flow and proton flow are related but not identical: electrons pass between carriers, while protons are pumped across the membrane. Cristae provide a large area for these membrane proteins.",
+        "pitfall": "Oxygen does not directly split glucose or carry protons through ATP synthase.",
+        "hlOnly": true
+      },
+      {
+        "key": "chemiosmosis",
+        "title": "Using a gradient to make ATP",
+        "syllabusPoints": [
+          "C1.2.15"
+        ],
+        "body": "Protons move down their electrochemical gradient from the intermembrane space to the matrix through ATP synthase. Their passage drives changes in the enzyme that couple ADP and inorganic phosphate to form ATP. This coupling of a proton gradient to ATP formation is chemiosmosis, part of oxidative phosphorylation.\n\nA proton leak can dissipate the gradient even while electrons continue along the transport chain. ATP production then falls because less proton flow is coupled through ATP synthase. By contrast, blocking ATP synthase initially steepens the gradient; as pumping against that gradient becomes difficult, electron transport and oxygen consumption can slow.\n\nAn intact inner membrane is therefore essential for efficient ATP synthesis. Electron transfer alone is insufficient if the energy cannot be retained in a usable gradient.",
+        "pitfall": "A larger oxygen-consumption rate does not always imply a larger ATP-production rate, especially during uncoupling.",
+        "hlOnly": true
+      },
+      {
+        "key": "fuels",
+        "title": "Comparing respiratory substrates",
+        "syllabusPoints": [
+          "C1.2.17"
+        ],
+        "body": "Both carbohydrates and lipids can supply carbon for aerobic respiration. Fatty acids are broken into two-carbon acetyl groups carried by coenzyme A; they can then enter the Krebs cycle. Fatty-acid breakdown also supplies reduced carriers.\n\nLipids contain more carbon-hydrogen bonds and less oxygen relative to their mass than carbohydrates, so their complete oxidation generally releases more energy per gram. This makes fat an effective energy reserve. A per-gram comparison is not a per-molecule comparison: molecular masses differ.\n\nHuman anaerobic glycolytic ATP production depends on carbohydrate. Fatty acids cannot replace glucose to maintain that pathway when oxygen supply limits aerobic ATP production. Aerobic ATP yield also depends on coupling and transport, so a single rigid ATP total should not be assumed for all cells.",
+        "pitfall": "A fuel with a higher energy yield per gram is not necessarily usable by every cell under every condition.",
+        "hlOnly": true
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "atp",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which organisms carry out cell respiration?",
+        "answer": "Both autotrophs and heterotrophs",
+        "distractors": [
+          "Only animals",
+          "Only non-photosynthetic organisms",
+          "Only organisms without mitochondria"
+        ],
+        "explanation": "Autotrophs also require usable energy for cellular work and oxidize carbon compounds."
+      },
+      {
+        "key": "w-atp-work",
+        "sectionKey": "atp",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why a plant root cell may need ATP even though it is not photosynthesizing.",
+        "answer": "ATP supports processes such as active transport of mineral ions or synthesis of cell components.~Respiration can regenerate ATP using carbon compounds supplied to the root.",
+        "distractors": [],
+        "explanation": "Plant cells require energy for cellular work, whether or not they capture light themselves.",
+        "hlOnly": false
+      },
+      {
+        "key": "m-atp-cycle",
+        "sectionKey": "atp-cycle",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "An active cell has a nearly constant ATP concentration. Which interpretation is supported?",
+        "answer": "ATP use is approximately balanced by ATP regeneration.",
+        "distractors": [
+          "No ATP molecules are being hydrolysed.",
+          "ADP is not produced in the cell.",
+          "Every ATP-dependent reaction has stopped."
+        ],
+        "explanation": "A steady pool can have rapid turnover; concentration alone does not measure the rate of use.",
+        "hlOnly": false
+      },
+      {
+        "key": "w-hydrolysis",
+        "sectionKey": "atp-cycle",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why ATP hydrolysis can power cellular work but ATP regeneration needs an energy input.",
+        "answer": "ATP hydrolysis to ADP and phosphate is energetically favourable overall.~Enzymes couple that reaction to processes requiring energy.~The reverse conversion requires an energy input, supplied for example by respiration.",
+        "distractors": [],
+        "explanation": "Breaking a bond alone costs energy; explain the energetics of the overall coupled reaction.",
+        "hlOnly": false
+      },
+      {
+        "key": "w-human-pathways",
+        "sectionKey": "pathways",
+        "kind": "written",
+        "command": "compare",
+        "prompt": "Compare aerobic respiration and anaerobic glucose metabolism in human cells, using oxygen, products, ATP yield and location.",
+        "answer": "Aerobic respiration requires oxygen; the anaerobic route does not directly use it.~Complete aerobic oxidation produces carbon dioxide and water, whereas the human anaerobic route produces lactate.~Aerobic respiration yields substantially more ATP per glucose.~Glucose breakdown begins in the cytoplasm; aerobic stages also involve mitochondria, whereas the anaerobic lactate route is cytoplasmic.",
+        "distractors": [],
+        "explanation": "Make paired comparisons and distinguish respiration from breathing.",
+        "hlOnly": false
+      },
+      {
+        "key": "m-red-cells",
+        "sectionKey": "pathways",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Mature human red blood cells have no mitochondria. Which statement correctly describes their ATP supply?",
+        "answer": "They can produce ATP in the cytoplasm while forming lactate.",
+        "distractors": [
+          "They cannot make ATP at all.",
+          "They make most ATP by oxidizing fatty acids in mitochondria.",
+          "They release carbon dioxide when lactate forms."
+        ],
+        "explanation": "Cytoplasmic glucose metabolism can supply ATP without mitochondrial aerobic stages.",
+        "hlOnly": false
+      },
+      {
+        "key": "d1",
+        "sectionKey": "respirometry",
+        "kind": "data",
+        "command": "suggest",
+        "prompt": "A respirometer records oxygen uptake by germinating seeds. An equal apparatus containing boiled seeds shows no uptake. Suggest the role of the boiled-seed comparison and one variable that must still be controlled.",
+        "answer": "It helps distinguish respiration by living tissue from non-biological changes in the apparatus.~Temperature, seed quantity or apparatus volume should be controlled.",
+        "distractors": [],
+        "explanation": "A control improves interpretation but does not eliminate all possible physical confounders."
+      },
+      {
+        "key": "d-respirometer-rate",
+        "sectionKey": "respirometry",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "In synthetic respirometer data, 2.0 g of seeds take up 0.60 cm³ of oxygen in 5.0 min after control correction. Calculate the mass-specific uptake rate and include units.",
+        "answer": "0.60 / (5.0 × 2.0) = 0.060.~The rate is 0.060 cm³ g⁻¹ min⁻¹.",
+        "distractors": [],
+        "explanation": "Divide by both time and sample mass; do not multiply by the mass.",
+        "hlOnly": false
+      },
+      {
+        "key": "d-respirometer-design",
+        "sectionKey": "respirometry",
+        "kind": "data",
+        "command": "evaluate",
+        "prompt": "A student compares oxygen uptake at 15 °C and 25 °C using one seed sample at each temperature, no carbon-dioxide absorbent and no equilibration period. Evaluate two weaknesses and propose improvements.",
+        "answer": "Carbon-dioxide release can offset oxygen uptake; use a suitable absorbent separated from the tissue.~Temperature changes can alter gas volume without respiration; equilibrate and use a matched physical control.~One sample per treatment does not estimate biological variation; use independent replicates with matched seed mass and condition.",
+        "distractors": [],
+        "explanation": "Credit two explained weakness-improvement pairs. Repeating a reading from one sample is not equivalent to independent biological replication.",
+        "hlOnly": false
+      },
+      {
+        "key": "m-nad-redox",
+        "sectionKey": "redox",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "When NAD+ becomes NADH during substrate oxidation, what happens to NAD+?",
+        "answer": "It gains electrons and is reduced.",
+        "distractors": [
+          "It loses electrons and is reduced.",
+          "It gains electrons and is oxidized.",
+          "It is converted directly into ATP."
+        ],
+        "explanation": "Oxidation and reduction are electron-transfer terms, not changes in the number of carrier molecules.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-nad-recycling",
+        "sectionKey": "redox",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why a cell needs to regenerate NAD+ rather than continually accumulating NADH.",
+        "answer": "NAD+ accepts electrons during oxidation of respiratory substrates.~If it is not regenerated, the oxidized carrier becomes limiting and those reactions cannot continue at their previous rate.",
+        "distractors": [],
+        "explanation": "The cell recycles a finite carrier pool between oxidized and reduced forms.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-glycolysis-net",
+        "sectionKey": "glycolysis",
+        "kind": "mcq",
+        "command": "determine",
+        "prompt": "Two ATP are invested and four ATP are formed during glycolysis of one glucose. What is the net ATP gain?",
+        "answer": "Two ATP",
+        "distractors": [
+          "Four ATP",
+          "Six ATP",
+          "Zero ATP"
+        ],
+        "explanation": "Net gain subtracts the initial ATP investment from the gross ATP output.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-glycolysis-carbon",
+        "sectionKey": "glycolysis",
+        "kind": "data",
+        "command": "determine",
+        "prompt": "Three glucose molecules complete glycolysis. Determine the number of pyruvate, net ATP and NADH produced, and the number of carbon dioxide molecules released during this stage.",
+        "answer": "Six pyruvate are produced.~Six ATP are gained net and six NADH are formed.~No carbon dioxide is released in glycolysis.",
+        "distractors": [],
+        "explanation": "Multiply each per-glucose yield by three. All 18 carbon atoms remain in six three-carbon pyruvate molecules.",
+        "hlOnly": true
+      },
+      {
+        "key": "w1",
+        "sectionKey": "fermentation",
+        "kind": "written",
+        "command": "compare",
+        "prompt": "Compare the products of anaerobic glucose metabolism in human muscle cells and yeast.",
+        "answer": "Human muscle cells can produce lactate.~Yeast can produce ethanol and carbon dioxide.~Both routes support a relatively small ATP yield from glycolysis compared with aerobic respiration.",
+        "distractors": [],
+        "explanation": "Do not assign ethanol production to human muscle cells.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-fermentation-block",
+        "sectionKey": "fermentation",
+        "kind": "data",
+        "command": "suggest",
+        "prompt": "A yeast culture without oxygen still has abundant glucose. A treatment prevents NADH oxidation in the ethanol pathway. Suggest why ATP production cannot be sustained at its previous rate.",
+        "answer": "NAD+ regeneration is inhibited, so the available NAD+ pool falls.~Glycolysis requires NAD+ and therefore slows.~The loss of glycolytic ATP formation lowers the sustained ATP supply despite glucose remaining.",
+        "distractors": [],
+        "explanation": "The purpose of the fermentation step is carrier recycling; it does not itself add to the two ATP net glycolytic yield.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-link-carbon",
+        "sectionKey": "link",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which description correctly follows carbon in one link reaction?",
+        "answer": "Three-carbon pyruvate supplies a two-carbon acetyl group and one carbon dioxide.",
+        "distractors": [
+          "Six-carbon glucose directly produces two carbon dioxide and a four-carbon acceptor.",
+          "Three-carbon pyruvate becomes a three-carbon acetyl group without carbon loss.",
+          "Two-carbon acetyl-CoA gains carbon dioxide to form pyruvate."
+        ],
+        "explanation": "Decarboxylation removes one carbon from each pyruvate; NADH is formed but ATP is not made directly.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-link-yield",
+        "sectionKey": "link",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "Four pyruvate molecules complete the link reaction. Calculate the acetyl-CoA, carbon dioxide, NADH and directly formed ATP produced.",
+        "answer": "Four acetyl-CoA, four carbon dioxide and four NADH are formed.~No ATP is directly formed in the link reaction.",
+        "distractors": [],
+        "explanation": "Count per pyruvate, rather than per glucose: each pyruvate supplies one acetyl group.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-krebs-cycle",
+        "sectionKey": "krebs",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why the Krebs pathway is a cycle rather than a one-way consumption of oxaloacetate.",
+        "answer": "A four-carbon acceptor combines with a two-carbon acetyl group to make a six-carbon compound.~Oxidations and two decarboxylations return the pathway to a four-carbon acceptor.~Regeneration allows another acetyl group to enter.",
+        "distractors": [],
+        "explanation": "Track carbon counts and regeneration. Coenzyme A and oxaloacetate have different roles.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-krebs-yield",
+        "sectionKey": "krebs",
+        "kind": "data",
+        "command": "determine",
+        "prompt": "Two acetyl groups complete two turns of the Krebs cycle. Determine the total carbon dioxide, NADH, reduced FAD and ATP equivalents formed in those turns only.",
+        "answer": "Four carbon dioxide and six NADH.~Two reduced FAD and two ATP equivalents.",
+        "distractors": [],
+        "explanation": "Do not add glycolytic or link-reaction yields when the question asks only about the cycle.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-mitochondrial-pumping",
+        "sectionKey": "electron-transport",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "In respiring mitochondria, which process directly establishes the proton gradient across the inner membrane?",
+        "answer": "Electron-transfer energy drives proton movement from the matrix into the intermembrane space.",
+        "distractors": [
+          "ATP synthase moves electrons from oxygen into NADH.",
+          "Protons diffuse freely through the lipid membrane from matrix to intermembrane space.",
+          "Oxygen is pumped across the membrane in place of protons."
+        ],
+        "explanation": "Protons are pumped against their electrochemical gradient; their later return through ATP synthase is a separate process.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-oxygen-terminal",
+        "sectionKey": "electron-transport",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why removal of oxygen eventually inhibits the Krebs cycle even though the cycle does not directly consume oxygen.",
+        "answer": "Oxygen accepts electrons at the end of the electron-transport chain and participates in water formation.~Without this acceptor, sustained electron transfer and reoxidation of reduced carriers are inhibited.~Oxidized carriers become limiting for the link reaction and Krebs cycle.",
+        "distractors": [],
+        "explanation": "Connect the pathways through carrier recycling instead of placing oxygen directly into a Krebs-cycle reaction.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-proton-leak",
+        "sectionKey": "chemiosmosis",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "A treatment increases proton leakage across the inner mitochondrial membrane without directly blocking electron carriers. Which outcome is most directly expected?",
+        "answer": "Less ATP is made per unit of electron transfer because the gradient is dissipated.",
+        "distractors": [
+          "More ATP is necessarily made because protons cross the membrane faster.",
+          "ATP synthase reverses the electrons carried by NADH.",
+          "The treatment necessarily increases net glycolytic ATP yield from two to four."
+        ],
+        "explanation": "Leaking protons bypass ATP synthase, so respiratory electron flow can become less efficiently coupled to ATP formation.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-coupling-data",
+        "sectionKey": "chemiosmosis",
+        "kind": "data",
+        "command": "suggest",
+        "prompt": "Synthetic mitochondrial data show oxygen use of 10 units and ATP output of 30 units before treatment. Afterwards oxygen use is 14 units and ATP output is 7 units. Suggest a mechanism consistent with the change.",
+        "answer": "ATP produced per unit of oxygen use has fallen from 3.0 to 0.50.~Increased proton leakage or uncoupling could dissipate the gradient without stopping electron flow.~The data are consistent with uncoupling but do not identify a unique molecular cause.",
+        "distractors": [],
+        "explanation": "Use both measurements; increased oxygen use alone would give a misleading conclusion about ATP output.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-fuel-comparison",
+        "sectionKey": "fuels",
+        "kind": "written",
+        "command": "compare",
+        "prompt": "Compare carbohydrate and lipid as respiratory substrates in terms of energy per gram and use during human anaerobic ATP production.",
+        "answer": "Complete lipid oxidation generally yields more energy per gram than carbohydrate because lipid is more reduced.~Human anaerobic glycolytic ATP production uses carbohydrate; fatty acids cannot substitute for glucose in that pathway.",
+        "distractors": [],
+        "explanation": "Higher energy density does not make fat an anaerobic fuel.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-fuel-units",
+        "sectionKey": "fuels",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "Use the synthetic rounded energy yields 17 kJ g⁻¹ for carbohydrate and 38 kJ g⁻¹ for lipid. Calculate the energy released by complete oxidation of 3.0 g of each. Explain why this does not by itself determine a cell’s ATP yield.",
+        "answer": "Carbohydrate: 3.0 × 17 = 51 kJ.~Lipid: 3.0 × 38 = 114 kJ.~The fraction transferred to ATP depends on metabolic pathways and coupling; released energy also becomes heat.",
+        "distractors": [],
+        "explanation": "Energy per gram and ATP production are different quantities, so neither kJ total should be relabelled as a count of ATP molecules.",
+        "hlOnly": true
+      }
+    ],
+    "remaining": "All 17 numbered understandings now have relevant teaching and linked practice, with core 1–6 and HL 7–17 separated. This is still partial revision support: add labelled mitochondrial/pathway diagrams, a wider range of unfamiliar respirometer traces and uncertainty analyses, practical execution and independent teacher review. References do not certify every assessment demand."
+  },
+  {
+    "code": "C1.3",
+    "title": "Photosynthesis",
+    "hlOnly": false,
+    "prerequisites": [
+      "A1.1",
+      "B1.1"
+    ],
+    "sections": [
+      {
+        "key": "transformation",
+        "title": "Light energy and carbon fixation",
+        "syllabusPoints": [
+          "C1.3.1",
+          "C1.3.2",
+          "C1.3.3"
+        ],
+        "body": "Photosynthesis transfers light energy into chemical energy in organic compounds. Carbon dioxide supplies carbon; water supplies hydrogen in oxygenic photosynthesis. A simplified overall equation is 6 CO2 + 6 H2O → C6H12O6 + 6 O2, with light and photosynthetic pigments required. The detailed pathway builds smaller carbon compounds before sugars are assembled.\n\nPlants, algae and cyanobacteria perform oxygenic photosynthesis. Oxygen released as a by-product originates from water, not directly from carbon dioxide. Light supplies energy, not the carbon atoms in biomass.\n\nPlants also respire in light and darkness. Measured oxygen release can therefore represent net photosynthesis: gross photosynthetic oxygen production minus respiratory oxygen use.",
+        "pitfall": "The simplified equation is not a claim that glucose is formed in one reaction.",
+        "hlOnly": false
+      },
+      {
+        "key": "chromatography",
+        "title": "Separating photosynthetic pigments",
+        "syllabusPoints": [
+          "C1.3.4"
+        ],
+        "body": "In chromatography, dissolved pigments move with a solvent over a stationary material. Different pigments have different relative affinities for these phases and therefore travel different distances. Apply a small concentrated spot above the starting solvent level and mark the solvent front before it evaporates.\n\nRf = distance travelled by pigment from the origin / distance travelled by solvent front from the same origin. Measure to the centre of a pigment band. If a band travels 3.6 cm and the front 6.0 cm, Rf = 0.60, with no units.\n\nColour and Rf can support identification using standards run under the same conditions. Rf depends on the solvent and stationary phase, so a remembered value alone cannot establish identity across different methods.",
+        "pitfall": "Measure from the origin, not the bottom of the paper, and do not treat Rf as a distance.",
+        "hlOnly": false
+      },
+      {
+        "key": "pigments",
+        "title": "Absorption spectra and action spectra",
+        "syllabusPoints": [
+          "C1.3.5",
+          "C1.3.6"
+        ],
+        "body": "A pigment absorbs particular wavelengths of visible light; absorbed photons can raise electrons to higher energy states. Chlorophyll absorbs strongly in blue and red regions and less strongly in green, much of which is reflected or transmitted. Accessory pigments extend the wavelengths available.\n\nAn absorption spectrum plots how strongly a pigment or sample absorbs light against wavelength, usually in nanometres. An action spectrum plots photosynthetic activity, such as oxygen production, against wavelength. The vertical axes measure different things even when the overall patterns resemble each other.\n\nTo compare effects of wavelength, control the photon flux, temperature and carbon-dioxide availability. A whole-leaf action spectrum reflects multiple pigments and other biological factors, not only purified chlorophyll.",
+        "pitfall": "Low absorption of green light does not mean every leaf has exactly zero photosynthesis in green light.",
+        "hlOnly": false
+      },
+      {
+        "key": "limiting",
+        "title": "Pigments and limiting factors",
+        "syllabusPoints": [
+          "C1.3.7"
+        ],
+        "body": "Light intensity, carbon-dioxide availability and temperature can limit photosynthetic rate. Increasing one factor increases the rate only while that factor constrains the process. A plateau after increasing light may indicate that carbon dioxide or another condition is now limiting; the plateau alone does not identify which one.\n\nChange one factor at a time, control the others, allow equilibration and use independent replicates. A lamp can alter temperature as well as light intensity, so temperature must be measured and controlled.\n\nGas-exchange measurements need interpretation: oxygen-bubble counts are less precise than gas volume or concentration because bubble sizes vary. Net oxygen release combines photosynthetic production and respiratory use. An effect on net exchange does not automatically establish an identical effect on gross photosynthesis.",
+        "pitfall": "A rising factor is not necessarily still limiting after the response has reached a plateau.",
+        "hlOnly": false
+      },
+      {
+        "key": "enrichment",
+        "title": "Testing effects of elevated carbon dioxide",
+        "syllabusPoints": [
+          "C1.3.8"
+        ],
+        "body": "Growth chambers and greenhouses allow controlled changes in carbon dioxide while light, water and temperature are regulated. They help isolate causal effects, but enclosure conditions can differ from natural environments.\n\nFree-air carbon-dioxide enrichment (FACE) exposes plants to elevated carbon dioxide outdoors without enclosing them. It preserves more natural interactions with weather, soil and surrounding organisms, but controlling exposure and other conditions is harder. Replicated treatment and ambient-control plots improve interpretation.\n\nHigher carbon dioxide can increase photosynthesis when carbon availability limits it, but responses also depend on nutrients, water, temperature and acclimation. Results from one species and setting do not establish that all ecosystems will respond identically. Distinguish a short-term leaf rate from long-term biomass production.",
+        "pitfall": "More realistic field conditions do not remove the need for controls and replication.",
+        "hlOnly": false
+      },
+      {
+        "key": "photosystems",
+        "title": "Capturing light in photosystems",
+        "syllabusPoints": [
+          "C1.3.9",
+          "C1.3.10"
+        ],
+        "body": "Photosystems are pigment-protein complexes in thylakoid membranes. Antenna pigments absorb light and transfer excitation energy towards a reaction centre. A reaction-centre chlorophyll can then donate an excited electron to an acceptor, beginning directed electron transfer.\n\nMany antenna pigments can deliver energy to one reaction centre, increasing the probability of capturing usable light. Different accessory pigments absorb different wavelength ranges, broadening capture beyond that of a single chlorophyll molecule.\n\nEnergy transfer among antenna pigments is not the same as the electron-transfer sequence leaving the reaction centre. Photosystem II operates before photosystem I in the usual non-cyclic pathway, despite their numerical names.",
+        "pitfall": "Antenna pigments collect excitation energy; they do not each generate a separate ATP molecule.",
+        "hlOnly": true
+      },
+      {
+        "key": "photolysis",
+        "title": "Replacing photosystem II electrons",
+        "syllabusPoints": [
+          "C1.3.11"
+        ],
+        "body": "Light excites electrons in photosystem II and electron transfer removes them from its reaction centre. Water is split at the photosystem-II-associated complex to replace those electrons. The products are electrons, protons and oxygen.\n\nThe balanced relationship is 2 H2O → O2 + 4 H+ + 4 electrons. Protons released on the thylakoid-lumen side contribute to the proton gradient, and oxygen can leave as a by-product. Sustained non-cyclic flow needs this electron supply.\n\nWater supplies the electrons; carbon dioxide has a different role in carbon fixation. Isotopic labelling of water can therefore trace the origin of the oxygen gas.",
+        "pitfall": "Photolysis is associated with photosystem II, not the Calvin cycle or photosystem I.",
+        "hlOnly": true
+      },
+      {
+        "key": "light-atp",
+        "title": "Photophosphorylation and proton flow",
+        "syllabusPoints": [
+          "C1.3.12"
+        ],
+        "body": "Electrons leaving photosystem II pass through carriers towards photosystem I. Electron-transfer energy supports proton movement from the stroma into the thylakoid lumen. Water splitting also supplies lumen protons. The membrane limits proton leakage.\n\nProtons return down their electrochemical gradient through ATP synthase from the lumen to the stroma, driving ATP formation on the stromal side. This light-supported ATP formation is photophosphorylation.\n\nIn non-cyclic flow, water supplies electrons and the pathway ultimately produces reduced NADP as well as ATP, with oxygen released. In cyclic flow, electrons excited at photosystem I return through carriers. Cyclic flow can support additional ATP formation without net reduced NADP production or water splitting by that cycle.",
+        "pitfall": "The lumen-to-stroma flow through ATP synthase is opposite to the energy-driven pumping direction.",
+        "hlOnly": true
+      },
+      {
+        "key": "nadph",
+        "title": "Photosystem I and reduced NADP",
+        "syllabusPoints": [
+          "C1.3.13"
+        ],
+        "body": "Light raises electrons in photosystem I to a higher energy state. In non-cyclic flow, electrons arrive to replace those lost by its reaction centre, while the excited electrons pass to acceptors that enable NADP+ reduction. NADP+ accepts two electrons and a proton from the stroma to form NADPH, also called reduced NADP.\n\nNADPH transfers reducing power to reactions in the stroma, including reduction of carbon compounds during the Calvin cycle. It is then oxidized to NADP+, which can accept electrons again. ATP and NADPH have different roles: ATP supplies energy through coupled reactions, whereas NADPH supplies reducing power.",
+        "pitfall": "NADPH is not an alternative name for ATP, and reduced NADP is not the carrier used in glycolysis.",
+        "hlOnly": true
+      },
+      {
+        "key": "spatial",
+        "title": "Chloroplast compartments",
+        "syllabusPoints": [
+          "C1.3.14"
+        ],
+        "body": "The thylakoid membrane holds photosystems, electron carriers and ATP synthase in an organized arrangement. The thylakoid lumen is a small compartment in which proton concentration can increase. The stroma lies outside the thylakoids but inside the chloroplast envelope.\n\nLight-dependent reactions build the proton gradient across the thylakoid membrane, while ATP and NADPH become available on the stromal side. Enzymes for the Calvin cycle act in the stroma, where these products can be used. Thylakoid membranes provide a large working area and separate the two sides of the gradient.\n\nRupturing the membrane can eliminate efficient chemiosmotic ATP production even if some isolated pigments still absorb light.",
+        "pitfall": "The stroma is not the fluid inside the thylakoid lumen.",
+        "hlOnly": true
+      },
+      {
+        "key": "fixation",
+        "title": "Rubisco and carbon entry",
+        "syllabusPoints": [
+          "C1.3.15"
+        ],
+        "body": "Carbon fixation incorporates inorganic carbon dioxide into an organic compound. In the stroma, the enzyme Rubisco catalyses addition of one carbon dioxide to five-carbon ribulose bisphosphate (RuBP). The unstable six-carbon product splits into two molecules of three-carbon glycerate 3-phosphate (GP).\n\nFor three carbon dioxide molecules, three RuBP molecules are used and six GP molecules result. The carbon count is 3 + 15 = 18, matching six three-carbon products. RuBP is the carbon-dioxide acceptor; Rubisco is the enzyme. Their similar names do not indicate identical roles.\n\nFixation alone is not completion of sugar synthesis: the products still need reduction and the acceptor must be regenerated.",
+        "pitfall": "Carbon dioxide does not combine directly with ATP to become glucose.",
+        "hlOnly": true
+      },
+      {
+        "key": "reduction",
+        "title": "Producing triose phosphate",
+        "syllabusPoints": [
+          "C1.3.16"
+        ],
+        "body": "Glycerate 3-phosphate is converted to triose phosphate (TP) using ATP and reduced NADP. ATP supports the energetically demanding conversion, and NADPH supplies reducing power. ADP and NADP+ return to the pool available to the light-dependent reactions.\n\nFor fixation of three carbon dioxide molecules, conversion of the six GP molecules uses six ATP and six NADPH to form six TP molecules. Each TP contains three carbons. Most TP stays in the cycle to regenerate the carbon acceptor; only a fraction represents net carbon gain available for other synthesis.\n\nThe term light-independent does not mean these reactions usually run indefinitely in darkness: their supplies of ATP and NADPH depend on the light-dependent reactions.",
+        "pitfall": "GP and TP both contain three carbons, but they differ in chemical state and cannot be treated as the same compound.",
+        "hlOnly": true
+      },
+      {
+        "key": "regeneration",
+        "title": "Recycling RuBP and counting net gain",
+        "syllabusPoints": [
+          "C1.3.17"
+        ],
+        "body": "For every three carbon dioxide fixed, six three-carbon TP molecules form. Five TP, containing fifteen carbons in total, regenerate three five-carbon RuBP molecules. Regeneration uses a further three ATP. The remaining one TP, containing three carbons, is the net product available to leave this cycle accounting.\n\nCombining reduction and regeneration gives nine ATP and six NADPH used per net TP from three carbon dioxide. Producing the carbon equivalent of a six-carbon sugar requires two net TP, so the totals double.\n\nFive-sixths of the TP produced is therefore recycled in this accounting. Removing all six TP as products would exhaust RuBP and prevent continued fixation.",
+        "pitfall": "Count the net exported TP, not every TP molecule temporarily formed during the cycle.",
+        "hlOnly": true
+      },
+      {
+        "key": "products",
+        "title": "From fixed carbon to biomass",
+        "syllabusPoints": [
+          "C1.3.18"
+        ],
+        "body": "Products of the Calvin cycle provide carbon skeletons for the synthesis of other organic compounds. Triose phosphate can contribute to hexose formation; those sugars can be used to make sucrose for transport, starch for storage and cellulose for cell walls. Carbon skeletons also contribute to lipid and amino-acid synthesis.\n\nPhotosynthesis alone does not supply every element in biomass. Amino acids and proteins require nitrogen, obtained for example through assimilation of absorbed nitrate or ammonium. Other compounds require mineral nutrients such as phosphorus or sulfur.\n\nA plant can therefore be limited in growth by mineral supply even when light and carbon dioxide permit carbon fixation. Net biomass increase also depends on respiration and allocation of products.",
+        "pitfall": "Carbon dioxide and water cannot by themselves supply the nitrogen atoms in proteins.",
+        "hlOnly": true
+      },
+      {
+        "key": "interdependence",
+        "title": "Why the reaction groups depend on each other",
+        "syllabusPoints": [
+          "C1.3.19"
+        ],
+        "body": "Light-dependent reactions supply ATP and NADPH to the Calvin cycle. In using them, the cycle regenerates ADP, phosphate and NADP+, which can support continued light-dependent reactions. The pathways exchange carriers as well as carbon and energy.\n\nWhen light is removed, new production of ATP and NADPH falls, so sustained Calvin-cycle activity becomes limited as available supplies are used. When carbon-dioxide supply is severely restricted, carbon fixation and consumption of ATP and NADPH can fall. Slower regeneration of NADP+ and ADP can then limit sustained electron flow and ATP formation.\n\nThese are linked responses, not claims that every intermediate becomes zero instantly. Storage pools and alternative electron pathways can affect the short-term response.",
+        "pitfall": "Light-independent reactions are not independent of the products of light-dependent reactions.",
+        "hlOnly": true
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "transformation",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Where does the oxygen gas released during oxygenic photosynthesis originate?",
+        "answer": "Water",
+        "distractors": [
+          "Carbon dioxide being fixed",
+          "Glucose transported into the leaf",
+          "The mineral ions absorbed by roots"
+        ],
+        "explanation": "Water is split during the light-dependent processes; its oxygen atoms can be released as oxygen gas."
+      },
+      {
+        "key": "d-net-photosynthesis",
+        "sectionKey": "transformation",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "A leaf has gross photosynthetic oxygen production of 12 units per minute and respiratory oxygen use of 3 units per minute. Calculate net oxygen release.",
+        "answer": "12 − 3 = 9 units per minute.",
+        "distractors": [],
+        "explanation": "Net release subtracts simultaneous respiratory use from gross production.",
+        "hlOnly": false
+      },
+      {
+        "key": "d-rf",
+        "sectionKey": "chromatography",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "A pigment band travels 42 mm and the solvent front travels 60 mm from the same origin. Calculate Rf and state whether it has units.",
+        "answer": "Rf = 42 / 60 = 0.70.~Rf is dimensionless.",
+        "distractors": [],
+        "explanation": "The ratio is unchanged if both distances are converted to centimetres.",
+        "hlOnly": false
+      },
+      {
+        "key": "w-rf-identification",
+        "sectionKey": "chromatography",
+        "kind": "written",
+        "command": "evaluate",
+        "prompt": "A student identifies a pigment solely because its Rf matches a value from a different solvent system. Evaluate that identification.",
+        "answer": "Rf depends on the solvent and stationary phase, so values from different systems are not directly decisive.~Compare colour and a known standard run under the same conditions before assigning identity.",
+        "distractors": [],
+        "explanation": "Chromatographic movement is evidence for identification, not an environment-independent molecular label.",
+        "hlOnly": false
+      },
+      {
+        "key": "w1",
+        "sectionKey": "pigments",
+        "kind": "written",
+        "command": "distinguish",
+        "prompt": "Distinguish an absorption spectrum from an action spectrum.",
+        "answer": "An absorption spectrum shows how strongly a pigment or sample absorbs different wavelengths.~An action spectrum shows the effectiveness of different wavelengths in producing a biological response.",
+        "distractors": [],
+        "explanation": "Identify what is measured on the vertical axis in each case."
+      },
+      {
+        "key": "d-spectra",
+        "sectionKey": "pigments",
+        "kind": "data",
+        "command": "suggest",
+        "prompt": "Under matched photon flux, synthetic leaf data show photosynthetic rates of 8, 3 and 7 units at 450, 550 and 660 nm respectively. Suggest why the pattern resembles, but need not exactly match, the absorption spectrum of purified chlorophyll.",
+        "answer": "Blue and red wavelengths are strongly absorbed by chlorophyll, supporting higher rates than green in these data.~An intact leaf contains accessory pigments and other biological factors absent from a purified chlorophyll sample.",
+        "distractors": [],
+        "explanation": "Do not conclude that all green light is unusable or that the vertical axes of both spectra measure absorption.",
+        "hlOnly": false
+      },
+      {
+        "key": "d1",
+        "sectionKey": "limiting",
+        "kind": "data",
+        "command": "suggest",
+        "prompt": "At low light intensity, increasing light raises oxygen production. At high intensity, extra light has no effect, but adding carbon dioxide raises production. Suggest an explanation.",
+        "answer": "Light was limiting at low intensity.~At the higher intensity, carbon-dioxide availability became limiting.~Adding carbon dioxide removed part of that limitation.",
+        "distractors": [],
+        "explanation": "The response to changing each factor supports the inference about which factor limits rate."
+      },
+      {
+        "key": "d-lamp-confound",
+        "sectionKey": "limiting",
+        "kind": "data",
+        "command": "explain",
+        "prompt": "Moving a lamp closer to pondweed increases bubble count and water temperature. Explain why this does not isolate the effect of light intensity, and suggest two improvements.",
+        "answer": "Both light intensity and temperature changed, so the result cannot be attributed to light alone.~Control and monitor water temperature while changing measured light intensity.~Measure oxygen volume or concentration rather than assuming every bubble has equal volume; use independent replicates.",
+        "distractors": [],
+        "explanation": "Identify the confounding variable and connect each improvement to the weakness it addresses.",
+        "hlOnly": false
+      },
+      {
+        "key": "w-face-comparison",
+        "sectionKey": "enrichment",
+        "kind": "written",
+        "command": "compare",
+        "prompt": "Compare a controlled growth chamber and a FACE field experiment for studying elevated carbon dioxide.",
+        "answer": "A chamber makes it easier to hold other conditions constant, helping isolate effects of carbon dioxide.~FACE retains more natural environmental interactions without enclosing the plants.~Field conditions are harder to control, so replicated treatment and control plots are important.",
+        "distractors": [],
+        "explanation": "Neither method is universally superior; their control and ecological realism differ.",
+        "hlOnly": false
+      },
+      {
+        "key": "d-co2-generalization",
+        "sectionKey": "enrichment",
+        "kind": "data",
+        "command": "evaluate",
+        "prompt": "In synthetic field data, added carbon dioxide increases biomass by 18% in watered, fertilized plots but by 2% in dry, nutrient-poor plots. Evaluate the claim that elevated carbon dioxide will increase all plant growth by 18%.",
+        "answer": "The response depends on water and nutrient conditions, so the 18% result cannot be applied to every setting.~Other species, climates and exposure durations may respond differently.~Replication and variation are needed to judge how reliably the measured treatment differences are estimated.",
+        "distractors": [],
+        "explanation": "Separate the observed response in particular plots from a universal prediction.",
+        "hlOnly": false
+      },
+      {
+        "key": "m-antenna",
+        "sectionKey": "photosystems",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "What is an advantage of grouping antenna pigments around a reaction centre?",
+        "answer": "Multiple pigments can capture light and transfer excitation energy towards the reaction centre.",
+        "distractors": [
+          "Each antenna pigment independently fixes carbon dioxide.",
+          "It removes the need to replace reaction-centre electrons.",
+          "It makes all visible wavelengths equally absorbed."
+        ],
+        "explanation": "Antenna organization increases light capture without requiring every pigment to function as an independent reaction centre.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-photosystem-transfer",
+        "sectionKey": "photosystems",
+        "kind": "written",
+        "command": "distinguish",
+        "prompt": "Distinguish excitation-energy transfer among antenna pigments from electron transfer out of a reaction centre.",
+        "answer": "Antenna pigments pass excitation energy towards a reaction centre.~An excited reaction-centre electron is transferred to an electron acceptor, beginning directed electron flow.",
+        "distractors": [],
+        "explanation": "The collected energy and the electron leaving the reaction centre are related but should not be described as the same moving object.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-water-splitting",
+        "sectionKey": "photolysis",
+        "kind": "data",
+        "command": "determine",
+        "prompt": "Using 2 H2O → O2 + 4 H+ + 4 electrons, determine the oxygen, protons and electrons supplied by splitting six water molecules.",
+        "answer": "Three oxygen molecules, twelve protons and twelve electrons.",
+        "distractors": [],
+        "explanation": "Multiply every term in the balanced relationship by three.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-psii-water",
+        "sectionKey": "photolysis",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which role of water is directly linked to sustained photosystem II activity?",
+        "answer": "Water supplies replacement electrons and contributes protons and oxygen through splitting.",
+        "distractors": [
+          "Water supplies the carbon fixed into GP.",
+          "Water converts Rubisco into RuBP.",
+          "Water accepts electrons at the end of the mitochondrial electron chain."
+        ],
+        "explanation": "The reaction centre needs replacement electrons after photoexcited electrons are transferred away.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-chloroplast-protons",
+        "sectionKey": "light-atp",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "In a functioning chloroplast, which proton movement is coupled to ATP formation by ATP synthase?",
+        "answer": "From the thylakoid lumen to the stroma",
+        "distractors": [
+          "From the stroma into the thylakoid lumen",
+          "From the mitochondrial matrix into the stroma",
+          "From the cytoplasm directly into RuBP"
+        ],
+        "explanation": "ATP synthase uses the downhill return flow rather than the pumping step that builds the gradient.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-cyclic-flow",
+        "sectionKey": "light-atp",
+        "kind": "written",
+        "command": "compare",
+        "prompt": "Compare cyclic and non-cyclic electron flow with respect to ATP, reduced NADP and oxygen production.",
+        "answer": "Both can support ATP formation through a proton gradient.~Non-cyclic flow supplies electrons to reduce NADP and involves water splitting with oxygen release.~Cyclic flow returns photosystem-I electrons through carriers and does not itself produce net reduced NADP or oxygen.",
+        "distractors": [],
+        "explanation": "Cyclic flow can supplement ATP supply without equivalent extra NADPH production.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-nadph-role",
+        "sectionKey": "nadph",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which statement distinguishes the roles of ATP and NADPH in carbon reduction?",
+        "answer": "ATP supports energy-requiring reactions, while NADPH supplies reducing power.",
+        "distractors": [
+          "NADPH supplies the carbon atoms, while ATP supplies nitrogen.",
+          "ATP supplies electrons to photosystem I, while NADPH is the enzyme Rubisco.",
+          "ATP and NADPH are interchangeable names for the same molecule."
+        ],
+        "explanation": "Both are needed, but they perform different chemical roles.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-nadp-reduction",
+        "sectionKey": "nadph",
+        "kind": "written",
+        "command": "outline",
+        "prompt": "Outline how NADP+ becomes reduced NADP during non-cyclic electron flow.",
+        "answer": "Light excites electrons in photosystem I and they pass to acceptors.~NADP+ accepts two electrons and a proton from the stroma to form NADPH.",
+        "distractors": [],
+        "explanation": "Reduced NADP is a reusable carrier, not a carbon product of the Calvin cycle.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-chloroplast-layout",
+        "sectionKey": "spatial",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain how thylakoid compartmentalization supports photosynthetic ATP production and its use.",
+        "answer": "The membrane separates lumen and stroma and restricts proton leakage so an electrochemical gradient can form.~ATP synthase couples proton return to ATP formation on the stromal side.~ATP can then be used by Calvin-cycle enzymes in the stroma.",
+        "distractors": [],
+        "explanation": "Connect structure to function rather than only naming chloroplast parts.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-broken-thylakoids",
+        "sectionKey": "spatial",
+        "kind": "data",
+        "command": "suggest",
+        "prompt": "An isolated preparation still absorbs light after its thylakoid membranes are ruptured, but makes very little ATP. Suggest why light absorption is not enough.",
+        "answer": "Ruptured membranes cannot maintain an effective proton gradient between lumen and stroma.~Without the gradient, ATP synthase lacks the coupled driving force for efficient ATP formation.",
+        "distractors": [],
+        "explanation": "Pigment absorption and energy coupling are distinct requirements.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-rubisco-rubp",
+        "sectionKey": "fixation",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which statement assigns Rubisco and RuBP their correct roles?",
+        "answer": "Rubisco is an enzyme; RuBP is a five-carbon carbon-dioxide acceptor.",
+        "distractors": [
+          "RuBP is an enzyme; Rubisco is a five-carbon sugar.",
+          "Both are names for the same protein.",
+          "Rubisco is ATP; RuBP is reduced NADP."
+        ],
+        "explanation": "The enzyme catalyses fixation, while the acceptor contributes carbon to the unstable product.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-fixation-carbon",
+        "sectionKey": "fixation",
+        "kind": "data",
+        "command": "determine",
+        "prompt": "Three CO2 molecules are fixed using three RuBP molecules. Determine the number of GP molecules formed and check the carbon balance.",
+        "answer": "Six GP molecules form.~Three carbons from CO2 plus fifteen carbons from RuBP equal eighteen carbons, matching six three-carbon GP molecules.",
+        "distractors": [],
+        "explanation": "The fixed carbon is added to pre-existing acceptor carbon, so GP output exceeds the number of newly fixed carbon atoms.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-gp-reduction",
+        "sectionKey": "reduction",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why conversion of GP to TP depends on both ATP and reduced NADP.",
+        "answer": "ATP supplies energy through coupled reactions needed for the conversion.~Reduced NADP supplies reducing power and becomes NADP+.~Without these inputs, GP cannot be continuously converted to TP at the previous rate.",
+        "distractors": [],
+        "explanation": "Name both roles; saying only that both supply energy misses the electron-transfer role of NADPH.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-reduction-demand",
+        "sectionKey": "reduction",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "For three CO2 fixed, six GP are reduced using six ATP and six NADPH. Calculate the ATP and NADPH used in this reduction stage for six CO2 fixed. Do not include RuBP regeneration.",
+        "answer": "Twelve ATP and twelve NADPH.",
+        "distractors": [],
+        "explanation": "This is the reduction stage only. Counting regeneration would add further ATP.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-calvin-accounting",
+        "sectionKey": "regeneration",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "Calculate the CO2, ATP and NADPH requirements for two net TP molecules, using three CO2, nine ATP and six NADPH per net TP.",
+        "answer": "Six CO2, eighteen ATP and twelve NADPH.",
+        "distractors": [],
+        "explanation": "Two net three-carbon TP supply the carbon equivalent of one six-carbon sugar, not twelve net TP.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-tp-recycling",
+        "sectionKey": "regeneration",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why only one of six TP molecules formed per three CO2 fixed is a net product in the Calvin-cycle accounting.",
+        "answer": "Five three-carbon TP supply fifteen carbons to regenerate three five-carbon RuBP molecules.~Only the remaining TP is available as net exported carbon.~Exporting all six would deplete the carbon-dioxide acceptor and prevent continued fixation.",
+        "distractors": [],
+        "explanation": "Show conservation of carbon and the need to regenerate the acceptor.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-protein-nitrogen",
+        "sectionKey": "products",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why a plant with adequate light and carbon dioxide may still require nitrate or ammonium to increase protein production.",
+        "answer": "Fixed carbon supplies carbon skeletons but proteins also contain nitrogen.~Absorbed inorganic nitrogen can be assimilated into amino acids, which form proteins.",
+        "distractors": [],
+        "explanation": "Carbon fixation does not supply elements absent from carbon dioxide and water.",
+        "hlOnly": true
+      },
+      {
+        "key": "m-carbon-allocation",
+        "sectionKey": "products",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which set consists of products that can use carbon ultimately derived from Calvin-cycle intermediates?",
+        "answer": "Sucrose, starch, cellulose and amino-acid carbon skeletons",
+        "distractors": [
+          "Only glucose, because no other compound can use fixed carbon",
+          "Only oxygen and mineral nitrate",
+          "Rubisco but no carbohydrates"
+        ],
+        "explanation": "Fixed carbon supports several synthetic pathways; amino-acid synthesis additionally requires a nitrogen source.",
+        "hlOnly": true
+      },
+      {
+        "key": "w-dark-response",
+        "sectionKey": "interdependence",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why Calvin-cycle activity cannot be sustained indefinitely after illumination stops, even though light is not directly absorbed in those reactions.",
+        "answer": "New supplies of ATP and NADPH from the light-dependent reactions decline.~The available pools are consumed, limiting reduction of GP and regeneration of RuBP.~An immediate total stop is not implied because pools and transient responses exist.",
+        "distractors": [],
+        "explanation": "Distinguish no direct light-absorption step from no dependence on light-supported products.",
+        "hlOnly": true
+      },
+      {
+        "key": "d-co2-feedback",
+        "sectionKey": "interdependence",
+        "kind": "data",
+        "command": "suggest",
+        "prompt": "In a synthetic experiment, severe carbon-dioxide restriction under constant light is followed by NADPH accumulation and declining sustained oxygen evolution. Suggest a link between the observations.",
+        "answer": "Reduced carbon fixation lowers consumption of NADPH and regeneration of NADP+.~Availability of the terminal electron acceptor NADP+ can then limit sustained non-cyclic electron flow.~This can lower water splitting and oxygen production; the data do not exclude alternative pathways or other limitations.",
+        "distractors": [],
+        "explanation": "Connect the two reaction groups through carrier recycling, without claiming that all short-term responses must be identical.",
+        "hlOnly": true
+      }
+    ],
+    "remaining": "All 19 numbered understandings now have relevant teaching and linked practice, with core 1–8 and HL 9–19 separated. This remains partial revision support: add labelled chloroplast/photosystem diagrams, real pigment and action-spectrum images, further unfamiliar datasets and uncertainty analysis, practical execution and independent teacher review. References do not certify every assessment demand."
+  },
+  {
+    "code": "C2.1",
+    "title": "Chemical signalling",
+    "hlOnly": true,
+    "prerequisites": [
+      "B1.2",
+      "B2.1"
+    ],
+    "sections": [
+      {
+        "key": "reception",
+        "title": "Signals and target cells",
+        "body": "A signalling molecule affects a cell only if the cell can detect it through a suitable receptor and produce a response. Receptors have binding sites with properties that recognize particular ligands. Water-soluble signals often bind to receptors at the cell surface, while some lipid-soluble signals can cross the membrane and bind intracellular receptors. Endocrine signals travel through circulation; local signalling acts over shorter distances.",
+        "pitfall": "A hormone reaching every tissue in the blood does not mean every cell responds to it."
+      },
+      {
+        "key": "transduction",
+        "title": "From receptor to response",
+        "body": "Receptor activation can trigger a sequence of intracellular events, including changes in enzyme activity, ion movement or gene expression. A cascade can amplify a small external signal because one activated component can affect several downstream components. Signalling also needs termination: ligand removal, receptor inactivation and breakdown of intermediates prevent a response from persisting indefinitely. Negative feedback reduces the initial disturbance, whereas positive feedback reinforces a change until a separate endpoint intervenes.",
+        "pitfall": "Signal amplification does not mean that the original hormone must enter every downstream reaction."
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "reception",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Why might two cells exposed to the same hormone respond differently?",
+        "answer": "They may differ in receptors or downstream signalling machinery",
+        "distractors": [
+          "Hormones always change into different elements in each cell",
+          "Only cells nearest the heart receive hormones",
+          "All receptors have identical binding properties"
+        ],
+        "explanation": "Detection and response depend on the cell's molecular machinery, not just exposure."
+      },
+      {
+        "key": "w1",
+        "sectionKey": "transduction",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain how a signalling cascade can amplify a response.",
+        "answer": "One activated component can activate several molecules at the next step.~Repeated multiplication across a sequence can produce a large downstream response from a small initial signal.",
+        "distractors": [],
+        "explanation": "Amplification describes the number of affected downstream components, not creation of matter or energy."
+      },
+      {
+        "key": "d1",
+        "sectionKey": "reception",
+        "kind": "data",
+        "command": "suggest",
+        "prompt": "A hormone binds normally to cells with a receptor mutation, but no downstream response occurs. Suggest where the defect may act.",
+        "answer": "The mutation may preserve ligand binding but prevent receptor activation or coupling to downstream components.~A test of early intracellular signals could distinguish this from a later response defect.",
+        "distractors": [],
+        "explanation": "Binding and signal transduction are related but separable functions."
+      }
+    ],
+    "remaining": "Add the full set of receptor classes, named pathways, steroid-hormone examples and feedback applications. All resources in this topic are HL-only."
+  },
+  {
+    "code": "C2.2",
+    "title": "Neural signalling",
+    "hlOnly": false,
+    "prerequisites": [
+      "B2.1"
+    ],
+    "sections": [
+      {
+        "key": "impulses",
+        "title": "Neurons and electrical signalling",
+        "body": "Neurons have a cell body and projecting fibres, including an axon and dendrites. A resting membrane potential reflects unequal ion distributions and selective membrane permeability. ATP-dependent pumping maintains sodium and potassium gradients; the resting interior is negative relative to the outside. A nerve impulse is a propagated action potential involving ion movement across the membrane. Conduction speed varies with properties such as axon diameter and myelination.",
+        "pitfall": "An impulse does not consist of one packet of neurotransmitter travelling down the entire axon.",
+        "syllabusPoints": [
+          "C2.2.1",
+          "C2.2.2",
+          "C2.2.3",
+          "C2.2.4"
+        ]
+      },
+      {
+        "key": "synapses",
+        "title": "Chemical synapses",
+        "body": "At a chemical synapse, arrival of an impulse at the presynaptic terminal triggers calcium entry. Calcium promotes release of neurotransmitter from vesicles. The transmitter diffuses across the cleft and binds to receptors on the postsynaptic membrane. At an excitatory cholinergic synapse, acetylcholine can produce a postsynaptic depolarization. A typical chemical synapse transmits in one direction because release and receptor machinery occupy different sides.",
+        "pitfall": "The electrical impulse does not jump unchanged across a chemical synaptic cleft.",
+        "syllabusPoints": [
+          "C2.2.5",
+          "C2.2.6",
+          "C2.2.7"
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "synapses",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "What directly links presynaptic depolarization to neurotransmitter release at a typical chemical synapse?",
+        "answer": "Calcium entry into the presynaptic terminal",
+        "distractors": [
+          "DNA replication in the synaptic cleft",
+          "Movement of the postsynaptic nucleus into the axon",
+          "Conversion of acetylcholine into an electrical wire"
+        ],
+        "explanation": "Calcium acts as an intracellular signal promoting vesicle release."
+      },
+      {
+        "key": "w1",
+        "sectionKey": "synapses",
+        "kind": "written",
+        "command": "outline",
+        "prompt": "Outline how a signal crosses a chemical synapse.",
+        "answer": "An impulse reaches the presynaptic terminal and triggers calcium entry.~Neurotransmitter is released and diffuses across the cleft.~It binds to postsynaptic receptors and changes the activity of the postsynaptic membrane.",
+        "distractors": [],
+        "explanation": "Keep the events in order and distinguish electrical transmission along the neuron from chemical transmission between cells."
+      },
+      {
+        "key": "d1",
+        "sectionKey": "impulses",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "An impulse travels 0.60 m in 0.010 s. Calculate conduction speed. State why comparing this value between two axons does not by itself identify the cause of a difference.",
+        "answer": "Speed = distance/time = 0.60/0.010 = 60 m s⁻¹.~Diameter, myelination, temperature or other conditions may differ, so relevant variables must be controlled.",
+        "distractors": [],
+        "explanation": "A numerical difference is an observation; identifying its cause requires controlled comparison."
+      }
+    ],
+    "remaining": "Core mechanisms are introduced. Add required correlation analysis and HL action-potential phases, local currents, saltatory conduction, inhibitory signalling and summation."
+  },
+  {
+    "code": "C3.1",
+    "title": "Integration of body systems",
+    "hlOnly": false,
+    "prerequisites": [
+      "B3.2",
+      "C2.2"
+    ],
+    "sections": [
+      {
+        "key": "coordination",
+        "title": "Coordinating multiple systems",
+        "body": "Cells form tissues, organs and organ systems whose activities must be coordinated. Nervous signals can target particular effectors rapidly; hormones can coordinate responses in cells with suitable receptors. Circulation transports gases, nutrients, hormones and waste between organs. During exercise, muscles, ventilation and circulation interact: greater metabolic activity increases demand for oxygen and delivery of respiratory substrates while carbon dioxide must be removed.",
+        "pitfall": "An organ's function cannot always be understood in isolation from the systems supplying and regulating it."
+      },
+      {
+        "key": "responses",
+        "title": "Receptors, integration and effectors",
+        "body": "A coordinated response can be described as detection by a receptor, information processing by an integrating system and action by an effector. The brain combines inputs and participates in learning and memory. Reflex pathways can generate rapid responses without waiting for a conscious decision. An effector may be a muscle or gland. The result can then alter the input, completing a feedback loop when the response influences the monitored variable.",
+        "pitfall": "A rapid reflex is not evidence that the nervous system is absent from the response."
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "responses",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which is an effector in a withdrawal response?",
+        "answer": "A skeletal muscle that contracts",
+        "distractors": [
+          "A receptor detecting the damaging stimulus",
+          "The external hot surface",
+          "A sensory input before processing"
+        ],
+        "explanation": "An effector carries out the response; a receptor detects the stimulus."
+      },
+      {
+        "key": "w1",
+        "sectionKey": "coordination",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why increased muscle activity requires coordination with the circulatory system.",
+        "answer": "Active muscle requires delivery of oxygen and respiratory substrates.~It also produces carbon dioxide and other substances that must be transported away.~Circulatory adjustments help match transport to the altered demand.",
+        "distractors": [],
+        "explanation": "Link muscular metabolism to transport rather than simply listing two systems."
+      },
+      {
+        "key": "d1",
+        "sectionKey": "coordination",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "Cardiac output is heart rate × stroke volume. Calculate output when heart rate is 120 beats min⁻¹ and stroke volume is 90 mL beat⁻¹, then express it in L min⁻¹.",
+        "answer": "120 × 90 = 10,800 mL min⁻¹.~10,800/1000 = 10.8 L min⁻¹.",
+        "distractors": [],
+        "explanation": "The beat units cancel. The supplied equation makes this a transport application rather than a recall test of a new formula."
+      }
+    ],
+    "remaining": "Add full named nervous and endocrine control pathways, required brain and spinal-cord details and HL plant integration."
+  },
+  {
+    "code": "C3.2",
+    "title": "Defence against disease",
+    "hlOnly": false,
+    "prerequisites": [
+      "A2.2",
+      "B1.2"
+    ],
+    "sections": [
+      {
+        "key": "innate",
+        "title": "Barriers and innate defence",
+        "body": "Pathogens can cause infectious disease. Skin and mucous membranes limit entry; secretions and physical removal mechanisms can reduce the chance of infection. If barriers are breached, innate responses include inflammation and phagocytosis. Phagocytes engulf material and digest it in intracellular compartments. Innate defence responds to broad features and does not require a previous encounter with that specific pathogen.",
+        "pitfall": "Not all microorganisms are pathogens, and inflammation does not identify one particular cause by itself."
+      },
+      {
+        "key": "adaptive",
+        "title": "Specific responses and memory",
+        "body": "Adaptive responses depend on recognition of particular antigens. Activated lymphocyte populations expand; some descendants produce antibodies and others become memory cells. Antibodies bind specific targets and can assist neutralization or removal. A later encounter can trigger a faster and stronger response because memory cells are already available. Vaccination exposes the immune system to suitable antigenic information without requiring the person to experience the full target disease.",
+        "pitfall": "Antibodies are proteins; they are not cells that engulf pathogens."
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "innate",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which process involves a cell engulfing and digesting material?",
+        "answer": "Phagocytosis",
+        "distractors": [
+          "Antibody binding by itself",
+          "Ventilation",
+          "Transcription"
+        ],
+        "explanation": "Phagocytosis is a cellular uptake-and-digestion process, unlike the binding action of an antibody molecule."
+      },
+      {
+        "key": "w1",
+        "sectionKey": "adaptive",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why a secondary immune response can be faster than the primary response.",
+        "answer": "The first response can produce antigen-specific memory cells.~On re-exposure, these cells can respond and expand more rapidly, producing an effective response sooner.",
+        "distractors": [],
+        "explanation": "Connect memory-cell persistence to the timing of the later response."
+      },
+      {
+        "key": "d1",
+        "sectionKey": "adaptive",
+        "kind": "data",
+        "command": "evaluate",
+        "prompt": "After vaccination, antibody concentration rises and later falls. A student concludes that all protection disappears as soon as the concentration begins to fall. Evaluate the conclusion.",
+        "answer": "Falling circulating antibody concentration does not by itself show that all protection has vanished.~Memory cells and other immune components may persist.~Protection against a particular outcome requires relevant evidence, not only the direction of one measurement.",
+        "distractors": [],
+        "explanation": "Avoid treating one biomarker as a complete measure of immune protection."
+      }
+    ],
+    "remaining": "Add the full range of pathogens, blood clotting, antibiotic resistance, disease examples and HL immune mechanisms."
+  },
+  {
+    "code": "C4.1",
+    "title": "Populations and communities",
+    "hlOnly": false,
+    "prerequisites": [
+      "B4.2"
+    ],
+    "sections": [
+      {
+        "key": "populations",
+        "title": "Population change and limits",
+        "body": "A population is a group of organisms of one species in an area; a community contains interacting populations of different species. Births and immigration add individuals, while deaths and emigration remove them. Population growth can slow when resources or space become limiting. Carrying capacity describes a population size an environment can sustain under particular conditions; it can change when conditions change rather than remaining permanently fixed.",
+        "pitfall": "A community contains multiple populations, not merely a large population of one species."
+      },
+      {
+        "key": "sampling",
+        "title": "Sampling and interactions",
+        "body": "Quadrats sample sessile organisms or slow-moving organisms in a defined area. Random placement reduces deliberate site-selection bias; systematic sampling along a transect can investigate a gradient. Replication helps estimate variation. Organisms also interact through competition, predation, herbivory, parasitism and mutualism. An observed correlation between two populations does not by itself establish the interaction or direction of causation.",
+        "pitfall": "More quadrats do not remove bias if all are placed only in convenient or unusually dense patches."
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "populations",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "Which change directly increases population size, with other processes unchanged?",
+        "answer": "Immigration",
+        "distractors": [
+          "Emigration",
+          "Deaths",
+          "A decrease in births"
+        ],
+        "explanation": "Immigration adds individuals to the defined population."
+      },
+      {
+        "key": "w1",
+        "sectionKey": "sampling",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why random quadrat placement and replication address different problems.",
+        "answer": "Random placement reduces systematic site-selection bias.~Replication samples variation and improves the basis for estimating abundance and uncertainty.",
+        "distractors": [],
+        "explanation": "Repeated biased sampling can still give a misleading estimate."
+      },
+      {
+        "key": "d1",
+        "sectionKey": "sampling",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "Five randomly placed quadrats of 0.25 m² contain 3, 5, 4, 6 and 2 plants. Estimate the number of plants in a comparable 100 m² area, and state one assumption.",
+        "answer": "Mean = 20/5 = 4 plants per quadrat, or 16 plants m⁻².~Estimated total = 16 × 100 = 1,600 plants.~The sampled quadrats must adequately represent the larger area.",
+        "distractors": [],
+        "explanation": "This is an estimate with sampling uncertainty, not an exact census."
+      }
+    ],
+    "remaining": "There is no additional HL content, but required population models, interaction examples, statistical association and allelopathy or antibiotic-secretion applications still need expansion."
+  },
+  {
+    "code": "C4.2",
+    "title": "Transfers of energy and matter",
+    "hlOnly": false,
+    "prerequisites": [
+      "B4.2",
+      "C1.2",
+      "C1.3"
+    ],
+    "sections": [
+      {
+        "key": "systems",
+        "title": "Open systems and energy inputs",
+        "body": "An open ecosystem exchanges both matter and energy with its surroundings. A closed system exchanges energy but not matter; it is not necessarily isolated from light or heat. Sunlight supports most ecosystems through photosynthesis. Some deep environments instead rely on chemical energy, and a dark cave may receive organic material made by photosynthesis outside it. Define the system boundary before deciding whether an input is direct or imported.",
+        "pitfall": "A closed bottle can still receive light and lose heat; closed does not mean isolated.",
+        "syllabusPoints": [
+          "C4.2.1",
+          "C4.2.2"
+        ]
+      },
+      {
+        "key": "webs",
+        "title": "Food chains, webs and decomposers",
+        "body": "Food-chain arrows point from a resource toward the consumer receiving its biomass and chemical energy. For example: grass → grasshopper → frog. A food web joins several chains because organisms can have multiple foods and predators. Dead leaves, carcasses and faeces contain organic compounds that supply decomposers and detritus feeders. These routes connect material from many trophic levels to decomposition rather than forming only one final link after the top predator.",
+        "pitfall": "A food-web arrow does not normally point from the hunter toward what it catches.",
+        "syllabusPoints": [
+          "C4.2.3",
+          "C4.2.4",
+          "C4.2.5"
+        ]
+      },
+      {
+        "key": "nutrition",
+        "title": "Carbon sources and energy sources",
+        "body": "Autotrophs build organic compounds from inorganic carbon using an external energy supply. Photoautotrophs use light; chemoautotrophs use energy from chemical oxidation, such as the oxidation of iron compounds by some bacteria. Heterotrophs obtain organic carbon from other organisms and use it to build their own molecules. Both groups respire, transferring energy from carbon compounds into ATP and heat. Being a producer does not remove the need for respiration.",
+        "pitfall": "Autotroph does not mean an organism creates energy or matter from nothing.",
+        "syllabusPoints": [
+          "C4.2.6",
+          "C4.2.7",
+          "C4.2.8",
+          "C4.2.9"
+        ]
+      },
+      {
+        "key": "levels",
+        "title": "Trophic levels and energy pyramids",
+        "body": "Producers occupy the first trophic level. Primary consumers feed on producers, secondary consumers feed on primary consumers, and tertiary consumers feed on secondary consumers. An omnivore can occupy different levels in different chains. An energy pyramid compares energy transferred per unit area per unit time, such as kJ m⁻² yr⁻¹. Use one common scale and period across levels. Unlike a snapshot of standing biomass, an energy-flow pyramid records a rate over time.",
+        "pitfall": "An organism is not necessarily assigned one permanent trophic level regardless of what it eats.",
+        "syllabusPoints": [
+          "C4.2.10",
+          "C4.2.11"
+        ]
+      },
+      {
+        "key": "losses",
+        "title": "Why transfer is incomplete",
+        "body": "Not all biomass is eaten, and not everything eaten is digested and assimilated. Some energy therefore passes into detritus rather than into the next consumer's new biomass. Organisms also respire and dissipate energy as heat during ATP production and use. Energy available to build biomass at successive feeding levels consequently declines, limiting the length of food chains. Transfer efficiency varies: 10% is a convenient example, not a universal fixed biological law.",
+        "pitfall": "Energy is conserved, but heat dispersed into the surroundings is not recycled into food by the ecosystem's organisms.",
+        "syllabusPoints": [
+          "C4.2.12",
+          "C4.2.13",
+          "C4.2.14"
+        ]
+      },
+      {
+        "key": "production",
+        "title": "Primary and secondary production",
+        "body": "Primary production is the accumulation of organic carbon compounds in autotroph biomass; secondary production is accumulation in heterotroph biomass. Report production as mass or energy per unit area per unit time, not simply as the mass present on one date. Growth and reproduction add biomass, while respiration transfers some carbon back to the environment. A consumer's intake is therefore not equivalent to its new biomass production. When a problem distinguishes gross from net production, subtract the specified respiratory cost to obtain net production.",
+        "pitfall": "Standing biomass is a stock; production is a rate. Their units and interpretations differ.",
+        "syllabusPoints": [
+          "C4.2.15",
+          "C4.2.16"
+        ]
+      },
+      {
+        "key": "carbon",
+        "title": "Tracing carbon through an ecosystem",
+        "body": "A carbon-cycle diagram should label both stores and processes. Atmospheric carbon dioxide → photosynthesis → plant organic compounds → feeding → animal organic compounds. Respiration by plants, animals and decomposers returns carbon dioxide. Death and egestion move organic material toward detrital stores. These arrows represent movements of carbon atoms, unlike arrows describing energy dissipation. Mineral nutrients and other required elements also cycle, with decomposers helping return them to available forms.",
+        "pitfall": "Decomposers recycle matter, not the same usable energy indefinitely.",
+        "syllabusPoints": [
+          "C4.2.17",
+          "C4.2.22"
+        ]
+      },
+      {
+        "key": "balance",
+        "title": "Carbon sinks, sources and gas exchange",
+        "body": "A system is a carbon sink over a stated interval when its net carbon uptake exceeds its release, and a source when release exceeds uptake. In a simplified ecosystem budget, photosynthetic carbon uptake exceeding total respiration gives net uptake; other exports, imports and disturbances can alter a real budget. Oxygenic photosynthesis supplies oxygen used by aerobic respiration, while respiration supplies carbon dioxide available for photosynthesis. These large opposing flows can occur at the same time.",
+        "pitfall": "A forest is not automatically a carbon sink in every year merely because its trees photosynthesize.",
+        "syllabusPoints": [
+          "C4.2.18",
+          "C4.2.21"
+        ]
+      },
+      {
+        "key": "combustion",
+        "title": "Combustion and long-term carbon stores",
+        "body": "Combustion of biomass, peat and fossil fuels converts stored carbon into products including carbon dioxide. These stores accumulated over very different timescales. Burning them can release stored carbon much more rapidly than it is replaced. Fire can begin naturally, but human activities have greatly increased fossil-carbon release. Describing a carbon budget requires both the rate of release and the rates of uptake or storage, not only the existence of one process.",
+        "pitfall": "A carbon store and a carbon sink are not identical ideas: a large store can be losing carbon.",
+        "syllabusPoints": [
+          "C4.2.19"
+        ]
+      },
+      {
+        "key": "keeling",
+        "title": "Interpreting seasonal and long-term change",
+        "body": "The Keeling Curve records atmospheric carbon-dioxide concentration over time. Its seasonal oscillation reflects changing net biological uptake and release, strongly influenced by the Northern Hemisphere's land vegetation. During active growth, uptake can lower atmospheric concentration; seasonal slowing of growth changes the balance. The multi-decade increase is a separate feature associated with net additions of carbon dioxide, especially from human activities. Describe the long-term trend and the oscillation separately before explaining them.",
+        "pitfall": "A seasonal fall does not disprove a rising long-term trend.",
+        "syllabusPoints": [
+          "C4.2.20"
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "key": "m1",
+        "sectionKey": "systems",
+        "kind": "mcq",
+        "command": "distinguish",
+        "prompt": "Which statement describes a closed system rather than an isolated system?",
+        "answer": "Energy can cross its boundary, but matter does not",
+        "distractors": [
+          "Neither matter nor energy can cross its boundary",
+          "Matter can cross but energy never can",
+          "It must remain at a constant temperature"
+        ],
+        "explanation": "Closed refers to matter exchange. Energy exchange remains possible."
+      },
+      {
+        "key": "m2",
+        "sectionKey": "webs",
+        "kind": "mcq",
+        "command": "identify",
+        "prompt": "A grasshopper eats grass. Which arrow follows the usual food-chain convention?",
+        "answer": "Grass → grasshopper",
+        "distractors": [
+          "Grasshopper → grass",
+          "Grass ↔ grasshopper to indicate the direction of feeding energy",
+          "No arrow because plants do not contain chemical energy"
+        ],
+        "explanation": "The arrow follows transfer of biomass and energy from the food to its consumer."
+      },
+      {
+        "key": "w1",
+        "sectionKey": "nutrition",
+        "kind": "written",
+        "command": "compare",
+        "prompt": "Compare photoautotrophs and chemoautotrophs.",
+        "answer": "Both can synthesize organic compounds from inorganic carbon.~Photoautotrophs use light as an energy source.~Chemoautotrophs use energy from chemical oxidation reactions.",
+        "distractors": [],
+        "explanation": "Separate their shared carbon strategy from their different energy sources."
+      },
+      {
+        "key": "w2",
+        "sectionKey": "levels",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "A bird eats seeds and also insects that feed on seeds. Explain why the bird can occupy more than one trophic level.",
+        "answer": "When eating seeds from producers, it acts as a primary consumer.~When eating seed-eating insects, it acts as a secondary consumer.",
+        "distractors": [],
+        "explanation": "Assign the level using the particular feeding route."
+      },
+      {
+        "key": "d1",
+        "sectionKey": "levels",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "Annual energy transfer is 24,000 kJ m⁻² to primary consumers and 3,600 kJ m⁻² to secondary consumers. Calculate transfer efficiency between these levels.",
+        "answer": "Efficiency = 3600/24000 × 100 = 15%.~Both measurements use the same area and time interval, so they are comparable.",
+        "distractors": [],
+        "explanation": "Use output divided by input, not the inverse. The result illustrates why assuming a universal 10% transfer would be wrong."
+      },
+      {
+        "key": "w3",
+        "sectionKey": "losses",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain two routes by which energy in producer biomass fails to become new primary-consumer biomass.",
+        "answer": "Some producer material is not eaten, or eaten material is not assimilated and enters detrital pathways.~Some assimilated energy is used in respiration and dissipated as heat rather than retained in new biomass.",
+        "distractors": [],
+        "explanation": "Distinguish transfer to detritus from dissipation as heat."
+      },
+      {
+        "key": "d2",
+        "sectionKey": "production",
+        "kind": "data",
+        "command": "calculate",
+        "prompt": "A producer community fixes 1,100 g C m⁻² yr⁻¹ and returns 420 g C m⁻² yr⁻¹ through its own respiration. Using net production = gross fixation − producer respiration, calculate net production.",
+        "answer": "Net production = 1100 − 420 = 680 g C m⁻² yr⁻¹.",
+        "distractors": [],
+        "explanation": "The formula and the definition of the respiration term are supplied. Do not subtract unrelated consumer respiration in this calculation."
+      },
+      {
+        "key": "d3",
+        "sectionKey": "production",
+        "kind": "data",
+        "command": "determine",
+        "prompt": "A consumer ingests 800 kJ, loses 240 kJ in unassimilated material and dissipates 420 kJ through respiratory processes over the same interval. Assuming no other losses or storage changes, determine energy retained as new biomass.",
+        "answer": "Retained energy = 800 − 240 − 420 = 140 kJ.",
+        "distractors": [],
+        "explanation": "Ingestion is not production; subtract the specified losses before identifying the retained component."
+      },
+      {
+        "key": "w4",
+        "sectionKey": "carbon",
+        "kind": "written",
+        "command": "outline",
+        "prompt": "Outline a carbon pathway from atmospheric carbon dioxide into a herbivore and back to the atmosphere.",
+        "answer": "Photosynthesis incorporates atmospheric carbon into plant organic compounds.~The herbivore obtains this carbon by feeding and assimilation.~Respiration returns some carbon to the atmosphere as carbon dioxide.",
+        "distractors": [],
+        "explanation": "Name stores and processes in the correct sequence."
+      },
+      {
+        "key": "w5",
+        "sectionKey": "carbon",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why an ecosystem can recycle chemical elements but needs a continuing energy input.",
+        "answer": "Atoms can move between organisms and environmental stores and be reused in new compounds.~Energy transfers disperse some energy as heat, which is not returned to the same usable biological pathways.~An external input replaces the usable energy dissipated.",
+        "distractors": [],
+        "explanation": "Conservation of energy does not imply that all forms remain equally available for cellular work."
+      },
+      {
+        "key": "d4",
+        "sectionKey": "balance",
+        "kind": "data",
+        "command": "determine",
+        "prompt": "Over one year, an ecosystem takes up 900 tonnes of carbon through photosynthesis and releases 970 tonnes through total respiration. Ignore other carbon fluxes. Determine whether it is a net sink or source and calculate the net flux.",
+        "answer": "Release exceeds uptake by 970 − 900 = 70 tonnes of carbon per year.~It is a net source under the stated simplified budget.",
+        "distractors": [],
+        "explanation": "The classification depends on the balance over the specified interval, not simply on the presence of photosynthesis."
+      },
+      {
+        "key": "w6",
+        "sectionKey": "combustion",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain why burning a long-established peat deposit can increase atmospheric carbon dioxide rapidly.",
+        "answer": "The peat contains organic carbon accumulated over a long interval.~Combustion oxidizes stored carbon and releases carbon dioxide much faster than the store may be replaced.",
+        "distractors": [],
+        "explanation": "Link the pre-existing store, the combustion process and the imbalance in timescales."
+      },
+      {
+        "key": "d5",
+        "sectionKey": "keeling",
+        "kind": "data",
+        "command": "describe",
+        "prompt": "A hypothetical annual CO₂ series reaches 410 ppm in spring and 404 ppm in autumn in year 1, then 413 ppm in spring and 407 ppm in autumn in year 2. Describe the seasonal pattern and the year-to-year change separately.",
+        "answer": "Within each year, the spring value exceeds the autumn value by 6 ppm.~At the same season, year 2 is 3 ppm higher than year 1.~A seasonal decline therefore coexists with a rising year-to-year baseline.",
+        "distractors": [],
+        "explanation": "These are explicitly hypothetical data, not current measurements from the Keeling Curve."
+      },
+      {
+        "key": "w7",
+        "sectionKey": "balance",
+        "kind": "written",
+        "command": "explain",
+        "prompt": "Explain one gas-exchange interdependence between photosynthesis and aerobic respiration.",
+        "answer": "Oxygenic photosynthesis releases oxygen that aerobic respiration can consume.~Respiration releases carbon dioxide that photosynthesis can incorporate into organic compounds.",
+        "distractors": [],
+        "explanation": "Both processes can operate within the same organism as well as between different trophic groups."
+      }
+    ],
+    "remaining": "All 22 numbered understandings have relevant original teaching. Full coverage is not certified: students still need researched local food webs, scaled energy-pyramid construction, actual carbon-cycle drawing, source-data interpretation and teacher-reviewed assessment depth. There is no additional HL content in C4.2."
+  }
+]
