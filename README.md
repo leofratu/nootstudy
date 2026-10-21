@@ -191,3 +191,7 @@ IBVault.xcodeproj/         Generated, checked-in Xcode project
 ~~~
 
 Keep source membership and **project.yml** in sync with **xcodegen generate**. Do not commit study stores, material folders, credentials, DerivedData, or raw screenshots containing personal information.
+
+## License
+
+Noot Study is licensed under the [MIT License](LICENSE).
