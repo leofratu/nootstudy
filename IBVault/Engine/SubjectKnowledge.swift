@@ -101,7 +101,7 @@ nonisolated struct SubjectKnowledge: Sendable {
             "Functions: quadratics, rationals, exponentials, logarithms and transformations",
             "Trigonometry: identities, equations, and non-right triangles",
             "Calculus: limits, differentiation and integration with applications",
-            "Statistics and probability: distributions, hypothesis testing",
+            "Statistics and probability: discrete, binomial and normal distributions",
             "Vectors and geometry"
         ],
         highYieldTopics: [

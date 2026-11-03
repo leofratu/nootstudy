@@ -241,7 +241,14 @@ nonisolated struct SyllabusSeeder {
         }
 
         for (key, node) in nodesByKey where !expectedKeys.contains(key) {
-            context.delete(node)
+            // A catalog correction must not erase a user's recorded evidence.
+            // Keep retired rows with mastery data; current curriculum views
+            // resolve against the new canonical paths, while old records and
+            // backups remain readable.
+            if node.recordedMasteryRaw == nil && node.masteryUpdatedAt == nil &&
+                node.masterySource == nil && node.masteryNote == nil {
+                context.delete(node)
+            }
         }
 
         // Existing cards are user data. Do not remove or deduplicate them
@@ -334,7 +341,7 @@ nonisolated struct SyllabusSeeder {
             ?? URL(string: "https://www.ibo.org/")
             ?? URL(fileURLWithPath: "/")
         return CurriculumMetadata(
-            catalogVersion: "2026.1 / first assessment \(firstAssessment)",
+            catalogVersion: "2026.2 / first assessment \(firstAssessment)",
             firstAssessment: firstAssessment,
             sourceTitle: title,
             sourceURL: url
@@ -795,354 +802,329 @@ nonisolated struct SyllabusSeeder {
     // MARK: - IB Biology SL (First assessment 2025)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+    // Topic codes follow the IB guides. Subtopics are concise study summaries,
+    // not substitutes for the full syllabus statements. HL-only material stays
+    // in its theme so it cannot accidentally appear in an SL selection.
     private static var biologyCurriculum: [CurriculumUnit] {
         [
             CurriculumUnit(name: "Theme A — Unity and Diversity", topics: [
-                CurriculumTopic(name: "Water and Biomolecules", subtopics: [
-                    "Hydrogen bonding in water",
-                    "Thermal properties of water",
-                    "Solvent properties of water",
-                    "Carbohydrates — monosaccharides, disaccharides, polysaccharides",
-                    "Lipids — triglycerides, phospholipids",
-                    "Proteins — amino acids, peptide bonds, levels of structure"
+                CurriculumTopic(name: "A1.1 Water", subtopics: [
+                    "Polarity, hydrogen bonding, cohesion and adhesion",
+                    "Water as a solvent and an aquatic habitat",
+                    "HL: Water's origins and the search for life"
                 ]),
-                CurriculumTopic(name: "DNA and Nucleic Acids", subtopics: [
-                    "DNA structure and base pairing",
-                    "RNA types and structure",
-                    "Semi-conservative DNA replication",
-                    "Transcription and translation",
-                    "Gene expression and regulation"
+                CurriculumTopic(name: "A1.2 Nucleic acids", subtopics: [
+                    "Nucleotides, DNA structure and complementary base pairing",
+                    "RNA structure and the genetic code",
+                    "HL: DNA packaging, directionality and genome comparisons"
                 ]),
-                CurriculumTopic(name: "Evolution", subtopics: [
-                    "Evidence for evolution",
-                    "Natural selection mechanism",
-                    "Speciation (allopatric and sympatric)",
-                    "Classification and taxonomy",
-                    "Cladistics and phylogenetic trees"
+                CurriculumTopic(name: "A2.1 Origins of cells", subtopics: [
+                    "Prebiotic chemistry and the emergence of cells",
+                    "Evidence for the last universal common ancestor"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "A2.2 Cell structure", subtopics: [
+                    "Prokaryotic and eukaryotic cells",
+                    "Microscopy, magnification and cell ultrastructure",
+                    "HL: Endosymbiosis and multicellular organization"
                 ]),
-                CurriculumTopic(name: "Biodiversity", subtopics: [
-                    "Measuring biodiversity",
-                    "Threats to biodiversity",
-                    "Conservation biology strategies",
-                    "Keystone species and indicator species",
-                    "In situ and ex situ conservation"
+                CurriculumTopic(name: "A2.3 Viruses", subtopics: [
+                    "Viral structure, replication and host specificity",
+                    "Lytic and lysogenic infection cycles"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "A3.1 Diversity of organisms", subtopics: [
+                    "Species, variation and binomial nomenclature",
+                    "Chromosomes, karyograms and genome diversity"
                 ]),
+                CurriculumTopic(name: "A3.2 Classification and cladistics", subtopics: [
+                    "Classification using evolutionary relationships",
+                    "Cladograms and molecular evidence"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "A4.1 Evolution and speciation", subtopics: [
+                    "Evidence for evolution and common ancestry",
+                    "Reproductive isolation and speciation"
+                ]),
+                CurriculumTopic(name: "A4.2 Conservation of biodiversity", subtopics: [
+                    "Biodiversity loss, extinction and human impacts",
+                    "Conservation strategies and evaluating their success"
+                ])
             ]),
-
             CurriculumUnit(name: "Theme B — Form and Function", topics: [
-                CurriculumTopic(name: "Cells and Cell Structure", subtopics: [
-                    "Prokaryotic cell structure",
-                    "Eukaryotic cell ultrastructure",
-                    "Organelle functions (mitochondria, chloroplasts, ER, Golgi)",
-                    "Comparing prokaryotes and eukaryotes",
-                    "Origins of cells and endosymbiotic theory",
-                    "Electron microscopy interpretation"
+                CurriculumTopic(name: "B1.1 Carbohydrates and lipids", subtopics: [
+                    "Carbohydrate structure, condensation and hydrolysis",
+                    "Triglycerides, phospholipids and energy storage"
                 ]),
-                CurriculumTopic(name: "Membranes and Transport", subtopics: [
-                    "Fluid mosaic model",
-                    "Membrane proteins and their functions",
-                    "Simple and facilitated diffusion",
-                    "Osmosis",
-                    "Active transport",
-                    "Endocytosis and exocytosis"
+                CurriculumTopic(name: "B1.2 Proteins", subtopics: [
+                    "Amino acids, peptide bonds and protein function",
+                    "HL: Protein structure, folding and denaturation"
                 ]),
-                CurriculumTopic(name: "Enzymes and Metabolism", subtopics: [
-                    "Enzyme structure and function",
-                    "Enzyme-substrate specificity",
-                    "Factors affecting enzyme activity",
-                    "Competitive and non-competitive inhibition",
-                    "Metabolic pathways — anabolism and catabolism"
+                CurriculumTopic(name: "B2.1 Membranes and membrane transport", subtopics: [
+                    "Phospholipid bilayers and the fluid mosaic model",
+                    "Diffusion, osmosis and active transport",
+                    "HL: Membrane fluidity, channels and transport regulation"
                 ]),
-                CurriculumTopic(name: "Human Physiology Systems", subtopics: [
-                    "Digestion and absorption",
-                    "The circulatory system",
-                    "Gas exchange in the lungs",
-                    "Defence against infectious disease",
-                    "Neurons and synaptic transmission",
-                    "Hormonal regulation (endocrine system)",
-                    "Homeostasis and feedback mechanisms"
+                CurriculumTopic(name: "B2.2 Organelles and compartmentalization", subtopics: [
+                    "Organelle functions and intracellular compartments",
+                    "HL: Endomembrane transport and organelle adaptations"
                 ]),
+                CurriculumTopic(name: "B2.3 Cell specialization", subtopics: [
+                    "Differentiation, stem cells and specialized cells",
+                    "Cell size, surface area and volume"
+                ]),
+                CurriculumTopic(name: "B3.1 Gas exchange", subtopics: [
+                    "Gas exchange surfaces and concentration gradients",
+                    "Ventilation, alveoli and leaf adaptations"
+                ]),
+                CurriculumTopic(name: "B3.2 Transport", subtopics: [
+                    "Blood vessels, circulation and the heart",
+                    "Water transport in xylem and transpiration",
+                    "HL: Phloem transport and tissue fluid"
+                ]),
+                CurriculumTopic(name: "B3.3 Muscle and motility", subtopics: [
+                    "Sliding filaments, sarcomeres and muscle contraction",
+                    "Movement, joints and antagonistic muscles"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "B4.1 Adaptation to environment", subtopics: [
+                    "Abiotic factors, distribution and adaptations",
+                    "Terrestrial and aquatic biomes"
+                ]),
+                CurriculumTopic(name: "B4.2 Ecological niches", subtopics: [
+                    "Nutrition, resource use and ecological niches",
+                    "Competition and adaptations for feeding"
+                ])
             ]),
-
             CurriculumUnit(name: "Theme C — Interaction and Interdependence", topics: [
-                CurriculumTopic(name: "Ecosystems", subtopics: [
-                    "Species, communities and ecosystems",
-                    "Biotic and abiotic factors",
-                    "Trophic levels and food webs",
-                    "Habitat and ecological niches"
+                CurriculumTopic(name: "C1.1 Enzymes and metabolism", subtopics: [
+                    "Enzyme specificity, activation energy and metabolic pathways",
+                    "Temperature, pH and substrate concentration",
+                    "HL: Inhibition and regulation of metabolic pathways"
                 ]),
-                CurriculumTopic(name: "Energy Flow in Ecosystems", subtopics: [
-                    "Energy flow through trophic levels",
-                    "Productivity (GPP, NPP)",
-                    "Energy pyramids",
-                    "Photosynthesis — light-dependent and light-independent reactions",
-                    "Cell respiration — glycolysis, Krebs cycle, oxidative phosphorylation"
+                CurriculumTopic(name: "C1.2 Cell respiration", subtopics: [
+                    "ATP production, aerobic and anaerobic respiration",
+                    "HL: Glycolysis, Krebs cycle and oxidative phosphorylation"
                 ]),
-                CurriculumTopic(name: "Population Biology", subtopics: [
-                    "Population growth curves (S and J curves)",
-                    "Carrying capacity and limiting factors",
-                    "Predator-prey relationships",
-                    "Sampling techniques for populations"
+                CurriculumTopic(name: "C1.3 Photosynthesis", subtopics: [
+                    "Photosynthetic pigments and limiting factors",
+                    "HL: Light-dependent reactions and carbon fixation"
                 ]),
-                CurriculumTopic(name: "Sustainability", subtopics: [
-                    "Carbon cycling and climate change",
-                    "Nitrogen cycling",
-                    "Human impact on ecosystems",
-                    "Sustainable development and resource management"
+                CurriculumTopic(name: "C2.1 Chemical signalling", subtopics: [
+                    "Receptors, ligands and signal transduction",
+                    "Second messengers and cellular responses"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "C2.2 Neural signalling", subtopics: [
+                    "Neurons, action potentials and synaptic transmission",
+                    "HL: Ion movements and modulation of signalling"
                 ]),
+                CurriculumTopic(name: "C3.1 Integration of body systems", subtopics: [
+                    "Coordination by nervous and endocrine systems",
+                    "Brain, spinal cord and reflex pathways"
+                ]),
+                CurriculumTopic(name: "C3.2 Defence against disease", subtopics: [
+                    "Barriers, blood clotting and innate immunity",
+                    "Lymphocytes, antibodies and vaccination",
+                    "HL: Immune specificity and monoclonal antibodies"
+                ]),
+                CurriculumTopic(name: "C4.1 Populations and communities", subtopics: [
+                    "Population growth and limiting factors",
+                    "Sampling, species interactions and community ecology"
+                ]),
+                CurriculumTopic(name: "C4.2 Transfers of energy and matter", subtopics: [
+                    "Food webs, trophic levels and ecological energy flow",
+                    "Carbon cycling, biomass and productivity"
+                ])
             ]),
-
             CurriculumUnit(name: "Theme D — Continuity and Change", topics: [
-                CurriculumTopic(name: "Genetics", subtopics: [
-                    "Genes, alleles and the genome",
-                    "Chromosomes and karyotypes",
-                    "DNA profiling and biotechnology",
-                    "Gene mutations"
+                CurriculumTopic(name: "D1.1 DNA replication", subtopics: [
+                    "Semi-conservative replication and complementary base pairing",
+                    "PCR and DNA profiling",
+                    "HL: Replication enzymes, directionality and proofreading"
                 ]),
-                CurriculumTopic(name: "Inheritance", subtopics: [
-                    "Mendel's laws of inheritance",
-                    "Monohybrid crosses and Punnett squares",
-                    "Codominance and multiple alleles",
-                    "Sex-linked inheritance",
-                    "Pedigree analysis",
-                    "Dihybrid crosses"
+                CurriculumTopic(name: "D1.2 Protein synthesis", subtopics: [
+                    "D1.2.1 Transcribing RNA from a DNA template",
+                    "D1.2.2 Base pairing during transcription",
+                    "D1.2.3 Conservation of the DNA template",
+                    "D1.2.4 Transcription and gene expression",
+                    "D1.2.5 Translating mRNA into a polypeptide",
+                    "D1.2.6 Functions of mRNA, ribosomes and tRNA",
+                    "D1.2.7 Pairing codons with anticodons",
+                    "D1.2.8 Triplets, degeneracy and universality",
+                    "D1.2.9 Reading a codon table",
+                    "D1.2.10 Ribosome movement and peptide formation",
+                    "D1.2.11 How mutations alter proteins",
+                    "HL: D1.2.12 Direction of transcription and translation",
+                    "HL: D1.2.13 Promoters and transcription initiation",
+                    "HL: D1.2.14 Functions of non-coding DNA",
+                    "HL: D1.2.15 RNA processing in eukaryotes",
+                    "HL: D1.2.16 Alternative exon splicing",
+                    "HL: D1.2.17 Starting translation",
+                    "HL: D1.2.18 Processing polypeptides into functional proteins",
+                    "HL: D1.2.19 Proteasomes and amino acid recycling"
                 ]),
-                CurriculumTopic(name: "Natural Selection", subtopics: [
-                    "Variation within populations",
-                    "Directional and stabilising selection",
-                    "Antibiotic resistance as example",
-                    "Sexual selection"
+                CurriculumTopic(name: "D1.3 Mutation and gene editing", subtopics: [
+                    "Gene mutations, causes and consequences",
+                    "HL: Gene editing and CRISPR applications"
                 ]),
-                CurriculumTopic(name: "Evolutionary Change", subtopics: [
-                    "Gradualism vs punctuated equilibrium",
-                    "Adaptive radiation",
-                    "Convergent and divergent evolution",
-                    "Human evolution"
+                CurriculumTopic(name: "D2.1 Cell and nuclear division", subtopics: [
+                    "Cell cycle, mitosis and cytokinesis",
+                    "Meiosis, chromosome segregation and genetic variation"
                 ]),
+                CurriculumTopic(name: "D2.2 Gene expression", subtopics: [
+                    "Regulation of transcription and translation",
+                    "Epigenetics and environmental influences"
+                ], levels: [.hl]),
+                CurriculumTopic(name: "D2.3 Water potential", subtopics: [
+                    "Osmosis and water movement in cells",
+                    "HL: Solute potential, pressure potential and water potential"
+                ]),
+                CurriculumTopic(name: "D3.1 Reproduction", subtopics: [
+                    "Sexual and asexual reproduction",
+                    "Human reproductive systems, fertilization and plant reproduction",
+                    "HL: Hormonal control, pregnancy and development"
+                ]),
+                CurriculumTopic(name: "D3.2 Inheritance", subtopics: [
+                    "Genes, alleles, Mendelian inheritance and Punnett squares",
+                    "Codominance, sex linkage and pedigree analysis",
+                    "HL: Dihybrid crosses, linked genes and recombination"
+                ]),
+                CurriculumTopic(name: "D3.3 Homeostasis", subtopics: [
+                    "Homeostasis and negative feedback",
+                    "Blood glucose and body temperature regulation",
+                    "HL: Kidney function and osmoregulation"
+                ]),
+                CurriculumTopic(name: "D4.1 Natural selection", subtopics: [
+                    "Heritable variation, selection and reproductive success",
+                    "Evolution of antibiotic resistance"
+                ]),
+                CurriculumTopic(name: "D4.2 Stability and change", subtopics: [
+                    "Ecosystem stability, resilience and human impacts",
+                    "HL: Ecological succession and alternative stable states"
+                ]),
+                CurriculumTopic(name: "D4.3 Climate change", subtopics: [
+                    "Greenhouse gases, evidence and biological consequences",
+                    "Feedback cycles, mitigation and conservation"
+                ])
             ]),
-
-            CurriculumUnit(name: "Higher Level Extension", topics: [
-                CurriculumTopic(name: "Advanced Molecular Biology", subtopics: [
-                    "HL: DNA replication and the roles of polymerases",
-                    "HL: Transcription regulation and RNA processing",
-                    "HL: Translation, ribosome structure and polypeptide synthesis",
-                    "HL: Gene expression, epigenetics and environmental influence"
-                ], levels: [.hl]),
-                CurriculumTopic(name: "Advanced Physiology", subtopics: [
-                    "HL: Muscle contraction and the sliding filament model",
-                    "HL: Kidney function, osmoregulation and hormonal control",
-                    "HL: Reproduction, gametogenesis and hormonal regulation",
-                    "HL: Immune response, antibody production and vaccination"
-                ], levels: [.hl]),
-                CurriculumTopic(name: "Advanced Ecology and Evolution", subtopics: [
-                    "HL: Gene pools, allele frequencies and population change",
-                    "HL: Speciation mechanisms and reproductive isolation",
-                    "HL: Community succession and ecosystem stability",
-                    "HL: Statistical testing and interpretation in biological investigations"
-                ], levels: [.hl]),
-            ]),
-
             CurriculumUnit(name: "Additional Components", topics: [
-                CurriculumTopic(name: "Nature of Science", subtopics: [
-                    "Observations and hypotheses",
-                    "Experimental design",
-                    "Variables and controls",
-                    "Falsifiability and paradigm shifts"
+                CurriculumTopic(name: "Scientific investigation", subtopics: [
+                    "Experimental design, variables and controls",
+                    "Data analysis, uncertainty, conclusions and evaluation"
                 ]),
-                CurriculumTopic(name: "Experimental Investigations", subtopics: [
-                    "Planning and designing experiments",
-                    "Data collection and processing",
-                    "Conclusions and evaluation",
-                    "Scientific report writing"
-                ]),
-                CurriculumTopic(name: "Collaborative Science Project", subtopics: [
-                    "Group research project",
-                    "Interdisciplinary approaches",
-                    "Communication of findings"
-                ]),
-            ]),
+                CurriculumTopic(name: "Collaborative sciences project", subtopics: [
+                    "Interdisciplinary investigation and collaboration",
+                    "Communicating evidence and scientific reasoning"
+                ])
+            ])
         ]
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - IB Mathematics: Analysis & Approaches SL (2021)
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+    // MARK: - IB Mathematics: Analysis & Approaches (first assessment 2021)
+    // All 51 SL sections are represented individually. Additional HL content
+    // is grouped under its official parent topic and filtered by course level.
     private static var mathAACurriculum: [CurriculumUnit] {
         [
             CurriculumUnit(name: "Topic 1 — Number and Algebra", topics: [
-                CurriculumTopic(name: "Indices and Logarithms", subtopics: [
-                    "Laws of exponents",
-                    "Logarithmic functions and laws",
-                    "Natural logarithm (ln)",
-                    "Solving equations with exponents and logs",
-                    "Change of base formula"
-                ]),
-                CurriculumTopic(name: "Sequences and Series", subtopics: [
-                    "Arithmetic sequences and series",
-                    "Geometric sequences and series",
-                    "Sum to infinity of geometric series",
-                    "Sigma notation",
-                    "Applications of sequences and series"
-                ]),
-                CurriculumTopic(name: "Exponential Functions", subtopics: [
-                    "Exponential growth and decay models",
-                    "Compound interest and depreciation",
-                    "The number e and natural exponential",
-                    "Graphs of exponential functions"
-                ]),
+                CurriculumTopic(name: "1.1 Scientific notation", subtopics: ["Calculating with powers of ten", "Representing large and small numbers"]),
+                CurriculumTopic(name: "1.2 Arithmetic sequences and series", subtopics: ["Common differences and nth terms", "Finite sums and sigma notation"]),
+                CurriculumTopic(name: "1.3 Geometric sequences and series", subtopics: ["Common ratios and nth terms", "Finite geometric sums"]),
+                CurriculumTopic(name: "1.4 Financial applications", subtopics: ["Compound interest and depreciation", "Inflation and investment value"]),
+                CurriculumTopic(name: "1.5 Exponents and introductory logarithms", subtopics: ["Integer exponent laws", "Base ten and natural logarithms"]),
+                CurriculumTopic(name: "1.6 Deductive proof", subtopics: ["Numerical and algebraic proof", "Equality, identity and checking results"]),
+                CurriculumTopic(name: "1.7 Exponent and logarithm laws", subtopics: ["Rational exponents and change of base", "Solving exponential and logarithmic equations"]),
+                CurriculumTopic(name: "1.8 Infinite geometric series", subtopics: ["Convergence conditions", "Calculating sums to infinity"]),
+                CurriculumTopic(name: "1.9 Binomial theorem", subtopics: ["Expanding positive integer powers", "Binomial coefficients and Pascal's triangle"]),
+                CurriculumTopic(name: "1.10–1.16 Additional algebra", subtopics: [
+                    "Counting principles and generalized binomial expansions",
+                    "Partial fractions and complex numbers",
+                    "Modulus, argument, polar form and De Moivre's theorem",
+                    "Proof by induction, contradiction and counterexample",
+                    "Systems of linear equations"
+                ], levels: [.hl])
             ]),
-
             CurriculumUnit(name: "Topic 2 — Functions", topics: [
-                CurriculumTopic(name: "Function Notation", subtopics: [
-                    "Domain and range",
-                    "Function notation f(x)",
-                    "Composite functions f∘g",
-                    "Inverse functions f⁻¹",
-                    "Self-inverse functions"
-                ]),
-                CurriculumTopic(name: "Graphs and Transformations", subtopics: [
-                    "Translations (horizontal and vertical shifts)",
-                    "Reflections in axes",
-                    "Stretches and compressions",
-                    "Combined transformations",
-                    "Asymptotes"
-                ]),
-                CurriculumTopic(name: "Polynomial, Rational and Exponential Functions", subtopics: [
-                    "Quadratic functions and completing the square",
-                    "The discriminant and nature of roots",
-                    "Polynomial division and the factor theorem",
-                    "Rational functions and their graphs",
-                    "Exponential and logarithmic function graphs"
-                ]),
+                CurriculumTopic(name: "2.1 Straight lines", subtopics: ["Gradient and equations of lines", "Parallel and perpendicular lines"]),
+                CurriculumTopic(name: "2.2 Functions and inverses", subtopics: ["Function notation, domain and range", "Inverse graphs and one-to-one functions"]),
+                CurriculumTopic(name: "2.3 Graphing functions", subtopics: ["Sketching and interpreting graphs", "Using graphing technology"]),
+                CurriculumTopic(name: "2.4 Key graph features", subtopics: ["Intercepts, extrema and asymptotes", "Intersections using technology"]),
+                CurriculumTopic(name: "2.5 Composite and inverse functions", subtopics: ["Function composition and identity", "Finding and restricting inverse functions"]),
+                CurriculumTopic(name: "2.6 Quadratic functions", subtopics: ["Expanded, factored and vertex forms", "Axis of symmetry and graph features"]),
+                CurriculumTopic(name: "2.7 Quadratic equations and inequalities", subtopics: ["Factorization, completing the square and quadratic formula", "Discriminant and the nature of roots"]),
+                CurriculumTopic(name: "2.8 Reciprocal and rational functions", subtopics: ["Reciprocal graphs", "Rational functions and asymptotes"]),
+                CurriculumTopic(name: "2.9 Exponential and logarithmic functions", subtopics: ["Exponential growth and decay models", "Exponential and logarithmic graphs as inverses"]),
+                CurriculumTopic(name: "2.10 Solving equations", subtopics: ["Analytical and graphical solutions", "Numerical solutions using technology"]),
+                CurriculumTopic(name: "2.11 Transformations", subtopics: ["Translations, reflections and stretches", "Combining graph transformations"]),
+                CurriculumTopic(name: "2.12–2.16 Additional functions", subtopics: [
+                    "Polynomial division, factor theorem and roots",
+                    "Odd, even, self-inverse and rational functions",
+                    "Function inequalities and modulus equations"
+                ], levels: [.hl])
             ]),
-
             CurriculumUnit(name: "Topic 3 — Geometry and Trigonometry", topics: [
-                CurriculumTopic(name: "Angles and Triangles", subtopics: [
-                    "Sine rule",
-                    "Cosine rule",
-                    "Area of a triangle (½ab sin C)",
-                    "Applications in 2D and 3D problems"
-                ]),
-                CurriculumTopic(name: "Trigonometric Functions", subtopics: [
-                    "Unit circle and radian measure",
-                    "Graphs of sin, cos, tan",
-                    "Amplitude, period and phase shift",
-                    "Trigonometric equations",
-                    "Inverse trigonometric functions"
-                ]),
-                CurriculumTopic(name: "Trigonometric Identities", subtopics: [
-                    "Pythagorean identities",
-                    "Double angle formulae",
-                    "Compound angle formulae",
-                    "Proving trigonometric identities"
-                ]),
+                CurriculumTopic(name: "3.1 Three-dimensional geometry", subtopics: ["Distance, midpoints and angles", "Surface areas and volumes of solids"]),
+                CurriculumTopic(name: "3.2 Triangle trigonometry", subtopics: ["Sine rule, cosine rule and triangle area", "Angles of elevation and depression"]),
+                CurriculumTopic(name: "3.3 Applications of trigonometry", subtopics: ["Bearings and diagrams", "Solving two- and three-dimensional problems"]),
+                CurriculumTopic(name: "3.4 Radians, arcs and sectors", subtopics: ["Converting degrees and radians", "Arc lengths and sector areas"]),
+                CurriculumTopic(name: "3.5 Unit circle", subtopics: ["Sine, cosine and tangent on the unit circle", "Exact values and signs"]),
+                CurriculumTopic(name: "3.6 Trigonometric identities", subtopics: ["Pythagorean identity", "Double-angle identities for sine and cosine"]),
+                CurriculumTopic(name: "3.7 Trigonometric functions", subtopics: ["Graphs of sin, cos and tan", "Amplitude, period, phase and transformations"]),
+                CurriculumTopic(name: "3.8 Trigonometric equations", subtopics: ["Solving within a specified interval", "Using identities and quadratic forms"]),
+                CurriculumTopic(name: "3.9–3.20 Additional trigonometry and vectors", subtopics: [
+                    "Reciprocal and inverse trigonometric functions",
+                    "Compound angle formulae and symmetry identities",
+                    "Position vectors, scalar and vector products",
+                    "Vector equations of lines and planes",
+                    "Intersections, angles, distances and geometric proofs"
+                ], levels: [.hl])
             ]),
-
             CurriculumUnit(name: "Topic 4 — Statistics and Probability", topics: [
-                CurriculumTopic(name: "Data Analysis", subtopics: [
-                    "Measures of central tendency (mean, median, mode)",
-                    "Measures of dispersion (range, IQR, standard deviation)",
-                    "Box plots and cumulative frequency",
-                    "Outliers and their treatment"
-                ]),
-                CurriculumTopic(name: "Probability Rules", subtopics: [
-                    "Sample spaces and Venn diagrams",
-                    "Combined events (AND/OR)",
-                    "Conditional probability",
-                    "Independent and mutually exclusive events",
-                    "Tree diagrams"
-                ]),
-                CurriculumTopic(name: "Normal Distribution", subtopics: [
-                    "Properties of the normal distribution",
-                    "Z-scores and standardisation",
-                    "Inverse normal calculations",
-                    "Applications of the normal distribution"
-                ]),
-                CurriculumTopic(name: "Correlation and Regression", subtopics: [
-                    "Scatter diagrams",
-                    "Pearson's correlation coefficient (r)",
-                    "Least squares regression line",
-                    "Coefficient of determination (r²)",
-                    "Interpolation and extrapolation"
-                ]),
+                CurriculumTopic(name: "4.1 Sampling", subtopics: ["Populations, samples and sampling bias", "Discrete and continuous data"]),
+                CurriculumTopic(name: "4.2 Presenting data", subtopics: ["Frequency tables, histograms and cumulative frequency", "Box plots and identifying outliers"]),
+                CurriculumTopic(name: "4.3 Descriptive statistics", subtopics: ["Mean, median and mode", "Range, interquartile range and standard deviation"]),
+                CurriculumTopic(name: "4.4 Correlation and regression", subtopics: ["Scatter diagrams and Pearson's correlation coefficient", "Regression of y on x, interpolation and extrapolation"]),
+                CurriculumTopic(name: "4.5 Probability", subtopics: ["Sample spaces and complementary events", "Expected frequency"]),
+                CurriculumTopic(name: "4.6 Combined events", subtopics: ["Venn diagrams, tree diagrams and addition rules", "Conditional probability and independence"]),
+                CurriculumTopic(name: "4.7 Discrete random variables", subtopics: ["Probability distributions", "Expected value and applications"]),
+                CurriculumTopic(name: "4.8 Binomial distribution", subtopics: ["Binomial conditions and probabilities", "Mean and variance of a binomial distribution"]),
+                CurriculumTopic(name: "4.9 Normal distribution", subtopics: ["Normal curve and its properties", "Probabilities and inverse normal calculations"]),
+                CurriculumTopic(name: "4.10 Regression of x on y", subtopics: ["Choosing the appropriate regression line", "Predictions and limits of regression"]),
+                CurriculumTopic(name: "4.11 Conditional probability", subtopics: ["Formal conditional probability formula", "Testing events for independence"]),
+                CurriculumTopic(name: "4.12 Standardized normal variables", subtopics: ["Z-scores and standardization", "Finding unknown means and standard deviations"]),
+                CurriculumTopic(name: "4.13–4.14 Additional probability", subtopics: [
+                    "Bayes' theorem and conditional probability",
+                    "Continuous random variables and probability density",
+                    "Expectation, variance and linear transformations"
+                ], levels: [.hl])
             ]),
-
             CurriculumUnit(name: "Topic 5 — Calculus", topics: [
-                CurriculumTopic(name: "Limits", subtopics: [
-                    "Concept of a limit",
-                    "Limits at a point",
-                    "Limits at infinity",
-                    "Continuity"
-                ]),
-                CurriculumTopic(name: "Differentiation", subtopics: [
-                    "First principles of differentiation",
-                    "Power rule",
-                    "Chain rule",
-                    "Product and quotient rules",
-                    "Derivatives of trigonometric functions",
-                    "Derivatives of exponential and logarithmic functions"
-                ]),
-                CurriculumTopic(name: "Integration", subtopics: [
-                    "Indefinite integrals and antiderivatives",
-                    "Definite integrals",
-                    "Integration by substitution",
-                    "Area under a curve",
-                    "Area between two curves"
-                ]),
-                CurriculumTopic(name: "Applications of Calculus", subtopics: [
-                    "Tangent and normal lines",
-                    "Maximum and minimum problems",
-                    "Optimisation problems",
-                    "Kinematics (displacement, velocity, acceleration)",
-                    "Rates of change and related rates"
-                ]),
+                CurriculumTopic(name: "5.1 Limits and derivatives", subtopics: ["Limits and the gradient of a curve", "Interpreting derivatives as rates of change"]),
+                CurriculumTopic(name: "5.2 Increasing and decreasing functions", subtopics: ["Sign of the first derivative", "Intervals of increasing and decreasing behavior"]),
+                CurriculumTopic(name: "5.3 Polynomial differentiation", subtopics: ["Power rule", "Differentiating sums of integer powers"]),
+                CurriculumTopic(name: "5.4 Tangents and normals", subtopics: ["Finding tangent gradients and equations", "Finding normal gradients and equations"]),
+                CurriculumTopic(name: "5.5 Introductory integration", subtopics: ["Antiderivatives and the constant of integration", "Definite integrals using technology"]),
+                CurriculumTopic(name: "5.6 Differentiation rules", subtopics: ["Derivatives of powers, trigonometric, exponential and logarithmic functions", "Chain, product and quotient rules"]),
+                CurriculumTopic(name: "5.7 Second derivatives", subtopics: ["Relationships between f, f' and f''", "Interpreting derivative graphs"]),
+                CurriculumTopic(name: "5.8 Optimization and curve behavior", subtopics: ["Local extrema and optimization", "Concavity and points of inflexion"]),
+                CurriculumTopic(name: "5.9 Kinematics", subtopics: ["Displacement, velocity and acceleration", "Distance travelled and speed"]),
+                CurriculumTopic(name: "5.10 Integration techniques", subtopics: ["Standard antiderivatives and reverse chain rule", "Integration by substitution"]),
+                CurriculumTopic(name: "5.11 Definite integration and areas", subtopics: ["Fundamental theorem of calculus", "Area under and between curves"]),
+                CurriculumTopic(name: "5.12–5.19 Additional calculus", subtopics: [
+                    "Continuity, differentiability and limits",
+                    "Implicit differentiation and related rates",
+                    "Integration by parts and partial fractions",
+                    "Volumes of revolution",
+                    "First-order differential equations and Euler's method",
+                    "Maclaurin series and approximation"
+                ], levels: [.hl])
             ]),
-
-            CurriculumUnit(name: "Higher Level Extension", topics: [
-                CurriculumTopic(name: "Proof, Complex Numbers and Advanced Algebra", subtopics: [
-                    "HL: Proof by induction, contradiction and counterexample",
-                    "HL: Complex numbers in Cartesian, polar and exponential form",
-                    "HL: De Moivre's theorem and roots of complex numbers",
-                    "HL: Polynomial roots, sums and products of roots",
-                    "HL: Systems of linear equations and solution structure"
-                ], levels: [.hl]),
-                CurriculumTopic(name: "Vectors and Advanced Geometry", subtopics: [
-                    "HL: Vector equations of lines and planes",
-                    "HL: Intersections, angles and distances in three dimensions",
-                    "HL: Scalar and vector products",
-                    "HL: Geometric transformations using matrices"
-                ], levels: [.hl]),
-                CurriculumTopic(name: "Advanced Statistics and Probability", subtopics: [
-                    "HL: Discrete and continuous random variables",
-                    "HL: Binomial and Poisson distributions",
-                    "HL: Expectation, variance and linear combinations",
-                    "HL: Hypothesis testing and confidence intervals"
-                ], levels: [.hl]),
-                CurriculumTopic(name: "Advanced Calculus", subtopics: [
-                    "HL: Implicit differentiation and related rates",
-                    "HL: Integration by parts and partial fractions",
-                    "HL: First-order differential equations and Euler's method",
-                    "HL: Maclaurin series and local approximation",
-                    "HL: Volumes of revolution and advanced optimisation"
-                ], levels: [.hl]),
-            ]),
-
             CurriculumUnit(name: "Internal Assessment", topics: [
                 CurriculumTopic(name: "Mathematical Exploration (IA)", subtopics: [
-                    "Choosing a topic with personal engagement",
-                    "Mathematical communication and notation",
-                    "Use of mathematics (beyond the syllabus encouraged)",
-                    "Reflection and personal connection",
-                    "Assessment criteria (worth ~20% of final grade)"
-                ]),
-            ]),
+                    "Choosing and developing a mathematical investigation",
+                    "Mathematical communication, reflection and personal engagement",
+                    "Interpreting results and evaluating limitations"
+                ])
+            ])
         ]
     }
 
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // MARK: - IB English B HL
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private static var englishBCurriculum: [CurriculumUnit] {
         [

@@ -23,16 +23,23 @@ struct XPCalculatorTests {
         #expect(XPCalculator.xp(forQualities: [], intensity: .intensive) == 0)
     }
 
-    @Test("Study XP is one point per minute scaled by intensity, rounded down")
+    @Test("Study XP awards three points per minute scaled by intensity, rounded down")
     func studyXPPerMinute() {
-        #expect(XPCalculator.xp(forStudyMinutes: 50, intensity: .average) == 50)
-        #expect(XPCalculator.xp(forStudyMinutes: 50, intensity: .intensive) == 75)
-        #expect(XPCalculator.xp(forStudyMinutes: 10.9, intensity: .average) == 10)
+        #expect(XPCalculator.xp(forStudyMinutes: 50, intensity: .average) == 150)
+        #expect(XPCalculator.xp(forStudyMinutes: 50, intensity: .intensive) == 225)
+        #expect(XPCalculator.xp(forStudyMinutes: 10.9, intensity: .average) == 32)
     }
 
     @Test("Negative or zero study minutes never award XP")
     func studyXPNeverNegative() {
         #expect(XPCalculator.xp(forStudyMinutes: -30, intensity: .intensive) == 0)
         #expect(XPCalculator.xp(forStudyMinutes: 0, intensity: .average) == 0)
+    }
+
+    @Test("Imported nonfinite or overflowing durations do not trap")
+    func malformedImportedDurations() {
+        #expect(XPCalculator.xp(forStudyMinutes: .nan, intensity: .average) == 0)
+        #expect(XPCalculator.xp(forStudyMinutes: .infinity, intensity: .average) == 0)
+        #expect(XPCalculator.xp(forStudyMinutes: .greatestFiniteMagnitude, intensity: .intensive) == 0)
     }
 }

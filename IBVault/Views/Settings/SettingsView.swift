@@ -37,6 +37,9 @@ struct SettingsView: View {
     @State private var settingsSearch = ""
     @State private var initializedProfile = false
     @State private var loadedSections: Set<SettingsSection> = []
+    @State private var codexModels: [AIModelOption] = []
+    @State private var isLoadingCodexModels = false
+    @State private var codexCatalogStatus = ""
 
     // ARIA Settings
     @AppStorage("geminiModel") private var selectedModel = "gemini-2.0-flash"
@@ -49,8 +52,6 @@ struct SettingsView: View {
     @AppStorage("junaliBaseURL") private var junaliBaseURL = AIConfiguration.junaliDefaultBaseURL
     @AppStorage("codexCLIPath") private var codexCLIPath = ""
     @AppStorage("ariaTemperature") private var ariaTemperature = 0.7
-    @AppStorage("ariaAutoCompact") private var ariaAutoCompact = true
-    @AppStorage("ariaContextWindow") private var ariaContextWindow = 20
 
     // Study Settings
     @AppStorage("showMasteryPercent") private var showMasteryPercent = true
@@ -70,6 +71,7 @@ struct SettingsView: View {
     @State private var isConfiguringCalendar = false
     @State private var isGoogleConfigured = false
     @State private var isGoogleConnected = false
+    @AppStorage(CalendarSyncPreferences.lastErrorKey) private var calendarLastError = ""
 
     @State private var adhdMedSettings: ADHDMedicationSettings = .default
     @State private var showMedicationPicker = false
@@ -224,6 +226,17 @@ struct SettingsView: View {
             }
         }
         .task(id: selectedSection) { await loadSectionState() }
+        .task(id: selectedProviderRaw) {
+            if loadsExternalState, selectedProvider == .codexCLI { await loadCodexModels() }
+        }
+        .onChange(of: calendarLastError) { _, error in
+            guard !isConfiguringCalendar else { return }
+            refreshGoogleCalendarState()
+            if !error.isEmpty { calendarSyncStatus = error }
+            else if let date = UserDefaults.standard.object(forKey: CalendarSyncPreferences.lastSyncDateKey) as? Date {
+                calendarSyncStatus = "Last synced \(date.formatted(date: .abbreviated, time: .shortened))."
+            }
+        }
         .onDisappear {
             profileSaveTask?.cancel()
             if loadsExternalState, context.hasChanges { persistChanges() }
@@ -328,6 +341,7 @@ struct SettingsView: View {
         switch section {
         case .assistant:
             refreshKeychainState()
+            if selectedProvider == .codexCLI { await loadCodexModels() }
         case .data:
             refreshBackupState()
         case .study:
@@ -345,6 +359,7 @@ struct SettingsView: View {
                     return
                 } catch {
                     guard !Task.isCancelled else { return }
+                    refreshGoogleCalendarState()
                     calendarSyncStatus = error.localizedDescription
                     return
                 }
@@ -505,10 +520,6 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.plain)
-            Divider()
-            Stepper("Conversation context: \(ariaContextWindow) messages",
-                    value: $ariaContextWindow, in: 5...50, step: 5)
-            SettingsToggle("Compact older conversations", isOn: $ariaAutoCompact)
         } header: {
             Label("Conversation & memory", systemImage: "bubble.left.and.bubble.right")
         }
@@ -655,23 +666,28 @@ struct SettingsView: View {
                     .buttonStyle(SecondaryButtonStyle())
                 } else {
                     Picker("Model preset", selection: activeModel) {
-                        let models = AIConfiguration.knownModels[selectedProvider] ?? []
+                        let models = selectedProvider == .codexCLI ? codexModels : (AIConfiguration.knownModels[selectedProvider] ?? [])
                         if !models.contains(where: { $0.id == activeModel.wrappedValue }) {
                             Text("Custom · \(activeModel.wrappedValue)").tag(activeModel.wrappedValue)
                         }
                         ForEach(models) { option in
-                            Text("\(option.name) · \(option.role)").tag(option.id)
+                            Text(option.name).tag(option.id)
                         }
                     }
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    HStack(spacing: 10) {
+                    DisclosureGroup("Custom model") {
                         TextField("Custom model ID", text: activeModel)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.callout, design: .monospaced))
                             .accessibilityLabel("Custom model ID")
-                        Text("Model ID").font(.caption).foregroundStyle(IBColors.inkSecondary)
+                    }
+                }
+                if selectedProvider == .codexCLI {
+                    if isLoadingCodexModels { ProgressView("Updating Codex models…").controlSize(.small) }
+                    if !codexCatalogStatus.isEmpty {
+                        Text(codexCatalogStatus).font(.caption).foregroundStyle(IBColors.inkSecondary)
                     }
                 }
             }
@@ -710,6 +726,29 @@ struct SettingsView: View {
             }
         } header: {
             Label("Model & responses", systemImage: "cpu")
+        }
+    }
+
+    @MainActor
+    private func loadCodexModels() async {
+        guard !isLoadingCodexModels else { return }
+        isLoadingCodexModels = true
+        codexModels = AIConfiguration.knownModels[.codexCLI] ?? []
+        defer { isLoadingCodexModels = false }
+        do {
+            let models = try await AIProviderService.refreshCodexModels()
+            codexModels = AIConfiguration.knownModels[.codexCLI] ?? []
+            // Keep explicit selections, including provider IDs that the CLI
+            // accepts without advertising them in its catalog.
+            if UserDefaults.standard.string(forKey: "codexModel") == nil || codexModel.isEmpty,
+               let defaultModel = models.first(where: \.isDefault) ?? models.first {
+                codexModel = defaultModel.model
+            }
+            reasoningEffortRaw = AIConfiguration.normalizedReasoningEffort(selectedReasoningEffort.wrappedValue, for: .codexCLI).rawValue
+            codexCatalogStatus = "Models updated from your installed Codex."
+        } catch is CancellationError {
+        } catch {
+            codexCatalogStatus = "Couldn't update Codex models: \(error.localizedDescription)"
         }
     }
 
@@ -883,6 +922,7 @@ struct SettingsView: View {
                     } label: {
                         Label(isGoogleConfigured ? "Replace File" : "Choose File", systemImage: "doc.badge.plus")
                     }
+                    .disabled(isConfiguringCalendar)
                 }
 
                 HStack {
@@ -918,6 +958,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .disabled(isConfiguringCalendar)
 
                 if calendarOptions.isEmpty {
                     HStack {
@@ -934,6 +975,7 @@ struct SettingsView: View {
                             Text(option.displayName).tag(option.id)
                         }
                     }
+                    .disabled(isConfiguringCalendar)
                     .onChange(of: selectedCalendarIdentifier) { _, _ in
                         guard calendarSyncEnabled else { return }
                         calendarSyncStatus = "Calendar changed. Syncing..."
@@ -970,6 +1012,7 @@ struct SettingsView: View {
 
     @MainActor
     private func connectGoogleCalendar() async {
+        guard !isConfiguringCalendar else { return }
         isConfiguringCalendar = true
         calendarSyncStatus = "Waiting for Google sign-in..."
         defer { isConfiguringCalendar = false }
@@ -992,6 +1035,7 @@ struct SettingsView: View {
             calendarSyncStatus = syncSuccessMessage()
             NotificationCenter.default.post(name: .calendarSyncRequested, object: nil)
         } catch {
+            refreshGoogleCalendarState()
             calendarSyncEnabled = false
             CalendarSyncPreferences.recordFailure(error)
             calendarSyncStatus = error.localizedDescription
@@ -1000,6 +1044,7 @@ struct SettingsView: View {
 
     @MainActor
     private func chooseGoogleOAuthConfiguration() {
+        guard !isConfiguringCalendar else { return }
         let panel = NSOpenPanel()
         panel.title = "Choose Google OAuth Configuration"
         panel.message = "Select the Desktop app JSON file downloaded from Google Cloud."
@@ -1020,10 +1065,10 @@ struct SettingsView: View {
 
     @MainActor
     private func disconnectGoogleCalendar() {
+        guard !isConfiguringCalendar else { return }
         CalendarSyncService.shared.disconnect()
         calendarSyncEnabled = false
         calendarOptions = []
-        selectedCalendarIdentifier = ""
         calendarSyncStatus = "Google Calendar disconnected. Existing events were kept."
         refreshGoogleCalendarState()
     }
@@ -1032,7 +1077,7 @@ struct SettingsView: View {
     private func refreshGoogleCalendarState() {
         isGoogleConfigured = CalendarSyncService.shared.isConfigured
         isGoogleConnected = CalendarSyncService.shared.isConnected
-        if !isGoogleConnected {
+        if !isGoogleConnected, calendarSyncEnabled {
             calendarSyncEnabled = false
         }
     }
@@ -1051,12 +1096,14 @@ struct SettingsView: View {
 
     @MainActor
     private func loadCalendarOptions() async {
+        guard !isConfiguringCalendar else { return }
         do {
             try await loadCalendarOptions(keepProgressVisible: false)
             calendarSyncStatus = calendarOptions.isEmpty
                 ? "No writable calendars found."
                 : "Choose the calendar that belongs to your Google account."
         } catch {
+            refreshGoogleCalendarState()
             CalendarSyncPreferences.recordFailure(error)
             calendarSyncStatus = error.localizedDescription
         }
@@ -1064,14 +1111,16 @@ struct SettingsView: View {
 
     @MainActor
     private func syncCalendarsNow() async {
-        guard calendarSyncEnabled, !selectedCalendarIdentifier.isEmpty else { return }
+        guard !isConfiguringCalendar, calendarSyncEnabled, !selectedCalendarIdentifier.isEmpty else { return }
         isConfiguringCalendar = true
+        calendarSyncStatus = "Syncing study sessions..."
         defer { isConfiguringCalendar = false }
 
         do {
             try await syncCurrentStudyPlans()
             calendarSyncStatus = syncSuccessMessage()
         } catch {
+            refreshGoogleCalendarState()
             CalendarSyncPreferences.recordFailure(error)
             calendarSyncStatus = error.localizedDescription
         }

@@ -17,6 +17,7 @@ enum CalendarSyncPreferences {
     static let isEnabledKey = "calendarSyncEnabled"
     static let calendarIdentifierKey = "calendarSyncCalendarIdentifier"
     static let eventIdentifiersKey = "googleCalendarSyncEventIdentifiers"
+    static let calendarEventIdentifiersKey = "googleCalendarSyncEventsByCalendar"
     static let lastSyncDateKey = "calendarSyncLastDate"
     static let lastErrorKey = "calendarSyncLastError"
 
@@ -28,13 +29,24 @@ enum CalendarSyncPreferences {
         UserDefaults.standard.string(forKey: calendarIdentifierKey) ?? ""
     }
 
-    static var eventIdentifiers: [String: String] {
-        get {
-            UserDefaults.standard.dictionary(forKey: eventIdentifiersKey) as? [String: String] ?? [:]
+    static func eventIdentifiers(for calendarID: String, defaults: UserDefaults = .standard) -> [String: String] {
+        var calendars = defaults.dictionary(forKey: calendarEventIdentifiersKey) as? [String: [String: String]] ?? [:]
+        // Migrate the old, unscoped cache once. Other calendars keep their own IDs.
+        if let legacy = defaults.dictionary(forKey: eventIdentifiersKey) as? [String: String] {
+            let previousCalendar = defaults.string(forKey: calendarIdentifierKey) ?? ""
+            if !previousCalendar.isEmpty, calendars[previousCalendar] == nil {
+                calendars[previousCalendar] = legacy
+            }
+            defaults.set(calendars, forKey: calendarEventIdentifiersKey)
+            defaults.removeObject(forKey: eventIdentifiersKey)
         }
-        set {
-            UserDefaults.standard.set(newValue, forKey: eventIdentifiersKey)
-        }
+        return calendars[calendarID] ?? [:]
+    }
+
+    static func setEventIdentifiers(_ mappings: [String: String], for calendarID: String, defaults: UserDefaults = .standard) {
+        var calendars = defaults.dictionary(forKey: calendarEventIdentifiersKey) as? [String: [String: String]] ?? [:]
+        calendars[calendarID] = mappings
+        defaults.set(calendars, forKey: calendarEventIdentifiersKey)
     }
 
     static func recordSuccess(at date: Date = Date()) {
@@ -154,12 +166,20 @@ final class CalendarSyncService {
     ]
 
     private let session: URLSession
+    private let defaults: UserDefaults
+    private var syncTask: Task<Void, any Error>?
+    private var refreshTask: Task<GoogleOAuthToken, any Error>?
 
     var isConfigured: Bool { KeychainService.loadGoogleOAuthConfiguration() != nil }
     var isConnected: Bool { KeychainService.loadGoogleOAuthToken() != nil }
 
-    private init(session: URLSession = .shared) {
+    init(session: URLSession = .shared, defaults: UserDefaults = .standard) {
         self.session = session
+        self.defaults = defaults
+        let calendarID = defaults.string(forKey: CalendarSyncPreferences.calendarIdentifierKey) ?? ""
+        if !calendarID.isEmpty {
+            _ = CalendarSyncPreferences.eventIdentifiers(for: calendarID, defaults: defaults)
+        }
     }
 
     func importConfiguration(from url: URL) throws {
@@ -225,9 +245,9 @@ final class CalendarSyncService {
     }
 
     func disconnect() {
+        refreshTask?.cancel()
         _ = KeychainService.deleteGoogleOAuthToken()
-        CalendarSyncPreferences.eventIdentifiers = [:]
-        UserDefaults.standard.set(false, forKey: CalendarSyncPreferences.isEnabledKey)
+        defaults.set(false, forKey: CalendarSyncPreferences.isEnabledKey)
     }
 
     func writableCalendars() async throws -> [CalendarSyncOption] {
@@ -249,22 +269,45 @@ final class CalendarSyncService {
     }
 
     func sync(plans: [StudyPlan]) async throws {
-        guard CalendarSyncPreferences.isEnabled else { return }
-        let calendarID = CalendarSyncPreferences.calendarIdentifier
+        // Settings, automatic changes and reconnect can request sync together.
+        // Serialize whole passes so they cannot create duplicates or lose IDs.
+        let previous = syncTask
+        let task = Task { @MainActor in
+            if let previous { _ = try? await previous.value }
+            try await performSync(plans: plans)
+        }
+        syncTask = task
+        do {
+            try await task.value
+        } catch GoogleHTTPError.notFound {
+            throw CalendarSyncError.calendarUnavailable
+        }
+    }
+
+    private func performSync(plans: [StudyPlan]) async throws {
+        guard defaults.bool(forKey: CalendarSyncPreferences.isEnabledKey) else { return }
+        let calendarID = defaults.string(forKey: CalendarSyncPreferences.calendarIdentifierKey) ?? ""
         guard !calendarID.isEmpty else { throw CalendarSyncError.calendarUnavailable }
 
-        var mappings = CalendarSyncPreferences.eventIdentifiers
+        var mappings = CalendarSyncPreferences.eventIdentifiers(for: calendarID, defaults: defaults)
         let currentPlanIDs = Set(plans.map { $0.id.uuidString })
 
+        func isCurrentCalendar() -> Bool {
+            defaults.bool(forKey: CalendarSyncPreferences.isEnabledKey) &&
+                defaults.string(forKey: CalendarSyncPreferences.calendarIdentifierKey) == calendarID
+        }
+
         for stalePlanID in mappings.keys.filter({ !currentPlanIDs.contains($0) }) {
+            guard isCurrentCalendar() else { return }
             if let eventID = mappings[stalePlanID] {
                 try await deleteEvent(eventID, calendarID: calendarID)
             }
             mappings.removeValue(forKey: stalePlanID)
-            CalendarSyncPreferences.eventIdentifiers = mappings
+            CalendarSyncPreferences.setEventIdentifiers(mappings, for: calendarID, defaults: defaults)
         }
 
         for plan in plans {
+            guard isCurrentCalendar() else { return }
             let planID = plan.id.uuidString
             let body = eventBody(for: plan)
             if let eventID = mappings[planID] {
@@ -275,12 +318,22 @@ final class CalendarSyncService {
                     mappings.removeValue(forKey: planID)
                 }
             }
-            mappings[planID] = try await createEvent(calendarID: calendarID, body: body)
-            CalendarSyncPreferences.eventIdentifiers = mappings
+            // Recover a previous insert whose response was lost before the ID
+            // could be persisted, including after disconnect/reconnect.
+            if let existingID = try await existingEventID(planID: planID, calendarID: calendarID) {
+                guard isCurrentCalendar() else { return }
+                try await updateEvent(existingID, calendarID: calendarID, body: body)
+                mappings[planID] = existingID
+            } else {
+                guard isCurrentCalendar() else { return }
+                mappings[planID] = try await createEvent(calendarID: calendarID, body: body)
+            }
+            CalendarSyncPreferences.setEventIdentifiers(mappings, for: calendarID, defaults: defaults)
         }
 
-        CalendarSyncPreferences.eventIdentifiers = mappings
-        CalendarSyncPreferences.recordSuccess()
+        CalendarSyncPreferences.setEventIdentifiers(mappings, for: calendarID, defaults: defaults)
+        defaults.set(Date(), forKey: CalendarSyncPreferences.lastSyncDateKey)
+        defaults.removeObject(forKey: CalendarSyncPreferences.lastErrorKey)
     }
 
     private func authorizationURL(
@@ -355,6 +408,7 @@ final class CalendarSyncService {
     }
 
     private func validToken(forceRefresh: Bool = false) async throws -> GoogleOAuthToken {
+        if let refreshTask { return try await refreshTask.value }
         guard let configuration = KeychainService.loadGoogleOAuthConfiguration() else {
             throw CalendarSyncError.configurationMissing
         }
@@ -362,11 +416,24 @@ final class CalendarSyncService {
             throw CalendarSyncError.tokenMissing
         }
         guard forceRefresh || stored.needsRefresh else { return stored }
-        let refreshed = try await refreshedToken(stored, configuration: configuration)
-        guard KeychainService.saveGoogleOAuthToken(refreshed) else {
-            throw CalendarSyncError.serverError("Noot could not securely update the Google connection.")
+        let task = Task { @MainActor in
+            do {
+                let refreshed = try await refreshedToken(stored, configuration: configuration)
+                try Task.checkCancellation()
+                guard KeychainService.saveGoogleOAuthToken(refreshed) else {
+                    throw CalendarSyncError.serverError("Noot could not securely update the Google connection.")
+                }
+                return refreshed
+            } catch CalendarSyncError.tokenMissing {
+                // A revoked/expired refresh token cannot be repaired by retrying.
+                // Keep configuration and event IDs, and expose Connect again.
+                _ = KeychainService.deleteGoogleOAuthToken()
+                throw CalendarSyncError.tokenMissing
+            }
         }
-        return refreshed
+        refreshTask = task
+        defer { refreshTask = nil }
+        return try await task.value
     }
 
     private func authenticatedData(_ original: URLRequest) async throws -> Data {
@@ -382,7 +449,11 @@ final class CalendarSyncService {
                 token = try await validToken(forceRefresh: true)
                 continue
             }
-            if http.statusCode == 404 { throw GoogleHTTPError.notFound }
+            if http.statusCode == 401 {
+                _ = KeychainService.deleteGoogleOAuthToken()
+                throw CalendarSyncError.tokenMissing
+            }
+            if http.statusCode == 404 || http.statusCode == 410 { throw GoogleHTTPError.notFound }
             guard (200..<300).contains(http.statusCode) else {
                 throw CalendarSyncError.serverError(Self.googleError(from: data, statusCode: http.statusCode))
             }
@@ -401,7 +472,7 @@ final class CalendarSyncService {
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw CalendarSyncError.serverError(Self.googleError(from: data, statusCode: statusCode))
+            throw Self.responseError(from: data, statusCode: statusCode)
         }
         return try JSONDecoder().decode(T.self, from: data)
     }
@@ -413,6 +484,20 @@ final class CalendarSyncService {
         request.httpBody = try JSONEncoder.googleCalendar.encode(body)
         let response: EventIDResponse = try await authenticatedJSON(request)
         return response.id
+    }
+
+    private func existingEventID(planID: String, calendarID: String) async throws -> String? {
+        struct Events: Decodable {
+            struct Event: Decodable { let id: String; let status: String? }
+            let items: [Event]?
+        }
+        var components = URLComponents(url: eventsURL(calendarID: calendarID), resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "privateExtendedProperty", value: "nootStudyPlanID=\(planID)"),
+            URLQueryItem(name: "showDeleted", value: "false")
+        ]
+        let response: Events = try await authenticatedJSON(URLRequest(url: components.url!))
+        return response.items?.first { $0.status != "cancelled" }?.id
     }
 
     private func updateEvent(_ eventID: String, calendarID: String, body: GoogleCalendarEvent) async throws {
@@ -487,6 +572,18 @@ final class CalendarSyncService {
             return "\(encodedKey)=\(encodedValue)"
         }.joined(separator: "&")
         return Data(string.utf8)
+    }
+
+    static func responseError(from data: Data, statusCode: Int) -> CalendarSyncError {
+        struct OAuthError: Decodable {
+            let error: String
+            let error_description: String?
+        }
+        if let oauth = try? JSONDecoder().decode(OAuthError.self, from: data) {
+            if oauth.error == "invalid_grant" { return .tokenMissing }
+            return .authorizationFailed(oauth.error_description ?? oauth.error)
+        }
+        return .serverError(googleError(from: data, statusCode: statusCode))
     }
 
     private static func googleError(from data: Data, statusCode: Int) -> String {

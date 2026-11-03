@@ -9,6 +9,26 @@ struct VisualSnapshotHarness {
 
     @MainActor
     @Test
+    func renderSessionAndProfileSnapshots() throws {
+        guard let path = ProcessInfo.processInfo.environment["NOOTSTUDY_ISSUE_SNAPSHOTS"], !path.isEmpty else { return }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let container = try makeSeededContainer()
+        let plan = StudyPlan(subjectName: "Biology", topicName: "D1.2 Protein synthesis",
+                             scheduledDate: Date(), durationMinutes: 60)
+        container.mainContext.insert(plan)
+        try container.mainContext.save()
+        for scheme in [ColorScheme.light, .dark] {
+            let suffix = scheme == .light ? "light" : "dark"
+            try render(ActiveStudySessionView(plan: plan).modelContainer(container).environment(ProgressionEventCenter()),
+                       size: CGSize(width: 780, height: 580), name: "session-\(suffix)", directory: directory, scheme: scheme)
+            try render(ProfileView().modelContainer(container), size: CGSize(width: 1080, height: 1500),
+                       name: "profile-\(suffix)", directory: directory, scheme: scheme)
+        }
+    }
+
+    @MainActor
+    @Test
     func renderSettingsSnapshots() throws {
         guard let path = ProcessInfo.processInfo.environment["NOOTSTUDY_SETTINGS_SNAPSHOTS"],
               !path.isEmpty else { return }

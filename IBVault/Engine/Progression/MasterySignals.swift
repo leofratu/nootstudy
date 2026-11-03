@@ -30,7 +30,7 @@ nonisolated enum MasterySignals: Sendable {
     /// Fraction of cards that have been successfully recalled at least twice.
     static func coverage(cards: [CardSnapshot]) -> Double {
         guard !cards.isEmpty else { return 0 }
-        let learned = cards.filter { $0.repetitions >= 2 }.count
+        let learned = cards.filter { $0.successfulReviews >= 2 }.count
         return Double(learned) / Double(cards.count)
     }
 
@@ -39,7 +39,7 @@ nonisolated enum MasterySignals: Sendable {
     /// dominate the composite.
     static func retention(reviews: [ReviewSnapshot], now: Date) -> Double {
         let cutoff = now.addingTimeInterval(-retentionWindowDays * secondsPerDay)
-        let recent = reviews.filter { $0.timestamp >= cutoff }
+        let recent = reviews.filter { $0.timestamp >= cutoff && $0.timestamp <= now }
         guard recent.count >= retentionMinimumSample else { return neutralRetention }
         let successful = recent.filter(\.isSuccessful).count
         return Double(successful) / Double(recent.count)
@@ -48,7 +48,7 @@ nonisolated enum MasterySignals: Sendable {
     /// Mean interval across reviewed cards, normalised against the target and
     /// capped so one very mature card cannot carry a whole subject.
     static func stability(cards: [CardSnapshot]) -> Double {
-        let seen = cards.filter { $0.repetitions >= 1 }
+        let seen = cards.filter { $0.successfulReviews >= 1 }
         guard !seen.isEmpty else { return 0 }
         let total = seen.reduce(0.0) { partial, card in
             partial + min(max(Double(card.intervalDays), 0) / stabilityTargetDays, 1.0)

@@ -12,6 +12,10 @@ struct ActiveStudySessionView: View {
     @Query(sort: \StudySession.endDate, order: .reverse) private var recentStudySessions: [StudySession]
 
     @State private var sessionStartDate = Date()
+    @State private var didStartSession = false
+    @State private var sessionControlStatus: String?
+    @State private var isUpdatingDuration = false
+    @State private var showExitConfirmation = false
     // Frozen at completion so the completion screen shows a stable duration
     // instead of a timer that keeps counting while the user reads the results.
     @State private var completedElapsed: TimeInterval = 0
@@ -39,7 +43,11 @@ struct ActiveStudySessionView: View {
     @State private var examMarkdown = ""
     @State private var savedTestID = UUID()
     @State private var testSaveStatus: String?
+    @State private var isSavingTest = false
     @State private var isGeneratingExam = false
+    @State private var examGenerationTask: Task<Void, Never>?
+    @State private var examGenerationError: String?
+    @State private var examMaximumMarks = 20
     @State private var examResponse = ""
     @State private var examMarkScheme = ""
     @State private var examGradingMarkdown = ""
@@ -183,11 +191,11 @@ struct ActiveStudySessionView: View {
     }
 
     private var dedicatedMinutes: Int {
-        ARIAService.normalizedDurationMinutes(elapsed / 60)
+        max(0, Int(elapsed / 60))
     }
 
     private var dedicatedMinutesDouble: Double {
-        Double(dedicatedMinutes)
+        max(0, elapsed / 60)
     }
 
     private var priorSubjectSessions: [StudySession] {
@@ -246,7 +254,15 @@ struct ActiveStudySessionView: View {
         .onDisappear {
             flashcardTask?.cancel()
             markingTask?.cancel()
+            examGenerationTask?.cancel()
             saveSessionNotes()
+        }
+        .interactiveDismissDisabled(!isSessionComplete)
+        .confirmationDialog("Leave this study session?", isPresented: $showExitConfirmation, titleVisibility: .visible) {
+            Button("Save progress & leave") { finishSession(markPlanComplete: false) }
+            Button("Keep studying", role: .cancel) {}
+        } message: {
+            Text("Your time, reviews, notes and practice answer will be saved. The plan stays open so you can study it again.")
         }
         .sheet(isPresented: $showCompletionCheckIn) {
             completionCheckIn
@@ -257,6 +273,14 @@ struct ActiveStudySessionView: View {
         VStack(spacing: 0) {
             sessionHeader
                 .padding(16)
+            if let sessionControlStatus {
+                Text(sessionControlStatus)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
+            }
 
             Divider()
 
@@ -307,45 +331,81 @@ struct ActiveStudySessionView: View {
     // MARK: - Header
 
     private var sessionHeader: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(IBColors.inkTertiary.opacity(0.1))
-                    .frame(width: 42, height: 42)
-                Image(systemName: subjectIcon(plan.subjectName))
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(subjectColor(plan.subjectName))
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text(plan.subjectName)
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    Text("FOCUS SESSION")
-                        .font(.caption2.weight(.bold))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(IBColors.inkTertiary.opacity(0.1))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: subjectIcon(plan.subjectName))
+                        .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(subjectColor(plan.subjectName))
                 }
-                Text(plan.selectionSummary)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
 
-            Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(plan.subjectName)
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        Text("FOCUS SESSION")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(subjectColor(plan.subjectName))
+                    }
+                    Text(plan.selectionSummary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
 
-            // Timer + progress ring live in their own subview so the parent
-            // body is not re-evaluated every second.
-            SessionTimerView(startDate: sessionStartDate, durationMinutes: plan.durationMinutes)
+                Spacer()
 
-            FocusRhythmView()
-
-            Button { dismiss() } label: {
-                Label("Close", systemImage: "xmark")
-            }
+                Button { showExitConfirmation = true } label: {
+                    Label(isCompletingSession ? "Saving…" : "Leave", systemImage: "xmark")
+                }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("Close study session")
+                .disabled(isCompletingSession || isUpdatingDuration)
+                .help("Save progress and leave the session")
                 .keyboardShortcut(.cancelAction)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) { sessionTimeControls; Spacer(); FocusRhythmView() }
+                VStack(alignment: .leading, spacing: 10) { sessionTimeControls; FocusRhythmView() }
+            }
+        }
+    }
+
+    private var sessionTimeControls: some View {
+        HStack(spacing: 10) {
+            SessionTimerView(startDate: sessionStartDate, durationMinutes: plan.durationMinutes)
+            Menu {
+                ForEach([15, 30, 60], id: \.self) { minutes in
+                    Button("Add \(minutes) minutes") { extendSession(by: minutes) }
+                }
+            } label: {
+                Label(isUpdatingDuration ? "Saving…" : "Extend", systemImage: "plus")
+            }
+            .disabled(isUpdatingDuration || isCompletingSession)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+    }
+
+    private func extendSession(by minutes: Int) {
+        guard !isUpdatingDuration, !isCompletingSession else { return }
+        isUpdatingDuration = true
+        defer { isUpdatingDuration = false }
+        let previousDuration = plan.durationMinutes
+        let previousEnd = plan.scheduledEndDate
+        do {
+            let extensionValue = try StudySessionDuration.extending(plan, by: minutes)
+            plan.durationMinutes = extensionValue.minutes
+            plan.scheduledEndDate = extensionValue.endDate
+            try context.save()
+            sessionControlStatus = "Added \(minutes) minutes. Session target: \(plan.durationMinutes) minutes."
+        } catch {
+            plan.durationMinutes = previousDuration
+            plan.scheduledEndDate = previousEnd
+            sessionControlStatus = "Could not extend the session: \(error.localizedDescription)"
         }
     }
 
@@ -387,7 +447,7 @@ struct ActiveStudySessionView: View {
                     )
                     .foregroundStyle(
                         selectedTab == tab
-                            ? AnyShapeStyle(IBColors.accent)
+                            ? AnyShapeStyle(IBColors.ink)
                             : AnyShapeStyle(.secondary)
                     )
                 }
@@ -652,8 +712,7 @@ struct ActiveStudySessionView: View {
                 .controlSize(.small)
             }
         }
-        .padding(14)
-        .glassCard(cornerRadius: IBRadius.md)
+        .padding(.vertical, 14)
     }
 
     @ViewBuilder
@@ -662,7 +721,7 @@ struct ActiveStudySessionView: View {
             DisclosureGroup("Choose topics · \(flashcardSelection.count) selected") {
                 TopicSelectionView(subject: subject, selection: $flashcardSelection).padding(.top, 16)
             }
-            .padding(16).surfaceCard()
+            .padding(.vertical, 12)
             .disabled(isGeneratingCards)
         }
     }
@@ -781,6 +840,15 @@ struct ActiveStudySessionView: View {
             VStack(alignment: .leading, spacing: 16) {
                 examToolbar
                     .disabled(isGradingExam)
+                if let examGenerationError {
+                    Label(examGenerationError, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(IBColors.danger)
+                        .textSelection(.enabled)
+                    Button("Use an offline practice template", action: useOfflineExam)
+                        .buttonStyle(.bordered)
+                        .disabled(isGeneratingExam)
+                }
                 examContent
             }
             .padding(.horizontal, 20)
@@ -794,20 +862,22 @@ struct ActiveStudySessionView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Practice Exam")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("Generate, answer, and grade against subject-specific IB criteria.")
+                Text("Generate a scoped paper, write your answer, and save it to the Library.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer()
             if isGeneratingExam {
                 ProgressView().controlSize(.small)
+                Button("Cancel") { examGenerationTask?.cancel() }
             } else if examMarkdown.isEmpty {
                 Button("Generate Exam", systemImage: "sparkles", action: generateExam)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
             } else {
-                Button("Save test to Library", systemImage: "square.and.arrow.down", action: savePracticeTest)
+                Button(isSavingTest ? "Saving…" : "Save test to Library", systemImage: "square.and.arrow.down") { savePracticeTest() }
                     .buttonStyle(.bordered).controlSize(.small)
+                    .disabled(isSavingTest)
                 Button("New Exam", systemImage: "arrow.clockwise") {
                     clearExamWorkspace()
                     generateExam()
@@ -819,8 +889,7 @@ struct ActiveStudySessionView: View {
                     .controlSize(.small)
             }
         }
-        .padding(14)
-        .glassCard(cornerRadius: IBRadius.md)
+        .padding(.vertical, 14)
     }
 
     @ViewBuilder
@@ -837,7 +906,7 @@ struct ActiveStudySessionView: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let testSaveStatus { Text(testSaveStatus).font(.caption).foregroundStyle(.secondary) }
                 examPaper
-                examRubricOverview
+                DisclosureGroup("Response guidance") { examRubricOverview }
                 examResponseEditor
                 examGradingResult
             }
@@ -846,9 +915,7 @@ struct ActiveStudySessionView: View {
 
     private var examPaper: some View {
         FormattedMessageContent(text: examMarkdown)
-            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassCard(cornerRadius: IBRadius.md)
     }
 
     private var examRubricOverview: some View {
@@ -857,7 +924,7 @@ struct ActiveStudySessionView: View {
                 Label("Practice criteria", systemImage: "list.bullet.clipboard")
                     .font(.headline)
                 Spacer()
-                Text("\(IBExamRubric.totalMarks(in: examMarkdown)) marks")
+                Text("\(examMaximumMarks) marks")
                     .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -881,12 +948,7 @@ struct ActiveStudySessionView: View {
                 }
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(IBColors.accent.opacity(0.045))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(IBColors.accent.opacity(0.12)))
-        )
+        .padding(.vertical, 12)
     }
 
     private var examResponseEditor: some View {
@@ -906,13 +968,21 @@ struct ActiveStudySessionView: View {
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.035)))
                 .disabled(isGradingExam)
-            DisclosureGroup("Add a mark scheme (optional)") {
+                .onChange(of: examResponse) { _, _ in
+                    examGradingMarkdown = ""
+                    testSaveStatus = nil
+                }
+            DisclosureGroup("Mark scheme (hidden while answering)") {
                 TextEditor(text: $examMarkScheme)
                     .frame(minHeight: 120).padding(10)
                     .scrollContentBackground(.hidden)
                     .background(IBColors.canvas)
                     .accessibilityLabel("Practice exam mark scheme")
                     .disabled(isGradingExam)
+                    .onChange(of: examMarkScheme) { _, _ in
+                        examGradingMarkdown = ""
+                        testSaveStatus = nil
+                    }
             }
             HStack {
                 Text(examMarkScheme.isEmpty ? "Practice estimate · No mark scheme" : "Against your supplied scheme")
@@ -928,8 +998,7 @@ struct ActiveStudySessionView: View {
                     .disabled(examResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isGradingExam)
             }
         }
-        .padding(16)
-        .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.surface))
+        .padding(.vertical, 16)
     }
 
     @ViewBuilder
@@ -967,7 +1036,7 @@ struct ActiveStudySessionView: View {
                 if !noteSaveStatus.isEmpty {
                     Text(noteSaveStatus)
                         .font(.caption2)
-                        .foregroundStyle(IBColors.success)
+                        .foregroundStyle(noteSaveStatus == "Saved" ? IBColors.success : IBColors.danger)
                 }
                 Button {
                     saveSessionNotes()
@@ -1005,12 +1074,14 @@ struct ActiveStudySessionView: View {
 
     private func saveSessionNotes() {
         guard plan.notes != sessionNotes else { return }
+        let previousNotes = plan.notes
         plan.notes = sessionNotes
         do {
             try context.save()
             noteSaveStatus = "Saved"
         } catch {
-            noteSaveStatus = "Not saved"
+            plan.notes = previousNotes
+            noteSaveStatus = "Could not save: \(error.localizedDescription)"
         }
     }
 
@@ -1362,6 +1433,8 @@ struct ActiveStudySessionView: View {
     // MARK: - Timer
 
     private func startTimer() {
+        guard !didStartSession else { return }
+        didStartSession = true
         sessionStartDate = Date()
     }
 
@@ -1464,6 +1537,7 @@ struct ActiveStudySessionView: View {
     // MARK: - Exam Generation
 
     private func clearExamWorkspace() {
+        guard !isGeneratingExam, !isGradingExam, !isSavingTest else { return }
         withAnimation(IBAnimation.smooth) {
             savedTestID = UUID()
             testSaveStatus = nil
@@ -1472,85 +1546,91 @@ struct ActiveStudySessionView: View {
             examResponse = ""
             examGradingMarkdown = ""
             examGradingError = nil
+            examGenerationError = nil
+            examMaximumMarks = 20
         }
     }
 
-    private func savePracticeTest() {
+    @discardableResult
+    private func savePracticeTest() -> Bool {
+        guard !isSavingTest, !examMarkdown.isEmpty else { return false }
+        isSavingTest = true
+        defer { isSavingTest = false }
         let test = SavedStudyTest(id: savedTestID, subject: plan.subjectName,
             level: subjects.first(where: { $0.name == plan.subjectName })?.level ?? "",
             topics: plan.selectedTopicNames, subtopics: plan.selectedSubtopicNames,
             question: examMarkdown, answer: examResponse, markScheme: examMarkScheme,
-            feedback: examGradingMarkdown, maximumMarks: IBExamRubric.totalMarks(in: examMarkdown))
-        do { _ = try StudyTestStore.save(test, context: context); testSaveStatus = "Saved to Library" }
-        catch { testSaveStatus = "Couldn't save test: \(error.localizedDescription)" }
+            feedback: examGradingMarkdown, maximumMarks: examMaximumMarks)
+        do {
+            _ = try StudyTestStore.save(test, context: context)
+            testSaveStatus = "Saved to Library"
+            return true
+        } catch {
+            testSaveStatus = "Couldn't save test: \(error.localizedDescription)"
+            return false
+        }
     }
 
     private func generateExam() {
+        guard !isGeneratingExam, !isGradingExam else { return }
         isGeneratingExam = true
-        examMarkdown = ""
-        examResponse = ""
-        examGradingMarkdown = ""
-        examGradingError = nil
+        examGenerationError = nil
+        let level = subjects.first(where: { $0.name == plan.subjectName })?.level ?? ""
 
-        let remoteAvailable: Bool = switch AIConfiguration.provider {
-        case .gemini: KeychainService.hasAPIKey
-        case .junali: KeychainService.hasJunaliAPIKey
-        case .codexCLI: true
-        }
-        guard remoteAvailable else {
-            examMarkdown = PracticeExamFallback.markdown(
-                subject: plan.subjectName,
-                level: subjects.first(where: { $0.name == plan.subjectName })?.level ?? "",
-                unit: plan.selectedUnitNames.first ?? "Selected unit",
-                topics: plan.selectedTopicNames,
-                subtopics: plan.selectedSubtopicNames
-            )
-            isGeneratingExam = false
-            return
-        }
-
-        Task {
+        examGenerationTask = Task { @MainActor in
+            defer { isGeneratingExam = false; examGenerationTask = nil }
             do {
                 let prompt = """
                 Generate a rigorous Practice Exam paper for:
                 Subject: \(plan.subjectName)
+                Level: \(level)
                 Units: \(plan.selectedUnitNames.joined(separator: ", "))
                 Topics: \(plan.selectedTopicNames.joined(separator: ", "))
                 \(plan.selectedSubtopicNames.isEmpty ? "" : "Focus subtopics: \(plan.selectedSubtopicNames.joined(separator: ", "))")
                 
                 Format rules:
-                - Output should mimic a true IB past paper format.
+                - Write original IB-style practice questions. Do not claim this is an official past paper.
                 - Use clear sections (e.g., Section A: Short Answer, Section B: Extended Response / Essay).
                 - Use rigorous IB command terms (Evaluate, Discuss, To what extent, Compare and contrast).
                 - IMPORTANT: Include the exact marks available at the end of every question in brackets, e.g. [4 marks].
-                - Distribute marks realistically (total of ~20-30 marks).
-                - Do NOT include the answers in the main exam block, just the questions. Provide a small "Mark Scheme / Hints" section at the very end.
+                - The paper must total exactly 24 marks. Do not repeat marks in headings or totals.
+                - Include the complete data, passage or case needed to answer each question. Do not ask the student to invent the problem.
+                - Keep answers and hints OUT of the question field. Put a complete question-by-question mark scheme in markScheme.
                 - Ensure layout uses Markdown headings, numbered questions, bullets, and blockquotes effectively.
-                - Never use Markdown tables because the native exam workspace intentionally renders criteria as structured rows.
+                - Avoid Markdown tables.
+                Return ONLY JSON with these keys:
+                {"question":"Markdown paper with [N marks] after each question","markScheme":"Markdown scheme","maximumMarks":24}
                 """
 
                 let response = try await AIProviderService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You are an exacting IB examiner. Generate rigorous practice exams tailored to the student's stated subject level, with valid LaTeX for equations and a concise mark scheme."
+                    systemInstruction: "You write original practice exams tailored to the supplied IB subject, level and curriculum scope. Return the requested JSON object with separate question and markScheme fields. Use valid LaTeX for equations."
                 )
-
-                await MainActor.run {
-                    examMarkdown = IBExamRubric.displaySafeMarkdown(response)
-                    isGeneratingExam = false
-                }
-            } catch {
-                await MainActor.run {
-                    examMarkdown = PracticeExamFallback.markdown(
-                        subject: plan.subjectName,
-                        level: subjects.first(where: { $0.name == plan.subjectName })?.level ?? "",
-                        unit: plan.selectedUnitNames.first ?? "Selected unit",
-                        topics: plan.selectedTopicNames,
-                        subtopics: plan.selectedSubtopicNames
-                    )
-                    isGeneratingExam = false
-                }
-            }
+                try Task.checkCancellation()
+                let paper = try PracticeExamPaper.parse(response)
+                examMarkdown = IBExamRubric.displaySafeMarkdown(paper.question)
+                examMarkScheme = IBExamRubric.displaySafeMarkdown(paper.markScheme)
+                examMaximumMarks = paper.maximumMarks
+            } catch is CancellationError {
+                examGenerationError = "Exam generation cancelled. You can try again."
+            } catch { examGenerationError = "Could not generate the paper: \(error.localizedDescription)" }
         }
+    }
+
+    private func useOfflineExam() {
+        guard !isGeneratingExam, !isGradingExam else { return }
+        let template = PracticeExamFallback.markdown(
+            subject: plan.subjectName,
+            level: subjects.first(where: { $0.name == plan.subjectName })?.level ?? "",
+            unit: plan.selectedUnitNames.first ?? "Selected unit",
+            topics: plan.selectedTopicNames,
+            subtopics: plan.selectedSubtopicNames
+        )
+        let sections = template.components(separatedBy: "### Mark scheme and self-check")
+        examMarkdown = sections[0]
+        examMarkScheme = sections.count > 1 ? sections[1] : ""
+        examMaximumMarks = IBExamRubric.totalMarks(in: examMarkdown)
+        examGenerationError = nil
     }
 
     private func gradeExamResponse() {
@@ -1558,7 +1638,7 @@ struct ActiveStudySessionView: View {
         let request = ExamMarkingRequest(subject: plan.subjectName,
             level: subjects.first(where: { $0.name == plan.subjectName })?.level ?? "",
             question: examMarkdown, answer: examResponse, markScheme: examMarkScheme,
-            maximumMarks: IBExamRubric.totalMarks(in: examMarkdown))
+            maximumMarks: examMaximumMarks)
         guard request.isValid else { examGradingError = ExamMarkingError.invalidRequest.localizedDescription; return }
         isGradingExam = true
         examGradingError = nil
@@ -1567,7 +1647,9 @@ struct ActiveStudySessionView: View {
             defer { isGradingExam = false; markingTask = nil }
             do {
                 let result = try await ExamMarkingService.mark(request)
+                try Task.checkCancellation()
                 examGradingMarkdown = result.transcript(hasScheme: request.hasScheme)
+                savePracticeTest()
             } catch is CancellationError {
                 // Keep the response available for another attempt.
             } catch { examGradingError = error.localizedDescription }
@@ -1680,8 +1762,12 @@ struct ActiveStudySessionView: View {
     }
 
     private func completeSession() {
+        finishSession(markPlanComplete: true)
+    }
+
+    private func finishSession(markPlanComplete: Bool) {
         guard !isCompletingSession else { return }
-        guard hasCompleteCheckIn else {
+        guard !markPlanComplete || hasCompleteCheckIn else {
             completionError = "Rate every selected topic or subunit before completing."
             return
         }
@@ -1690,17 +1776,24 @@ struct ActiveStudySessionView: View {
             return
         }
         isCompletingSession = true
+        if !examMarkdown.isEmpty, !savePracticeTest() {
+            isCompletingSession = false
+            let message = testSaveStatus ?? "Could not save your practice answer. Try again."
+            sessionControlStatus = message
+            completionError = message
+            return
+        }
         // Freeze the elapsed time first: every XP / duration / startDate read
         // below (and on the completion screen) must use this single snapshot,
         // not a still-running clock.
         completedElapsed = max(0, IBLocalClock.now.timeIntervalSince(sessionStartDate))
-        plan.isCompleted = true
+        plan.isCompleted = markPlanComplete
         plan.notes = sessionNotes
 
         // Log StudySession
         let topics = plan.selectedTopicNames.isEmpty ? [plan.topicName] : plan.selectedTopicNames
         let minutesPerScope = evidenceScopes.isEmpty ? 0 : dedicatedMinutesDouble / Double(evidenceScopes.count)
-        let evidence = evidenceScopes.map { scope in
+        let evidence = (markPlanComplete ? evidenceScopes : []).map { scope in
             let scopedGeneratedIDs = generatedCards.filter {
                 $0.topicName.caseInsensitiveCompare(scope.topicName) == .orderedSame &&
                     (scope.subtopicName.isEmpty || $0.subtopic.caseInsensitiveCompare(scope.subtopicName) == .orderedSame)
@@ -1751,18 +1844,18 @@ struct ActiveStudySessionView: View {
             context.insert(StudyActivity(date: today, cardsReviewed: reviewedCardCount, minutesStudied: dedicatedMinutesDouble, xpEarned: xpAwarded))
         }
 
-        // Record to ARIA context
-        ARIAService.recordPlannedStudySession(
-            subjectName: plan.subjectName,
-            topics: topics,
-            planMarkdown: plan.planMarkdown,
-            notes: sessionNotes,
-            xpEarned: xpAwarded,
-            durationMinutes: dedicatedMinutesDouble
-        )
-
         do {
             try context.save()
+            if markPlanComplete {
+                ARIAService.recordPlannedStudySession(
+                    subjectName: plan.subjectName,
+                    topics: topics,
+                    planMarkdown: plan.planMarkdown,
+                    notes: sessionNotes,
+                    xpEarned: xpAwarded,
+                    durationMinutes: dedicatedMinutesDouble
+                )
+            }
 
             // Must run after the StudySession and StudyActivity records are in the
             // context, or this session's work is invisible to the engine.
@@ -1772,6 +1865,10 @@ struct ActiveStudySessionView: View {
             onComplete?()
             isCompletingSession = false
             showCompletionCheckIn = false
+            if !markPlanComplete {
+                dismiss()
+                return
+            }
             withAnimation(IBAnimation.smooth) {
                 isSessionComplete = true
                 showRewardPulse = true
@@ -1783,8 +1880,11 @@ struct ActiveStudySessionView: View {
             // (no other UI is writing) and async work uses its own scratch
             // contexts, so there is no unrelated pending change to lose.
             context.rollback()
+            completedElapsed = 0
             isCompletingSession = false
-            completionError = "Could not save the session. Your check-in is still here so you can retry."
+            let message = "Could not save the session: \(error.localizedDescription). Your work is still here so you can retry."
+            completionError = message
+            sessionControlStatus = message
         }
     }
 
@@ -1818,6 +1918,50 @@ struct ActiveStudySessionView: View {
         case "Life", "Founder Academy", "Startups & Venture Capital": return "rocket.fill"
         default: return "book.fill"
         }
+    }
+}
+
+nonisolated enum StudySessionDuration {
+    struct Extension: Equatable, Sendable {
+        let minutes: Int
+        let endDate: Date
+    }
+
+    enum AdjustmentError: LocalizedError {
+        case invalidDuration
+        var errorDescription: String? { "Choose a positive extension with a total session length of at most 24 hours." }
+    }
+
+    static func extending(_ plan: StudyPlan, by additionalMinutes: Int) throws -> Extension {
+        let (minutes, overflow) = plan.durationMinutes.addingReportingOverflow(additionalMinutes)
+        guard !plan.isCompleted, additionalMinutes > 0, !overflow, (1...1440).contains(minutes) else {
+            throw AdjustmentError.invalidDuration
+        }
+        return Extension(minutes: minutes, endDate: plan.scheduledEndDate.addingTimeInterval(Double(additionalMinutes) * 60))
+    }
+}
+
+nonisolated struct PracticeExamPaper: Codable, Equatable, Sendable {
+    let question: String
+    let markScheme: String
+    let maximumMarks: Int
+
+    enum GenerationError: LocalizedError {
+        case invalidPaper
+        var errorDescription: String? { "The provider returned an incomplete paper or inconsistent marks. Try generating it again." }
+    }
+
+    static func parse(_ response: String) throws -> PracticeExamPaper {
+        guard let start = response.firstIndex(of: "{"), let end = response.lastIndex(of: "}"), start <= end,
+              let paper = try? JSONDecoder().decode(Self.self, from: Data(response[start...end].utf8)),
+              !paper.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !paper.markScheme.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              paper.question.count <= 20_000, paper.markScheme.count <= 30_000,
+              (1...100).contains(paper.maximumMarks),
+              IBExamRubric.questionMarks(in: paper.question) == paper.maximumMarks else {
+            throw GenerationError.invalidPaper
+        }
+        return paper
     }
 }
 
@@ -1919,16 +2063,24 @@ nonisolated enum IBExamRubric: Sendable {
     }
 
     static func totalMarks(in paper: String) -> Int {
-        let pattern = #"\[(\d+)\s*marks?\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return 20 }
+        questionMarks(in: paper) ?? 20
+    }
+
+    static func questionMarks(in paper: String) -> Int? {
+        let pattern = #"\[(\d+)\s*(?:marks?)?\]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
         let range = NSRange(paper.startIndex..<paper.endIndex, in: paper)
-        let total = regex.matches(in: paper, range: range).reduce(into: 0) { sum, match in
+        let matches = regex.matches(in: paper, range: range)
+        guard !matches.isEmpty else { return nil }
+        var total = 0
+        for match in matches {
             guard match.numberOfRanges > 1,
                   let markRange = Range(match.range(at: 1), in: paper),
-                  let marks = Int(paper[markRange]) else { return }
-            sum += marks
+                  let marks = Int(paper[markRange]), (1...100).contains(marks),
+                  total <= 100 - marks else { return nil }
+            total += marks
         }
-        return total > 0 ? total : 20
+        return total
     }
 
     static func displaySafeMarkdown(_ source: String) -> String {

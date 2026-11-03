@@ -103,10 +103,40 @@ struct ProficiencyTrackerTests {
         let card = createTestCard(proficiency: .novice)
         card.consecutiveCorrect = 2
         card.totalReviewCount = 2
+        card.successfulReviewCount = 2
         
         ProficiencyTracker.updateProficiency(for: card)
         
         #expect(card.proficiency == .developing)
+    }
+
+    @Test("Failed attempts alone never establish developing proficiency")
+    func failuresStayNovice() {
+        let card = createTestCard()
+        card.totalReviewCount = 12
+        card.repetitions = 12
+        card.successfulReviewCount = 0
+        ProficiencyTracker.updateProficiency(for: card)
+        #expect(card.proficiency == .novice)
+    }
+
+    @Test("Attempts cannot substitute for successful recalls at the mastery threshold")
+    func masteryRequiresSuccessfulRetrieval() {
+        let card = createTestCard()
+        card.totalReviewCount = 6
+        card.repetitions = 6
+        card.successfulReviewCount = 5
+        card.interval = 30
+        ProficiencyTracker.updateProficiency(for: card)
+        #expect(card.proficiency != .mastered)
+    }
+
+    @Test("A stored mastered label cannot hide poor recall accuracy")
+    func masteredLabelRespectsEvidence() {
+        let card = createTestCard(proficiency: .mastered)
+        card.totalReviewCount = 10
+        card.successfulReviewCount = 2
+        #expect(abs(ProficiencyTracker.masteryPercentage(for: [card]) - 0.2) < 0.001)
     }
     
     @Test("New card should be novice")

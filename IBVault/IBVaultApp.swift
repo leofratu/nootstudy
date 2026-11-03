@@ -53,6 +53,14 @@ struct IBVaultApp: App {
     ])
 
     private static func makeModelContainer() -> ModelContainer {
+        // A test host must never seed, migrate or quarantine the learner's store.
+        if AppEnvironment.isRunningTests {
+            do {
+                return try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+            } catch {
+                fatalError("Could not create the isolated test store: \(error)")
+            }
+        }
         let fileManager = FileManager.default
         let legacyURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("default.store")

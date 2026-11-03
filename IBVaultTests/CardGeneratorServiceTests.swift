@@ -766,11 +766,12 @@ struct ARIAMessageFormattingTests {
 
 @Suite("AI Configuration Tests")
 struct AIConfigurationTests {
-    @Test("Local Codex exposes only supported GPT-5.6 effort levels")
+    @Test("Local Codex has compatible fallback effort levels")
     func codexEffortLevels() {
         let efforts = AIConfiguration.supportedReasoningEfforts(for: .codexCLI)
 
-        #expect(efforts == [.low, .medium, .high, .xhigh, .max, .ultra])
+        #expect(!efforts.isEmpty)
+        #expect(!efforts.contains(.none))
         #expect(AIConfiguration.normalizedReasoningEffort(.none, for: .codexCLI) == .low)
         #expect(AIConfiguration.normalizedReasoningEffort(.ultra, for: .junali) == .max)
         #expect(AIConfiguration.supportedReasoningEfforts(for: .gemini).isEmpty)
@@ -778,8 +779,27 @@ struct AIConfigurationTests {
 
     @Test("Known model slugs receive human-readable names")
     func modelDisplayNames() {
-        #expect(AIConfiguration.modelDisplayName("gpt-5.6-sol", for: .codexCLI) == "GPT-5.6 Sol")
+        #expect(AIConfiguration.modelDisplayName("gpt-5.6-sol", for: .junali) == "GPT-5.6 Sol")
         #expect(AIConfiguration.modelDisplayName("custom-model", for: .junali) == "custom-model")
+    }
+
+    @Test("Legacy preferences cannot disable automatic conversation management")
+    func automaticContextPolicy() {
+        #expect(AIConfiguration.autoCompactEnabled)
+        #expect(AIConfiguration.conversationWindow == 24)
+    }
+
+    @Test("Decodes the installed Codex model catalog and per-model effort choices")
+    func decodesInstalledCatalog() throws {
+        // Captured from Codex 0.166.0 model/list, retaining its first model.
+        let fixture = Data(#"""
+        {"id":2,"result":{"data":[{"id":"gpt-6.1-sol","model":"gpt-6.1-sol","upgrade":null,"upgradeInfo":null,"availabilityNux":{"message":"Maximize usage with GPT-6.1 Sol. Try it on complex work for near-Astra performance at a lower cost."},"displayName":"GPT-6.1-Sol","description":"Latest workhorse model for coding and everyday work.","modelSpecialty":null,"hidden":false,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast responses with lighter reasoning"},{"reasoningEffort":"medium","description":"Balances speed and reasoning depth for everyday tasks"},{"reasoningEffort":"high","description":"Greater reasoning depth for complex problems"},{"reasoningEffort":"xhigh","description":"Extra high reasoning depth for complex problems"},{"reasoningEffort":"max","description":"Maximum reasoning depth for the hardest problems"},{"reasoningEffort":"ultra","description":"Maximum reasoning with automatic task delegation"}],"defaultReasoningEffort":"low","inputModalities":["text","image"],"supportsPersonality":false,"multiAgentVersion":"v2","additionalSpeedTiers":["fast"],"serviceTiers":[{"id":"priority","name":"Fast","description":"2x speed, increased usage"}],"defaultServiceTier":null,"availableAccessPrograms":{"cyber":["standard"]},"isDefault":true}],"nextCursor":null}}
+        """#.utf8)
+        let page = try AIProviderService.decodeCodexModelPage(fixture)
+        #expect(page.data.first?.model == "gpt-6.1-sol")
+        #expect(page.data.first?.isDefault == true)
+        #expect(page.data.first?.supportedReasoningEfforts.map(\.reasoningEffort) == ["low", "medium", "high", "xhigh", "max", "ultra"])
+        #expect(page.nextCursor == nil)
     }
 }
 
