@@ -44,12 +44,14 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var profiles: [UserProfile]
     @State private var selectedTab: NavigationTab? = .dashboard
+    @State private var showCoach = false
     @State private var reviewQueueManager = ReviewQueueManager()
     @State private var progressionEvents = ProgressionEventCenter()
     @Namespace private var sidebarSelectionNamespace
 
     init(initialTab: NavigationTab = .dashboard) {
-        _selectedTab = State(initialValue: initialTab)
+        _selectedTab = State(initialValue: initialTab == .aria ? .dashboard : (initialTab == .examMarker ? .library : initialTab))
+        _showCoach = State(initialValue: initialTab == .aria)
     }
 
     private var dueCount: Int {
@@ -72,6 +74,21 @@ struct ContentView: View {
         #endif
         .environment(reviewQueueManager)
         .environment(progressionEvents)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showCoach = true } label: { Label("Ask ARIA", systemImage: "sparkles") }
+                    .help("Open your study coach")
+            }
+        }
+        .sheet(isPresented: $showCoach) {
+            ARIAChatView()
+                .frame(minWidth: 820, minHeight: 640)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showCoach = false }
+                    }
+                }
+        }
         .tint(IBColors.accent)
         .onAppear {
             reviewQueueManager.ensureLoaded(context: context)
@@ -160,7 +177,7 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     sidebarSection("WORKSPACE", tabs: [.dashboard, .subjects, .studySessions])
-                    sidebarSection("PRACTICE", tabs: [.library, .cardStudio, .review, .examMarker, .aria])
+                    sidebarSection("PRACTICE", tabs: [.library, .cardStudio, .review])
                     sidebarSection("YOUR PROGRESS", tabs: [.analytics, .recommendations, .predictions])
                 }
                 .padding(.horizontal, 12).padding(.bottom, 20)
@@ -265,8 +282,8 @@ struct ContentView: View {
             case .review: ReviewLaunchView()
             case .cardStudio: CardStudioView()
             case .library: NavigationStack { CardLibraryView(embedded: true) }
-            case .examMarker: ExamMarkerView()
-            case .aria: ARIAChatView()
+            case .examMarker: NavigationStack { CardLibraryView(embedded: true) }
+            case .aria: DashboardView()
             case .analytics: ProgressHubView()
             case .recommendations: SmartRecommendationsView()
             case .predictions: PredictiveGradeView()
@@ -288,6 +305,10 @@ struct ContentView: View {
 
     private func handleAppCommand(_ payload: Any?) {
         guard let command = IBVaultAppCommand.fromNotificationPayload(payload) else { return }
+        if command == .showARIA {
+            showCoach = true
+            return
+        }
         if let targetTab = command.targetTab {
             selectedTab = targetTab
         }

@@ -9,7 +9,11 @@ nonisolated enum SnapshotBuilder: Sendable {
             name: subject.name,
             level: SubjectLevel(rawLevel: subject.level),
             cards: subject.cards.map {
-                CardSnapshot(repetitions: $0.repetitions, intervalDays: $0.interval)
+                CardSnapshot(
+                    repetitions: $0.repetitions,
+                    intervalDays: $0.interval,
+                    successfulReviews: $0.successfulReviewCount
+                )
             },
             reviews: reviews
                 .filter { $0.subjectName == subject.name }

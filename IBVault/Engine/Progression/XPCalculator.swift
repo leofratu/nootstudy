@@ -4,7 +4,9 @@ import Foundation
 /// decides what that work is worth.
 nonisolated enum XPCalculator: Sendable {
 
-    static let xpPerStudyMinute = 1.0
+    // A focused hour now earns 180 XP at average intensity, comparable to
+    // a useful retrieval set. Previously time-based sessions earned only 60.
+    static let xpPerStudyMinute = 3.0
 
     /// XP for a completed review session.
     static func xp(forQualities qualities: [RecallQuality], intensity: StudyIntensity) -> Int {
@@ -15,7 +17,11 @@ nonisolated enum XPCalculator: Sendable {
 
     /// XP for logged study time.
     static func xp(forStudyMinutes minutes: Double, intensity: StudyIntensity) -> Int {
-        guard minutes > 0 else { return 0 }
-        return Int(minutes * xpPerStudyMinute * intensity.xpMultiplier)
+        guard minutes.isFinite, minutes > 0 else { return 0 }
+        let earned = minutes * xpPerStudyMinute * intensity.xpMultiplier
+        // Inputs can also come from imported activity logs. Avoid trapping
+        // when converting an out-of-range Double to Int.
+        guard earned < Double(Int.max) else { return 0 }
+        return Int(earned)
     }
 }

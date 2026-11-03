@@ -17,7 +17,11 @@ struct HeatmapView: View {
                 HStack(spacing: spacing) {
                     Text("").frame(width: 24)
                     ForEach(0..<columns, id: \.self) { week in
-                        if week % 4 == 0 { monthLabel(for: week) } else { Color.clear.frame(width: cellSize) }
+                        if week == 0 || !Calendar.current.isDate(dateFor(week: week, day: 0), equalTo: dateFor(week: week - 1, day: 0), toGranularity: .month) {
+                            monthLabel(for: week)
+                        } else {
+                            Color.clear.frame(width: cellSize)
+                        }
                     }
                 }
                 // Grid
@@ -28,8 +32,10 @@ struct HeatmapView: View {
                             let date = dateFor(week: week, day: day)
                             let intensity = intensityFor(date: date, in: index)
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(colorForIntensity(intensity))
+                                .fill(date > Date() ? Color.clear : colorForIntensity(intensity))
                                 .frame(width: cellSize, height: cellSize)
+                                .help("\(date.formatted(date: .abbreviated, time: .omitted)): \(intensity == 0 ? "No study activity" : "Study activity level \(intensity) of 4")")
+                                .accessibilityLabel("\(date.formatted(date: .abbreviated, time: .omitted)), activity \(intensity) of 4")
                         }
                     }
                 }
@@ -55,11 +61,11 @@ struct HeatmapView: View {
         return Text(Self.monthFormatter.string(from: date))
             .font(.system(size: 8))
             .foregroundColor(IBColors.inkTertiary)
-            .frame(width: cellSize, alignment: .leading)
             // Allow "Dec"/"Mar" to overflow their 12pt cell instead of clipping
             // while keeping the grid column alignment intact.
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
+            .frame(width: cellSize, alignment: .leading)
     }
 
     private static let monthFormatter: DateFormatter = {
@@ -69,7 +75,7 @@ struct HeatmapView: View {
     }()
 
     private func dateFor(week: Int, day: Int) -> Date {
-        let today = Date()
+        let today = Calendar.current.startOfDay(for: Date())
         let cal = Calendar.current
         let weekday = cal.component(.weekday, from: today)
         let startOfWeek = cal.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
@@ -79,11 +85,13 @@ struct HeatmapView: View {
 
     private var activityByDay: [Date: Int] {
         let cal = Calendar.current
-        var index: [Date: Int] = [:]
+        var totals: [Date: (cards: Int, minutes: Double)] = [:]
         for activity in activities {
-            index[cal.startOfDay(for: activity.date)] = activity.intensity
+            let day = cal.startOfDay(for: activity.date)
+            let existing = totals[day] ?? (0, 0)
+            totals[day] = (existing.cards + activity.cardsReviewed, existing.minutes + activity.minutesStudied)
         }
-        return index
+        return totals.mapValues { StudyActivity.intensity(cardsReviewed: $0.cards, minutesStudied: $0.minutes) }
     }
 
     private func intensityFor(date: Date, in index: [Date: Int]) -> Int {

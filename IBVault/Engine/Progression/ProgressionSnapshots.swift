@@ -32,13 +32,15 @@ nonisolated enum SubjectLevel: String, Codable, Sendable {
 }
 
 nonisolated struct CardSnapshot: Sendable, Equatable {
-    /// Compatibility mirror of the scheduler's successful-review count.
+    /// Compatibility mirror of the scheduler's attempt count.
     let repetitions: Int
     let intervalDays: Int
+    let successfulReviews: Int
 
-    init(repetitions: Int, intervalDays: Int) {
+    init(repetitions: Int, intervalDays: Int, successfulReviews: Int? = nil) {
         self.repetitions = repetitions
         self.intervalDays = intervalDays
+        self.successfulReviews = max(0, successfulReviews ?? repetitions)
     }
 }
 

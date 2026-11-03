@@ -213,7 +213,7 @@ struct CardLibraryView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 if filteredTests.isEmpty {
                     ContentUnavailableView("No tests found", systemImage: "doc.text.magnifyingglass",
-                        description: Text(tests.isEmpty ? "Save a practice exam or an exam-marker question to find it here." : "Try another unit, topic or search."))
+                        description: Text(tests.isEmpty ? "Save a practice exam from a study session to find it here." : "Try another unit, topic or search."))
                         .frame(maxWidth: .infinity).padding(.vertical, 60)
                 }
                 ForEach(filteredTests) { test in

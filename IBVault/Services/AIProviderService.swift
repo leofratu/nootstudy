@@ -89,6 +89,101 @@ struct CodexEventUpdate: Equatable, Sendable {
 }
 
 nonisolated enum AIProviderService {
+    struct CodexModelPage: Decodable {
+        let data: [CodexCatalogModel]
+        let nextCursor: String?
+    }
+
+    /// Read the installed CLI's catalog without starting an inference turn.
+    /// Preserve its ordering and paginate rather than maintaining model IDs here.
+    static func refreshCodexModels() async throws -> [CodexCatalogModel] {
+        let executable = try codexExecutableURL()
+        var models: [CodexCatalogModel] = []
+        var cursor: String?
+        var seenCursors = Set<String>()
+        repeat {
+            try Task.checkCancellation()
+            let page = try await codexModelPage(executable: executable, cursor: cursor)
+            models.append(contentsOf: page.data.filter { !$0.hidden })
+            cursor = page.nextCursor
+            if let cursor, !seenCursors.insert(cursor).inserted { throw AIProviderError.invalidResponse }
+        } while cursor != nil
+        guard !models.isEmpty else { throw AIProviderError.invalidResponse }
+        AIConfiguration.cachedCodexModels = models
+        return models
+    }
+
+    private static func codexModelPage(executable: URL, cursor: String?) async throws -> CodexModelPage {
+        let controller = ProcessController()
+        return try await withTaskCancellationHandler {
+            try await Task.detached(priority: .utility) {
+                let process = Process()
+                let input = Pipe()
+                let output = Pipe()
+                let errors = Pipe()
+                let lines = JSONLineBuffer()
+                let response = ProcessOutputBuffer()
+                let errorOutput = ProcessOutputBuffer()
+                var parameters: [String: Any] = ["includeHidden": false, "limit": 100]
+                if let cursor { parameters["cursor"] = cursor }
+                let listRequest = try JSONSerialization.data(withJSONObject: [
+                    "id": 2, "method": "model/list", "params": parameters
+                ]) + Data([0x0A])
+                output.fileHandleForReading.readabilityHandler = { handle in
+                    for line in lines.append(handle.availableData) {
+                        guard let data = line.data(using: .utf8),
+                              let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let id = message["id"] as? Int else { continue }
+                        if id == 1, message["result"] != nil {
+                            input.fileHandleForWriting.write(Data("{\"method\":\"initialized\"}\n".utf8))
+                            input.fileHandleForWriting.write(listRequest)
+                        } else if id == 1 || id == 2 {
+                            response.append(data)
+                            controller.terminate()
+                        }
+                    }
+                }
+                errors.fileHandleForReading.readabilityHandler = { handle in
+                    errorOutput.append(handle.availableData)
+                }
+                defer {
+                    output.fileHandleForReading.readabilityHandler = nil
+                    errors.fileHandleForReading.readabilityHandler = nil
+                    try? input.fileHandleForWriting.close()
+                }
+                configureCodexProcess(process, executableURL: executable, arguments: ["app-server", "--listen", "stdio://"])
+                process.standardInput = input
+                process.standardOutput = output
+                process.standardError = errors
+                try controller.run(process)
+                input.fileHandleForWriting.write(Data("{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"nootstudy\",\"title\":\"Noot Study\",\"version\":\"2.0.0\"}}}\n".utf8))
+                let timeout = DispatchWorkItem { controller.terminate(timedOut: true) }
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 20, execute: timeout)
+                process.waitUntilExit()
+                timeout.cancel()
+                try Task.checkCancellation()
+                guard !controller.didTimeOut else {
+                    throw AIProviderError.processFailed("Codex model catalog timed out. Your last model choices were kept.")
+                }
+                return try decodeCodexModelPage(Data(response.string().utf8))
+            }.value
+        } onCancel: {
+            controller.terminate()
+        }
+    }
+
+    static func decodeCodexModelPage(_ data: Data) throws -> CodexModelPage {
+        struct Response: Decodable {
+            struct RPCError: Decodable { let message: String }
+            let result: CodexModelPage?
+            let error: RPCError?
+        }
+        let response = try JSONDecoder().decode(Response.self, from: data)
+        if let error = response.error { throw AIProviderError.processFailed(error.message) }
+        guard let result = response.result else { throw AIProviderError.invalidResponse }
+        return result
+    }
+
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 120

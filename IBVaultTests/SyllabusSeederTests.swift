@@ -35,8 +35,8 @@ struct SyllabusSeederTests {
         let math = SyllabusSeeder.curriculum(for: "Mathematics AA", level: "HL")
         let russian = SyllabusSeeder.curriculum(for: "Russian A Literature", level: "HL")
 
-        #expect(biology.contains { $0.name == "Higher Level Extension" })
-        #expect(math.contains { $0.name == "Higher Level Extension" })
+        #expect(biology.flatMap(\.topics).contains { $0.name == "A2.1 Origins of cells" })
+        #expect(math.flatMap(\.topics).contains { $0.name == "1.10–1.16 Additional algebra" })
         #expect(russian.flatMap(\.topics).contains { $0.name == "Higher Level Essay" })
         #expect(!biology.flatMap(\.topics).flatMap(\.subtopics).contains { $0.hasPrefix("HL:") })
     }
@@ -149,6 +149,72 @@ struct SyllabusSeederTests {
         let curriculum = SyllabusSeeder.curriculum(for: "Biology", level: "SL")
         let subtopics = curriculum.flatMap(\.topics).flatMap(\.subtopics)
         #expect(subtopics.contains { $0.localizedCaseInsensitiveContains("homeostasis") })
+    }
+
+    @Test("Biology uses the 2025 topic codes, with protein synthesis under D1.2")
+    func biologyUsesOfficialRoadmap() {
+        let sl = SyllabusSeeder.curriculum(for: "Biology", level: "SL")
+        let hl = SyllabusSeeder.curriculum(for: "Biology", level: "HL")
+        let protein = sl.flatMap(\.topics).first { $0.name == "D1.2 Protein synthesis" }
+        #expect(protein?.subtopics.count == 11)
+        #expect(protein?.subtopics.first?.hasPrefix("D1.2.1 ") == true)
+        #expect(protein?.subtopics.last?.hasPrefix("D1.2.11 ") == true)
+        #expect(protein?.subtopics.contains { $0.contains("codon table") } == true)
+        #expect(SyllabusSeeder.unitName(for: "Biology", level: "SL", topicName: "D1.2 Protein synthesis") == "Theme D — Continuity and Change")
+        #expect(!sl.flatMap(\.topics).contains { $0.name == "A2.1 Origins of cells" })
+        #expect(!sl.flatMap(\.topics).contains { $0.name == "D2.2 Gene expression" })
+        #expect(hl.flatMap(\.topics).first { $0.name == "D1.2 Protein synthesis" }?.subtopics.count == 19)
+        #expect(hl.filter { $0.name.hasPrefix("Theme ") }.flatMap(\.topics).count == 40)
+    }
+
+    @Test("Maths AA SL contains all 51 numbered sections and separates HL content")
+    func mathsSLHasCompleteNumberedCoverage() {
+        let curriculum = SyllabusSeeder.curriculum(for: "Mathematics AA", level: "SL")
+        let mainUnits = curriculum.filter { $0.name.hasPrefix("Topic ") }
+        #expect(mainUnits.map { $0.topics.count } == [9, 11, 8, 12, 11])
+        let topics = mainUnits.flatMap(\.topics)
+        #expect(topics.contains { $0.name == "1.9 Binomial theorem" })
+        #expect(topics.contains { $0.name == "4.8 Binomial distribution" })
+        #expect(topics.contains { $0.name == "4.7 Discrete random variables" })
+        #expect(topics.contains { $0.name == "2.1 Straight lines" })
+        let slContent = topics.flatMap(\.subtopics).joined(separator: " ").lowercased()
+        #expect(!slContent.contains("compound angle"))
+        #expect(!slContent.contains("polynomial division"))
+        #expect(!slContent.contains("hypothesis testing"))
+        #expect(!slContent.contains("poisson"))
+    }
+
+    @MainActor
+    @Test("Correcting a curriculum preserves cards and retired nodes with recorded mastery")
+    func catalogCorrectionPreservesUserEvidence() throws {
+        let container = try ModelContainer(
+            for: Subject.self, StudyCard.self, CurriculumNode.self, Grade.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")
+        context.insert(subject)
+        let card = StudyCard(topicName: "Genetics", subtopic: "Gene mutations", front: "Saved question", back: "Saved answer", subject: subject)
+        context.insert(card)
+        let retiredNode = CurriculumNode(
+            subjectName: "Biology", level: "SL", unitName: "Theme D — Continuity and Change",
+            topicName: "Genetics", subtopicName: "Gene mutations", catalogVersion: "legacy",
+            sourceTitle: "Old catalog", sourceURLString: "https://www.ibo.org/"
+        )
+        retiredNode.recordedProficiency = .proficient
+        retiredNode.masteryNote = "Teacher feedback"
+        context.insert(retiredNode)
+        try context.save()
+
+        #expect(SyllabusSeeder.synchronizeCurriculum(context: context))
+        #expect(SyllabusSeeder.synchronizeCurriculum(context: context))
+
+        let savedCards = try context.fetch(FetchDescriptor<StudyCard>())
+        #expect(savedCards.count == 1)
+        #expect(savedCards.first?.id == card.id)
+        let evidence = try context.fetch(FetchDescriptor<CurriculumNode>()).first { $0.id == retiredNode.id }
+        #expect(evidence?.recordedProficiency == .proficient)
+        #expect(evidence?.masteryNote == "Teacher feedback")
     }
 
     @Test("curriculum(for:) is memoized and stable across calls")

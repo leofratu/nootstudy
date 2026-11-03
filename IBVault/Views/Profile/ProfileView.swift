@@ -25,6 +25,7 @@ struct ProfileView: View {
                     profileHero
                     rankProgressCard
                     statsGrid
+                    studyHeatmap
                     achievementsCard
                     activityCard
                 }
@@ -108,6 +109,49 @@ struct ProfileView: View {
                         .font(.callout.weight(.medium))
                 }
             }
+
+            DisclosureGroup("All ranks and unlock requirements") {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Ranks unlock through mastery across your subjects. XP rewards study activity separately.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(Rank.allCases, id: \.rawValue) { rank in
+                        let firstStep = RankStep(rank: rank, tier: .three)
+                        let achieved = profile?.achievedStep ?? RankStep(ordinal: 0)
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: firstStep <= achieved ? rank.symbolName : "lock")
+                                .frame(width: 24)
+                                .foregroundStyle(firstStep <= achieved ? IBColors.accent : IBColors.inkTertiary)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(rank.displayName).font(.callout.weight(.medium))
+                                Text(RankTier.allCases.map { tier in
+                                    let step = RankStep(rank: rank, tier: tier)
+                                    return "\(tier.numeral): \(Int(ceil(step.masteryThreshold * 100)))%"
+                                }.joined(separator: "  ·  "))
+                                .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if achieved.rank == rank {
+                                Text("Current · \(achieved.tier.numeral)").font(.caption)
+                            } else if firstStep > achieved {
+                                Text("Locked").font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                Image(systemName: "checkmark").accessibilityLabel("Unlocked")
+                            }
+                        }
+                    }
+                }.padding(.top, 12)
+            }
+        }
+        .padding(16)
+        .glassCard()
+    }
+
+    private var studyHeatmap: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Study consistency").font(.headline)
+            Text("Your last year of reviews and logged study time.")
+                .font(.caption).foregroundStyle(.secondary)
+            HeatmapView(activities: activities)
         }
         .padding(16)
         .glassCard()

@@ -20,10 +20,14 @@ nonisolated final class StudyActivity {
     }
 
     var intensity: Int {
-        if cardsReviewed >= 30 { return 4 }
-        if cardsReviewed >= 20 { return 3 }
-        if cardsReviewed >= 10 { return 2 }
-        if cardsReviewed > 0 { return 1 }
+        Self.intensity(cardsReviewed: cardsReviewed, minutesStudied: minutesStudied)
+    }
+
+    static func intensity(cardsReviewed: Int, minutesStudied: Double) -> Int {
+        if cardsReviewed >= 30 || minutesStudied >= 120 { return 4 }
+        if cardsReviewed >= 20 || minutesStudied >= 60 { return 3 }
+        if cardsReviewed >= 10 || minutesStudied >= 30 { return 2 }
+        if cardsReviewed > 0 || minutesStudied > 0 { return 1 }
         return 0
     }
 

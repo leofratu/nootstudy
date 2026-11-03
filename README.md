@@ -66,17 +66,17 @@ The review queue, subject screens, dashboard, reminders, and ARIA review actions
 
 Once the allowance is used, Noot Study shows **Done for today** and separates the remaining backlog from today's work. Repeated copies are filtered from the queue without deleting their records.
 
-### Practice exams and marking
+### Practice exams
 
-In **Exam marker**, choose a subject, add the question and your answer, set the available marks, and optionally provide a mark scheme. **Unit & topics** can attach curriculum scope.
+Open **Practice** during a study session to generate an original paper for the selected subject, course level, and topics. Questions and mark schemes are stored separately, and question marks must match the paper total. Generation failures are shown with a retry action; an offline self-check template is available explicitly.
 
 Feedback includes criterion scores, evidence from the answer, corrections, a stronger example answer, and suggested practice. Scores are checked against the available marks. Without a supplied mark scheme, feedback is labelled a **practice estimate** rather than an official IB grade.
 
-Tests can be saved before or after marking and reopened under **Library → Tests** with their answers and feedback intact.
+Tests can be saved before or after marking and reopened under **Library → Tests** with their answers and feedback intact. The standalone **Exam marker** entry is vaulted; existing tests and feedback remain saved.
 
 ## ARIA and AI providers
 
-ARIA uses saved study context for explanations, revision, plans, grades, and progress. Explicit requests can create or edit supported app records. Destructive changes require an explicit request.
+Use **Ask ARIA** from the workspace toolbar for explanations, revision, plans, grades, and progress. Explicit requests can create or edit supported app records. Destructive changes require an explicit request.
 
 For revision and generation, ARIA can receive existing questions and answers with their IDs. This lets it reuse an existing learning point instead of creating a paraphrased duplicate when the meaning matches. Related questions that test different calculations, contrasts, or applications remain distinct.
 
@@ -86,7 +86,7 @@ For revision and generation, ARIA can receive existing questions and answers wit
 | Google Gemini | Add a Gemini API key and select a model. |
 | Junali | Add the provider key and configure its compatible endpoint and model. |
 
-Model, reasoning effort, answer detail, and supported web-search controls are explicit in settings. The default Local Codex model ID is **gpt-5.6-sol**, with medium reasoning when no preference has been saved. Availability depends on the provider account.
+Local Codex reads its available models and supported reasoning options from the installed CLI and keeps the last successful catalog for offline use. Existing explicit model choices are preserved. Model, reasoning effort, answer detail, and supported web-search controls remain in settings. Conversation windows and older-history compaction are managed automatically by Noot Study.
 
 Study data remains local unless an AI feature is used. Selected context is then sent to the configured provider. API keys are stored in macOS Keychain, while Local Codex uses the existing CLI sign-in.
 
@@ -94,7 +94,9 @@ The desktop build is **not App Sandbox enabled** because Local Codex launches a 
 
 ## Subjects, sessions, and progress
 
-Noot Study includes IB curriculum browsing, scoped study sessions, FSRS scheduling, proficiency tracking, grades, mastery views, achievements, and progress summaries. Sessions combine source material, retrieval practice, corrective feedback, notes, and exam transfer.
+Noot Study includes IB curriculum browsing, scoped study sessions, FSRS scheduling, proficiency tracking, grades, mastery views, achievements, and progress summaries. Sessions combine source material, retrieval practice, corrective feedback, notes, and exam transfer. Extend a running session by 15, 30, or 60 minutes without restarting it, or use **Leave** to save progress while keeping the plan incomplete.
+
+The profile shows a year of study activity and every rank's mastery requirements, including locked ranks. Future logged study time earns a base of 3 XP per minute, adjusted by study intensity. Mastery uses successful retrieval and spaced practice as evidence; its numerical weights and thresholds are app heuristics, not validated exam predictions.
 
 Practice feedback and academic evidence are kept separate: saved AI marking is not automatically converted into a school grade. Work completed elsewhere can be recorded as an external activity and merged into study history without double counting.
 

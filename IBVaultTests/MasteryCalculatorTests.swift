@@ -25,6 +25,25 @@ struct MasteryCalculatorTests {
         #expect(MasteryCalculator.mastery(for: subject, now: now) == 0)
     }
 
+    @Test("Unsuccessful and future reviews cannot establish mastery")
+    func failuresAndFutureReviewsDoNotEstablishMastery() {
+        let cards = [CardSnapshot(repetitions: 6, intervalDays: 21, successfulReviews: 0)]
+        let failure = ReviewSnapshot(timestamp: now, qualityRating: 0)
+        let futureSuccess = ReviewSnapshot(timestamp: now.addingTimeInterval(3600), qualityRating: 5)
+        #expect(MasteryCalculator.mastery(for: snapshot(cards: cards, reviews: [failure, futureSuccess]), now: now) == 0)
+        #expect(MasterySignals.coverage(cards: cards) == 0)
+        #expect(MasterySignals.stability(cards: cards) == 0)
+    }
+
+    @Test("A single successful recall supplies only limited evidence")
+    func sparseEvidenceIsLimited() {
+        let cards = [CardSnapshot(repetitions: 1, intervalDays: 2)]
+        let review = ReviewSnapshot(timestamp: now, qualityRating: 3)
+        let value = MasteryCalculator.mastery(for: snapshot(cards: cards, reviews: [review]), now: now)
+        #expect(value > 0)
+        #expect(value < 0.05)
+    }
+
     @Test("Mastery composes the three signals at 40/35/25 and applies freshness")
     func masteryComposesSignals() {
         // 4 cards, all learned and mature: coverage 1.0, stability 1.0.

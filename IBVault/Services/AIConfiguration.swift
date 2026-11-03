@@ -115,11 +115,24 @@ struct AIModelOption: Identifiable, Hashable, Sendable {
     let role: String
 }
 
+nonisolated struct CodexCatalogModel: Codable, Sendable {
+    struct ReasoningOption: Codable, Sendable {
+        let reasoningEffort: String
+    }
+
+    let model: String
+    let displayName: String
+    let description: String
+    let hidden: Bool
+    let isDefault: Bool
+    let supportedReasoningEfforts: [ReasoningOption]
+}
+
 nonisolated enum AIConfiguration {
     static let junaliDefaultBaseURL = "https://openapi.junliai.org/v1"
     static let codexDefaultModel = "gpt-5.6-sol"
 
-    private enum Key {
+    nonisolated private enum Key {
         static let provider = "ariaProvider"
         static let geminiModel = "geminiModel"
         static let junaliModel = "junaliModel"
@@ -191,7 +204,7 @@ nonisolated enum AIConfiguration {
             fallback = codexDefaultModel
         case .codexCLI:
             key = Key.codexModel
-            fallback = codexDefaultModel
+            fallback = cachedCodexModels.first(where: \.isDefault)?.model ?? codexDefaultModel
         }
         return UserDefaults.standard.string(forKey: key)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? fallback
     }
@@ -213,6 +226,10 @@ nonisolated enum AIConfiguration {
     static func supportedReasoningEfforts(for provider: AIProviderKind) -> [AIReasoningEffort] {
         switch provider {
         case .codexCLI:
+            if let model = cachedCodexModels.first(where: { $0.model == self.model(for: provider) }) {
+                let supported = model.supportedReasoningEfforts.compactMap { AIReasoningEffort(rawValue: $0.reasoningEffort) }
+                if !supported.isEmpty { return supported }
+            }
             return [.low, .medium, .high, .xhigh, .max, .ultra]
         case .junali:
             return [.none, .low, .medium, .high, .xhigh, .max]
@@ -241,13 +258,23 @@ nonisolated enum AIConfiguration {
     }
 
     static var conversationWindow: Int {
-        let stored = UserDefaults.standard.integer(forKey: "ariaContextWindow")
-        return min(max(stored > 0 ? stored : 20, 5), 50)
+        24
     }
 
     static var autoCompactEnabled: Bool {
-        guard UserDefaults.standard.object(forKey: "ariaAutoCompact") != nil else { return true }
-        return UserDefaults.standard.bool(forKey: "ariaAutoCompact")
+        true
+    }
+
+    static var cachedCodexModels: [CodexCatalogModel] {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: "codexModelCatalog"),
+                  let models = try? JSONDecoder().decode([CodexCatalogModel].self, from: data) else { return [] }
+            return models
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            UserDefaults.standard.set(data, forKey: "codexModelCatalog")
+        }
     }
 
     static var junaliBaseURL: String {
@@ -271,7 +298,9 @@ nonisolated enum AIConfiguration {
                 AIModelOption(id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", role: "Compatible")
             ],
             .junali: openAICompatibleModels,
-            .codexCLI: openAICompatibleModels
+            .codexCLI: cachedCodexModels.map {
+                AIModelOption(id: $0.model, name: $0.displayName, role: $0.description)
+            }
         ]
     }
 

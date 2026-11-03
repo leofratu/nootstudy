@@ -2,6 +2,14 @@ import Foundation
 import SwiftData
 
 nonisolated struct ProficiencyConfig: Sendable {
+    // Repeated successful retrieval, accuracy and spaced intervals are useful
+    // evidence of learning. These thresholds are app heuristics, not cutoffs
+    // validated by the studies below or guarantees of permanent mastery.
+    static let evidenceSummary = "Mastery estimates use successful retrieval, accuracy and spaced review. Thresholds are app heuristics, not an exam grade or a guarantee of retention."
+    static let researchURLs = [
+        URL(string: "https://doi.org/10.1016/j.jml.2006.09.004")!,
+        URL(string: "https://doi.org/10.1037/0033-2909.132.3.354")!
+    ]
     var masteryRepetitionsThreshold: Int = 6
     var masteryIntervalThreshold: Int = 21
     var masterySuccessRateThreshold: Double = 0.85
@@ -24,15 +32,18 @@ nonisolated enum ProficiencyTracker {
         let level: ProficiencyLevel
         
         if card.repetitions >= config.masteryRepetitionsThreshold &&
+            card.successfulReviewCount >= config.masteryRepetitionsThreshold &&
             card.interval >= config.masteryIntervalThreshold &&
             successRate >= config.masterySuccessRateThreshold {
             level = .mastered
         } else if card.repetitions >= config.proficientRepetitionsThreshold &&
+                    card.successfulReviewCount >= config.proficientRepetitionsThreshold &&
                     card.interval >= config.proficientIntervalThreshold &&
                     successRate >= config.proficientSuccessRateThreshold {
             level = .proficient
-        } else if card.consecutiveCorrect >= config.developingConsecutiveThreshold ||
-                    reviewCount >= config.developingReviewCountThreshold {
+        } else if card.successfulReviewCount > 0 &&
+                    (card.consecutiveCorrect >= config.developingConsecutiveThreshold ||
+                     reviewCount >= config.developingReviewCountThreshold) {
             level = .developing
         } else {
             level = .novice
@@ -85,7 +96,7 @@ nonisolated enum ProficiencyTracker {
         case .proficient:
             return (0.66 + 0.34 * min(min(correct / 6, interval / 21), 1)) * accuracy
         case .mastered:
-            return 1
+            return accuracy
         }
     }
     

@@ -1,6 +1,10 @@
 import Foundation
 
-/// Composes the mastery signals into a single 0...1 score per subject.
+/// Composes retrieval evidence into an estimate, not a validated grade or a
+/// probability of passing an exam. Repeated retrieval and distributed practice
+/// inform the signals; weights and cutoffs are product heuristics.
+/// Research: https://doi.org/10.1016/j.jml.2006.09.004
+/// https://doi.org/10.1037/0033-2909.132.3.354
 nonisolated enum MasteryCalculator: Sendable {
 
     static let coverageWeight = 0.40
@@ -10,13 +14,16 @@ nonisolated enum MasteryCalculator: Sendable {
     /// Mastery for one subject. Returns 0 when no work has been recorded — the
     /// neutral retention value must never grant mastery to an untouched subject.
     static func mastery(for snapshot: SubjectSnapshot, now: Date) -> Double {
-        guard !snapshot.reviews.isEmpty else { return 0 }
+        let observed = snapshot.reviews.filter { $0.timestamp <= now }
+        guard observed.contains(where: \.isSuccessful) else { return 0 }
 
         let raw = coverageWeight * MasterySignals.coverage(cards: snapshot.cards)
-            + retentionWeight * MasterySignals.retention(reviews: snapshot.reviews, now: now)
+            + retentionWeight * MasterySignals.retention(reviews: observed, now: now)
             + stabilityWeight * MasterySignals.stability(cards: snapshot.cards)
 
-        let decayed = raw * MasterySignals.freshness(lastReviewDate: snapshot.lastReviewDate, now: now)
+        // Sparse samples must not inherit the full neutral retention credit.
+        let evidence = min(Double(observed.count) / Double(MasterySignals.retentionMinimumSample), 1)
+        let decayed = raw * evidence * MasterySignals.freshness(lastReviewDate: observed.map(\.timestamp).max(), now: now)
         return min(max(decayed, 0.0), 1.0)
     }
 
