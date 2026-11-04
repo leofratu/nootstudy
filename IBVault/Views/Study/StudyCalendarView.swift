@@ -68,7 +68,7 @@ struct StudyCalendarView: View {
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(IBColors.surface)
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(IBColors.border, lineWidth: 1))
+                
         )
         .task {
             now = IBLocalClock.now
@@ -137,7 +137,7 @@ struct StudyCalendarView: View {
 
         return HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(day.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                Text(day.formatted(.dateTime.weekday(.abbreviated)))
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(isToday ? IBColors.accent : IBColors.inkSecondary)
                 Text(day.formatted(.dateTime.day()))
@@ -175,16 +175,16 @@ struct StudyCalendarView: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(isToday ? IBColors.accent.opacity(0.04) : Color.clear)
+                .fill(Color.clear)
         )
     }
 
     private func planBlock(_ plan: StudyPlan) -> some View {
         return Button { onTapPlan(plan) } label: {
             HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(IBColors.inkTertiary)
-                    .frame(width: 3, height: 32)
+                Circle()
+                    .fill(IBColors.subjectColor(for: plan.subjectName))
+                    .frame(width: 8, height: 8)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(plan.subjectName)
                         .font(.callout.weight(.semibold))
@@ -215,10 +215,10 @@ struct StudyCalendarView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 6).fill(IBColors.surface))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(IBColors.border, lineWidth: 1))
+            .contentShape(Rectangle())
+            .hoverHighlight()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IBPressStyle())
         .contextMenu {
             if let onDeletePlan {
                 Button(role: .destructive) { onDeletePlan(plan) } label: {

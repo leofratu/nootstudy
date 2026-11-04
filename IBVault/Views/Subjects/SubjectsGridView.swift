@@ -51,7 +51,7 @@ struct SubjectsGridView: View {
                     StudioPageHeader(
                         eyebrow: "Knowledge library",
                         title: "Subjects",
-                        subtitle: "Your curriculum, one subject at a time.",
+                        subtitle: "Mastery reflects your recall and imported assessment results.",
                         symbol: "books.vertical.fill",
                         tint: IBColors.englishColor
                     ) {
@@ -60,19 +60,10 @@ struct SubjectsGridView: View {
                         }.buttonStyle(PrimaryButtonStyle())
                     }
 
-                    HStack(spacing: 12) {
-                        StudioMetricTile(value: "\(subjects.count)", label: "Enrolled", symbol: "books.vertical.fill", tint: IBColors.englishColor, detail: "Your IB syllabus")
-                        StudioMetricTile(value: "\(averageMastery(mastery))%", label: "Average mastery", symbol: "chart.bar.fill", tint: IBColors.inkTertiary, detail: "Across active subjects")
-                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + (dueCounts[$1.id] ?? 0) })", label: "Due today", symbol: "clock.badge.exclamationmark", tint: IBColors.inkTertiary, detail: "Within your daily allowance")
-                    }
-
-                    StudioSectionHeader(
-                        searchText.isEmpty ? "Subject portfolio" : "Search results",
-                        subtitle: searchText.isEmpty ? "Mastery reflects recall and imported assessment results." : "\(sortedSubjects.count) matching subjects",
-                        symbol: "square.grid.2x2.fill",
-                        tint: IBColors.accent
-                    ) {
-                        EmptyView()
+                    HStack(spacing: 16) {
+                        StudioMetricTile(value: "\(subjects.count)", label: "Subjects", symbol: "books.vertical.fill")
+                        StudioMetricTile(value: "\(averageMastery(mastery))%", label: "Average mastery", symbol: "chart.bar.fill")
+                        StudioMetricTile(value: "\(subjects.reduce(0) { $0 + (dueCounts[$1.id] ?? 0) })", label: "Cards due", symbol: "clock.badge.exclamationmark")
                     }
 
                     if sortedSubjects.isEmpty {
@@ -83,14 +74,14 @@ struct SubjectsGridView: View {
                         )
                         .frame(maxWidth: .infinity)
                     } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 290), spacing: 20)], spacing: 20) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 290), spacing: 12)], spacing: 12) {
                             ForEach(sortedSubjects, id: \.id) { subject in
                                 NavigationLink {
                                     SubjectDetailView(subject: subject)
                                 } label: {
                                     SubjectLibraryTile(subject: subject, dueCount: dueCounts[subject.id] ?? 0, mastery: mastery[subject.id] ?? 0)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(IBPressStyle())
                             }
                         }
                     }
@@ -129,91 +120,45 @@ struct SubjectWorkspaceRow: View {
     private var tint: Color { IBColors.subjectColor(for: subject.name) }
 
     var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(IBGradient.tint(tint))
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(tint.opacity(0.16), lineWidth: 1)
-                    )
-                Image(systemName: subjectSymbol)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(tint)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
+            Circle().fill(tint).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 1) {
                 Text(subject.name)
-                    .font(.callout.weight(.bold))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(IBColors.ink)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
+                    .lineLimit(1)
                     .help(subject.name)
-                    .layoutPriority(1)
-                HStack(spacing: 7) {
-                    StudioPill(title: subject.level, tint: tint)
-                    Text(subject.cards.isEmpty ? "No recall cards" : "\(subject.cards.count) cards")
-                        .font(.caption)
-                        .foregroundStyle(IBColors.inkSecondary)
-                        .lineLimit(1)
-                }
+                Text("\(subject.level) · \(subject.cards.isEmpty ? "No cards yet" : "\(subject.cards.count) cards")")
+                    .font(IBTypography.caption)
+                    .foregroundStyle(IBColors.inkTertiary)
+                    .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    Text("Mastery")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(IBColors.inkSecondary)
-                    Spacer()
-                    Text("\(Int(mastery * 100))%")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(tint)
-                }
-                MasteryBar(progress: mastery, height: 5, color: tint)
-            }
-            .frame(minWidth: 120, maxWidth: 220, alignment: .leading)
+            Text(dueCount == 0 ? "Nothing due" : "\(dueCount) due")
+                .font(IBTypography.caption.monospacedDigit())
+                .foregroundStyle(dueCount == 0 ? IBColors.inkTertiary : IBColors.inkSecondary)
+                .lineLimit(1)
+                .fixedSize()
 
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(dueCount == 0 ? "Clear" : "\(dueCount) due")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(dueCount == 0 ? IBColors.success : IBColors.inkTertiary)
-                    .lineLimit(1)
-                    .fixedSize()
-                Text(masteryLabel)
-                    .font(.caption2)
+            HStack(spacing: 8) {
+                MasteryBar(progress: mastery, height: 4, color: tint)
+                    .frame(width: 110)
+                Text("\(Int(mastery * 100))%")
+                    .font(IBTypography.caption.monospacedDigit())
                     .foregroundStyle(IBColors.inkSecondary)
-                    .lineLimit(1)
+                    .frame(width: 32, alignment: .trailing)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Mastery \(Int(mastery * 100)) percent")
 
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(IBColors.inkTertiary)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 13)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
-    }
-
-    private var masteryLabel: String {
-        switch mastery {
-        case 0..<0.25: return "Starting"
-        case 0.25..<0.6: return "Building"
-        case 0.6..<0.85: return "Reliable"
-        default: return "Strong"
-        }
-    }
-
-    private var subjectSymbol: String {
-        switch subject.name {
-        case let name where name.contains("Math"): return "function"
-        case let name where name.contains("Biology"): return "leaf.fill"
-        case let name where name.contains("Economics"): return "chart.line.uptrend.xyaxis"
-        case let name where name.contains("Business"): return "briefcase.fill"
-        case let name where name.contains("English"): return "text.book.closed.fill"
-        default: return "book.closed.fill"
-        }
     }
 }
 
@@ -224,36 +169,30 @@ private struct SubjectLibraryTile: View {
     private var tint: Color { IBColors.subjectColor(for: subject.name) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack {
-                Text(subject.level).font(IBTypography.captionBold).tracking(1.5)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .background(tint.opacity(0.1), in: Capsule())
-                Spacer()
-                Image(systemName: "arrow.up.right").font(.system(size: 15, weight: .medium))
-            }.foregroundStyle(tint)
-            Text(subject.name).font(.custom("Georgia", size: 25))
-                .foregroundStyle(IBColors.ink)
-                .frame(height: 64, alignment: .topLeading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(2)
-            HStack {
-                Text("\(subject.cards.count) cards")
-                Spacer()
-                Text(dueCount > 0 ? "\(dueCount) due" : "Queue clear")
-            }.font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
-            Divider()
-            HStack {
-                Text("Mastery").font(IBTypography.caption)
-                Spacer()
-                Text("\(Int(mastery * 100))%").font(IBTypography.mono).foregroundStyle(tint)
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Circle().fill(tint).frame(width: 8, height: 8)
+                    Text(subject.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(IBColors.ink)
+                        .lineLimit(1)
+                }
+                Text("\(subject.level) · \(subject.cards.count) cards · \(dueCount > 0 ? "\(dueCount) due" : "nothing due")")
+                    .font(IBTypography.caption)
+                    .foregroundStyle(IBColors.inkSecondary)
+                    .lineLimit(1)
             }
-            MasteryBar(progress: mastery, height: 5, color: tint)
+            HStack(spacing: 10) {
+                MasteryBar(progress: mastery, height: 4, color: tint)
+                Text("\(Int(mastery * 100))%")
+                    .font(IBTypography.caption.monospacedDigit())
+                    .foregroundStyle(IBColors.inkSecondary)
+            }
         }
-        .padding(24).surfaceCard()
-        .overlay(alignment: .top) {
-            RoundedRectangle(cornerRadius: 2).fill(tint).frame(height: 3).padding(.horizontal, 24)
-        }
+        .padding(18)
+        .surfaceCard()
+        .hoverHighlight(cornerRadius: IBRadius.card)
         .contentShape(Rectangle())
     }
 }

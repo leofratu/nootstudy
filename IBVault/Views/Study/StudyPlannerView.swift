@@ -158,16 +158,10 @@ struct StudyPlannerView: View {
     private var todaySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(IBColors.warning)
-                    .frame(width: 7, height: 7)
                 Text("Today")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
+                    .font(IBTypography.sectionTitle)
+                    .foregroundStyle(IBColors.ink)
             }
-            .padding(.leading, 4)
 
             ForEach(todayPlans, id: \.id) { plan in
                 planRow(plan)
@@ -179,23 +173,14 @@ struct StudyPlannerView: View {
     private var upcomingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(IBColors.accent)
-                    .frame(width: 7, height: 7)
                 Text("Upcoming")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
+                    .font(IBTypography.sectionTitle)
+                    .foregroundStyle(IBColors.ink)
                 Spacer()
                 Text("\(upcomingPlans.count)")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(IBColors.accent.opacity(0.1)))
-                    .foregroundStyle(IBColors.accent)
+                    .font(IBTypography.caption.monospacedDigit())
+                    .foregroundStyle(IBColors.inkTertiary)
             }
-            .padding(.leading, 4)
 
             ForEach(upcomingPlans, id: \.id) { plan in
                 planRow(plan)
@@ -209,9 +194,9 @@ struct StudyPlannerView: View {
             openPlan(plan)
         } label: {
             HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(IBColors.inkTertiary)
-                    .frame(width: 3, height: 40)
+                Circle()
+                    .fill(IBColors.subjectColor(for: plan.subjectName))
+                    .frame(width: 8, height: 8)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(plan.subjectName)
@@ -226,8 +211,8 @@ struct StudyPlannerView: View {
                             .lineLimit(2)
                             .help(plan.selectionSummary.isEmpty ? plan.scheduleLabel : plan.selectionSummary)
                         if plan.isFollowUpReview {
-                            Text("REVIEW")
-                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                            Text("Review")
+                                .font(.system(size: 10, weight: .medium))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
                                 .background(Capsule().fill(IBColors.accent.opacity(0.1)))
@@ -240,16 +225,16 @@ struct StudyPlannerView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(plan.scheduledTimeFormatted)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: 11).monospacedDigit())
                         .foregroundStyle(.secondary)
                     Text("\(plan.durationMinutes)m")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.tertiary)
                 }
 
                 if plan.isActive {
-                    Text("NOW")
-                        .font(.system(size: 9, weight: .heavy, design: .rounded))
+                    Text("Now")
+                        .font(.system(size: 11, weight: .medium))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
                         .background(Capsule().fill(IBColors.success.opacity(0.12)))
@@ -271,16 +256,10 @@ struct StudyPlannerView: View {
     private var recentSessionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(.secondary.opacity(0.4))
-                    .frame(width: 7, height: 7)
                 Text("Recent")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
+                    .font(IBTypography.sectionTitle)
+                    .foregroundStyle(IBColors.ink)
             }
-            .padding(.leading, 4)
 
             ForEach(recentSessions.prefix(5), id: \.id) { session in
                 Button {
@@ -288,9 +267,9 @@ struct StudyPlannerView: View {
                     IBHaptics.light()
                 } label: {
                     HStack(spacing: 14) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(IBColors.inkTertiary)
-                            .frame(width: 3, height: 44)
+                        Circle()
+                            .fill(IBColors.subjectColor(for: session.subjectName))
+                            .frame(width: 8, height: 8)
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text(session.subjectName)
@@ -344,7 +323,7 @@ struct StudyPlannerView: View {
                 .foregroundStyle(.tertiary)
 
             Text("No study sessions yet")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .font(.system(size: 16, weight: .semibold))
 
             Text("Create your first session. Pick a subject and topic,\nthen ARIA will build a personalised study plan.")
                 .font(.callout)
@@ -378,7 +357,7 @@ struct StudyPlannerView: View {
     private func retentionBadge(_ percent: Int) -> some View {
         let color: Color = percent >= 80 ? IBColors.success : percent >= 50 ? IBColors.warning : IBColors.danger
         return Text("\(percent)%")
-            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .font(.system(size: 11, weight: .bold))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .background(Capsule().fill(color.opacity(0.1)))

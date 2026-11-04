@@ -142,7 +142,7 @@ struct ExamMarkerView: View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .center, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(result.scoreLabel).font(.custom("Georgia", size: 52))
+                    Text(result.scoreLabel).font(.system(size: 52, weight: .semibold))
                     Text(submitted.hasScheme ? "AI-marked · Supplied scheme" : "Practice estimate · No scheme")
                         .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                 }

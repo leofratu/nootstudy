@@ -1280,7 +1280,7 @@ class ARIAService {
         guard !candidates.isEmpty else {
             return "No saved cards matched that scope. Try a different unit or topic in Library, or ask to create cards for the missing material."
         }
-        revisionCardIDs = Array(candidates.prefix(min(max(action.cardCount ?? 20, 1), 40))).map(\.id)
+        revisionCardIDs = Array(candidates.prefix(min(max(action.cardCount ?? 20, 1), CardGenerationOptions.maximumCount))).map(\.id)
         return "Found \(revisionCardIDs.count) saved cards. Open ‘Revise saved cards’ below to practise them. No duplicate cards were created; review history stays intact."
     }
 
@@ -1295,7 +1295,7 @@ class ARIAService {
             let subtopics = sanitizedSubtopics(action.subtopics, subjectName: subject.name, subjectLevel: subject.level, topics: [topic])
             return subtopics.isEmpty ? [.init(topic: topic)] : subtopics.map { .init(topic: topic, subtopic: $0) }
         }
-        let count = min(max(action.cardCount ?? 10, scopes.count), 40)
+        let count = min(max(action.cardCount ?? 10, scopes.count), CardGenerationOptions.maximumCount)
         let jobs = try CardBatchService.plan(scopes: scopes, styles: [.basic], count: count)
         let batch = try await CardBatchService.generate(subject: subject, jobs: jobs,
             options: .init(count: count), context: context) { _, _, _ in }
@@ -2953,7 +2953,7 @@ class ARIAService {
         let overdueDate = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
         let overduePredicate = #Predicate<StudyCard> { $0.nextReviewDate < overdueDate }
         let overdueCount = (try? context.fetchCount(FetchDescriptor(predicate: overduePredicate))) ?? 0
-        lines.append("- Review backlog: \(dueCount) due cards, \(overdueCount) overdue; today's humane ceiling is \(dailyReviewLimit) cards")
+        lines.append("- Review backlog: \(dueCount) due cards, \(overdueCount) overdue; today's goal is \(dailyReviewLimit) cards (the learner may review beyond it)")
 
         var sessionDescriptor = FetchDescriptor<ReviewSession>(sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
         sessionDescriptor.fetchLimit = maxSnapshotReviewSessions

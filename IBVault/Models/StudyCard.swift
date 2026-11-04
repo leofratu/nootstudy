@@ -7,6 +7,17 @@ nonisolated enum ProficiencyLevel: String, Codable, CaseIterable, Sendable {
     case proficient = "Proficient"
     case mastered = "Mastered"
 
+    /// What the learner sees. Raw values stay as they are because they are
+    /// persisted and backed up.
+    var stageName: String {
+        switch self {
+        case .novice: return "Encoding"
+        case .developing: return "Retrievable"
+        case .proficient: return "Consolidating"
+        case .mastered: return "Durable"
+        }
+    }
+
     var sortOrder: Int {
         switch self {
         case .novice: return 0

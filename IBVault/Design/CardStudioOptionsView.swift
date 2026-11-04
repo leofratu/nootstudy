@@ -79,7 +79,7 @@ struct CardCountControl: View {
     @Binding var count: Int
 
     private var boundedCount: Binding<Int> {
-        Binding(get: { count }, set: { count = min(max($0, 1), 50) })
+        Binding(get: { count }, set: { count = min(max($0, 1), CardGenerationOptions.maximumCount) })
     }
 
     var body: some View {
@@ -92,7 +92,7 @@ struct CardCountControl: View {
                 .monospacedDigit()
                 .frame(width: 64)
                 .accessibilityLabel("Cards per set")
-            Stepper("Cards per set", value: boundedCount, in: 1...50)
+            Stepper("Cards per set", value: boundedCount, in: 1...CardGenerationOptions.maximumCount, step: 5)
                 .labelsHidden().fixedSize()
         }
     }
@@ -111,13 +111,13 @@ struct StudioSelectionButton: View {
             }
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(selected ? IBColors.accent : IBColors.inkSecondary)
-            .padding(.horizontal, 10).padding(.vertical, 10)
+            .padding(.horizontal, 10).padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? IBColors.highlight : IBColors.surface, in: RoundedRectangle(cornerRadius: IBRadius.md))
-            .overlay(RoundedRectangle(cornerRadius: IBRadius.md).stroke(selected ? IBColors.accent : IBColors.borderStrong, lineWidth: 1))
+            .background(selected ? IBColors.highlight : IBColors.surfaceRaised, in: RoundedRectangle(cornerRadius: IBRadius.sm))
             .contentShape(Rectangle())
+            .hoverHighlight()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IBPressStyle())
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityValue(selected ? "Selected" : "Not selected")
     }

@@ -109,8 +109,24 @@ nonisolated enum AIProviderService {
             if let cursor, !seenCursors.insert(cursor).inserted { throw AIProviderError.invalidResponse }
         } while cursor != nil
         guard !models.isEmpty else { throw AIProviderError.invalidResponse }
-        AIConfiguration.cachedCodexModels = models
+        AIConfiguration.syncCodexCatalog(models)
         return models
+    }
+
+    /// Keeps the model list current without the learner opening Settings. The
+    /// CLI is the source of truth and the catalog rarely changes, so this runs at
+    /// most every few hours; failures keep the last known list.
+    static func syncCodexModelsIfDue(now: Date = Date()) async {
+        guard AIConfiguration.provider == .codexCLI else { return }
+        let key = "codexModelCatalogSyncedAt"
+        if let last = UserDefaults.standard.object(forKey: key) as? Date,
+           now.timeIntervalSince(last) < 6 * 60 * 60 { return }
+        do {
+            _ = try await refreshCodexModels()
+            UserDefaults.standard.set(now, forKey: key)
+        } catch {
+            // Offline or Codex not installed: the coach reports that when used.
+        }
     }
 
     private static func codexModelPage(executable: URL, cursor: String?) async throws -> CodexModelPage {
@@ -187,7 +203,8 @@ nonisolated enum AIProviderService {
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 120
-        configuration.timeoutIntervalForResource = 180
+        // Must exceed the longest per-request timeout, or it silently caps it.
+        configuration.timeoutIntervalForResource = 480
         configuration.waitsForConnectivity = true
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: configuration)

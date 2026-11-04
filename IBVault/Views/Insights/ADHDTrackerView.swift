@@ -87,7 +87,7 @@ struct ADHDTrackerView: View {
     private var statusColor: Color {
         switch currentStatus.colorName {
         case "green": return IBColors.success
-        case "blue": return .blue
+        case "blue": return IBColors.accent
         case "orange": return IBColors.warning
         default: return .gray
         }
@@ -163,7 +163,7 @@ struct ADHDTrackerView: View {
                     .frame(width: 80, height: 80)
                 VStack(spacing: 2) {
                     Text(String(format: "%.1f", currentStatus.level))
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundStyle(statusColor)
                     Text("ng/mL")
                         .font(.system(size: 10, weight: .medium))
@@ -174,7 +174,7 @@ struct ADHDTrackerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "pills.fill")
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(IBColors.plum)
                     Text(currentStatus.status)
                         .font(.title3.bold())
                         .foregroundStyle(statusColor)
@@ -196,7 +196,7 @@ struct ADHDTrackerView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "capsule.fill")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(IBColors.plum)
                 Text("Regimen")
                     .font(.headline)
             }
@@ -243,11 +243,11 @@ struct ADHDTrackerView: View {
                 HStack(spacing: 10) {
                     ZStack {
                         Circle()
-                            .fill(Color.purple.opacity(0.1))
+                            .fill(IBColors.plum.opacity(0.1))
                             .frame(width: 32, height: 32)
                         Text("\(index + 1)")
                             .font(.callout.bold())
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(IBColors.plum)
                     }
                     
                     VStack(alignment: .leading, spacing: 2) {
@@ -290,7 +290,7 @@ struct ADHDTrackerView: View {
                         )
                         .foregroundStyle(
                             LinearGradient(
-                                colors: [Color.blue.opacity(0.28), .clear],
+                                colors: [IBColors.accent.opacity(0.28), .clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -300,7 +300,7 @@ struct ADHDTrackerView: View {
                             x: .value("Hour", point.hour),
                             y: .value("Level", point.level)
                         )
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(IBColors.accent)
                         .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
                     }
                     
@@ -349,7 +349,7 @@ struct ADHDTrackerView: View {
                             height: .fixed(18)
                         )
                         .clipShape(Capsule())
-                        .foregroundStyle(Color.blue.opacity(0.75))
+                        .foregroundStyle(IBColors.accent.opacity(0.75))
                     }
 
                     if let currentHourOffset {

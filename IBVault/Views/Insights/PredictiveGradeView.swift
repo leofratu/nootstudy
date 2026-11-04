@@ -58,7 +58,7 @@ struct PredictiveGradeView: View {
             HStack(alignment: .center, spacing: 30) {
                 VStack(spacing: 4) {
                     Text("\(predictedSubjectPoints)")
-                        .font(.system(size: 48, weight: .heavy, design: .rounded))
+                        .font(.system(size: 48, weight: .heavy))
                         .foregroundStyle(IBColors.accent)
                     Text("Subject points / 42")
                         .font(.caption)
@@ -69,7 +69,7 @@ struct PredictiveGradeView: View {
 
                 VStack(spacing: 4) {
                     Text("\(DiplomaForecast.assumedCorePoints)")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(IBColors.inkTertiary)
                     Text("TOK + EE assumed")
                         .font(.caption)
@@ -81,7 +81,7 @@ struct PredictiveGradeView: View {
                 if let profile = profiles.first {
                     VStack(spacing: 4) {
                         Text("\(profile.targetIBScore)")
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .font(.system(size: 36, weight: .bold))
                             .foregroundStyle(targetColor)
                         Text("Target")
                             .font(.caption)
@@ -93,7 +93,7 @@ struct PredictiveGradeView: View {
                 
                 VStack(spacing: 4) {
                     Text("\(predictedDiplomaScore)")
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .font(.system(size: 36, weight: .bold))
                         .foregroundStyle(targetColor)
                     Text("Predicted / 45")
                         .font(.caption)

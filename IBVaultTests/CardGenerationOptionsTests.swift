@@ -16,7 +16,7 @@ struct CardGenerationOptionsTests {
         #expect(CardGenerationOptions.preferences(in: defaults) == choice)
         defaults.set(1000, forKey: "cardDefaultCount")
         defaults.set("unrecognized", forKey: "cardDefaultTone")
-        #expect(CardGenerationOptions.preferences(in: defaults).count == 50)
+        #expect(CardGenerationOptions.preferences(in: defaults).count == CardGenerationOptions.maximumCount)
         #expect(CardGenerationOptions.preferences(in: defaults).tone == .balanced)
     }
 

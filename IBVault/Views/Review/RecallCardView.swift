@@ -20,26 +20,19 @@ struct RecallCardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack {
-                Label(card.cardStyle.label.uppercased(), systemImage: card.cardStyle.symbol)
-                    .font(IBTypography.captionBold).tracking(1)
-                    .foregroundStyle(IBColors.accent)
-                Spacer()
-                StudioPill(title: card.difficulty.rawValue)
-            }
+        VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .firstTextBaseline) {
-                Text(card.topicName).font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+                Text("\(card.topicName) · \(card.cardStyle.label) · \(card.difficulty.rawValue)")
+                    .font(IBTypography.caption).foregroundStyle(IBColors.inkTertiary)
+                    .lineLimit(1)
                 Spacer()
                 if showMasteryPercent {
-                    Text("\(Int((ProficiencyTracker.masteryValue(for: card) * 100).rounded()))% · \(card.proficiency.rawValue)")
-                        .font(IBTypography.captionBold).foregroundStyle(IBColors.inkSecondary)
+                    Text("\(Int((ProficiencyTracker.masteryValue(for: card) * 100).rounded()))% · \(card.proficiency.stageName)")
+                        .font(IBTypography.caption).foregroundStyle(IBColors.inkTertiary)
                 }
             }
-            Text(card.cardStyle == .cloze ? "FILL IN THE BLANK" : "QUESTION")
-                .font(IBTypography.captionBold).tracking(1).foregroundStyle(IBColors.inkSecondary)
             FormattedMessageContent(text: prompt)
-                .font(.custom("Georgia", size: 25))
+                .font(.system(size: 20, weight: .medium))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let choices = validChoices {
@@ -70,12 +63,10 @@ struct RecallCardView: View {
                         .font(IBTypography.headline)
                         .foregroundStyle(CardRecallPresentation.isCorrect(selectedChoice, answer: card.back) ? IBColors.success : IBColors.coral)
                 }
-                Text("ANSWER").font(IBTypography.captionBold).tracking(1).foregroundStyle(IBColors.accent)
                 FormattedMessageContent(text: card.back)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-                    .background(IBColors.highlight, in: RoundedRectangle(cornerRadius: IBRadius.md))
+                    .transition(.opacity)
                 if let url = card.sourceURL, let title = card.sourceTitle {
                     Link(destination: url) { Label(title, systemImage: "arrow.up.right") }
                         .font(IBTypography.caption)
@@ -122,12 +113,12 @@ struct RecallCardView: View {
                 }
             }
             .foregroundStyle(tint)
-            .padding(16)
-            .background((revealed && correct) || selected ? IBColors.highlight : IBColors.canvas, in: RoundedRectangle(cornerRadius: IBRadius.md))
-            .overlay(RoundedRectangle(cornerRadius: IBRadius.md).stroke(tint, lineWidth: 1))
+            .padding(12)
+            .background((revealed && correct) || selected ? IBColors.highlight : IBColors.surfaceRaised, in: RoundedRectangle(cornerRadius: IBRadius.md))
             .contentShape(Rectangle())
+            .hoverHighlight(cornerRadius: IBRadius.md)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IBPressStyle())
         .disabled(revealed)
         .accessibilityLabel("Option \(index + 1): \(choice)")
         .accessibilityValue(revealed && correct ? "Correct answer" : selected ? "Selected" : "")

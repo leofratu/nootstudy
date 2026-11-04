@@ -102,10 +102,7 @@ struct CardStudioView: View {
             let headingLayout = narrow ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
                 : AnyLayout(HStackLayout(spacing: 16))
             headingLayout {
-                HStack(spacing: 16) {
-                    Text("01").font(IBTypography.mono).foregroundStyle(IBColors.accent)
-                    Text("Choose your material").font(IBTypography.title3)
-                }
+                Text("Choose your material").font(IBTypography.sectionTitle)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Picker("Subject", selection: $subjectID) {
                     Text("Choose a subject").tag(Optional<UUID>.none)
@@ -157,10 +154,7 @@ struct CardStudioView: View {
 
     private var configuration: some View {
         VStack(alignment: .leading, spacing: 24) {
-            HStack(spacing: 12) {
-                Text("02").font(IBTypography.mono).foregroundStyle(IBColors.accent)
-                Text("Build your set").font(IBTypography.title3)
-            }
+            Text("Build your set").font(IBTypography.sectionTitle)
             VStack(alignment: .leading, spacing: 12) {
                 Text("Answer style").font(IBTypography.headline)
                 Picker("Answer style", selection: $options.tone) {
@@ -180,21 +174,20 @@ struct CardStudioView: View {
                     Button {
                         if formats.contains(style) { formats.remove(style) } else { formats.insert(style) }
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: style.symbol).font(.system(size: 19))
-                                .frame(width: 24)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(style.label).font(IBTypography.headline)
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(style.label).font(.system(size: 13, weight: .medium))
                                 Text(style.shortDescription).font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                             }
                             Spacer()
                             Image(systemName: formats.contains(style) ? "checkmark.circle.fill" : "circle")
                         }
                         .foregroundStyle(formats.contains(style) ? IBColors.accent : IBColors.ink)
-                        .padding(12)
-                        .background(formats.contains(style) ? IBColors.highlight : IBColors.surface, in: RoundedRectangle(cornerRadius: IBRadius.md))
-                        .overlay(RoundedRectangle(cornerRadius: IBRadius.md).stroke(formats.contains(style) ? IBColors.accent : IBColors.borderStrong, lineWidth: 1))
-                    }.buttonStyle(.plain)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(formats.contains(style) ? IBColors.highlight : IBColors.surfaceRaised, in: RoundedRectangle(cornerRadius: IBRadius.md))
+                        .contentShape(Rectangle())
+                        .hoverHighlight(cornerRadius: IBRadius.md)
+                    }.buttonStyle(IBPressStyle())
                     .accessibilityValue(formats.contains(style) ? "Selected" : "Not selected")
                 }
             }
@@ -206,7 +199,7 @@ struct CardStudioView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Reuse saved cards first", isOn: $reuseExisting).toggleStyle(.checkbox)
                 Text("Only missing cards need generation.").font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
-                Text("\(options.count) cards · \(selection.count) topics · \(formats.count) formats")
+                Text("\(options.count) cards · \(selection.count) \(selection.count == 1 ? "topic" : "topics") · \(formats.count) \(formats.count == 1 ? "format" : "formats")")
                     .font(IBTypography.headline)
                 if selection.isEmpty {
                     Text("Select at least one topic to prepare a set.")
@@ -215,16 +208,16 @@ struct CardStudioView: View {
                     Text("Choose at least one card format.")
                         .font(IBTypography.caption).foregroundStyle(IBColors.coral)
                 }
-                if selectionMinimum > options.count || selectionMinimum > 50 {
-                    Text(selectionMinimum > 50 ? "Choose fewer topics or formats to fit a 50-card batch." : "Increase the count to at least \(selectionMinimum) to include every topic and format.")
+                if selectionMinimum > options.count || selectionMinimum > CardGenerationOptions.maximumCount {
+                    Text(selectionMinimum > CardGenerationOptions.maximumCount ? "Choose fewer topics or formats to fit a \(CardGenerationOptions.maximumCount)-card batch." : "Increase the count to at least \(selectionMinimum) to include every topic and format.")
                         .font(IBTypography.caption).foregroundStyle(IBColors.coral)
-                    if selectionMinimum <= 50 {
+                    if selectionMinimum <= CardGenerationOptions.maximumCount {
                         Button("Use \(selectionMinimum) cards") { options.count = selectionMinimum }
                             .buttonStyle(.borderless)
                     }
                 }
                 Button(action: generate) {
-                    Label(reuseExisting ? "Find & prepare cards" : "Generate new cards", systemImage: "sparkles")
+                    Text(reuseExisting ? "Prepare cards" : "Generate new cards")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PrimaryButtonStyle())
@@ -336,7 +329,7 @@ struct CardDraftEditor: View {
             Text("QUESTION").font(IBTypography.captionBold).tracking(1)
                 .foregroundStyle(IBColors.accent)
             TextField("Question", text: $draft.front, axis: .vertical)
-                .font(.custom("Georgia", size: 19)).textFieldStyle(.plain)
+                .font(.system(size: 19, weight: .semibold)).textFieldStyle(.plain)
                 .accessibilityLabel("Card question")
             Divider()
             Text("ANSWER").font(IBTypography.captionBold).tracking(1)

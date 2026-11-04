@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Glass Card View -> flat SurfaceCard (API preserved)
+// MARK: - Surface Card
 struct GlassCard<Content: View>: View {
     let content: Content
     var cornerRadius: CGFloat = IBRadius.card
@@ -21,8 +21,11 @@ struct GlassCard<Content: View>: View {
     }
 }
 
-// MARK: - Study Studio Shell
+// MARK: - Page Shell
 
+/// Page title and one line of context. `eyebrow`, `symbol` and `tint` stay in
+/// the signature so existing call sites keep compiling, but a page earns its
+/// hierarchy from type alone: no icon, no shouting label.
 struct StudioPageHeader<Trailing: View>: View {
     let eyebrow: String
     let title: String
@@ -48,18 +51,8 @@ struct StudioPageHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: IBSpacing.lg) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: symbol)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(tint)
-                    Text(eyebrow.uppercased())
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1.8)
-                        .foregroundStyle(IBColors.inkTertiary)
-                }
-
+        HStack(alignment: .firstTextBaseline, spacing: IBSpacing.lg) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(IBTypography.pageTitle)
                     .foregroundStyle(IBColors.ink)
@@ -97,12 +90,8 @@ struct StudioSectionHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(IBTypography.sectionTitle)
                     .foregroundStyle(IBColors.ink)
@@ -118,6 +107,8 @@ struct StudioSectionHeader<Trailing: View>: View {
     }
 }
 
+/// A number with its label. Deliberately not a card: a row of these reads as
+/// one sentence of facts instead of four more boxes.
 struct StudioMetricTile: View {
     let value: String
     let label: String
@@ -125,7 +116,6 @@ struct StudioMetricTile: View {
     var tint: Color? = nil
     var detail: String? = nil
 
-    // Legacy tint initializer compat
     init(value: String, label: String, symbol: String, tint: Color, detail: String? = nil) {
         self.value = value
         self.label = label
@@ -142,21 +132,16 @@ struct StudioMetricTile: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(value)
-                    .font(.system(size: 23, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(IBColors.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Spacer(minLength: 8)
-                Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(tint ?? IBColors.accent)
-            }
-            Text(label)
-                .font(.system(size: 11, weight: .semibold))
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(IBTypography.stat)
                 .foregroundStyle(IBColors.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .contentTransition(.numericText())
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(IBColors.inkSecondary)
                 .lineLimit(1)
             if let detail {
                 Text(detail)
@@ -166,8 +151,6 @@ struct StudioMetricTile: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .surfaceCard(cornerRadius: IBRadius.md)
     }
 }
 
@@ -187,32 +170,27 @@ struct StudioPill: View {
         self.semantic = semantic
     }
 
-    private var resolved: (fg: Color, bg: Color, border: Color) {
+    private var resolved: (fg: Color, bg: Color) {
         switch semantic {
-        case .success: return (IBColors.success, IBColors.success.opacity(0.12), IBColors.success.opacity(0.20))
-        case .warning: return (IBColors.warning, IBColors.warning.opacity(0.12), IBColors.warning.opacity(0.20))
-        case .danger: return (IBColors.danger, IBColors.danger.opacity(0.12), IBColors.danger.opacity(0.20))
-        case .neutral: return (IBColors.inkSecondary, IBColors.surfaceHover, IBColors.border)
+        case .success: return (IBColors.success, IBColors.success.opacity(0.12))
+        case .warning: return (IBColors.warning, IBColors.warning.opacity(0.14))
+        case .danger: return (IBColors.danger, IBColors.danger.opacity(0.12))
+        case .neutral: return (IBColors.inkSecondary, IBColors.surfaceHover)
         }
     }
 
     var body: some View {
         let r = resolved
         Text(title)
-            .font(.system(size: 10.5, weight: .semibold))
-            .tracking(0.4)
+            .font(.system(size: 11, weight: .medium))
             .foregroundStyle(r.fg)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(r.bg)
-                    .overlay(Capsule().stroke(r.border, lineWidth: 1))
-            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(r.bg))
     }
 }
 
-// MARK: - Progress Ring — single accent
+// MARK: - Progress Ring
 struct ProgressRing: View {
     let progress: Double
     var lineWidth: CGFloat = 5
@@ -231,14 +209,14 @@ struct ProgressRing: View {
                 .rotationEffect(.degrees(-90))
                 .animation(IBAnimation.smooth, value: progress)
             Text("\(Int(clampedProgress * 100))")
-                .font(.system(size: size * 0.28, weight: .bold).monospacedDigit())
+                .font(.system(size: size * 0.28, weight: .semibold).monospacedDigit())
                 .foregroundStyle(IBColors.ink)
         }
         .frame(width: size, height: size)
     }
 }
 
-// MARK: - Animated Counter — with spring
+// MARK: - Animated Counter
 struct AnimatedCounter: View {
     let value: Int
     var font: Font = IBTypography.stat
@@ -253,26 +231,20 @@ struct AnimatedCounter: View {
     }
 }
 
-// MARK: - Pulse Orb — flat neutral
+// MARK: - Coach mark
 struct PulseOrb: View {
     var size: CGFloat = 44
     var color: Color = IBColors.inkTertiary
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(IBColors.surfaceHover)
-                .frame(width: size, height: size)
-                .overlay(Circle().stroke(IBColors.border, lineWidth: 1))
-            Image(systemName: "sparkles")
-                .font(.system(size: size * 0.4, weight: .semibold))
-                .foregroundStyle(IBColors.inkTertiary)
-        }
-        .frame(width: size, height: size)
+        Image(systemName: "sparkles")
+            .font(.system(size: size * 0.42, weight: .medium))
+            .foregroundStyle(IBColors.accent)
+            .frame(width: size, height: size)
     }
 }
 
-// MARK: - Subject Badge — neutral
+// MARK: - Subject Badge
 struct SubjectBadge: View {
     let name: String
     let level: String
@@ -280,9 +252,9 @@ struct SubjectBadge: View {
 
     var body: some View {
         HStack(spacing: IBSpacing.xs) {
-            Image(systemName: "book.closed")
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(IBColors.inkTertiary)
+            Circle()
+                .fill(IBColors.subjectColor(for: name))
+                .frame(width: 6, height: 6)
             Text(compact ? String(name.prefix(3)).uppercased() : name)
                 .font(compact ? IBTypography.captionBold : IBTypography.caption)
                 .foregroundStyle(IBColors.inkSecondary)
@@ -292,17 +264,10 @@ struct SubjectBadge: View {
                     .foregroundStyle(IBColors.inkTertiary)
             }
         }
-        .padding(.horizontal, compact ? 8 : 12)
-        .padding(.vertical, compact ? 4 : 6)
-        .background(
-            Capsule()
-                .fill(IBColors.surfaceHover)
-                .overlay(Capsule().stroke(IBColors.border, lineWidth: 1))
-        )
     }
 }
 
-// MARK: - Mastery Bar — single accent fill, neutral track
+// MARK: - Mastery Bar
 struct MasteryBar: View {
     let progress: Double
     var height: CGFloat = 6
@@ -313,10 +278,10 @@ struct MasteryBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(IBColors.border)
+                    .fill(IBColors.surfaceHover)
                 Capsule()
                     .fill(color)
-                    .frame(width: max(0, geo.size.width * min(progress, 1.0)))
+                    .frame(width: max(0, geo.size.width * min(max(progress, 0), 1.0)))
             }
         }
         .frame(height: height)
@@ -324,53 +289,45 @@ struct MasteryBar: View {
     }
 }
 
-// MARK: - Streak Fire — monochrome
+// MARK: - Streak
 struct StreakFire: View {
     let streakCount: Int
 
     var body: some View {
         HStack(spacing: IBSpacing.xs) {
             Image(systemName: "flame.fill")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(IBColors.inkTertiary)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(IBColors.streakOrange)
             AnimatedCounter(value: streakCount, font: IBTypography.headline, color: IBColors.ink)
         }
     }
 }
 
-// MARK: - Prompt Chip — flat neutral
+// MARK: - Prompt Chip
 struct PromptChip: View {
     let text: String
     let action: () -> Void
 
     var body: some View {
         Button(action: { action(); IBHaptics.soft() }) {
-            HStack(spacing: 12) {
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(IBColors.inkTertiary)
-                    .frame(width: 26, height: 26)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(IBColors.surfaceHover)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
-                    )
+            HStack(spacing: 10) {
                 Text(text)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13))
                     .foregroundStyle(IBColors.ink)
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(IBColors.inkTertiary)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surfaceCard(cornerRadius: IBRadius.md)
+            .contentShape(Rectangle())
+            .hoverHighlight()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IBPressStyle())
     }
 }
 
@@ -383,16 +340,14 @@ struct ThinkingDots: View {
     }
 }
 
-// MARK: - Quality Rating Button — neutral until selected
+// MARK: - Quality Rating Button
 struct QualityButton: View {
     let label: String
-    var color: Color = IBColors.border
+    var color: Color = IBColors.ink
     var detail: String? = nil
     var isSelected: Bool = false
     let action: () -> Void
-    @State private var isPressed = false
 
-    // Compat initializer with color param
     init(label: String, color: Color, detail: String? = nil, isSelected: Bool = false, action: @escaping () -> Void) {
         self.label = label
         self.color = color
@@ -408,71 +363,58 @@ struct QualityButton: View {
     }
 
     var body: some View {
-        Button {
-            isPressed = true
-            action()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { isPressed = false }
-        } label: {
+        Button(action: action) {
             VStack(spacing: 2) {
                 Text(label)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(color)
                 if let detail {
                     Text(detail)
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(IBColors.inkTertiary)
                         .lineLimit(1)
                 }
             }
-            .foregroundStyle(isSelected ? IBColors.accent : IBColors.ink)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, detail == nil ? 14 : 9)
+            .frame(minWidth: 72, maxWidth: .infinity)
+            .padding(.vertical, detail == nil ? 12 : 8)
             .background(
                 RoundedRectangle(cornerRadius: IBRadius.md)
-                    .fill(isSelected ? IBColors.accent.opacity(0.12) : IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: IBRadius.md)
-                            .stroke(isSelected ? IBColors.accent : IBColors.border, lineWidth: 1)
-                    )
+                    .fill(isSelected ? color.opacity(0.14) : IBColors.surfaceRaised)
             )
+            .contentShape(Rectangle())
+            .hoverHighlight(cornerRadius: IBRadius.md)
         }
-        .buttonStyle(.plain)
-        .scaleEffect(isPressed ? 0.98 : 1)
-        .animation(IBAnimation.snappy, value: isPressed)
+        .buttonStyle(IBPressStyle())
     }
 }
 
-// MARK: - Empty State View — refined neutral
+// MARK: - Empty State
 struct EmptyStateView: View {
     let icon: String
     let title: String
     let message: String
 
     var body: some View {
-        VStack(spacing: IBSpacing.md) {
-            ZStack {
-                Circle()
-                    .fill(IBColors.surfaceHover)
-                    .frame(width: 84, height: 84)
-                    .overlay(Circle().stroke(IBColors.border, lineWidth: 1))
-                Image(systemName: icon)
-                    .font(.system(size: 28, weight: .light))
-                    .foregroundStyle(IBColors.inkTertiary)
-            }
-            .padding(.bottom, 2)
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 24, weight: .light))
+                .foregroundStyle(IBColors.inkTertiary)
+                .padding(.bottom, 4)
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(IBTypography.sectionTitle)
                 .foregroundStyle(IBColors.ink)
             Text(message)
                 .font(IBTypography.body13)
                 .foregroundStyle(IBColors.inkSecondary)
                 .multilineTextAlignment(.center)
-                .lineSpacing(4)
+                .lineSpacing(3)
                 .frame(maxWidth: 380)
         }
         .padding(IBSpacing.xl)
     }
 }
 
-// MARK: - Premium Divider — sharp 1px
+// MARK: - Divider
 struct PremiumDivider: View {
     var body: some View {
         Rectangle()
@@ -481,7 +423,7 @@ struct PremiumDivider: View {
     }
 }
 
-// MARK: - Stat Card — neutral
+// MARK: - Stat Card
 struct StatCard: View {
     let value: String
     let label: String
@@ -489,18 +431,13 @@ struct StatCard: View {
     var icon: String? = nil
 
     var body: some View {
-        VStack(spacing: 6) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(IBColors.inkTertiary)
-            }
+        VStack(spacing: 2) {
             Text(value)
                 .font(IBTypography.stat)
                 .foregroundStyle(IBColors.ink)
             Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(IBColors.inkTertiary)
+                .font(.system(size: 12))
+                .foregroundStyle(IBColors.inkSecondary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -508,31 +445,85 @@ struct StatCard: View {
 
 // MARK: - Button Styles
 
+/// Press feedback without any chrome, for rows and bespoke buttons.
+struct IBPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(IBAnimation.press, value: configuration.isPressed)
+    }
+}
+
+/// Tints a row while the pointer is over it, so everything clickable answers
+/// the moment the pointer arrives instead of only on click.
+struct HoverHighlightModifier: ViewModifier {
+    var cornerRadius: CGFloat = IBRadius.sm
+    @State private var isHovered = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(isHovered && isEnabled ? IBColors.ink.opacity(0.05) : Color.clear)
+            )
+            .onHover { isHovered = $0 }
+            .animation(IBAnimation.hover, value: isHovered)
+    }
+}
+
+extension View {
+    func hoverHighlight(cornerRadius: CGFloat = IBRadius.sm) -> some View {
+        modifier(HoverHighlightModifier(cornerRadius: cornerRadius))
+    }
+}
+
+private struct IBFilledButtonBody: View {
+    let configuration: ButtonStyle.Configuration
+    let fill: Color
+    let hoverFill: Color
+    let foreground: Color
+    @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: IBRadius.sm + 1).fill(isHovered ? hoverFill : fill))
+            .contentShape(RoundedRectangle(cornerRadius: IBRadius.sm + 1))
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .onHover { isHovered = $0 }
+            .animation(IBAnimation.hover, value: isHovered)
+            .animation(IBAnimation.press, value: configuration.isPressed)
+    }
+}
+
 struct PrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(isEnabled ? Color.white : IBColors.inkTertiary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-            .background(RoundedRectangle(cornerRadius: IBRadius.md).fill(isEnabled ? IBColors.accentFill : IBColors.surfaceHover))
-            .opacity(configuration.isPressed ? 0.85 : 1)
+        IBFilledButtonBody(
+            configuration: configuration,
+            fill: isEnabled ? IBColors.accentFill : IBColors.surfaceHover,
+            hoverFill: isEnabled ? IBColors.accentFill.opacity(0.88) : IBColors.surfaceHover,
+            foreground: isEnabled ? Color.white : IBColors.inkTertiary
+        )
     }
 }
+
 struct SecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(isEnabled ? IBColors.ink : IBColors.inkTertiary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.surface)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
-            )
-            .opacity(configuration.isPressed ? 0.7 : 1)
+        IBFilledButtonBody(
+            configuration: configuration,
+            fill: IBColors.surfaceRaised,
+            hoverFill: isEnabled ? IBColors.surfaceHover : IBColors.surfaceRaised,
+            foreground: isEnabled ? IBColors.ink : IBColors.inkTertiary
+        )
     }
 }

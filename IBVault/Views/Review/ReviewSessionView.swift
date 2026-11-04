@@ -141,70 +141,36 @@ struct ReviewSessionView: View {
         VStack(spacing: 0) {
             // Progress header
             VStack(spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("ACTIVE RECALL")
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(IBColors.accent)
-                        Text("Card \(currentIndex + 1) of \(cards.count)")
-                            .font(.callout.weight(.bold))
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Card \(currentIndex + 1) of \(cards.count)")
+                        .font(.system(size: 13, weight: .medium).monospacedDigit())
+                        .foregroundStyle(IBColors.ink)
+                        .contentTransition(.numericText())
+                    if let subject = card.subject {
+                        Text("· \(subject.name) \(subject.level)")
+                            .font(IBTypography.caption)
+                            .foregroundStyle(IBColors.inkSecondary)
+                            .lineLimit(1)
+                    }
+                    if let scopeSummary {
+                        Text("· \(scopeSummary)")
+                            .font(IBTypography.caption)
+                            .foregroundStyle(IBColors.inkTertiary)
+                            .lineLimit(1)
                     }
                     Spacer()
-                    HStack(spacing: 4) {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(IBColors.inkTertiary)
-                            .font(.caption)
-                        Text("+\(liveSessionXP) XP")
-                            .font(.callout.bold())
-                            .foregroundStyle(IBColors.accent)
-                    }
+                    Text("\(queueManager.reviewedTodayCount) of \(queueManager.dailyGoal) today")
+                        .font(IBTypography.caption.monospacedDigit())
+                        .foregroundStyle(IBColors.inkTertiary)
+                    Text("+\(liveSessionXP) XP")
+                        .font(IBTypography.caption.monospacedDigit())
+                        .foregroundStyle(IBColors.accent)
+                        .contentTransition(.numericText())
                 }
-
-                ProgressView(value: progress)
-                    .tint(IBColors.accent)
-
-                HStack(spacing: 8) {
-                    Label("\(queueManager.reviewedTodayCount) reviewed today", systemImage: "rectangle.stack")
-                    Spacer()
-                    Text("Daily limit: \(queueManager.dailyMaximum)")
-                }
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(IBColors.inkSecondary)
-
-                if let subject = card.subject {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(IBColors.inkTertiary)
-                            .frame(width: 8, height: 8)
-                        Text(subject.name)
-                            .font(.caption.weight(.medium))
-                        Text("•")
-                            .foregroundStyle(IBColors.inkTertiary)
-                        Text(subject.level)
-                            .font(.caption)
-                            .foregroundStyle(IBColors.inkSecondary)
-                        Spacer()
-                        HStack(spacing: 4) { Circle().fill(proficiencyDotColor(card.proficiency)).frame(width: 6, height: 6); Text(card.proficiency.rawValue) }
-                            .font(.caption)
-                            .foregroundStyle(IBColors.inkSecondary)
-                    }
-                }
-                if let scopeSummary {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.caption2)
-                            .foregroundStyle(IBColors.accent)
-                        Text(scopeSummary)
-                            .font(.caption)
-                            .foregroundStyle(IBColors.inkSecondary)
-                            .lineLimit(2)
-                        Spacer()
-                    }
-                }
+                MasteryBar(progress: progress, height: 3)
             }
-            .padding(24)
-
-            Divider()
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
 
             ScrollView {
                 if let generationError { errorBanner(generationError).padding(.horizontal, 24) }
@@ -215,30 +181,29 @@ struct ReviewSessionView: View {
                     .frame(maxWidth: .infinity)
             }
 
-            Divider()
-
             // Action bar
             HStack(spacing: 12) {
                 if awaitingNextCard {
-                    Label("Rating recorded", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(IBColors.success)
+                    Text("Rating saved")
+                        .font(IBTypography.body13)
+                        .foregroundStyle(IBColors.inkSecondary)
                     Spacer()
                     Button("Next card") { advanceCard() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PrimaryButtonStyle())
                         .keyboardShortcut(.space, modifiers: [])
                 } else if isFlipped {
                     let previews = fsrsPreviews
-                    Text("How well did you recall?")
-                        .font(.callout)
+                    Text("How well did you recall it?")
+                        .font(IBTypography.body13)
                         .foregroundStyle(IBColors.inkSecondary)
                     Spacer()
                     QualityButton(label: "Again", color: IBColors.danger, detail: previews[.again]?.intervalLabel) { rateCard(.again) }
                         .keyboardShortcut("1", modifiers: [])
                     QualityButton(label: "Hard", color: IBColors.warning, detail: previews[.hard]?.intervalLabel) { rateCard(.hard) }
                         .keyboardShortcut("2", modifiers: [])
-                    QualityButton(label: "Good", color: IBColors.accent, detail: previews[.good]?.intervalLabel) { rateCard(.good) }
+                    QualityButton(label: "Good", color: IBColors.ink, detail: previews[.good]?.intervalLabel) { rateCard(.good) }
                         .keyboardShortcut("3", modifiers: [])
-                    QualityButton(label: "Easy", color: IBColors.success, detail: previews[.easy]?.intervalLabel) { rateCard(.easy) }
+                    QualityButton(label: "Easy", color: IBColors.accent, detail: previews[.easy]?.intervalLabel) { rateCard(.easy) }
                         .keyboardShortcut("4", modifiers: [])
                 } else if card.cardStyle == .multipleChoice,
                           CardGeneratorService.validatedChoices(back: card.back, choices: card.choices) != nil {
@@ -251,19 +216,15 @@ struct ReviewSessionView: View {
                         if reduceMotion { isFlipped = true } else { withAnimation(IBAnimation.snappy) { isFlipped = true } }
                         IBHaptics.light()
                     } label: {
-                        HStack {
-                            Image(systemName: "eye.fill")
-                            Text("Reveal Answer")
-                        }
-                        .frame(minWidth: 180)
+                        Text("Show answer").frame(minWidth: 160)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(PrimaryButtonStyle())
                     .keyboardShortcut(.space, modifiers: [])
                     Spacer()
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
             .background(IBColors.surface)
         }
     }
@@ -390,7 +351,7 @@ struct ReviewSessionView: View {
             day = try ReviewDailyLimitPolicy.day(in: context)
             guard day.canReview(card) else {
                 generationError = day.remaining == 0
-                    ? "Today's \(day.maximum)-card allowance is complete. More reviews are available tomorrow."
+                    ? "You've hit your \(day.maximum)-card daily limit. Turn it off in Settings under Flashcards to keep going."
                     : "This card or a matching copy has already been reviewed today."
                 return
             }
@@ -532,29 +493,37 @@ struct ReviewSessionView: View {
                     errorBanner(generationError)
                 }
                 Spacer()
-                ZStack {
-                Circle()
-                    .fill(emptyStateTint.opacity(0.08))
-                    .frame(width: 100, height: 100)
-                Image(systemName: emptyStateSymbol)
-                    .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(emptyStateTint)
-            }
+            Image(systemName: emptyStateSymbol)
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(emptyStateTint)
             Text(emptyStateTitle)
-                .font(.title2.bold())
+                .font(IBTypography.title3)
             Text(emptyStateMessage)
+                .font(IBTypography.body13)
                 .foregroundStyle(IBColors.inkSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 350)
-            Button("Close") { dismiss() }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+            HStack(spacing: 8) {
+                if queueManager.isLimitEnforced && queueManager.remainingDailyAllowance == 0 {
+                    Button("Keep reviewing") { liftDailyLimit() }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .help("Turns off the daily limit. You can turn it back on in Settings.")
+                }
+                Button("Close") { dismiss() }
+                    .buttonStyle(SecondaryButtonStyle())
+            }
             Spacer()
         }
     }
 
+    private func liftDailyLimit() {
+        UserDefaults.standard.set(false, forKey: ReviewDailyLimitPolicy.enforceLimitKey)
+        generationError = nil
+        loadCards()
+    }
+
     private var emptyStateTitle: String {
-        if queueManager.remainingDailyAllowance == 0 { return "Done for today" }
+        if queueManager.remainingDailyAllowance == 0 { return "Daily limit reached" }
         return studySessions.isEmpty ? "No Revision Yet" : "All Caught Up"
     }
 
@@ -576,55 +545,31 @@ struct ReviewSessionView: View {
                     .frame(maxWidth: 500)
             }
 
-            ZStack {
-                Circle()
-                    .fill(IBColors.accent.opacity(0.08))
-                    .frame(width: 100, height: 100)
-                Image(systemName: "trophy.fill")
-                    .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(IBColors.inkTertiary)
-            }
-            .glow(color: IBColors.inkTertiary, radius: 20)
+            Text("Session complete")
+                .font(IBTypography.pageTitle)
+                .foregroundStyle(IBColors.ink)
 
-            Text("Session Complete!")
-                .font(.title.bold())
-
-            // Stats
-            HStack(spacing: 0) {
-                StatCard(value: "\(completedCardCount)", label: "Cards", color: IBColors.accent, icon: "square.stack.fill")
-                Divider().frame(height: 50)
-                StatCard(value: "+\(sessionXP)", label: "XP Earned", color: IBColors.inkTertiary, icon: "star.fill")
-                Divider().frame(height: 50)
-                StatCard(value: "\(completedRetentionPercent)%", label: "Retention", color: IBColors.success, icon: "brain.head.profile")
+            HStack(spacing: 32) {
+                StatCard(value: "\(completedCardCount)", label: "Cards")
+                StatCard(value: "+\(sessionXP)", label: "XP earned")
+                StatCard(value: "\(completedRetentionPercent)%", label: "Recalled")
             }
-            .padding(.vertical, 16)
-            .glassCard()
-            .frame(maxWidth: 500)
+            .frame(maxWidth: 420)
 
             HStack(spacing: 12) {
                 Button {
                     showStudyGuide = true
                 } label: {
-                    HStack {
-                        Image(systemName: "sparkles")
-                        Text("ARIA Analysis")
-                    }
-                    .frame(minWidth: 140)
+                    Text("Review weak topics").frame(minWidth: 130)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .buttonStyle(SecondaryButtonStyle())
 
                 Button {
                     dismiss()
                 } label: {
-                    HStack {
-                        Image(systemName: "checkmark")
-                        Text("Done")
-                    }
-                    .frame(minWidth: 140)
+                    Text("Done").frame(minWidth: 130)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(PrimaryButtonStyle())
             }
 
             Spacer()
@@ -635,7 +580,7 @@ struct ReviewSessionView: View {
     private var emptyStateMessage: String {
         if let error = queueManager.lastRefreshError { return error }
         if queueManager.remainingDailyAllowance == 0 {
-            return "You've reached today's \(queueManager.dailyMaximum)-card allowance. Your remaining cards will wait until tomorrow."
+            return "You've reached the \(queueManager.dailyMaximum)-card limit you set for today. The remaining cards can wait until tomorrow, or you can keep going."
         }
         if practiceCards != nil {
             return "These cards have already been reviewed today. You can still use free practice without changing mastery or your schedule."
@@ -666,12 +611,7 @@ struct ReviewSessionView: View {
                 .font(.callout)
                 .foregroundStyle(IBColors.danger)
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(IBColors.danger.opacity(0.06))
-        )
         .padding(.horizontal, 24)
     }
 

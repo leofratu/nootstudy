@@ -3,7 +3,7 @@ import Foundation
 import SwiftData
 @testable import IBVault
 
-@Suite("ReviewQueueManager Tests")
+@Suite("ReviewQueueManager Tests", .enforcedDailyLimit)
 struct ReviewQueueManagerTests {
     
     @MainActor
@@ -200,7 +200,7 @@ struct ReviewQueueManagerTests {
     }
 }
 
-@Suite("Daily Review Limit Policy")
+@Suite("Daily Review Limit Policy", .enforcedDailyLimit)
 struct ReviewDailyLimitPolicyTests {
     @Test("Intensity suggests a goal while the saved personal goal takes precedence")
     func adaptsDailyMaximum() {
@@ -220,15 +220,15 @@ struct ReviewDailyLimitPolicyTests {
         }
         let alreadyReviewed = Set(cards.prefix(7).map(\.id))
 
-        let limited = ReviewDailyLimitPolicy.limitedCards(cards, reviewedCardIDs: alreadyReviewed)
+        let limited = ReviewDailyLimitPolicy.limitedCards(cards, reviewedCardIDs: alreadyReviewed, maximum: 40)
 
         #expect(limited.count == 33)
         #expect(limited.allSatisfy { !alreadyReviewed.contains($0.id) })
-        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: alreadyReviewed) == 33)
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: alreadyReviewed, maximum: 40) == 33)
     }
 }
 
-@Suite("Review Queue Recovery")
+@Suite("Review Queue Recovery", .enforcedDailyLimit)
 struct ReviewQueueRecoveryTests {
     @MainActor
     @Test("refresh exposes all due cards")
@@ -254,7 +254,8 @@ struct ReviewQueueRecoveryTests {
     @Test("intensity caps remain bounded")
     func intensityCapsRemainBounded() {
         #expect(ReviewDailyLimitPolicy.maximumCards(for: .intensive) == 30)
-        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage, dailyGoal: 100) == 40)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage, dailyGoal: 100) == 100)
+        #expect(ReviewDailyLimitPolicy.maximumCards(for: .belowAverage, dailyGoal: 5000) == ReviewDailyLimitPolicy.maximumCards)
     }
 
     @Test("limited cards preserve source order")
@@ -272,7 +273,7 @@ struct ReviewQueueRecoveryTests {
 }
 
 
-@Suite("Daily allowance regressions")
+@Suite("Daily allowance regressions", .enforcedDailyLimit)
 @MainActor
 struct DailyAllowanceRegressionTests {
     private func container() throws -> ModelContainer {
@@ -319,7 +320,7 @@ struct DailyAllowanceRegressionTests {
         #expect(manager.totalDueBacklogCount == 7)
     }
 
-    @Test func aLargeBacklogCannotExceedFortyEvenWithoutAProfile() throws {
+    @Test func anEnforcedLimitStopsAtTheDefaultGoalWithoutAProfile() throws {
         let store = try container()
         defer { withExtendedLifetime(store) {} }
         let context = store.mainContext
@@ -329,9 +330,9 @@ struct DailyAllowanceRegressionTests {
             context.insert(card)
         }
         let day = try ReviewDailyLimitPolicy.day(in: context)
-        #expect(day.limited(day.backlog).count == 40)
-        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: [], maximum: 999) == 40)
-        let ids = Set((0..<79).map { _ in UUID() })
+        #expect(day.limited(day.backlog).count == StudyIntensity.average.dailyCardSuggestion)
+        #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: [], maximum: 999) == 999)
+        let ids = Set((0..<ReviewDailyLimitPolicy.maximumCards).map { _ in UUID() })
         #expect(ReviewDailyLimitPolicy.allowance(reviewedCardIDs: ids) == 0)
     }
 

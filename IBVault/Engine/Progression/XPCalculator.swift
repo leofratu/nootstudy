@@ -4,9 +4,13 @@ import Foundation
 /// decides what that work is worth.
 nonisolated enum XPCalculator: Sendable {
 
-    // A focused hour now earns 180 XP at average intensity, comparable to
-    // a useful retrieval set. Previously time-based sessions earned only 60.
-    static let xpPerStudyMinute = 3.0
+    // A focused hour earns 300 XP at average intensity, about what 30 cards
+    // rated Good earn, so deep study is not worth less than clicking through a
+    // queue. Finishing a real session pays a further flat bonus.
+    static let xpPerStudyMinute = 5.0
+    static let sessionCompletionBonus = 50.0
+    /// Below this a session is a check-in, so it earns no completion bonus.
+    static let completionBonusMinimumMinutes = 10.0
 
     /// XP for a completed review session.
     static func xp(forQualities qualities: [RecallQuality], intensity: StudyIntensity) -> Int {
@@ -23,5 +27,11 @@ nonisolated enum XPCalculator: Sendable {
         // when converting an out-of-range Double to Int.
         guard earned < Double(Int.max) else { return 0 }
         return Int(earned)
+    }
+
+    /// Bonus for seeing a planned session through to its check-in.
+    static func completionBonus(forStudyMinutes minutes: Double, intensity: StudyIntensity) -> Int {
+        guard minutes.isFinite, minutes >= completionBonusMinimumMinutes else { return 0 }
+        return Int(sessionCompletionBonus * intensity.xpMultiplier)
     }
 }
