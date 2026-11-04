@@ -182,7 +182,7 @@ struct IntegrationSettingsSection: View {
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
                                         .fill(IBColors.canvasDeep)
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(IBColors.border, lineWidth: 1))
+                                        
                                 )
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)

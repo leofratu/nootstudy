@@ -180,7 +180,7 @@ struct ARIAReviewLimitTests {
         try await ARIAAppToolE2ETests().scenario(scenario)
     }
 
-    @Test func reviewActionCannotReopenAnExhaustedDailyQueue() async throws {
+    @Test(.enforcedDailyLimit) func reviewActionCannotReopenAnExhaustedDailyQueue() async throws {
         let container = try ARIAAppToolE2ETests().makeContainer()
         let context = container.mainContext
         try E2EScenarioLibrary.standardSeed(context)
@@ -673,7 +673,7 @@ nonisolated enum E2EScenarioLibrary {
             seed: standardSeed,
             verify: { ctx in
                 let profile = try ctx.fetch(FetchDescriptor<UserProfile>()).first
-                return profile?.dailyGoal == 40
+                return profile?.dailyGoal == 55
             },
             summaryContains: ["daily goal"]
         ))

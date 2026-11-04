@@ -66,7 +66,7 @@ struct NewStudySessionView: View {
     }
 
     private var recommendedFlashcardCount: Int {
-        min(50, max(8, max(selectedSubtopicList.count, selectedTopicList.count) * 4))
+        min(CardGenerationOptions.maximumCount, max(8, max(selectedSubtopicList.count, selectedTopicList.count) * 4))
     }
 
     private var selectedTopicSummary: String {
@@ -396,7 +396,7 @@ struct NewStudySessionView: View {
                 .foregroundStyle(.secondary)
 
                 Label(
-                    "Recall is handled by the daily flashcard queue (up to \(ReviewDailyLimitPolicy.maximumCards) cards), not extra calendar sessions.",
+                    "Recall is handled by your flashcard review queue, not extra calendar sessions.",
                     systemImage: "rectangle.stack.badge.play"
                 )
                 .font(.caption)

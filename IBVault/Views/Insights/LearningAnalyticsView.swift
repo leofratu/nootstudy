@@ -89,7 +89,7 @@ struct LearningAnalyticsView: View {
             HStack(spacing: 0) {
                 VStack(spacing: 4) {
                     Text("\(weekMinutes)")
-                        .font(.system(size: 32, weight: .heavy, design: .rounded))
+                        .font(.system(size: 32, weight: .heavy))
                         .foregroundStyle(IBColors.accent)
                     Text("minutes this week")
                         .font(.caption)
@@ -101,7 +101,7 @@ struct LearningAnalyticsView: View {
                 
                 VStack(spacing: 4) {
                     Text("\(dayAvg)")
-                        .font(.system(size: 32, weight: .heavy, design: .rounded))
+                        .font(.system(size: 32, weight: .heavy))
                         .foregroundStyle(IBColors.success)
                     Text("avg per day")
                         .font(.caption)
@@ -179,7 +179,7 @@ struct LearningAnalyticsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: "brain.head.profile")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(IBColors.plum)
                 Text("Retention Rate")
                     .font(.headline)
                 Spacer()
@@ -197,13 +197,13 @@ struct LearningAnalyticsView: View {
                         .frame(width: 80, height: 80)
                     Circle()
                         .trim(from: 0, to: retention)
-                        .stroke(.purple, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .stroke(IBColors.plum, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                         .frame(width: 80, height: 80)
                         .rotationEffect(.degrees(-90))
                     
                     Text("\(Int(retention * 100))%")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(IBColors.plum)
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -219,7 +219,7 @@ struct LearningAnalyticsView: View {
     private func retentionLabel(_ text: String, percentage: Double) -> some View {
         HStack {
             Circle()
-                .fill(text == "Remembered" ? .purple : .gray)
+                .fill(text == "Remembered" ? IBColors.plum : IBColors.inkTertiary)
                 .frame(width: 8, height: 8)
             Text(text)
                 .font(.caption)

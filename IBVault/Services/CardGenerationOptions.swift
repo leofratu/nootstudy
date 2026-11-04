@@ -86,6 +86,12 @@ nonisolated enum CardTone: String, Codable, CaseIterable, Identifiable, Sendable
 /// User-facing generation settings for the Card Studio. Persisted raw values
 /// remain compatible; new sets default to six balanced cards.
 nonisolated struct CardGenerationOptions: Codable, Equatable, Sendable {
+    /// Largest set one generation can produce.
+    static let maximumCount = 200
+    /// Providers return better cards from smaller asks, and a failure then costs
+    /// one slice rather than the whole set, so big sets are requested in slices.
+    static let requestSliceSize = 25
+
     var count: Int
     var difficulty: CardDifficulty
     var style: CardStyle
@@ -119,7 +125,7 @@ nonisolated struct CardGenerationOptions: Codable, Equatable, Sendable {
     static func preferences(in defaults: UserDefaults) -> CardGenerationOptions {
         let count = defaults.object(forKey: "cardDefaultCount") as? Int ?? 6
         return CardGenerationOptions(
-            count: min(max(count, 1), 50),
+            count: min(max(count, 1), maximumCount),
             difficulty: CardDifficulty(rawValue: defaults.string(forKey: "cardDefaultDifficulty") ?? "") ?? .exam,
             style: CardStyle(rawValue: defaults.string(forKey: "cardDefaultStyle") ?? "") ?? .basic,
             tone: CardTone(rawValue: defaults.string(forKey: "cardDefaultTone") ?? "") ?? .balanced
@@ -127,7 +133,7 @@ nonisolated struct CardGenerationOptions: Codable, Equatable, Sendable {
     }
 
     func savePreferences(in defaults: UserDefaults = .standard) {
-        defaults.set(min(max(count, 1), 50), forKey: "cardDefaultCount")
+        defaults.set(min(max(count, 1), Self.maximumCount), forKey: "cardDefaultCount")
         defaults.set(difficulty.rawValue, forKey: "cardDefaultDifficulty")
         defaults.set(style.rawValue, forKey: "cardDefaultStyle")
         defaults.set(tone.rawValue, forKey: "cardDefaultTone")

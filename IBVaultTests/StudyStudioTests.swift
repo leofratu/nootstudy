@@ -192,7 +192,7 @@ struct StudyStudioTests {
                                       styles: [.basic, .cloze], count: 3)
         }
         #expect(throws: CardBatchError.self) {
-            try CardBatchService.plan(scopes: [.init(topic: "Cells")], styles: [.basic], count: 51)
+            try CardBatchService.plan(scopes: [.init(topic: "Cells")], styles: [.basic], count: CardGenerationOptions.maximumCount + 1)
         }
     }
 
@@ -385,12 +385,26 @@ struct ExamMarkerTests {
         for response in [
             valid.replacingOccurrences(of: #""awarded":1"#, with: #""awarded":3"#),
             valid.replacingOccurrences(of: #""awarded":1"#, with: #""awarded":-1"#),
-            valid.replacingOccurrences(of: #""available":2"#, with: #""available":1"#),
             valid.replacingOccurrences(of: #""available":2"#, with: #""available":0"#),
             "Not JSON"
         ] {
             #expect(throws: ExamMarkingError.self) { try ExamMarkingService.parse(response, maximumMarks: 2) }
         }
+    }
+
+    @Test func criteriaThatMissThePaperTotalAreRescaledNotThrownAway() throws {
+        let result = try ExamMarkingService.parse(valid, maximumMarks: 10)
+        #expect(result.available == 10)
+        #expect(result.awarded == 5)
+    }
+
+    @Test func markingToleratesUnescapedLatexAndExtraNextSteps() throws {
+        let response = valid
+            .replacingOccurrences(of: "Include the concentration gradient.", with: #"Use $\frac{a}{b}$."#)
+            .replacingOccurrences(of: #""Practise describing the gradient.""#, with: #""a","b","c","d","e","f""#)
+        let result = try ExamMarkingService.parse(response, maximumMarks: 2)
+        #expect(result.criteria[0].feedback.contains(#"\frac"#))
+        #expect(result.nextSteps.count == 5)
     }
 
     @Test func requiresEvidenceAndActionableFeedback() {

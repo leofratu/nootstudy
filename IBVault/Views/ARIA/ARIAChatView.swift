@@ -279,13 +279,13 @@ struct ARIAChatView: View {
                     Text("ARIA")
                         .font(.system(size: 15, weight: .bold))
                     Text("STUDY COMPANION")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .font(.system(size: 9, weight: .bold))
                         .tracking(0.6)
                         .foregroundStyle(IBColors.inkTertiary)
                 }
                 Spacer(minLength: 4)
                 Text("\(visibleSessions.count)")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(IBColors.inkSecondary)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
@@ -1092,10 +1092,7 @@ private struct ARIAThinkingIndicator: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.border, lineWidth: 1)
-                    )
+                    
             )
             Spacer()
         }
@@ -1570,7 +1567,7 @@ private struct NativeMathBlockView: View {
                 .padding(.vertical, 12)
         }
         .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.codeBlockBackground))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
+        
     }
 
     @ViewBuilder
@@ -1816,10 +1813,7 @@ private struct ARIADiagramView: View {
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(IBColors.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(IBColors.border, lineWidth: 1)
-                )
+                
         )
     }
 
@@ -2122,10 +2116,7 @@ private struct ARIAGenerativeCanvasView: View {
                 .frame(height: max(canvasHeight, 210))
                 .background(IBColors.canvas.opacity(0.82))
                 .clipShape(RoundedRectangle(cornerRadius: 7))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7)
-                        .stroke(IBColors.border.opacity(0.75), lineWidth: 1)
-                )
+                
             }
 
             HStack(spacing: 10) {
@@ -2422,7 +2413,7 @@ private struct CodeBlockView: View {
             .background(IBColors.codeBlockBackground)
         }
         .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.codeBlockBackground))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
+        
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

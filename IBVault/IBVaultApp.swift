@@ -196,7 +196,7 @@ struct IBVaultCommands: Commands {
         }
 
         CommandMenu("Assistant") {
-            Button("ARIA") { post(.showARIA) }
+            Button("Study Coach") { post(.showARIA) }
                 .keyboardShortcut("5", modifiers: [.command])
         }
 

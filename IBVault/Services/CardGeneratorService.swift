@@ -205,7 +205,7 @@ struct CardGeneratorService {
                 subject: subject,
                 topicName: topicName,
                 subtopic: subtopic,
-                count: min(max(requestedCount, 1), 50),
+                count: min(max(requestedCount, 1), CardGenerationOptions.maximumCount),
                 startingIndex: localStartingIndex,
                 profile: profile,
                 options: effectiveOptions
@@ -239,7 +239,7 @@ struct CardGeneratorService {
         }
         // Bounded regardless of what the caller passes, so a rogue or stale
         // cardCount can never trigger an unbounded generation loop.
-        let targetCount = min(max(requestedCount, 1), 50)
+        let targetCount = min(max(requestedCount, 1), CardGenerationOptions.maximumCount)
         var collectedCards: [StudyCard] = []
         var lastError: (any Error)?
 
@@ -277,7 +277,9 @@ struct CardGeneratorService {
                         messages: [GeminiMessage(role: "user", text: prompt)],
                         systemInstruction: systemPrompt,
                         modelOverride: model,
-                        timeout: model == AIConfiguration.selectedModel ? 120 : 90
+                        // `model` is nil for non-Gemini providers, which are also
+                        // the slow ones: a 25-card slice needs longer than 90s.
+                        timeout: model == nil ? 300 : (model == AIConfiguration.selectedModel ? 120 : 90)
                     )
                     let dtos = try await Task.detached(priority: .userInitiated) {
                         try Self.extractCardDTOs(from: response)
@@ -372,7 +374,7 @@ struct CardGeneratorService {
         }
         guard !facts.isEmpty else { return [] }
         let metadata = SyllabusSeeder.metadata(for: subject.name)
-        let safeCount = min(max(count, 0), min(50, max(0, facts.count - max(startingIndex, 0))))
+        let safeCount = min(max(count, 0), min(CardGenerationOptions.maximumCount, max(0, facts.count - max(startingIndex, 0))))
         let requestedStyle = options?.style ?? .basic
         return (0..<safeCount).map { index in
             let absoluteIndex = max(startingIndex, 0) + index

@@ -23,11 +23,11 @@ struct XPCalculatorTests {
         #expect(XPCalculator.xp(forQualities: [], intensity: .intensive) == 0)
     }
 
-    @Test("Study XP awards three points per minute scaled by intensity, rounded down")
+    @Test("Study XP awards five points per minute scaled by intensity, rounded down")
     func studyXPPerMinute() {
-        #expect(XPCalculator.xp(forStudyMinutes: 50, intensity: .average) == 150)
-        #expect(XPCalculator.xp(forStudyMinutes: 50, intensity: .intensive) == 225)
-        #expect(XPCalculator.xp(forStudyMinutes: 10.9, intensity: .average) == 32)
+        #expect(XPCalculator.xp(forStudyMinutes: 50, intensity: .average) == 250)
+        #expect(XPCalculator.xp(forStudyMinutes: 50, intensity: .intensive) == 375)
+        #expect(XPCalculator.xp(forStudyMinutes: 10.9, intensity: .average) == 54)
     }
 
     @Test("Negative or zero study minutes never award XP")
@@ -41,5 +41,13 @@ struct XPCalculatorTests {
         #expect(XPCalculator.xp(forStudyMinutes: .nan, intensity: .average) == 0)
         #expect(XPCalculator.xp(forStudyMinutes: .infinity, intensity: .average) == 0)
         #expect(XPCalculator.xp(forStudyMinutes: .greatestFiniteMagnitude, intensity: .intensive) == 0)
+    }
+
+    @Test("Completing a real session earns a bonus, a brief check-in does not")
+    func completionBonus() {
+        #expect(XPCalculator.completionBonus(forStudyMinutes: 9.9, intensity: .average) == 0)
+        #expect(XPCalculator.completionBonus(forStudyMinutes: 10, intensity: .average) == 50)
+        #expect(XPCalculator.completionBonus(forStudyMinutes: 60, intensity: .intensive) == 75)
+        #expect(XPCalculator.completionBonus(forStudyMinutes: .nan, intensity: .average) == 0)
     }
 }

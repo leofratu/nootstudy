@@ -60,8 +60,10 @@ enum IBAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Color Palette (dynamic light/dark; dark is default)
+// MARK: - Color Palette (dynamic light/dark)
 
+/// Paper and ink with one pen-blue accent. Hue is reserved for meaning: blue is
+/// "act here", green/amber/red are outcomes, and everything else stays neutral.
 struct IBColors {
     // Helper: dynamic Color from light/dark hex pair
     private static func dynamic(light: String, dark: String) -> Color {
@@ -70,68 +72,73 @@ struct IBColors {
         }))
     }
 
-    // Core surfaces — flat, no gradient/glass
-    static let canvas = dynamic(light: "F6F3EB", dark: "151D1B")
-    static let canvasDeep = dynamic(light: "EAE7DD", dark: "101714")
-    static let surface = dynamic(light: "FFFEF9", dark: "1D2723")
-    static let surfaceRaised = dynamic(light: "EFEDE2", dark: "25332C")
-    static let surfaceHover = dynamic(light: "E6EBDD", dark: "304036")
-    static let border = dynamic(light: "D6D9CD", dark: "3B4B40")
-    static let borderStrong = dynamic(light: "7A8679", dark: "788C79")
+    // Core surfaces
+    static let canvas = dynamic(light: "F5F5F3", dark: "171717")
+    static let canvasDeep = dynamic(light: "ECECE9", dark: "111111")
+    static let surface = dynamic(light: "FFFFFF", dark: "212120")
+    static let surfaceRaised = dynamic(light: "EEEEEB", dark: "2A2A29")
+    static let surfaceHover = dynamic(light: "E5E5E1", dark: "343433")
+    static let border = dynamic(light: "E2E2DE", dark: "2F2F2E")
+    static let borderStrong = dynamic(light: "A6A6A0", dark: "5C5C59")
     static let cardBorder = border
 
     // Ink
-    static let ink = dynamic(light: "20382B", dark: "F1F2E6")
-    static let inkSecondary = dynamic(light: "536052", dark: "BCC8B8")
-    static let inkTertiary = dynamic(light: "64705F", dark: "A0B09C")
+    static let ink = dynamic(light: "1A1A19", dark: "EDEDEA")
+    static let inkSecondary = dynamic(light: "5C5C58", dark: "B3B3AE")
+    static let inkTertiary = dynamic(light: "71716C", dark: "90908B")
     static let secondaryText = inkSecondary
     static let tertiaryText = inkTertiary
     static let mutedGray = inkTertiary
     static let subduedInk = inkSecondary
     static let softWhite = ink
 
-    // Accent — single accent system
+    // Accent
     /// Accent used for text, tint, icons
-    static let accent = dynamic(light: "386044", dark: "C3DF91")
+    static let accent = dynamic(light: "2348D2", dark: "8FAAFF")
     /// Accent fill used for primary button backgrounds (white text)
-    static let accentFill = dynamic(light: "34533B", dark: "426144")
-    static let highlight = dynamic(light: "E2EEBC", dark: "34432C")
+    static let accentFill = dynamic(light: "2348D2", dark: "3A5BE0")
+    /// Quiet selected-state background
+    static let highlight = dynamic(light: "E7ECFD", dark: "272E47")
     static let electricBlue = accent
     static let electricBlueMuted = accentFill
 
-    // Legacy semantic aliases kept neutral-compiled
-    static let teal = dynamic(light: "286B70", dark: "91CFCA")
-    static let coral = dynamic(light: "A04E36", dark: "E4AB8F")
-    static let gold = dynamic(light: "83621D", dark: "E4CE8E")
+    // Muted hues that tell subjects apart
+    static let teal = dynamic(light: "1F7A80", dark: "6CC4C9")
+    static let coral = dynamic(light: "B4532F", dark: "E9976F")
+    static let gold = dynamic(light: "8C6A12", dark: "DDB85A")
+    static let plum = dynamic(light: "7A4A9E", dark: "BE98E0")
     static let streakOrange = coral
 
-    // Semantic — only where meaning is real
-    static let success = dynamic(light: "336C40", dark: "AED3A0")
-    static let warning = dynamic(light: "B7791F", dark: "F5B04C")
-    static let danger = dynamic(light: "C0392B", dark: "FF6B6B")
+    // Semantic: only where the meaning is real
+    static let success = dynamic(light: "1F7A4A", dark: "68C08F")
+    static let warning = dynamic(light: "A8650F", dark: "EBA94A")
+    static let danger = dynamic(light: "C4342B", dark: "F5736B")
 
-    // Subject accents — now neutral (single accent discipline)
+    // Subject accents
     static let englishColor = coral
-    static let russianColor = gold
-    static let biologyColor = accent
-    static let mathColor = teal
+    static let russianColor = plum
+    static let biologyColor = success
+    static let mathColor = accent
     static let economicsColor = gold
-    static let businessColor = coral
-    static let advancedMathColor = teal
-    static let universeColor = gold
-    static let startupsColor = accent
+    static let businessColor = teal
+    static let advancedMathColor = accent
+    static let universeColor = plum
+    static let startupsColor = teal
 
     static func subjectColor(for name: String) -> Color {
         switch name {
-        case let name where name.contains("Math"): teal
-        case let name where name.contains("English") || name.contains("Business"): coral
-        case let name where name.contains("Economics") || name.contains("Russian"): gold
-        default: accent
+        case let name where name.contains("Math"): mathColor
+        case let name where name.contains("English"): englishColor
+        case let name where name.contains("Business"): businessColor
+        case let name where name.contains("Economics"): economicsColor
+        case let name where name.contains("Russian"): russianColor
+        case let name where name.contains("Biology"): biologyColor
+        default: inkTertiary
         }
     }
 
     // Code block background for dark chat
-    static let codeBlockBackground = dynamic(light: "F5F6F8", dark: "0E1219")
+    static let codeBlockBackground = dynamic(light: "F0F0ED", dark: "101010")
 }
 
 // MARK: - Color Hex Initializer + NSColor hex
@@ -182,8 +189,7 @@ struct IBTypography {
     static let stat = Font.system(size: 26, weight: .bold, design: .default).monospacedDigit()
     static let bigStat = Font.system(size: 40, weight: .bold, design: .default).monospacedDigit()
 
-    // Page title 24 semibold; eyebrow 11 semibold uppercase tracking ~0.8; section 15 semibold
-    static let pageTitle = Font.custom("Georgia", size: 34, relativeTo: .largeTitle)
+    static let pageTitle = Font.system(size: 26, weight: .semibold, design: .default)
     static let eyebrow = Font.system(size: 11, weight: .semibold, design: .default)
     static let sectionTitle = Font.system(size: 15, weight: .semibold, design: .default)
     static let body13 = Font.system(size: 13, weight: .regular, design: .default)
@@ -208,10 +214,10 @@ struct IBSpacing {
 // MARK: - Corner Radii
 struct IBRadius {
     static let sm: CGFloat = 6
-    static let md: CGFloat = 10
-    static let lg: CGFloat = 14
-    static let xl: CGFloat = 20
-    static let card: CGFloat = 16
+    static let md: CGFloat = 8
+    static let lg: CGFloat = 10
+    static let xl: CGFloat = 14
+    static let card: CGFloat = 10
 }
 
 // MARK: - Shadows — killed, flat system uses none
@@ -237,40 +243,39 @@ struct IBGradient {
     }
 }
 
-// MARK: - Glass Card Modifier -> flat SurfaceCard
-struct GlassCardModifier: ViewModifier {
-    var cornerRadius: CGFloat = IBRadius.card
-    var isProminent: Bool = false
+// MARK: - Surface
 
-    func body(content: Content) -> some View {
-        content
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(isProminent ? IBColors.surfaceRaised : IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius)
-                            .stroke(IBColors.border, lineWidth: 1)
-                    )
-            )
+private struct SurfaceDepthKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
+extension EnvironmentValues {
+    /// How many surfaces enclose this view. Only the outermost one paints, so a
+    /// card placed inside another card can never read as a box in a box.
+    var surfaceDepth: Int {
+        get { self[SurfaceDepthKey.self] }
+        set { self[SurfaceDepthKey.self] = newValue }
     }
 }
 
-// Keep alias for API compat
 struct SurfaceCardModifier: ViewModifier {
     var cornerRadius: CGFloat = IBRadius.card
     var isProminent: Bool = false
+    @Environment(\.surfaceDepth) private var depth
+
     func body(content: Content) -> some View {
         content
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(isProminent ? IBColors.surfaceRaised : IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius)
-                            .stroke(IBColors.border, lineWidth: 1)
-                    )
-            )
+            .environment(\.surfaceDepth, depth + 1)
+            .background {
+                if depth == 0 {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(isProminent ? IBColors.surfaceRaised : IBColors.surface)
+                }
+            }
     }
 }
+
+typealias GlassCardModifier = SurfaceCardModifier
 
 // MARK: - Glow Modifier — disabled in flat system
 struct GlowModifier: ViewModifier {
@@ -310,4 +315,9 @@ struct IBAnimation {
     static let gentle = Animation.spring(response: 0.6, dampingFraction: 0.9)
     static let bounce = Animation.spring(response: 0.4, dampingFraction: 0.6)
     static let premium = Animation.interpolatingSpring(stiffness: 250, damping: 22)
+    /// Pointer feedback must feel instant; anything slower reads as lag.
+    static let hover = Animation.easeOut(duration: 0.1)
+    static let press = Animation.easeOut(duration: 0.08)
+    /// Moving between pages and tabs.
+    static let page = Animation.easeOut(duration: 0.14)
 }

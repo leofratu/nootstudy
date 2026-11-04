@@ -19,10 +19,8 @@ struct TopicSelectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label("Topics", systemImage: "list.bullet")
-                    .font(IBTypography.headline)
+                Text("\(selection.count) selected").font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                 Spacer()
-                Text("\(selection.count) selected").font(IBTypography.caption).foregroundStyle(IBColors.accent)
                 if !selection.isEmpty {
                     Button("Clear") { selection.removeAll() }.buttonStyle(.borderless)
                 }
@@ -36,16 +34,16 @@ struct TopicSelectionView: View {
             } else if !curriculum.flatMap(\.topics).contains(where: matches) {
                 ContentUnavailableView.search(text: search)
             } else {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(curriculum, id: \.name) { unit in
                         let visible = unit.topics.filter(matches)
                         if !visible.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(unit.name.uppercased())
-                                    .font(IBTypography.captionBold)
-                                    .tracking(1)
-                                    .foregroundStyle(IBColors.inkSecondary)
-                                    .padding(.top, 4)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(unit.name)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(IBColors.inkTertiary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.bottom, 4)
                                 ForEach(visible, id: \.name) { topic in
                                     topicRow(topic)
                                 }
@@ -62,8 +60,8 @@ struct TopicSelectionView: View {
         let whole = CardTopicSelection(topic: topic.name)
         let selected = selection.contains(whole)
         let partialCount = selection.filter { $0.topic == topic.name && !$0.subtopic.isEmpty }.count
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
                 Button {
                     if selected { selection.remove(whole) }
                     else {
@@ -71,38 +69,41 @@ struct TopicSelectionView: View {
                         selection.insert(whole)
                     }
                 } label: {
-                    HStack(alignment: .top, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: selected ? "checkmark.square.fill" : (partialCount > 0 ? "minus.square.fill" : "square"))
-                            .font(.system(size: 17))
+                            .font(.system(size: 14))
                             .foregroundStyle(selected || partialCount > 0 ? IBColors.accent : IBColors.inkSecondary)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(topic.name).font(.system(size: 13, weight: .semibold))
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(partialCount > 0 ? "\(partialCount) subtopics selected" : "\(topic.subtopics.count) subtopics")
-                                .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
-                        }
-                        Spacer(minLength: 0)
+                        Text(topic.name).font(.system(size: 13))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        Text(partialCount > 0 ? "\(partialCount) of \(topic.subtopics.count)" : "\(topic.subtopics.count)")
+                            .font(IBTypography.caption.monospacedDigit()).foregroundStyle(IBColors.inkTertiary)
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IBPressStyle())
                 .accessibilityLabel("Select \(topic.name)")
                 .accessibilityValue(selected ? "Selected" : partialCount > 0 ? "Partially selected" : "Not selected")
                 if !topic.subtopics.isEmpty {
                     Button {
-                        if expanded.contains(topic.name) { expanded.remove(topic.name) }
-                        else { expanded.insert(topic.name) }
+                        withAnimation(IBAnimation.snappy) {
+                            if expanded.contains(topic.name) { expanded.remove(topic.name) }
+                            else { expanded.insert(topic.name) }
+                        }
                     } label: {
-                        Image(systemName: expanded.contains(topic.name) ? "chevron.up" : "chevron.down")
-                            .frame(width: 28, height: 32)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(IBColors.inkTertiary)
+                            .rotationEffect(.degrees(expanded.contains(topic.name) ? 90 : 0))
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IBPressStyle())
                     .accessibilityLabel("\(expanded.contains(topic.name) ? "Collapse" : "Expand") \(topic.name)")
                 }
             }
-            .padding(12)
-            .background(selected || partialCount > 0 ? IBColors.highlight : IBColors.surface, in: RoundedRectangle(cornerRadius: IBRadius.md))
-            .overlay(RoundedRectangle(cornerRadius: IBRadius.md).stroke(selected || partialCount > 0 ? IBColors.accent : IBColors.border, lineWidth: 1))
+            .padding(.leading, 8).padding(.trailing, 2).padding(.vertical, 3)
+            .hoverHighlight()
 
             if expanded.contains(topic.name) || (!search.isEmpty && !topic.name.localizedCaseInsensitiveContains(search)) {
                 ForEach(topic.subtopics.filter { search.isEmpty || topic.name.localizedCaseInsensitiveContains(search) || $0.localizedCaseInsensitiveContains(search) }, id: \.self) { subtopic in
@@ -120,7 +121,7 @@ struct TopicSelectionView: View {
                     .toggleStyle(.checkbox)
                     .font(IBTypography.body)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 24).padding(.vertical, 4)
+                    .padding(.leading, 30).padding(.vertical, 2)
                 }
             }
         }

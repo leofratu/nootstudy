@@ -131,7 +131,7 @@ struct CardLibraryView: View {
                                 Text([StudyLibraryService.unit(for: card), card.subtopic].filter { !$0.isEmpty }.joined(separator: " · "))
                                     .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                                 Text(CardRecallPresentation.prompt(front: card.front, style: card.cardStyle, revealed: false))
-                                    .font(.custom("Georgia", size: 18)).lineLimit(3)
+                                    .font(.system(size: 15, weight: .medium)).lineLimit(3)
                                 DisclosureGroup("Answer") {
                                     FormattedMessageContent(text: card.back).textSelection(.enabled)
                                         .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)

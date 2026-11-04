@@ -3,15 +3,25 @@ import os
 import SwiftData
 
 nonisolated enum ReviewDailyLimitPolicy: Sendable {
-    static let maximumCards = 40
+    /// A safety bound on one day's queue, not a study recommendation. The number
+    /// learners see is their daily goal, which only caps reviews if they opt in.
+    static let maximumCards = 1000
+    static let enforceLimitKey = "enforceDailyCardLimit"
+
+    /// Lets tests pin enforcement without touching shared user defaults.
+    @TaskLocal static var enforcementOverride: Bool?
+
+    static var isLimitEnforced: Bool {
+        enforcementOverride ?? UserDefaults.standard.bool(forKey: enforceLimitKey)
+    }
 
     static func maximumCards(for intensity: StudyIntensity) -> Int {
         min(intensity.dailyCardSuggestion, maximumCards)
     }
 
     static func maximumCards(for intensity: StudyIntensity, dailyGoal: Int) -> Int {
-        // Intensity supplies a suggestion; an explicitly saved goal is the
-        // actual allowance, still bounded by the app-wide daily maximum.
+        // Intensity supplies a suggestion; an explicitly saved goal is what the
+        // learner aims for, still bounded by the app-wide safety maximum.
         min(max(dailyGoal, 1), maximumCards)
     }
 
@@ -37,6 +47,10 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
         let reviewedCanonicalIDs: Set<UUID>
         let maximum: Int
         let now: Date
+        /// The learner's daily target. Equals `maximum` only when enforced.
+        var goal: Int = ReviewDailyLimitPolicy.maximumCards
+
+        var isEnforced: Bool { maximum < ReviewDailyLimitPolicy.maximumCards && maximum == goal }
 
         var remaining: Int { allowance(reviewedCardIDs: reviewedIDs, maximum: maximum) }
 
@@ -85,10 +99,10 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
         ))
         let reviewedIDs = Set(reviews.map(\.cardID))
         let profile = try context.fetch(FetchDescriptor<UserProfile>()).first
-        let maximum = profile.map { maximumCards(for: $0.studyIntensity, dailyGoal: $0.dailyGoal) } ?? maximumCards
+        let goal = profile.map { maximumCards(for: $0.studyIntensity, dailyGoal: $0.dailyGoal) } ?? StudyIntensity.average.dailyCardSuggestion
         return Day(library: library, reviewedIDs: reviewedIDs,
                    reviewedCanonicalIDs: Set(reviewedIDs.map { library.canonicalIDs[$0] ?? $0 }),
-                   maximum: maximum, now: now)
+                   maximum: isLimitEnforced ? goal : maximumCards, now: now, goal: goal)
     }
 }
 
@@ -103,6 +117,9 @@ final class ReviewQueueManager {
     private(set) var deferredDueCount = 0
     private(set) var reviewedTodayCount = 0
     private(set) var dailyMaximum = ReviewDailyLimitPolicy.maximumCards
+    private(set) var dailyGoal = StudyIntensity.average.dailyCardSuggestion
+    /// True only when the learner has chosen to stop at their goal.
+    private(set) var isLimitEnforced = false
     private(set) var remainingDailyAllowance = ReviewDailyLimitPolicy.maximumCards
     private(set) var duplicateCardCount = 0
     private(set) var dueCountCache: [String: Int] = [:]
@@ -169,7 +186,7 @@ final class ReviewQueueManager {
         var canonical = day.reviewedCanonicalIDs
         canonical.insert(day.library.canonicalIDs[card.id] ?? card.id)
         apply(.init(library: day.library, reviewedIDs: reviewed, reviewedCanonicalIDs: canonical,
-                    maximum: day.maximum, now: day.now))
+                    maximum: day.maximum, now: day.now, goal: day.goal))
     }
 
     private func apply(_ day: ReviewDailyLimitPolicy.Day) {
@@ -177,6 +194,8 @@ final class ReviewQueueManager {
         let available = day.limited(backlog)
         reviewedTodayCount = day.reviewedIDs.count
         dailyMaximum = day.maximum
+        dailyGoal = day.goal
+        isLimitEnforced = day.isEnforced
         remainingDailyAllowance = day.remaining
         backlogDueCount = backlog.count
         totalDueBacklogCount = backlog.count

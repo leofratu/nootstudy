@@ -17,6 +17,14 @@ nonisolated enum MathExpressionFormatter: Sendable {
         "\\cot": "cot", "\\log": "log", "\\ln": "ln", "\\exp": "exp",
         "\\lim": "lim", "\\max": "max", "\\min": "min",
         "\\left": "", "\\right": "",
+        // Layout-only commands providers use often. They have no glyph, and left
+        // unmapped they appeared in papers as literal text like "displaystyle".
+        "\\displaystyle": "", "\\textstyle": "", "\\scriptstyle": "",
+        "\\,": " ", "\\;": " ", "\\:": " ", "\\!": "", "\\quad": "  ", "\\qquad": "   ",
+        "\\arcsin": "arcsin", "\\arccos": "arccos", "\\arctan": "arctan",
+        "\\sinh": "sinh", "\\cosh": "cosh", "\\tanh": "tanh", "\\inf": "inf", "\\sup": "sup",
+        "\\in": "∈", "\\notin": "∉", "\\subset": "⊂", "\\cup": "∪", "\\cap": "∩",
+        "\\forall": "∀", "\\exists": "∃", "\\circ": "∘", "\\degree": "°",
     ]
 
     /// Sorted by descending key length so ``\\rightarrow`` is replaced before ``\\right`` (which maps to empty and would otherwise truncate the arrow).

@@ -72,7 +72,7 @@ struct OnboardingView: View {
             // Title
             VStack(spacing: 8) {
                 Text("IB Vault")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(IBColors.accent)
                     .textCase(.uppercase)
                     .tracking(2)
@@ -158,10 +158,10 @@ struct OnboardingView: View {
     // MARK: - Welcome Content
     private var welcomeContent: some View {
         VStack(spacing: 12) {
-            featureRow(icon: "clock.arrow.circlepath", color: .blue,
+            featureRow(icon: "clock.arrow.circlepath", color: IBColors.accent,
                       title: "Smart Scheduling",
                       desc: "Cards appear when you're about to forget them")
-            featureRow(icon: "sparkles", color: .purple,
+            featureRow(icon: "sparkles", color: IBColors.plum,
                       title: "AI Study Companion",
                       desc: "ARIA generates guides and analyses your progress")
             featureRow(icon: "books.vertical", color: IBColors.warning,
@@ -175,10 +175,10 @@ struct OnboardingView: View {
             featureRow(icon: "arrow.triangle.2.circlepath", color: IBColors.success,
                       title: "Spaced Repetition",
                       desc: "Reviews scheduled at optimal intervals for long-term memory")
-            featureRow(icon: "brain.head.profile", color: .blue,
+            featureRow(icon: "brain.head.profile", color: IBColors.accent,
                       title: "Active Recall",
                       desc: "Retrieval practice makes you produce an answer instead of only re-reading it")
-            featureRow(icon: "chart.line.uptrend.xyaxis", color: .purple,
+            featureRow(icon: "chart.line.uptrend.xyaxis", color: IBColors.plum,
                       title: "Adaptive Difficulty",
                       desc: "FSRS adapts review timing to your recall history")
         }

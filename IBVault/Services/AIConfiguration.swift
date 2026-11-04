@@ -265,6 +265,19 @@ nonisolated enum AIConfiguration {
         true
     }
 
+    /// Stores a fresh catalog. A selection the catalog used to list and no longer
+    /// does has been retired, so it falls back to the new default. IDs that were
+    /// never listed are deliberate custom choices and are left alone.
+    static func syncCodexCatalog(_ models: [CodexCatalogModel]) {
+        let previous = Set(cachedCodexModels.map(\.model))
+        let current = Set(models.map(\.model))
+        if let selected = UserDefaults.standard.string(forKey: Key.codexModel),
+           previous.contains(selected), !current.contains(selected) {
+            UserDefaults.standard.removeObject(forKey: Key.codexModel)
+        }
+        cachedCodexModels = models
+    }
+
     static var cachedCodexModels: [CodexCatalogModel] {
         get {
             guard let data = UserDefaults.standard.data(forKey: "codexModelCatalog"),

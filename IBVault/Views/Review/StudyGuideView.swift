@@ -213,7 +213,7 @@ struct StudyGuideView: View {
                 (.preSession, "bolt.fill", IBColors.warning, "Pre-Session Brief", "Quick summary of what to focus on right now"),
                 (.fullGuide, "book.fill", IBColors.accent, "Full Study Guide", "Comprehensive topic-by-topic review guide"),
                 (.weakTopics, "target", IBColors.danger, "Weak Topics Focus", "Target the areas with the biggest payoff"),
-                (.examPrep, "flame.fill", .purple, "Exam Prep Sprint", "Maximum score improvement in minimum time")
+                (.examPrep, "flame.fill", IBColors.plum, "Exam Prep Sprint", "Maximum score improvement in minimum time")
             ]
 
             ForEach(modes, id: \.title) { m in

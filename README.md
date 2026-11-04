@@ -4,32 +4,36 @@
 
 Noot Study is a SwiftUI study app that keeps your library in SwiftData and connects it to the AI provider you choose through ARIA. Saved-card practice and scheduled review work without an AI connection.
 
-[Release 2.0](https://github.com/leofratu/nootstudy/releases/tag/v2.0.0) · [Release notes](docs/releases/v2.0.0.md) · [Quick start](#quick-start) · [Build locally](#build-locally) · [Integrations](#integrations)
+[Release 2.0](https://github.com/leofratu/nootstudy/releases/tag/v2.0.0) · [Release notes](docs/releases/v2.0.0.md) · [What's new](#whats-new) · [Quick start](#quick-start) · [Build locally](#build-locally) · [Integrations](#integrations)
 
-![The Noot Study Library, with curriculum filters and direct practice actions. The identity area is blurred.](docs/screenshots/library.jpg)
+![The Today page, with the review queue by subject, a coach note, and mastery for each subject.](docs/screenshots/today.jpg)
 
-*Screenshots use synthetic study material. Identity areas are blurred before capture; no personal study records, grades, credentials, or chat history are included.*
+*Screenshots use synthetic study material. No personal study records, grades, credentials, or chat history are included.*
 
-## What's new in 2.0
+## What's new
+
+The interface and study tools were reworked after 2.0. These changes are on `main` and are not part of the tagged 2.0 release.
 
 | Area | Highlights |
 | --- | --- |
-| Workspace | Redesigned paper-and-ink interface, grouped sidebar, clearer review status, and direct practice actions. |
-| Library | Search cards and tests by subject, unit, topic, subtopic, and content, then launch practice directly from a result. |
-| Card Studio | Combine topics and card formats, reuse saved cards first, and edit generated drafts before saving. |
-| Multiple choice | Shuffled choices, explicit answer checking, correction feedback, and end-of-set scoring. |
-| Daily review | One app-wide allowance with a ceiling of 40 distinct cards and support for lower personal targets. |
-| Exam practice | Save tests with curriculum metadata, reopen answers, and keep marking feedback in the Library. |
-| Continuity | Reused or hidden duplicate cards preserve their original IDs, scheduling, and review history. |
+| Design | Neutral paper and ink with one blue accent, no nested boxes, and quicker hover and page feedback. |
+| Daily review | Your daily number is a goal you can review past. Reviews only stop there if you turn on **Stop reviews at my goal**. |
+| Card Studio | A set can hold up to 200 cards, generated in slices so a failure keeps the cards already written. |
+| Practice exams | Papers get enough time to generate, maths renders properly, and small provider mistakes no longer discard a paper. |
+| Study sessions | A simpler header, a prompt to extend when planned time runs out, and the option to leave without logging. |
+| Coach | ARIA now opens as a side panel next to your work, and Local Codex models stay in sync automatically. |
+| Progress | A study heatmap with streaks, every rank with its unlock requirements, and research-based mastery levels. |
+| XP | Study time now earns 5 XP per minute, plus a bonus for completing a session of 10 minutes or more. |
+| Settings | Fewer sections, no duplicate controls, and rarely used AI options under **Advanced**. |
 
 ## Quick start
 
 1. [Build and run locally](#build-locally) with Xcode on a Mac running **macOS 14 or later**.
 2. Open Noot Study and choose your subjects. Existing installations keep their saved library and preferences.
 3. Use **Library** to practise saved material or **Card Studio** to prepare a new set.
-4. Configure an AI provider under **Settings → AI & Memory** for generation, tutoring, or marking.
+4. Configure an AI provider under **Settings → Coach & AI** for generation, tutoring, or marking.
 
-The 2.0 release publishes source, tags, and release notes. Builds and validation run locally; no app bundle, installer, ZIP, or DMG is attached.
+This project publishes source, tags, and release notes. Builds and validation run locally; no app bundle, installer, ZIP, or DMG is attached.
 
 ## Study workflows
 
@@ -54,7 +58,7 @@ Basic cards use answer reveal. Cloze cards conceal their deletion until reveal. 
 
 ![Card Studio with several topics selected and controls for format, count, difficulty, and reuse.](docs/screenshots/card-studio.jpg)
 
-Choose topics or subtopics across units and combine **Basic**, **Cloze**, and **Multiple Choice** formats. A batch contains **1–50 cards total**, distributed across the selected topic and format combinations.
+Choose topics or subtopics across units and combine **Basic**, **Cloze**, and **Multiple Choice** formats. A set contains **1–200 cards total**, distributed across the selected topic and format combinations. Larger sets are requested in slices of 25, so a failure partway through keeps the cards already written.
 
 **Reuse saved cards first** is enabled by default. If enough matching cards already exist, the set opens without a generation request. Otherwise, only the missing count is requested. Reused cards keep their IDs, scheduling, and review history.
 
@@ -62,21 +66,23 @@ New drafts can be edited before saving. Invalid multiple-choice options, malform
 
 ### Daily review
 
-The review queue, subject screens, dashboard, reminders, and ARIA review actions share one daily allowance. It counts distinct cards reviewed since local midnight, respects your goal and study intensity, and never offers more than the **40-card ceiling**.
+The review queue, subject screens, dashboard, reminders, and ARIA review actions share one view of your day. Your **daily goal** is a target, and you can keep reviewing past it. Each distinct card counts once per day, since local midnight.
 
-Once the allowance is used, Noot Study shows **Done for today** and separates the remaining backlog from today's work. Repeated copies are filtered from the queue without deleting their records.
+To make the goal a hard stop, turn on **Settings → Flashcards → Stop reviews at my goal**. The remaining backlog then waits until tomorrow, and you can choose **Keep reviewing** at any point. Repeated copies are filtered from the queue without deleting their records.
 
 ### Practice exams
 
-Open **Practice** during a study session to generate an original paper for the selected subject, course level, and topics. Questions and mark schemes are stored separately, and question marks must match the paper total. Generation failures are shown with a retry action; an offline self-check template is available explicitly.
+![A practice paper in a study session, with the marks total and an answer area.](docs/screenshots/practice-exam.jpg)
 
-Feedback includes criterion scores, evidence from the answer, corrections, a stronger example answer, and suggested practice. Scores are checked against the available marks. Without a supplied mark scheme, feedback is labelled a **practice estimate** rather than an official IB grade.
+Open **Practice** during a study session to generate an original paper for the selected subject, course level, and topics. A paper can take a few minutes to write. Questions and mark schemes are stored separately, and the marks printed on the questions set the paper's total. If generation fails, you can retry or use the offline paper, which needs no AI.
 
-Tests can be saved before or after marking and reopened under **Library → Tests** with their answers and feedback intact. The standalone **Exam marker** entry is vaulted; existing tests and feedback remain saved.
+Feedback includes criterion scores, evidence from the answer, corrections, a stronger example answer, and suggested practice. If a provider's criteria miss the paper's total, they are rescaled to it. Without a supplied mark scheme, feedback is labelled a **practice estimate** rather than an official IB grade.
+
+Tests can be saved before or after marking and reopened under **Library → Tests** with their answers and feedback intact. The standalone exam marker is vaulted for now; existing tests and feedback remain saved.
 
 ## ARIA and AI providers
 
-Use **Ask ARIA** from the workspace toolbar for explanations, revision, plans, grades, and progress. Explicit requests can create or edit supported app records. Destructive changes require an explicit request.
+Use **Coach** in the toolbar to open ARIA beside your current page for explanations, revision, plans, grades, and progress. Explicit requests can create or edit supported app records. Destructive changes require an explicit request.
 
 For revision and generation, ARIA can receive existing questions and answers with their IDs. This lets it reuse an existing learning point instead of creating a paraphrased duplicate when the meaning matches. Related questions that test different calculations, contrasts, or applications remain distinct.
 
@@ -86,7 +92,7 @@ For revision and generation, ARIA can receive existing questions and answers wit
 | Google Gemini | Add a Gemini API key and select a model. |
 | Junali | Add the provider key and configure its compatible endpoint and model. |
 
-Local Codex reads its available models and supported reasoning options from the installed CLI and keeps the last successful catalog for offline use. Existing explicit model choices are preserved. Model, reasoning effort, answer detail, and supported web-search controls remain in settings. Conversation windows and older-history compaction are managed automatically by Noot Study.
+Local Codex reads its available models and supported reasoning options from the installed CLI, refreshes them automatically, and keeps the last successful catalog for offline use. If a selected model is retired, the app moves to the new default; custom model IDs are left alone. The provider and model are in settings, with reasoning effort, answer detail, and web search under **Advanced**. Conversation context is managed automatically.
 
 Study data remains local unless an AI feature is used. Selected context is then sent to the configured provider. API keys are stored in macOS Keychain, while Local Codex uses the existing CLI sign-in.
 
@@ -94,9 +100,22 @@ The desktop build is **not App Sandbox enabled** because Local Codex launches a 
 
 ## Subjects, sessions, and progress
 
-Noot Study includes IB curriculum browsing, scoped study sessions, FSRS scheduling, proficiency tracking, grades, mastery views, achievements, and progress summaries. Sessions combine source material, retrieval practice, corrective feedback, notes, and exam transfer. Extend a running session by 15, 30, or 60 minutes without restarting it, or use **Leave** to save progress while keeping the plan incomplete.
+Noot Study includes IB curriculum browsing, scoped study sessions, FSRS scheduling, grades, achievements, and progress summaries. Sessions combine source material, retrieval practice, corrective feedback, notes, and exam transfer. Extend a running session by 15, 30, or 60 minutes without restarting it. **Leave** can save your progress or leave without logging, and the plan stays open either way.
 
-The profile shows a year of study activity and every rank's mastery requirements, including locked ranks. Future logged study time earns a base of 3 XP per minute, adjusted by study intensity. Mastery uses successful retrieval and spaced practice as evidence; its numerical weights and thresholds are app heuristics, not validated exam predictions.
+![Progress, with study totals, a year-long heatmap, and streaks.](docs/screenshots/progress.jpg)
+
+**Progress** and **Profile** show a year of study activity with streaks, and every rank with its mastery requirements, including locked ranks. Logged study time earns a base of 5 XP per minute, adjusted by study intensity, and completing a session of 10 minutes or more earns a bonus. Rank follows mastery, not XP.
+
+Each card moves through four mastery levels:
+
+| Level | What it takes |
+| --- | --- |
+| Encoding | Studied, but not yet recalled reliably. |
+| Retrievable | At least 2 reviews, with a successful recall. |
+| Consolidating | 3+ successful recalls, predicted to hold for 7+ days, 65%+ accuracy. |
+| Durable | 4+ successful recalls, predicted to hold for 21+ days, 85%+ accuracy. |
+
+These levels build on research into [repeated retrieval](https://doi.org/10.1016/j.jml.2006.09.004), [spacing](https://doi.org/10.1111/j.1467-9280.2008.02209.x), and [successive relearning](https://doi.org/10.1037/a0023956), with memory stability predicted by FSRS. The exact cutoffs are this app's own choices, not values validated by those studies, and a level is not an exam grade or a prediction of one.
 
 Practice feedback and academic evidence are kept separate: saved AI marking is not automatically converted into a school grade. Work completed elsewhere can be recorded as an external activity and merged into study history without double counting.
 
@@ -120,12 +139,11 @@ The repository and documentation exclude personal databases, backups, reports, c
 
 ## Build locally
 
-Development and release builds require a Mac. Version 2.0 uses **Xcode 26**, Swift 6, and XcodeGen. Swift package versions are pinned in **project.yml**.
+Development and release builds require a Mac. The project uses **Xcode 26**, Swift 6, and XcodeGen. Swift package versions are pinned in **project.yml**.
 
 ~~~bash
 git clone https://github.com/leofratu/nootstudy.git
 cd nootstudy
-git checkout v2.0.0
 brew install xcodegen
 xcodegen generate
 open IBVault.xcodeproj

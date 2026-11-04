@@ -67,10 +67,7 @@ struct ARIAChatInputBar: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(IBColors.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.border, lineWidth: 1)
-                    )
+                    
             )
         }
         .padding(.horizontal, 16)

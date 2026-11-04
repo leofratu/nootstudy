@@ -22,8 +22,8 @@ nonisolated enum CardBatchError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptySelection: "Choose at least one topic and one card format."
-        case .tooManySelections: "Choose fewer topics or formats; a batch can contain up to 50 cards."
-        case .invalidCount(let minimum): "Choose between \(minimum) and 50 cards to cover every selected topic and format."
+        case .tooManySelections: "Choose fewer topics or formats; a batch can contain up to \(CardGenerationOptions.maximumCount) cards."
+        case .invalidCount(let minimum): "Choose between \(minimum) and \(CardGenerationOptions.maximumCount) cards to cover every selected topic and format."
         case .invalidDraft: "Every card needs a question and answer. Multiple-choice cards need 3–4 different options and one correct answer; cloze cards need one matching blank."
         }
     }
@@ -97,8 +97,8 @@ enum CardBatchService {
         let uniqueStyles = CardStyle.allCases.filter { styles.contains($0) }
         let minimum = uniqueScopes.count * uniqueStyles.count
         guard minimum > 0 else { throw CardBatchError.emptySelection }
-        guard minimum <= 50 else { throw CardBatchError.tooManySelections }
-        guard count >= minimum, count <= 50 else { throw CardBatchError.invalidCount(minimum) }
+        guard minimum <= CardGenerationOptions.maximumCount else { throw CardBatchError.tooManySelections }
+        guard count >= minimum, count <= CardGenerationOptions.maximumCount else { throw CardBatchError.invalidCount(minimum) }
         return uniqueScopes.flatMap { scope in uniqueStyles.map { (scope, $0) } }
             .enumerated().map { index, pair in
                 CardBatchJob(scope: pair.0, style: pair.1,
@@ -138,21 +138,38 @@ enum CardBatchService {
             included.formUnion(reused.map(\.id))
             let missing = job.count - reused.count
             guard missing > 0 else { continue }
-            let missingJob = CardBatchJob(scope: job.scope, style: job.style, count: missing)
             var settings = options
-            settings.count = missing
             settings.style = job.style
             do {
-                let cards: [StudyCard]
-                if let generateCards {
-                    cards = try await generateCards(detached, missingJob, settings, context)
-                } else {
-                    cards = try await CardGeneratorService.generateCards(
-                        subject: detached, topicName: job.scope.topic, subtopic: job.scope.subtopic,
-                        context: context, options: settings, allowsLocalFallback: false,
-                        excludingFronts: coveredFronts, libraryCards: subject.cards)
+                var cards: [StudyCard] = []
+                var sliceFailure: (any Error)?
+                // Each slice sees the fronts of the slices before it, so a large
+                // set keeps covering new ground. Cards from finished slices
+                // survive a later failure.
+                while cards.count < missing {
+                    let sliceSize = min(missing - cards.count, CardGenerationOptions.requestSliceSize)
+                    settings.count = sliceSize
+                    let slice: [StudyCard]
+                    do {
+                        if let generateCards {
+                            slice = try await generateCards(detached, CardBatchJob(scope: job.scope, style: job.style, count: sliceSize), settings, context)
+                        } else {
+                            slice = try await CardGeneratorService.generateCards(
+                                subject: detached, topicName: job.scope.topic, subtopic: job.scope.subtopic,
+                                context: context, options: settings, allowsLocalFallback: false,
+                                excludingFronts: coveredFronts + cards.map(\.front), libraryCards: subject.cards)
+                        }
+                    } catch {
+                        if Task.isCancelled || error is CancellationError { throw CancellationError() }
+                        sliceFailure = error
+                        break
+                    }
+                    try Task.checkCancellation()
+                    cards.append(contentsOf: slice)
+                    onProgress(index, jobs.count, "\(job.scope.label) · \(min(cards.count, missing)) of \(missing)")
+                    if slice.count < sliceSize { break }
                 }
-                try Task.checkCancellation()
+                if let sliceFailure, cards.isEmpty { throw sliceFailure }
                 savedLibrary = CardDuplicatePolicy.library(subject.cards)
                 var added = 0
                 for card in cards {
@@ -174,7 +191,9 @@ enum CardBatchService {
                         added += 1
                     }
                 }
-                if added < missing {
+                if let sliceFailure {
+                    result.issues.append("\(job.scope.label) · \(job.style.label): \(added + reused.count) of \(job.count) cards available. \(sliceFailure.localizedDescription)")
+                } else if added < missing {
                     result.issues.append("\(job.scope.label) · \(job.style.label): \(added + reused.count) of \(job.count) cards available. Repeated or invalid cards were skipped.")
                 }
             } catch {

@@ -13,14 +13,13 @@ struct DashboardView: View {
     @Query private var academicReports: [AcademicReportSnapshot]
 
     @State private var ariaService: ARIAService
-    @State private var reviewScheduler = ReviewScheduler()
     @State private var showReview = false
     @State private var selectedSubjectForReview: Subject?
     @State private var greetingText = ""
     @State private var cachedEvidence: [EvidenceRow] = []
     @State private var dueRefreshTask: Task<Void, Never>?
 
-    private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+    private let metricColumns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 4)
 
     private struct EvidenceRow: Identifiable {
         let subject: Subject
@@ -58,14 +57,12 @@ struct DashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     dashboardHeader
-                    practiceDesk
                     metricsGrid
                     focusGrid
                     subjectPortfolio(evidence: evidence)
-                    assessmentCalibration(evidence: evidence)
-                    externalWorkPrompt
+                    footerRows(evidence: evidence)
                 }
-                .frame(maxWidth: 1240, alignment: .leading)
+                .frame(maxWidth: 1080, alignment: .leading)
                 .padding(.horizontal, 28)
                 .padding(.vertical, 24)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -96,7 +93,6 @@ struct DashboardView: View {
 
     private func recomputeDueCards() {
         queueManager.ensureLoaded(context: context)
-        reviewScheduler.analyze(context: context, availableCards: queueManager.dueCards)
         updateGreeting()
     }
 
@@ -113,25 +109,19 @@ struct DashboardView: View {
             subtitle: headerSubtitle,
             symbol: "rectangle.3.group"
         ) {
-            if dueCards.isEmpty {
-                NavigationLink {
-                    StudyPlannerView()
-                } label: {
-                    Label("Plan a session", systemImage: "calendar.badge.plus")
-                        .frame(minWidth: 132)
+            HStack(spacing: 8) {
+                NavigationLink { CardStudioView() } label: { Text("Create flashcards") }
+                    .buttonStyle(SecondaryButtonStyle())
+                if dueCards.isEmpty {
+                    NavigationLink { StudyPlannerView() } label: { Text("Plan a session") }
+                        .buttonStyle(PrimaryButtonStyle())
+                } else {
+                    Button("Start review") {
+                        selectedSubjectForReview = nil
+                        showReview = true
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .controlSize(.large)
-            } else {
-                Button {
-                    selectedSubjectForReview = nil
-                    showReview = true
-                } label: {
-                    Label("Start review", systemImage: "play.fill")
-                        .frame(minWidth: 132)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .controlSize(.large)
             }
         }
     }
@@ -139,10 +129,10 @@ struct DashboardView: View {
     private var headerSubtitle: String {
         if let error = queueManager.lastRefreshError { return error }
         if queueManager.remainingDailyAllowance == 0 {
-            return "You're done for today. Your remaining cards will wait until tomorrow."
+            return "You've hit your daily limit. Your remaining cards will wait until tomorrow."
         }
         if !dueCards.isEmpty {
-            return "\(dueCards.count) cards ready today · \(queueManager.dailyMaximum)-card daily allowance."
+            return "\(dueCards.count) cards are ready for review."
         }
         if studySessions.isEmpty {
             return "Pick a topic, make a set, and build your understanding."
@@ -152,47 +142,6 @@ struct DashboardView: View {
 
     private var subjectCountWithDue: Int {
         Set(dueCards.compactMap { $0.subject?.id }).count
-    }
-
-    private var practiceDesk: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("YOUR STUDY DESK").font(IBTypography.captionBold).tracking(2)
-                    Text("Small sessions.\nLasting knowledge.")
-                        .font(.custom("Georgia", size: 36))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                Image(systemName: "text.book.closed")
-                    .font(.system(size: 60, weight: .ultraLight))
-                    .foregroundStyle(IBColors.accent)
-                    .padding(16)
-                    .accessibilityHidden(true)
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    NavigationLink { CardStudioView() } label: {
-                        Label("Create flashcards", systemImage: "rectangle.stack.badge.plus")
-                    }.buttonStyle(PrimaryButtonStyle())
-                    NavigationLink { ExamMarkerView() } label: {
-                        Label("Mark an exam answer", systemImage: "checkmark.bubble")
-                    }.buttonStyle(SecondaryButtonStyle())
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    NavigationLink { CardStudioView() } label: {
-                        Label("Create flashcards", systemImage: "rectangle.stack.badge.plus")
-                    }.buttonStyle(PrimaryButtonStyle())
-                    NavigationLink { ExamMarkerView() } label: {
-                        Label("Mark an exam answer", systemImage: "checkmark.bubble")
-                    }.buttonStyle(SecondaryButtonStyle())
-                }
-            }
-        }
-        .foregroundStyle(IBColors.ink)
-        .padding(28)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(IBColors.highlight, in: RoundedRectangle(cornerRadius: IBRadius.xl))
     }
 
     private var evidenceRows: [EvidenceRow] {
@@ -220,35 +169,23 @@ struct DashboardView: View {
         }
     }
 
-    private var externalWorkPrompt: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "tray.and.arrow.down")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(IBColors.inkTertiary)
-                .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 7).fill(IBColors.surfaceHover).overlay(RoundedRectangle(cornerRadius: 7).stroke(IBColors.border, lineWidth: 1)))
-            VStack(alignment: .leading, spacing: 2) {
+    private func footerRows(evidence: [EvidenceRow]) -> some View {
+        let scoredCount = scoredEvidenceCount(evidence: evidence)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(scoredCount == 0
+                     ? "Add a report or assessment to calibrate subject mastery."
+                     : "Mastery includes \(scoredCount) scored assessments, averaging \(averageEvidenceMastery(evidence: evidence))%.")
+                    .foregroundStyle(IBColors.inkTertiary)
+            }
+            HStack(spacing: 6) {
                 Text("Worked outside Noot?")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(IBColors.ink)
-                Text("Add tutoring, Anki, or reading so it counts toward your history.")
-                    .font(IBTypography.caption11)
-                    .foregroundStyle(IBColors.inkSecondary)
-                    .lineLimit(2)
+                    .foregroundStyle(IBColors.inkTertiary)
+                NavigationLink("Add tutoring, Anki or reading") { ExternalActivityView() }
+                    .buttonStyle(.link)
             }
-            Spacer(minLength: 8)
-            NavigationLink {
-                ExternalActivityView()
-            } label: {
-                Label("Add work", systemImage: "plus")
-            }
-            .buttonStyle(SecondaryButtonStyle())
-            .controlSize(.small)
-            .accessibilityLabel("Add external work")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .surfaceCard(cornerRadius: IBRadius.md)
+        .font(IBTypography.caption)
     }
 
     private func scoredEvidenceCount(evidence: [EvidenceRow]) -> Int {
@@ -263,67 +200,35 @@ struct DashboardView: View {
     }
 
     private var metricsGrid: some View {
-        LazyVGrid(columns: metricColumns, spacing: 12) {
+        LazyVGrid(columns: metricColumns, spacing: 16) {
             StudioMetricTile(
-                value: "\(dueCards.count)",
-                label: "Left today",
-                symbol: "rectangle.stack",
-                detail: "\(queueManager.deferredDueCount) saved for another day"
+                value: "\(queueManager.reviewedTodayCount)",
+                label: "of \(queueManager.dailyGoal) card goal",
+                symbol: "rectangle.stack"
             )
             StudioMetricTile(
-                value: "\(profile?.currentStreak ?? 0)d",
-                label: "Study streak",
-                symbol: "flame",
-                detail: "\(profile?.longestStreak ?? 0)d best"
+                value: "\(dueBacklogCount)",
+                label: "Cards due",
+                symbol: "tray"
             )
             StudioMetricTile(
                 value: "\(newCardsCount)",
-                label: "New cards",
-                symbol: "sparkles",
-                detail: newCardsCount == 0 ? "No new cards" : "Not yet studied"
+                label: "Not yet studied",
+                symbol: "sparkles"
+            )
+            StudioMetricTile(
+                value: "\(profile?.currentStreak ?? 0)",
+                label: "Day streak",
+                symbol: "flame"
             )
         }
-    }
-
-    private func assessmentCalibration(evidence: [EvidenceRow]) -> some View {
-        let scoredCount = scoredEvidenceCount(evidence: evidence)
-        let subjectCount = evidence.filter { $0.evidence.assessmentEvidence != nil }.count
-        let isEmpty = scoredCount == 0
-        return HStack(alignment: .center, spacing: 16) {
-            Image(systemName: "chart.bar.doc.horizontal")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(IBColors.inkTertiary)
-                .frame(width: 44, height: 44)
-                .background(RoundedRectangle(cornerRadius: 10).fill(IBColors.surfaceHover).overlay(RoundedRectangle(cornerRadius: 10).stroke(IBColors.border, lineWidth: 1)))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Assessment baseline")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(IBColors.ink)
-                Text(isEmpty ? "Add a report or assessment to calibrate subject mastery." : "Current subject mastery includes your scored reports and assessments.")
-                    .font(IBTypography.caption11)
-                    .foregroundStyle(IBColors.inkSecondary)
-            }
-            Spacer(minLength: 12)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(averageEvidenceMastery(evidence: evidence))%")
-                    .font(.system(size: 24, weight: .bold).monospacedDigit())
-                    .foregroundStyle(isEmpty ? IBColors.inkSecondary : IBColors.ink)
-                Text("\(scoredCount) scored · \(subjectCount) subjects")
-                    .font(IBTypography.caption11)
-                    .foregroundStyle(IBColors.inkTertiary)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .surfaceCard(cornerRadius: IBRadius.md)
     }
 
     private var focusGrid: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 16) {
                 reviewFocus.frame(maxWidth: .infinity, alignment: .topLeading)
-                workspaceSignal.frame(width: 330, alignment: .topLeading)
+                workspaceSignal.frame(width: 300, alignment: .topLeading)
             }
             VStack(spacing: 16) {
                 reviewFocus
@@ -336,62 +241,46 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 16) {
             StudioSectionHeader(
                 "Review queue",
-                subtitle: dueCards.isEmpty ? "Nothing urgent right now" : "Prioritized by schedule",
+                subtitle: dueCards.isEmpty ? nil : "Pick a subject, or start with everything",
                 symbol: "brain.head.profile"
             ) {
-                StudioPill(title: dueCards.isEmpty ? "CLEAR" : "\(dueCards.count) DUE", semantic: .neutral)
+                EmptyView()
             }
 
             if dueCards.isEmpty {
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.system(size: 26))
-                        .foregroundStyle(IBColors.inkTertiary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(queueManager.remainingDailyAllowance == 0 ? "Done for today" : "You are caught up")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(IBColors.ink)
-                        Text(queueManager.remainingDailyAllowance == 0 ? "Your daily allowance resets tomorrow." : "New cards will appear here when they are ready for review.")
-                            .font(IBTypography.caption11)
-                            .foregroundStyle(IBColors.inkSecondary)
-                    }
-                }
-                .padding(.vertical, 8)
+                Text(queueManager.remainingDailyAllowance == 0
+                     ? "You've hit today's limit. It resets tomorrow."
+                     : "You're caught up. Cards appear here when they are ready.")
+                    .font(IBTypography.body13)
+                    .foregroundStyle(IBColors.inkSecondary)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(reviewScheduler.schedules.filter { queueManager.dueCount(for: $0.subject) > 0 }.prefix(4).enumerated()), id: \.element.id) { index, schedule in
+                    ForEach(subjectsWithDueCards.prefix(5), id: \.id) { subject in
                         Button {
-                            selectedSubjectForReview = schedule.subject
+                            selectedSubjectForReview = subject
                             showReview = true
                         } label: {
-                            DashboardQueueRow(schedule: schedule, dueCount: queueManager.dueCount(for: schedule.subject))
+                            DashboardQueueRow(subject: subject, dueCount: queueManager.dueCount(for: subject))
                         }
-                        .buttonStyle(.plain)
-                        if index < min(reviewScheduler.schedules.count, 4) - 1 {
-                            Rectangle().fill(IBColors.border).frame(height: 1).padding(.leading, 28)
-                        }
+                        .buttonStyle(IBPressStyle())
                     }
                 }
-                Button {
-                    selectedSubjectForReview = nil
-                    showReview = true
-                } label: {
-                    Label("Review today's cards", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .controlSize(.large)
             }
         }
-        .padding(18)
+        .padding(20)
         .surfaceCard()
+    }
+
+    private var subjectsWithDueCards: [Subject] {
+        sortedSubjects
+            .filter { queueManager.dueCount(for: $0) > 0 }
+            .sorted { queueManager.dueCount(for: $0) > queueManager.dueCount(for: $1) }
     }
 
     private var workspaceSignal: some View {
         VStack(alignment: .leading, spacing: 16) {
             StudioSectionHeader(
-                "Study signal",
-                subtitle: "ARIA's next suggestion",
+                "Coach's note",
                 symbol: "sparkles"
             ) {
                 EmptyView()
@@ -403,7 +292,7 @@ struct DashboardView: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(18)
+        .padding(20)
         .surfaceCard()
     }
 
@@ -416,14 +305,14 @@ struct DashboardView: View {
 
     private var fallbackStudySignal: String? {
         if queueManager.remainingDailyAllowance == 0 {
-            return "Your daily review is complete. Take a break; the backlog can wait."
+            return "You've hit your daily limit. Take a break; the backlog can wait."
         }
         if !dueCards.isEmpty {
             let subjectCount = subjectCountWithDue
             if subjectCount > 1 {
                 return "You have \(dueCards.count) cards ready today across \(subjectCount) subjects."
             }
-            return "You have \(dueCards.count) cards ready within today's allowance."
+            return "You have \(dueCards.count) cards ready to review."
         }
         if let weakest = evidenceRows.min(by: { $0.mastery < $1.mastery }), weakest.mastery < 0.7 {
             return "\(weakest.subject.name) is your current focus (\(Int(weakest.mastery*100))% mastery). Generate a few fresh cards or review its weakest subunit."
@@ -437,18 +326,14 @@ struct DashboardView: View {
     private func subjectPortfolio(evidence: [EvidenceRow]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             StudioSectionHeader(
-                "Your subjects",
-                subtitle: "Mastery and review readiness at a glance",
+                "Subjects",
                 symbol: "books.vertical"
             ) {
-                HStack(spacing: 10) {
-                    StudioPill(title: "\(sortedSubjects.count) ENROLLED", semantic: .neutral)
-                    NavigationLink("View all") {
-                        SubjectsGridView()
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(IBColors.accent)
+                NavigationLink("View all") {
+                    SubjectsGridView()
                 }
+                .buttonStyle(.link)
+                .font(IBTypography.caption)
             }
 
             if sortedSubjects.isEmpty {
@@ -462,11 +347,9 @@ struct DashboardView: View {
                             SubjectDetailView(subject: subject)
                         } label: {
                             SubjectWorkspaceRow(subject: subject, dueCount: scopedDueCount(for: subject), mastery: masteryBySubject[subject.id] ?? 0)
+                                .hoverHighlight(cornerRadius: IBRadius.card)
                         }
-                        .buttonStyle(.plain)
-                        if subject.id != sortedSubjects.last?.id {
-                            Rectangle().fill(IBColors.border).frame(height: 1).padding(.leading, 72)
-                        }
+                        .buttonStyle(IBPressStyle())
                     }
                 }
                 .surfaceCard()
@@ -480,33 +363,30 @@ struct DashboardView: View {
 }
 
 private struct DashboardQueueRow: View {
-    let schedule: SubjectReviewSchedule
+    let subject: Subject
     let dueCount: Int
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Circle()
-                .fill(IBColors.inkTertiary)
-                .frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(schedule.subject.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(IBColors.ink)
-                Text("\(schedule.subject.level) · study queue")
-                    .font(IBTypography.caption11)
-                    .foregroundStyle(IBColors.inkTertiary)
-            }
-            Spacer()
-            Text("\(dueCount)")
-                .font(.system(size: 20, weight: .semibold).monospacedDigit())
+                .fill(IBColors.subjectColor(for: subject.name))
+                .frame(width: 7, height: 7)
+            Text(subject.name)
+                .font(.system(size: 13))
                 .foregroundStyle(IBColors.ink)
-            Text("due")
+            Text(subject.level)
                 .font(IBTypography.caption11)
                 .foregroundStyle(IBColors.inkTertiary)
+            Spacer()
+            Text("\(dueCount)")
+                .font(.system(size: 13).monospacedDigit())
+                .foregroundStyle(IBColors.inkSecondary)
             Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(IBColors.inkTertiary)
         }
-        .padding(.vertical, 10)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 7)
         .contentShape(Rectangle())
+        .hoverHighlight()
     }
 }

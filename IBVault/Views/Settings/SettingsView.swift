@@ -56,6 +56,8 @@ struct SettingsView: View {
     // Study Settings
     @AppStorage("showMasteryPercent") private var showMasteryPercent = true
     @AppStorage("autoPlayNext") private var autoPlayNext = false
+    @AppStorage(ReviewDailyLimitPolicy.enforceLimitKey) private var enforceDailyCardLimit = false
+    @Environment(ReviewQueueManager.self) private var reviewQueue: ReviewQueueManager?
     @AppStorage("showDueCountBadge") private var showDueCountBadge = true
     @AppStorage("reviewOrder") private var reviewOrder = "spaced"
     @AppStorage("cardDefaultCount") private var cardDefaultCount = 6
@@ -79,10 +81,9 @@ struct SettingsView: View {
     /// The categorized left-hand navigation for Settings.
     enum SettingsSection: String, CaseIterable, Identifiable {
         case general = "General"
-        case assistant = "AI & Memory"
-        case subjects = "Subjects"
-        case flashcards = "Flashcards & Review"
-        case study = "Study"
+        case assistant = "Coach & AI"
+        case flashcards = "Flashcards"
+        case study = "Schedule & Focus"
         case integrations = "Integrations"
         case data = "Data & Backup"
         case about = "About"
@@ -93,7 +94,6 @@ struct SettingsView: View {
             switch self {
             case .general: return "person.crop.circle"
             case .assistant: return "sparkles"
-            case .subjects: return "books.vertical"
             case .flashcards: return "rectangle.on.rectangle"
             case .study: return "calendar"
             case .integrations: return "link"
@@ -104,9 +104,8 @@ struct SettingsView: View {
 
         var searchTerms: String {
             switch self {
-            case .general: return "name profile year intensity theme appearance grades report target"
-            case .assistant: return "AI provider model memory API key connection reasoning verbosity temperature creativity context web search"
-            case .subjects: return "curriculum subjects level syllabus HL SL"
+            case .general: return "name profile year intensity theme appearance grades report curriculum subjects level syllabus HL SL"
+            case .assistant: return "AI provider model memory API key connection reasoning verbosity temperature creativity web search"
             case .flashcards: return "cards count number batch format basic cloze multiple choice balanced concise tone difficulty review daily goal order mastery badge auto advance"
             case .study: return "calendar Google sync focus ADHD medication notification reminder streak"
             case .integrations: return "bridge NotebookLM external integrations"
@@ -136,11 +135,10 @@ struct SettingsView: View {
 
     private var sectionSummary: String {
         switch selectedSection {
-        case .general: return "Your study identity, target, and report data"
-        case .assistant: return "Provider, model, and response controls"
-        case .subjects: return "Curriculum and subject configuration"
-        case .flashcards: return "Shorter cards, practice defaults, and your review routine"
-        case .study: return "Workload, calendar, focus, and reminders"
+        case .general: return "You, your subjects and how the app looks"
+        case .assistant: return "Which AI powers your coach and generated cards"
+        case .flashcards: return "New card defaults and your daily review"
+        case .study: return "Calendar, focus and reminders"
         case .integrations: return "Local bridge, external work, and NotebookLM pack"
         case .data: return "Backups, recovery, and reset controls"
         case .about: return "Installed app and assistant details"
@@ -199,8 +197,7 @@ struct SettingsView: View {
             if geometry.size.width >= 820 {
                 HStack(spacing: 0) {
                     settingsNavigation(compact: false)
-                        .frame(width: 232)
-                    Rectangle().fill(IBColors.border).frame(width: 1)
+                        .frame(width: 200)
                     settingsDetail
                 }
             } else {
@@ -248,7 +245,6 @@ struct SettingsView: View {
 
     private func settingsNavigation(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Settings").font(IBTypography.title).foregroundStyle(IBColors.ink)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(IBColors.inkSecondary)
                 TextField("Find a setting", text: $settingsSearch)
@@ -259,8 +255,8 @@ struct SettingsView: View {
                         .buttonStyle(.plain).accessibilityLabel("Clear settings search")
                 }
             }
-            .padding(10)
-            .background(IBColors.canvas, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(IBColors.surfaceRaised, in: RoundedRectangle(cornerRadius: IBRadius.sm))
 
             if matchingSections.isEmpty {
                 Text("No matching settings. Try ‘cards’, ‘model’, or ‘theme’.")
@@ -276,40 +272,42 @@ struct SettingsView: View {
                 .frame(height: 44)
             } else {
                 ScrollView {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 1) {
                         ForEach(matchingSections) { section in categoryButton(section) }
                     }
                 }
             }
             if !compact {
-                Label("Changes save automatically", systemImage: "checkmark.circle")
-                    .font(.caption).foregroundStyle(IBColors.inkSecondary)
+                Text("Changes save automatically")
+                    .font(.caption).foregroundStyle(IBColors.inkTertiary)
             }
         }
-        .padding(20)
+        .padding(12)
         .frame(maxHeight: compact ? nil : .infinity, alignment: .topLeading)
-        .background(IBColors.surface)
+        .background(IBColors.canvasDeep)
     }
 
     private func categoryButton(_ section: SettingsSection) -> some View {
         Button { selectedSection = section } label: {
             Label(section.rawValue, systemImage: section.icon)
-                .font(.callout.weight(selectedSection == section ? .semibold : .regular))
+                .font(.system(size: 13, weight: selectedSection == section ? .medium : .regular))
                 .foregroundStyle(selectedSection == section ? IBColors.ink : IBColors.inkSecondary)
-                .padding(.horizontal, 12).padding(.vertical, 12)
+                .padding(.horizontal, 8).frame(height: 30)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(selectedSection == section ? IBColors.highlight : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 9))
+                .background(selectedSection == section ? IBColors.ink.opacity(0.07) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: IBRadius.sm))
+                .contentShape(Rectangle())
+                .hoverHighlight()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IBPressStyle())
         .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
     }
 
     private var settingsDetail: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(selectedSection.rawValue).font(IBTypography.pageTitle)
                         Text(sectionSummary).font(.callout).foregroundStyle(IBColors.inkSecondary)
                     }
@@ -325,7 +323,7 @@ struct SettingsView: View {
                         .id(selectedSection)
                         .transition(.opacity)
                 }
-                .frame(maxWidth: 820, alignment: .leading)
+                .frame(maxWidth: 680, alignment: .leading)
                 .padding(28)
                 .frame(maxWidth: .infinity)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: selectedSection)
@@ -376,15 +374,14 @@ struct SettingsView: View {
         switch selectedSection {
         case .general:
             studyWorkspace
+            curriculumSection
         case .assistant:
             modelConfigurationSection
             aiProviderSection
             assistantMemorySection
-        case .subjects:
-            curriculumSection
         case .flashcards:
-            flashcardDefaultsSection
             studySection
+            flashcardDefaultsSection
         case .study:
             calendarSyncSection
             adhdSection
@@ -426,9 +423,6 @@ struct SettingsView: View {
                             get: { profile.studyIntensity },
                             set: { profile.studyIntensity = $0; persistChanges() }
                         ), label: { $0.rawValue })
-                        Text("\(profile.studyIntensity.dailyCardSuggestion) suggested cards per day")
-                            .font(.caption)
-                            .foregroundStyle(IBColors.inkSecondary)
                     }
                 }
             } header: {
@@ -442,22 +436,6 @@ struct SettingsView: View {
                 }
             } header: {
                 Label("Appearance", systemImage: "paintbrush")
-            }
-
-            SettingsGroup {
-                HStack(alignment: .center, spacing: 24) {
-                    Text("40 / 45")
-                        .font(.custom("Georgia", size: 32))
-                        .foregroundStyle(IBColors.accent)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Diploma target").font(.callout.weight(.semibold))
-                        ProgressView(value: Double(Self.fixedTargetIBScore), total: 45)
-                        Text("Used in your study plans and predictions.")
-                            .font(.caption).foregroundStyle(IBColors.inkSecondary)
-                    }
-                }
-            } header: {
-                Label("IB target", systemImage: "target")
             }
 
             SettingsGroup {
@@ -677,12 +655,6 @@ struct SettingsView: View {
                     .labelsHidden()
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    DisclosureGroup("Custom model") {
-                        TextField("Custom model ID", text: activeModel)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.callout, design: .monospaced))
-                            .accessibilityLabel("Custom model ID")
-                    }
                 }
                 if selectedProvider == .codexCLI {
                     if isLoadingCodexModels { ProgressView("Updating Codex models…").controlSize(.small) }
@@ -692,37 +664,45 @@ struct SettingsView: View {
                 }
             }
 
-            if selectedProvider != .gemini {
-                Divider()
-                SettingsField("Reasoning effort") {
-                    SettingsChoices(values: AIConfiguration.supportedReasoningEfforts(for: selectedProvider),
-                                    selection: selectedReasoningEffort, label: { $0.displayName })
-                    Text(selectedReasoningEffort.wrappedValue.detail)
-                        .font(.caption).foregroundStyle(IBColors.inkSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            DisclosureGroup("Advanced") {
+                VStack(alignment: .leading, spacing: 20) {
+                    if selectedProvider != .gemini {
+                        SettingsField("Custom model ID") {
+                            TextField("Custom model ID", text: activeModel)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.callout, design: .monospaced))
+                                .accessibilityLabel("Custom model ID")
+                        }
+                        SettingsField("Reasoning effort") {
+                            SettingsChoices(values: AIConfiguration.supportedReasoningEfforts(for: selectedProvider),
+                                            selection: selectedReasoningEffort, label: { $0.displayName })
+                            Text(selectedReasoningEffort.wrappedValue.detail)
+                                .font(.caption).foregroundStyle(IBColors.inkSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        SettingsField("Answer detail") {
+                            SettingsChoices(values: AIResponseVerbosity.allCases,
+                                            selection: selectedVerbosity, label: { $0.displayName })
+                        }
+                    }
+                    if selectedProvider == .codexCLI {
+                        SettingsField("Web search") {
+                            SettingsChoices(values: AIWebSearchMode.allCases,
+                                            selection: selectedWebSearchMode, label: { $0.displayName })
+                            Text(selectedWebSearchMode.wrappedValue.detail)
+                                .font(.caption).foregroundStyle(IBColors.inkSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if selectedProvider == .gemini {
+                        SettingsField("Creativity · \(String(format: "%.1f", ariaTemperature))") {
+                            Slider(value: $ariaTemperature, in: 0...1.5, step: 0.1)
+                                .accessibilityLabel("Creativity")
+                            Text(temperatureDescription).font(.caption).foregroundStyle(IBColors.inkSecondary)
+                        }
+                    }
                 }
-                SettingsField("Answer detail") {
-                    SettingsChoices(values: AIResponseVerbosity.allCases,
-                                    selection: selectedVerbosity, label: { $0.displayName })
-                }
-            }
-
-            if selectedProvider == .codexCLI {
-                SettingsField("Web search") {
-                    SettingsChoices(values: AIWebSearchMode.allCases,
-                                    selection: selectedWebSearchMode, label: { $0.displayName })
-                    Text(selectedWebSearchMode.wrappedValue.detail)
-                        .font(.caption).foregroundStyle(IBColors.inkSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            if selectedProvider == .gemini {
-                SettingsField("Creativity · \(String(format: "%.1f", ariaTemperature))") {
-                    Slider(value: $ariaTemperature, in: 0...1.5, step: 0.1)
-                        .accessibilityLabel("Creativity")
-                    Text(temperatureDescription).font(.caption).foregroundStyle(IBColors.inkSecondary)
-                }
+                .padding(.top, 12)
             }
         } header: {
             Label("Model & responses", systemImage: "cpu")
@@ -745,7 +725,7 @@ struct SettingsView: View {
                 codexModel = defaultModel.model
             }
             reasoningEffortRaw = AIConfiguration.normalizedReasoningEffort(selectedReasoningEffort.wrappedValue, for: .codexCLI).rawValue
-            codexCatalogStatus = "Models updated from your installed Codex."
+            codexCatalogStatus = "Kept in sync with your installed Codex."
         } catch is CancellationError {
         } catch {
             codexCatalogStatus = "Couldn't update Codex models: \(error.localizedDescription)"
@@ -806,13 +786,9 @@ struct SettingsView: View {
     // MARK: - Study Settings
     private var flashcardDefaultsSection: some View {
         SettingsGroup {
-            SettingsField("Cards per set") {
-                SettingsChoices(values: [4, 6, 10, 20], selection: $cardDefaultCount,
-                                label: { "\($0) cards" })
-                CardCountControl(count: $cardDefaultCount)
-                Text("Saved automatically. This is the total across your selected topics and formats.")
-                    .font(.caption).foregroundStyle(IBColors.inkSecondary)
-            }
+            CardCountControl(count: $cardDefaultCount)
+            Text("The total across your selected topics and formats, up to \(CardGenerationOptions.maximumCount) in one set.")
+                .font(.caption).foregroundStyle(IBColors.inkSecondary)
             SettingsField("Answer style") {
                 SettingsChoices(values: CardTone.allCases, selection: $cardDefaultTone,
                                 value: { $0.rawValue }, label: { $0.label })
@@ -827,12 +803,8 @@ struct SettingsView: View {
                 SettingsChoices(values: CardDifficulty.allCases, selection: $cardDefaultDifficulty,
                                 value: { $0.rawValue }, label: { $0.rawValue })
             }
-            Divider()
-            Label("\(cardDefaultCount) cards · \((CardTone(rawValue: cardDefaultTone) ?? .balanced).label) · \((CardStyle(rawValue: cardDefaultStyle) ?? .basic).label)",
-                  systemImage: "checkmark.circle")
-                .font(.callout).foregroundStyle(IBColors.accent)
         } header: {
-            Label("Flashcard defaults", systemImage: "rectangle.on.rectangle")
+            Label("New card defaults", systemImage: "rectangle.on.rectangle")
         }
     }
 
@@ -842,23 +814,29 @@ struct SettingsView: View {
                 HStack {
                     Text("Daily goal")
                     Spacer()
-                    Text("\(p.dailyGoal) cards").foregroundStyle(IBColors.inkSecondary)
+                    TextField("Daily goal", value: Binding(
+                        get: { p.dailyGoal },
+                        set: { p.dailyGoal = min(max($0, 1), ReviewDailyLimitPolicy.maximumCards); persistChanges() }
+                    ), format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .frame(width: 64)
+                    .accessibilityLabel("Daily goal in cards")
                     Stepper("Daily goal", value: Binding(
                         get: { p.dailyGoal }, set: { p.dailyGoal = $0; persistChanges() }
-                    ), in: 5...ReviewDailyLimitPolicy.maximumCards, step: 5)
+                    ), in: 1...ReviewDailyLimitPolicy.maximumCards, step: 5)
                     .labelsHidden()
                 }
 
-                Text("This goal controls your daily review allowance, up to \(ReviewDailyLimitPolicy.maximumCards) cards. It is separate from cards per generated set.")
-                    .font(.caption).foregroundStyle(IBColors.inkSecondary)
-
-                HStack {
-                    Text("Streak Freezes"); Spacer()
-                    Text("\(p.streakFreezes)")
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "snowflake")
-                        .foregroundStyle(IBColors.inkTertiary)
-                }
+                SettingsToggle(
+                    "Stop reviews at my goal",
+                    detail: enforceDailyCardLimit
+                        ? "Reviews stop after \(p.dailyGoal) cards a day. Remaining cards wait until tomorrow."
+                        : "Off: \(p.dailyGoal) cards is a target, and you can keep reviewing past it.",
+                    isOn: $enforceDailyCardLimit
+                )
+                .onChange(of: enforceDailyCardLimit) { _, _ in reviewQueue?.refreshDueCards(context: context) }
             }
 
             SettingsField("Review order") {
@@ -876,7 +854,7 @@ struct SettingsView: View {
 
             SettingsToggle("Show mastery on cards", isOn: $showMasteryPercent)
 
-            SettingsToggle("Show due-card count", detail: "Display the review backlog in the sidebar", isOn: $showDueCountBadge)
+            SettingsToggle("Show due-card count", detail: "In the sidebar", isOn: $showDueCountBadge)
         } header: {
             Label("Daily review", systemImage: "book.fill")
         }
@@ -1145,7 +1123,7 @@ struct SettingsView: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "pills.fill")
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(IBColors.plum)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("ADHD Medication Tracker")
                         if adhdMedSettings.isEnabled && adhdMedSettings.medicationType != .none {
@@ -1555,9 +1533,9 @@ private struct SettingsGroup<Content: View, Header: View, Footer: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header.font(.headline).foregroundStyle(IBColors.ink)
-            VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 10) {
+            header.labelStyle(.titleOnly).font(IBTypography.sectionTitle).foregroundStyle(IBColors.ink)
+            VStack(alignment: .leading, spacing: 16) {
                 content
             }
             .font(.callout)
@@ -1567,7 +1545,7 @@ private struct SettingsGroup<Content: View, Header: View, Footer: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(22)
             .background(IBColors.surface, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(IBColors.border, lineWidth: 1))
+            
             footer.font(.caption).foregroundStyle(IBColors.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1654,17 +1632,16 @@ private struct SettingsChoices<Option: Hashable, Value: Hashable>: View {
         let selected = selection == value(option)
         return Button { selection = value(option) } label: {
             Text(label(option))
-                .font(.callout.weight(selected ? .semibold : .medium))
-                .foregroundStyle(selected ? IBColors.ink : IBColors.inkSecondary)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 38)
+                .font(.system(size: 12, weight: selected ? .medium : .regular))
+                .foregroundStyle(selected ? IBColors.accent : IBColors.inkSecondary)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 28)
                 .frame(maxWidth: .infinity)
                 .background(selected ? IBColors.highlight : IBColors.surfaceRaised,
-                            in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8)
-                    .stroke(selected ? IBColors.accent.opacity(0.55) : IBColors.border, lineWidth: 1))
+                            in: RoundedRectangle(cornerRadius: IBRadius.sm))
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IBPressStyle())
         .accessibilityLabel(label(option))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -1882,7 +1859,7 @@ struct ReportUploadView: View {
                                 grades[subject.name, default: [:]][comp] = score; IBHaptics.light()
                             } label: {
                                 Text("\(score)")
-                                    .font(.system(size: 14, weight: isSelected ? .bold : .regular, design: .rounded))
+                                    .font(.system(size: 14, weight: isSelected ? .bold : .regular))
                                     .foregroundColor(isSelected ? .white : .secondary)
                                     .frame(width: 28, height: 28)
                                     .background(Circle().fill(isSelected ? color : Color.secondary.opacity(0.15)))

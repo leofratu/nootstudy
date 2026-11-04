@@ -70,29 +70,27 @@ struct ContentView: View {
             detailPane
         }
         #if os(macOS)
-        .frame(minWidth: 940, minHeight: 640)
+        .frame(minWidth: 900, minHeight: 620)
         #endif
         .environment(reviewQueueManager)
         .environment(progressionEvents)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showCoach = true } label: { Label("Ask ARIA", systemImage: "sparkles") }
-                    .help("Open your study coach")
+                Button { showCoach.toggle() } label: { Label("Coach", systemImage: "sidebar.right") }
+                    .help(showCoach ? "Hide your study coach" : "Show your study coach")
             }
         }
-        .sheet(isPresented: $showCoach) {
+        // The coach sits beside the page you are working on rather than being
+        // a separate chat product you leave your work to visit.
+        .inspector(isPresented: $showCoach) {
             ARIAChatView()
-                .frame(minWidth: 820, minHeight: 640)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { showCoach = false }
-                    }
-                }
+                .inspectorColumnWidth(min: 340, ideal: 420, max: 620)
         }
         .tint(IBColors.accent)
         .onAppear {
             reviewQueueManager.ensureLoaded(context: context)
         }
+        .task { await AIProviderService.syncCodexModelsIfDue() }
         // Refresh whenever SwiftData persists a change; observing every
         // card/session through @Query held whole tables in memory and
         // re-rendered the shell on each rating.
@@ -104,6 +102,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             reviewQueueManager.scheduleRefresh(context: context)
+            Task { await AIProviderService.syncCodexModelsIfDue() }
         }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: .ibVaultAppCommand)) { notification in
@@ -118,82 +117,69 @@ struct ContentView: View {
         } label: {
             sidebarRow(tab)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IBPressStyle())
         .accessibilityLabel(tab.rawValue)
     }
 
     private func sidebarRow(_ tab: NavigationTab) -> some View {
-        HStack(spacing: 9) {
-            Label {
-                Text(tab.rawValue)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                    .foregroundStyle(selectedTab == tab ? IBColors.ink : IBColors.inkSecondary)
-            } icon: {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(selectedTab == tab ? IBColors.accent : IBColors.inkTertiary)
-            }
+        let isSelected = selectedTab == tab
+        return HStack(spacing: 9) {
+            Image(systemName: tab.icon)
+                .font(.system(size: 13))
+                .foregroundStyle(isSelected ? IBColors.accent : IBColors.inkTertiary)
+                .frame(width: 18)
+            Text(tab.rawValue)
+                .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                .lineLimit(1)
+                .foregroundStyle(isSelected ? IBColors.ink : IBColors.inkSecondary)
             Spacer(minLength: 4)
             if let badge = sidebarBadge(for: tab) {
                 badge
-                    .font(.system(size: 10, weight: .bold).monospacedDigit())
-                    .foregroundStyle(IBColors.inkSecondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(IBColors.surfaceHover).overlay(Capsule().stroke(IBColors.border, lineWidth: 1)))
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(IBColors.inkTertiary)
+                    .contentTransition(.numericText())
                     .allowsHitTesting(false)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .frame(height: 42)
+        .padding(.horizontal, 8)
+        .frame(height: 30)
         .background {
-            if selectedTab == tab {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(IBColors.highlight)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(IBColors.border, lineWidth: 1))
+            if isSelected {
+                RoundedRectangle(cornerRadius: IBRadius.sm)
+                    .fill(IBColors.ink.opacity(0.07))
                     .matchedGeometryEffect(id: "sidebarSelection", in: sidebarSelectionNamespace)
             }
         }
-        .animation(reduceMotion ? nil : IBAnimation.snappy, value: selectedTab)
         .contentShape(Rectangle())
+        .hoverHighlight()
     }
 
-    private var sidebarList: some View {
+    var sidebarList: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "books.vertical.fill")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(IBColors.accent)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("noot study").font(.custom("Georgia-Bold", size: 20))
-                        .foregroundStyle(IBColors.ink)
-                    Text("MAKE IT STICK").font(.system(size: 9, weight: .semibold))
-                        .tracking(1.8).foregroundStyle(IBColors.inkSecondary)
-                }
-                Spacer(minLength: 0)
-            }.padding(.horizontal, 20).padding(.top, 28).padding(.bottom, 28)
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    sidebarSection("WORKSPACE", tabs: [.dashboard, .subjects, .studySessions])
-                    sidebarSection("PRACTICE", tabs: [.library, .cardStudio, .review])
-                    sidebarSection("YOUR PROGRESS", tabs: [.analytics, .recommendations, .predictions])
+                VStack(alignment: .leading, spacing: 18) {
+                    sidebarSection(nil, tabs: [.dashboard, .studySessions, .subjects])
+                    sidebarSection("Flashcards", tabs: [.review, .cardStudio, .library])
+                    sidebarSection("Insight", tabs: [.analytics, .recommendations, .predictions])
                 }
-                .padding(.horizontal, 12).padding(.bottom, 20)
+                .padding(.horizontal, 10).padding(.vertical, 12)
+                .animation(reduceMotion ? nil : IBAnimation.snappy, value: selectedTab)
             }
             sidebarFooter
         }
         .background(IBColors.canvasDeep)
         .navigationTitle("Noot Study")
-        .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
     }
 
-    private func sidebarSection(_ title: String, tabs: [NavigationTab]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 9, weight: .semibold)).tracking(1.5)
-                .foregroundStyle(IBColors.inkSecondary)
-                .padding(.horizontal, 10).padding(.bottom, 8)
+    private func sidebarSection(_ title: String?, tabs: [NavigationTab]) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if let title {
+                Text(title).font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(IBColors.inkTertiary)
+                    .padding(.horizontal, 8).padding(.bottom, 4)
+            }
             ForEach(tabs, id: \.self) { sidebarButton($0) }
         }
     }
@@ -201,59 +187,42 @@ struct ContentView: View {
     private var sidebarFooter: some View {
         let profile = profiles.first
         let name = profile?.studentName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let initial = name.first.map { String($0).uppercased() } ?? "S"
-        return VStack(spacing: 0) {
-            Rectangle().fill(IBColors.border).frame(height: 1)
+        return HStack(spacing: 2) {
+            Button {
+                selectedTab = .profile
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(name.isEmpty ? "Student" : name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(IBColors.ink)
+                        .lineLimit(1)
+                    Text(profile?.achievedStep.displayName ?? "Getting started")
+                        .font(.system(size: 11))
+                        .foregroundStyle(IBColors.inkTertiary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .hoverHighlight()
+            }
+            .buttonStyle(IBPressStyle())
+            .accessibilityLabel("Profile")
+
             Button {
                 selectedTab = .settings
             } label: {
-                Label("Settings", systemImage: "gearshape")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(selectedTab == .settings ? IBColors.accent : IBColors.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .frame(height: 34)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(selectedTab == .settings ? IBColors.surfaceHover : Color.clear)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(selectedTab == .settings ? IBColors.border : Color.clear, lineWidth: 1))
-                    )
-            }
-            .buttonStyle(.plain)
-
-            HStack(spacing: 10) {
-                Button {
-                    selectedTab = .profile
-                } label: {
-                    HStack(spacing: 10) {
-                        ZStack {
-                            Circle()
-                                .fill(IBColors.surfaceHover)
-                                .frame(width: 28, height: 28)
-                                .overlay(Circle().stroke(IBColors.border, lineWidth: 1))
-                            Text(initial)
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(IBColors.inkSecondary)
-                        }
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(name.isEmpty ? "Student" : name)
-                                .font(.system(size: 12.5, weight: .semibold))
-                                .foregroundStyle(IBColors.ink)
-                                .lineLimit(1)
-                            Text(profile?.achievedStep.displayName ?? "Getting started")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(IBColors.inkTertiary)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 4)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                Image(systemName: "gearshape")
+                    .font(.system(size: 14))
+                    .foregroundStyle(selectedTab == .settings ? IBColors.accent : IBColors.inkTertiary)
+                    .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                    .hoverHighlight()
             }
-            .padding(.horizontal, 4)
+            .buttonStyle(IBPressStyle())
+            .help("Settings")
+            .accessibilityLabel("Settings")
         }
         .padding(8)
         .background(IBColors.canvasDeep)
@@ -261,13 +230,13 @@ struct ContentView: View {
 
     private var detailPane: some View {
         ZStack {
+            // Pages crossfade only: sliding a whole page while it also builds
+            // its content is what made tab changes feel heavy.
             pageContent
                 .id(selectedTab)
-                .transition(reduceMotion ? .opacity : .asymmetric(
-                    insertion: .opacity.combined(with: .offset(y: 8)), removal: .opacity
-                ))
+                .transition(.opacity)
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selectedTab)
+        .animation(reduceMotion ? nil : IBAnimation.page, value: selectedTab)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(IBColors.canvas)
     }
@@ -306,7 +275,7 @@ struct ContentView: View {
     private func handleAppCommand(_ payload: Any?) {
         guard let command = IBVaultAppCommand.fromNotificationPayload(payload) else { return }
         if command == .showARIA {
-            showCoach = true
+            showCoach.toggle()
             return
         }
         if let targetTab = command.targetTab {
@@ -343,58 +312,50 @@ struct ReviewLaunchView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     StudioPageHeader(
                         eyebrow: "Active recall",
-                        title: "Flashcard queue",
+                        title: "Review",
                         subtitle: reviewSubtitle,
                         symbol: "brain.head.profile"
                     ) {
-                        StudioPill(title: dueCardsCount == 0 ? "DONE FOR TODAY" : "\(dueCardsCount) TODAY", semantic: .neutral)
-                    }
-
-                    HStack(spacing: 12) {
-                        StudioMetricTile(value: "\(dueCardsCount)", label: "Left today", symbol: "rectangle.stack", detail: "\(queueManager.dailyMaximum)-card daily limit")
-                        StudioMetricTile(value: "\(queueManager.reviewedTodayCount)", label: "Reviewed today", symbol: "checkmark.circle", detail: "Completed")
-                        StudioMetricTile(value: "\(queueManager.deferredDueCount)", label: "For another day", symbol: "calendar", detail: "\(eligibleCount) unique saved cards")
-                    }
-
-                    VStack(alignment: .leading, spacing: 16) {
-                        StudioSectionHeader("Your next review", subtitle: reviewSubtitle, symbol: "play.rectangle") {
-                            EmptyView()
-                        }
-                        HStack(alignment: .center, spacing: 18) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(dueCardsCount == 0 ? "Queue complete" : "Start a focused recall session")
-                                    .font(IBTypography.sectionTitle)
-                                    .foregroundStyle(IBColors.ink)
-                                Text("Each response updates scheduling and builds a more reliable picture of what you know.")
-                                    .font(IBTypography.body13)
-                                    .foregroundStyle(IBColors.inkSecondary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            Button("Study guide") {
+                                IBHaptics.soft()
+                                showGuide = true
                             }
-                            Spacer(minLength: 20)
-                            VStack(spacing: 10) {
-                                Button {
-                                    IBHaptics.medium()
-                                    showReview = true
-                                } label: {
-                                    Label("Start cards", systemImage: "play.fill")
-                                        .frame(minWidth: 160)
-                                }
-                                .buttonStyle(PrimaryButtonStyle())
-                                .controlSize(.large)
-                                .disabled(dueCardsCount == 0)
-
-                                Button {
-                                    IBHaptics.soft()
-                                    showGuide = true
-                                } label: {
-                                    Label("Open study guide", systemImage: "book.closed")
-                                        .frame(minWidth: 160)
-                                }
-                                .buttonStyle(SecondaryButtonStyle())
+                            .buttonStyle(SecondaryButtonStyle())
+                            Button(dueCardsCount == 0 ? "Nothing due" : "Start review") {
+                                IBHaptics.medium()
+                                showReview = true
                             }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .disabled(dueCardsCount == 0)
                         }
                     }
-                    .padding(22)
+
+                    HStack(spacing: 16) {
+                        StudioMetricTile(value: "\(dueCardsCount)", label: "Ready now", symbol: "rectangle.stack")
+                        StudioMetricTile(value: "\(queueManager.reviewedTodayCount)", label: "Reviewed today", symbol: "checkmark.circle")
+                        StudioMetricTile(value: "\(queueManager.deferredDueCount)", label: "Waiting for tomorrow", symbol: "calendar")
+                        StudioMetricTile(value: "\(eligibleCount)", label: "Cards saved", symbol: "tray.full")
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Today's goal")
+                                .font(IBTypography.sectionTitle)
+                                .foregroundStyle(IBColors.ink)
+                            Spacer()
+                            Text("\(queueManager.reviewedTodayCount) of \(queueManager.dailyGoal) cards")
+                                .font(IBTypography.caption.monospacedDigit())
+                                .foregroundStyle(IBColors.inkSecondary)
+                        }
+                        MasteryBar(progress: Double(queueManager.reviewedTodayCount) / Double(max(queueManager.dailyGoal, 1)), height: 6)
+                        Text(queueManager.isLimitEnforced
+                             ? "Reviews stop at your goal. You can change this in Settings under Flashcards."
+                             : "A target, not a cap. Keep reviewing past it for as long as it's useful.")
+                            .font(IBTypography.caption)
+                            .foregroundStyle(IBColors.inkTertiary)
+                    }
+                    .padding(20)
                     .surfaceCard()
                 }
                 .frame(maxWidth: 960, alignment: .leading)
@@ -417,8 +378,8 @@ struct ReviewLaunchView: View {
     private var reviewSubtitle: String {
         if let error = queueManager.lastRefreshError { return error }
         if queueManager.remainingDailyAllowance == 0 {
-            return "Today's allowance is complete. The remaining cards will wait until tomorrow."
+            return "You've hit your daily limit. The remaining cards will wait until tomorrow."
         }
-        return "\(dueCardsCount) cards ready today, within your \(queueManager.dailyMaximum)-card allowance."
+        return dueCardsCount == 0 ? "You're caught up." : "\(dueCardsCount) cards are ready."
     }
 }

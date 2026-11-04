@@ -54,6 +54,7 @@
 		3FF6C224B9BE870D02042055 /* GradeMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 379A1481BDF76445ADFE4363 /* GradeMappingTests.swift */; };
 		413DA62A48CBED92CA81D53D /* BackupEarlyOutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F56DE8FE46360EDE84E832 /* BackupEarlyOutTests.swift */; };
 		41E7B7744D5CD36D9B634FBC /* MasteryCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46572174C584F070E8732E12 /* MasteryCalculator.swift */; };
+		41FEBC0A78378DAF9356B941 /* RankLadderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE4CB0F3EAAC1F57CCEE2FE4 /* RankLadderView.swift */; };
 		449ADDA1C21F572EE1872A6C /* RankProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97A440310E8DA6021B68587A /* RankProgress.swift */; };
 		45434FB663C699EED77D88D0 /* HeatmapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CBE422BE3736077D85F83C /* HeatmapView.swift */; };
 		45C0BC8B7710B682EF1B657D /* BridgeRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0119BE258CACADF75E53A4EC /* BridgeRouter.swift */; };
@@ -164,6 +165,7 @@
 		F8F8CFC2084381A99A18E627 /* WeeklyChallenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A987B07A7A64B11601995378 /* WeeklyChallenge.swift */; };
 		FAB7006BDFEDD13413FBE915 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 321F851CD24538BC63099454 /* Components.swift */; };
 		FB2B6F45BCD2D53911D81EB8 /* ARIAMemoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BBBB8B078687079BC5D9480 /* ARIAMemoryView.swift */; };
+		FC496205477D54BE12CCBCAB /* UIReworkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A4F78873CAA272452F35AA8 /* UIReworkTests.swift */; };
 		FCB6777BB813CD1BD2894EA8 /* IntegrationBridgeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7622D2EBA67DA97F5A5BAF9B /* IntegrationBridgeController.swift */; };
 		FCBB7707F18F8EFEF39782CD /* Materials in Resources */ = {isa = PBXBuildFile; fileRef = BB9713AFE0115FF39ABB53ED /* Materials */; };
 		FDEC1D8CE0720ECB213E467F /* TopicBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88FC6557D278D7C5D2150576 /* TopicBrowserView.swift */; };
@@ -273,6 +275,7 @@
 		97A440310E8DA6021B68587A /* RankProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankProgress.swift; sourceTree = "<group>"; };
 		998605218B33DF3291D5649D /* ReviewSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSession.swift; sourceTree = "<group>"; };
 		99D5763D72BAAB509FA60995 /* IBVaultAppCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IBVaultAppCommandTests.swift; sourceTree = "<group>"; };
+		9A4F78873CAA272452F35AA8 /* UIReworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIReworkTests.swift; sourceTree = "<group>"; };
 		9A6EF035A1AF10213DA1FA65 /* Achievement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Achievement.swift; sourceTree = "<group>"; };
 		9BBBB8B078687079BC5D9480 /* ARIAMemoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAMemoryView.swift; sourceTree = "<group>"; };
 		9C95169EBEE02D1161B47157 /* MasteryCalculatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteryCalculatorTests.swift; sourceTree = "<group>"; };
@@ -310,6 +313,7 @@
 		C950800C62B1C64FBEC68ED6 /* ARIAChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARIAChatView.swift; sourceTree = "<group>"; };
 		C99ECD31E3C91AA74D4E3420 /* FormattedMessageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormattedMessageCache.swift; sourceTree = "<group>"; };
 		CB8501D80DB14A3C686E56FD /* SmartRecommendationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartRecommendationsView.swift; sourceTree = "<group>"; };
+		CE4CB0F3EAAC1F57CCEE2FE4 /* RankLadderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankLadderView.swift; sourceTree = "<group>"; };
 		CE97B7A69191C889194AA1CF /* AcademicProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcademicProgressTests.swift; sourceTree = "<group>"; };
 		CED89DC549CFC92D3CC602B5 /* AIProviderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProviderService.swift; sourceTree = "<group>"; };
 		D0AD0CB222EFBF14223F2F50 /* IntegrationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationSettingsSection.swift; sourceTree = "<group>"; };
@@ -571,6 +575,7 @@
 				82D5C3D493F8E74D1A33CA70 /* AnalyticsView.swift */,
 				84CBE422BE3736077D85F83C /* HeatmapView.swift */,
 				EA37BD9EE66D6631497A7841 /* ProgressHubView.swift */,
+				CE4CB0F3EAAC1F57CCEE2FE4 /* RankLadderView.swift */,
 				064639B44D2E11A0F608D188 /* StudySessionLogView.swift */,
 			);
 			path = Analytics;
@@ -678,6 +683,7 @@
 				864373C28B7A6210FEC1A3BF /* StudyStudioTests.swift */,
 				5233D9FE11A99995314C6222 /* SubjectKnowledgeTests.swift */,
 				F2B3FD673726F5C6639FD59F /* SyllabusSeederTests.swift */,
+				9A4F78873CAA272452F35AA8 /* UIReworkTests.swift */,
 				FD42C0B0534AB6E78452E12D /* UserProfileProgressionTests.swift */,
 				C4F77CFAEEC1B8F79CB3A759 /* VisualSnapshotHarness.swift */,
 				23E6259966D0700049C34520 /* XPCalculatorTests.swift */,
@@ -896,6 +902,7 @@
 				10BDA9F05429CA565BE2AA9A /* ProgressionService.swift in Sources */,
 				85E962C86D710F46AC69BE33 /* ProgressionSnapshots.swift in Sources */,
 				C2A0CD45FFEC4EFF8BC95B35 /* RankLadder.swift in Sources */,
+				41FEBC0A78378DAF9356B941 /* RankLadderView.swift in Sources */,
 				449ADDA1C21F572EE1872A6C /* RankProgress.swift in Sources */,
 				7215EC5FDD0DD7F314750917 /* RecallCardView.swift in Sources */,
 				678B77411090D1DAB71C0E07 /* RelativeTimeHelper.swift in Sources */,
@@ -975,6 +982,7 @@
 				B58E7AAF11672A5125D12B2A /* StudyStudioTests.swift in Sources */,
 				95B71E62ED20AFEA05AD737C /* SubjectKnowledgeTests.swift in Sources */,
 				74F907BB6FD0CE9CFE7B5731 /* SyllabusSeederTests.swift in Sources */,
+				FC496205477D54BE12CCBCAB /* UIReworkTests.swift in Sources */,
 				516BA94C13C65BF91F437613 /* UserProfileProgressionTests.swift in Sources */,
 				A341AEE2C7D9381AF8F5F38E /* VisualSnapshotHarness.swift in Sources */,
 				CFD87C7AC43C98573EFE0E67 /* XPCalculatorTests.swift in Sources */,

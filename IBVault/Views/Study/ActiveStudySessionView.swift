@@ -4,6 +4,8 @@ import SwiftData
 struct ActiveStudySessionView: View {
     let plan: StudyPlan
     let onComplete: (() -> Void)? = nil
+    /// Opens with the offline paper loaded, so the harness can show the exam.
+    private let startsWithOfflinePaper: Bool
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(ProgressionEventCenter.self) private var progressionEvents
@@ -16,6 +18,9 @@ struct ActiveStudySessionView: View {
     @State private var sessionControlStatus: String?
     @State private var isUpdatingDuration = false
     @State private var showExitConfirmation = false
+    // Set only when the plan is completed through the check-in, so leaving early
+    // can never collect the completion bonus.
+    @State private var earnedCompletionBonus = false
     // Frozen at completion so the completion screen shows a stable duration
     // instead of a timer that keeps counting while the user reads the results.
     @State private var completedElapsed: TimeInterval = 0
@@ -69,6 +74,12 @@ struct ActiveStudySessionView: View {
 
     private typealias GeneratedFlashcard = CardDraft
 
+    init(plan: StudyPlan, initialTab: SessionTab = .plan, startsWithOfflinePaper: Bool = false) {
+        self.plan = plan
+        self.startsWithOfflinePaper = startsWithOfflinePaper
+        _selectedTab = State(initialValue: initialTab)
+    }
+
     private struct EvidenceScope: Identifiable {
         let topicName: String
         let subtopicName: String
@@ -84,7 +95,7 @@ struct ActiveStudySessionView: View {
     private var flashcardBatchBinding: Binding<Int> {
         Binding(
             get: { flashcardBatchSize },
-            set: { flashcardBatchSize = min(max($0, 1), 50) }
+            set: { flashcardBatchSize = min(max($0, 1), CardGenerationOptions.maximumCount) }
         )
     }
 
@@ -218,7 +229,7 @@ struct ActiveStudySessionView: View {
 
     enum SessionTab: String, CaseIterable {
         case plan = "Focus"
-        case chat = "ARIA Coach"
+        case chat = "Coach"
         case flashcards = "Recall"
         case exam = "Practice"
         case notes = "Notes"
@@ -250,6 +261,7 @@ struct ActiveStudySessionView: View {
             }
             initializeFlashcardScope()
             prepareFlashcardsIfRequested()
+            if startsWithOfflinePaper, examMarkdown.isEmpty { useOfflineExam() }
         }
         .onDisappear {
             flashcardTask?.cancel()
@@ -260,9 +272,10 @@ struct ActiveStudySessionView: View {
         .interactiveDismissDisabled(!isSessionComplete)
         .confirmationDialog("Leave this study session?", isPresented: $showExitConfirmation, titleVisibility: .visible) {
             Button("Save progress & leave") { finishSession(markPlanComplete: false) }
+            Button("Leave without logging", role: .destructive) { dismiss() }
             Button("Keep studying", role: .cancel) {}
         } message: {
-            Text("Your time, reviews, notes and practice answer will be saved. The plan stays open so you can study it again.")
+            Text("Saving logs your time, XP and practice answer. Either way the plan stays open to study again, and cards you already rated keep their schedule.")
         }
         .sheet(isPresented: $showCompletionCheckIn) {
             completionCheckIn
@@ -272,42 +285,45 @@ struct ActiveStudySessionView: View {
     private var sessionWorkspace: some View {
         VStack(spacing: 0) {
             sessionHeader
-                .padding(16)
             if let sessionControlStatus {
                 Text(sessionControlStatus)
-                    .font(.caption)
+                    .font(IBTypography.caption)
+                    .foregroundStyle(IBColors.inkSecondary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 10)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .transition(.opacity)
             }
-
-            Divider()
 
             HStack(spacing: 0) {
                 sessionTabBar
-                    .frame(width: 190)
-                    .background(IBColors.surface.opacity(0.72))
-
-                Divider()
+                    .frame(width: 184)
+                    .background(IBColors.canvasDeep)
 
                 panelContent
+                    .id(selectedTab)
+                    .transition(.opacity)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(IBColors.canvas)
             }
 
-            Divider()
+            Rectangle().fill(IBColors.border).frame(height: 1)
 
             bottomBar
-                .padding(14)
-                .background(.bar)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(IBColors.surface)
         }
+        .animation(IBAnimation.page, value: selectedTab)
+        .animation(IBAnimation.smooth, value: sessionControlStatus)
     }
 
     private func prepareFlashcardsIfRequested() {
         guard (plan.prepareFlashcards == true || plan.flashcardOnly == true), !didPrepareFlashcards else { return }
         didPrepareFlashcards = true
         selectedTab = .flashcards
-        flashcardBatchSize = min(max(plan.flashcardTargetCount ?? CardGenerationOptions.preferred.count, 1), 50)
+        flashcardBatchSize = min(max(plan.flashcardTargetCount ?? CardGenerationOptions.preferred.count, 1), CardGenerationOptions.maximumCount)
         cardStudioOptions.count = flashcardBatchSize
         if let raw = plan.flashcardDifficultyRaw, let value = CardDifficulty(rawValue: raw) {
             flashcardDifficulty = value
@@ -331,62 +347,55 @@ struct ActiveStudySessionView: View {
     // MARK: - Header
 
     private var sessionHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(IBColors.inkTertiary.opacity(0.1))
-                        .frame(width: 42, height: 42)
-                    Image(systemName: subjectIcon(plan.subjectName))
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(subjectColor(plan.subjectName))
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
-                        Text(plan.subjectName)
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        Text("FOCUS SESSION")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(subjectColor(plan.subjectName))
-                    }
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(plan.subjectName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(IBColors.ink)
                     Text(plan.selectionSummary)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .font(IBTypography.caption)
+                        .foregroundStyle(IBColors.inkSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(plan.selectionSummary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer()
+                SessionClockView(startDate: sessionStartDate, durationMinutes: plan.durationMinutes)
 
-                Button { showExitConfirmation = true } label: {
-                    Label(isCompletingSession ? "Saving…" : "Leave", systemImage: "xmark")
+                Menu {
+                    ForEach([15, 30, 60], id: \.self) { minutes in
+                        Button("Add \(minutes) minutes") { extendSession(by: minutes) }
+                    }
+                } label: {
+                    Text(isUpdatingDuration ? "Saving…" : "Extend")
                 }
-                .buttonStyle(.bordered)
+                .menuStyle(.button)
                 .controlSize(.small)
-                .disabled(isCompletingSession || isUpdatingDuration)
-                .help("Save progress and leave the session")
-                .keyboardShortcut(.cancelAction)
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 14) { sessionTimeControls; Spacer(); FocusRhythmView() }
-                VStack(alignment: .leading, spacing: 10) { sessionTimeControls; FocusRhythmView() }
-            }
-        }
-    }
+                .fixedSize()
+                .disabled(isUpdatingDuration || isCompletingSession)
+                .help("Add time without restarting the session")
 
-    private var sessionTimeControls: some View {
-        HStack(spacing: 10) {
-            SessionTimerView(startDate: sessionStartDate, durationMinutes: plan.durationMinutes)
-            Menu {
-                ForEach([15, 30, 60], id: \.self) { minutes in
-                    Button("Add \(minutes) minutes") { extendSession(by: minutes) }
-                }
-            } label: {
-                Label(isUpdatingDuration ? "Saving…" : "Extend", systemImage: "plus")
+                Button(isCompletingSession ? "Saving…" : "Leave") { showExitConfirmation = true }
+                    .controlSize(.small)
+                    .disabled(isCompletingSession || isUpdatingDuration)
+                    .help("Leave the session")
+                    .keyboardShortcut(.cancelAction)
             }
-            .disabled(isUpdatingDuration || isCompletingSession)
-            .menuStyle(.borderlessButton)
-            .fixedSize()
+            .padding(.horizontal, 20)
+            .frame(height: 54)
+            .background(IBColors.surface)
+
+            SessionTimeLine(startDate: sessionStartDate, durationMinutes: plan.durationMinutes)
+
+            SessionOvertimePrompt(
+                startDate: sessionStartDate,
+                durationMinutes: plan.durationMinutes,
+                isBusy: isUpdatingDuration || isCompletingSession,
+                onExtend: extendSession(by:),
+                onFinish: prepareCompletionCheckIn
+            )
         }
     }
 
@@ -412,85 +421,88 @@ struct ActiveStudySessionView: View {
     // MARK: - Tab Bar
 
     private var sessionTabBar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("WORKSPACE")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 14)
-                .padding(.top, 14)
-
+        VStack(alignment: .leading, spacing: 1) {
             ForEach(SessionTab.allCases, id: \.self) { tab in
                 Button {
-                    withAnimation(IBAnimation.snappy) { selectedTab = tab }
+                    selectedTab = tab
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: tab.icon)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 13))
+                            .foregroundStyle(selectedTab == tab ? IBColors.accent : IBColors.inkTertiary)
                             .frame(width: 18)
                         Text(tab.rawValue)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 13, weight: selectedTab == tab ? .medium : .regular))
+                            .foregroundStyle(selectedTab == tab ? IBColors.ink : IBColors.inkSecondary)
+                        Spacer(minLength: 0)
                         if tab == .flashcards && !generatedCards.isEmpty {
                             Text("\(generatedCards.count)")
-                                .font(.system(size: 9, weight: .bold, design: .rounded))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(IBColors.accent))
-                                .foregroundStyle(.white)
+                                .font(.system(size: 11).monospacedDigit())
+                                .foregroundStyle(IBColors.inkTertiary)
                         }
-                        Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
                     .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(selectedTab == tab ? IBColors.accent.opacity(0.11) : Color.clear)
+                        RoundedRectangle(cornerRadius: IBRadius.sm)
+                            .fill(selectedTab == tab ? IBColors.ink.opacity(0.07) : Color.clear)
                     )
-                    .foregroundStyle(
-                        selectedTab == tab
-                            ? AnyShapeStyle(IBColors.ink)
-                            : AnyShapeStyle(.secondary)
-                    )
+                    .contentShape(Rectangle())
+                    .hoverHighlight()
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 8)
+                .buttonStyle(IBPressStyle())
             }
-
-            Divider().padding(.horizontal, 12).padding(.vertical, 6)
 
             if let nextTask {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("UP NEXT")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.tertiary)
-                    Text(nextTask.title)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(2)
-                    Label("\(nextTask.minutes) min", systemImage: "clock")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Button("Open task", systemImage: "arrow.right.circle") { startTask(nextTask) }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                    Text("Up next")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(IBColors.inkTertiary)
+                    Button { startTask(nextTask) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(nextTask.title)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(IBColors.ink)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(3)
+                            Text("\(nextTask.minutes) min")
+                                .font(IBTypography.caption)
+                                .foregroundStyle(IBColors.inkSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(IBPressStyle())
+                    .help("Open this step")
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 8)
+                .padding(.top, 20)
             } else if !plan.planTasks.isEmpty {
-                Label("Plan complete", systemImage: "checkmark.seal.fill")
-                    .font(.caption.weight(.semibold))
+                Label("Plan complete", systemImage: "checkmark")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(IBColors.success)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 20)
             }
 
-            Spacer()
+            Spacer(minLength: 16)
 
-            ProgressView(value: Double(completedTaskCount), total: Double(max(plan.planTasks.count, 1)))
-                .tint(IBColors.accent)
-                .padding(.horizontal, 14)
-            Text("\(completedTaskCount) of \(plan.planTasks.count) steps")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 14)
+            FocusRhythmView()
+                .padding(.horizontal, 8)
+                .padding(.bottom, 12)
+
+            if !plan.planTasks.isEmpty {
+                MasteryBar(progress: Double(completedTaskCount) / Double(max(plan.planTasks.count, 1)), height: 3)
+                    .padding(.horizontal, 8)
+                Text("\(completedTaskCount) of \(plan.planTasks.count) steps")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(IBColors.inkTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 4)
+            }
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Plan Panel
@@ -559,24 +571,18 @@ struct ActiveStudySessionView: View {
                             if msg.role == "user" { Spacer(minLength: 60) }
 
                             if msg.role == "model" {
-                                ZStack {
-                                    Circle()
-                                        .fill(IBColors.accent.opacity(0.08))
-                                        .frame(width: 26, height: 26)
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(IBColors.accent)
-                                }
-                                .padding(.top, 2)
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(IBColors.accent)
+                                    .frame(width: 18)
+                                    .padding(.top, 3)
                             }
 
                             FormattedMessageContent(text: msg.text)
-                                .padding(10)
+                                .padding(msg.role == "user" ? 10 : 0)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(msg.role == "user"
-                                              ? IBColors.accent.opacity(0.08)
-                                              : Color.secondary.opacity(0.04))
+                                    RoundedRectangle(cornerRadius: IBRadius.lg)
+                                        .fill(msg.role == "user" ? IBColors.surfaceRaised : Color.clear)
                                 )
 
                             if msg.role == "model" { Spacer(minLength: 60) }
@@ -602,12 +608,12 @@ struct ActiveStudySessionView: View {
                 .padding(16)
             }
 
-            Divider()
+            Rectangle().fill(IBColors.border).frame(height: 1)
 
             // Input
             HStack(spacing: 8) {
-                TextField("Ask ARIA about \(plan.studyScope.title)…", text: $chatInput)
-                    .textFieldStyle(.roundedBorder)
+                TextField("Ask about \(plan.studyScope.title)…", text: $chatInput)
+                    .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .onSubmit { sendMessage() }
 
@@ -615,50 +621,37 @@ struct ActiveStudySessionView: View {
                     sendMessage()
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(
-                            chatInput.isEmpty
-                                ? AnyShapeStyle(.tertiary)
-                                : AnyShapeStyle(IBColors.accent)
-                        )
+                        .font(.system(size: 20))
+                        .foregroundStyle(chatInput.isEmpty ? IBColors.inkTertiary : IBColors.accent)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(IBPressStyle())
                 .disabled(chatInput.isEmpty || isChatting)
                 .help("Send message")
             }
-            .padding(12)
-            .glassCard(cornerRadius: IBRadius.md)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(IBColors.surface)
         }
     }
 
     private var emptyChat: some View {
-        VStack(spacing: 12) {
-            Spacer().frame(height: 30)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Ask your coach")
+                .font(IBTypography.sectionTitle)
+                .foregroundStyle(IBColors.ink)
+            Text("It already knows this session's topics, your grades and your study history.")
+                .font(IBTypography.body13)
+                .foregroundStyle(IBColors.inkSecondary)
 
-            Image(systemName: "sparkles")
-                .font(.system(size: 28, weight: .ultraLight))
-                .foregroundStyle(.tertiary)
-
-            Text("Chat with ARIA")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-
-            Text("Full context — ARIA knows your grades,\nprogress, and study history.")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-
-            VStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
                 quickPrompt("Explain \(plan.studyScope.title) simply")
                 quickPrompt("Give me a practice question")
                 quickPrompt("What are common exam mistakes here?")
                 quickPrompt("How is this assessed in the IB exam?")
                 quickPrompt("Create a mnemonic for key terms")
             }
-
-            Spacer()
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: 520, alignment: .leading)
     }
 
     // MARK: - Flashcards Panel
@@ -689,13 +682,13 @@ struct ActiveStudySessionView: View {
     }
 
     private var flashcardGenerationToolbar: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Session flashcards")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("Generate a focused batch, review it, then add more without leaving the session.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .font(IBTypography.sectionTitle)
+                Text("Generate a batch, review it, then add more without leaving the session.")
+                    .font(IBTypography.caption)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
             Spacer()
             if isGeneratingCards {
@@ -703,16 +696,12 @@ struct ActiveStudySessionView: View {
                 Button("Cancel") { flashcardTask?.cancel() }
             } else {
                 Button(action: generateFlashcards) {
-                    Label(
-                        generatedCards.isEmpty ? "Generate \(cardStudioOptions.count)" : "Add \(cardStudioOptions.count) More",
-                        systemImage: "sparkles"
-                    )
+                    Text(generatedCards.isEmpty ? "Generate \(cardStudioOptions.count)" : "Add \(cardStudioOptions.count) more")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .buttonStyle(PrimaryButtonStyle())
             }
         }
-        .padding(.vertical, 14)
+        .padding(.top, 10)
     }
 
     @ViewBuilder
@@ -721,7 +710,6 @@ struct ActiveStudySessionView: View {
             DisclosureGroup("Choose topics · \(flashcardSelection.count) selected") {
                 TopicSelectionView(subject: subject, selection: $flashcardSelection).padding(.top, 16)
             }
-            .padding(.vertical, 12)
             .disabled(isGeneratingCards)
         }
     }
@@ -741,9 +729,7 @@ struct ActiveStudySessionView: View {
             Label(flashcardError, systemImage: "exclamationmark.triangle.fill")
                 .font(.callout)
                 .foregroundStyle(IBColors.danger)
-                .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.danger.opacity(0.06)))
         }
     }
 
@@ -762,8 +748,7 @@ struct ActiveStudySessionView: View {
             )).id(card.id)
             flashcardAnswer(card, index: index)
         }
-        .padding(12)
-        .glassCard(cornerRadius: IBRadius.md)
+        .padding(.bottom, 8)
     }
 
     private func flashcardRowHeader(_ card: GeneratedFlashcard, index: Int) -> some View {
@@ -774,9 +759,8 @@ struct ActiveStudySessionView: View {
             if savedCardIDs.contains(card.id) {
                 Label("Saved", systemImage: "checkmark.circle.fill").font(.caption2).foregroundStyle(.secondary)
             } else {
-                Button("Save", systemImage: "plus.circle.fill") { saveCardToSubject(card) }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
+                Button("Save") { saveCardToSubject(card) }
+                    .controlSize(.small)
             }
         }
     }
@@ -793,10 +777,8 @@ struct ActiveStudySessionView: View {
                     Text("Recall").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     ForEach(RecallQuality.allCases, id: \.self) { quality in
-                        Button(quality.label) { rateGeneratedCard(card, quality: quality) }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .tint(recallTint(quality))
+                        QualityButton(label: quality.label, color: recallTint(quality)) { rateGeneratedCard(card, quality: quality) }
+                            .frame(maxWidth: 96)
                     }
                 }
             }
@@ -805,13 +787,11 @@ struct ActiveStudySessionView: View {
             Text("Choose an option, then check your answer.")
                 .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
         } else {
-            Button("Reveal answer", systemImage: "eye") {
-                _ = withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { revealedCards.insert(index) }
+            Button("Reveal answer") {
+                _ = withAnimation(IBAnimation.snappy) { revealedCards.insert(index) }
                 IBHaptics.light()
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .frame(maxWidth: .infinity)
+            .buttonStyle(SecondaryButtonStyle())
         }
     }
 
@@ -826,10 +806,8 @@ struct ActiveStudySessionView: View {
     @ViewBuilder
     private var saveAllGeneratedCardsButton: some View {
         if unsavedGeneratedCards.count > 1 {
-            Button("Save All \(unsavedGeneratedCards.count) Cards", systemImage: "square.and.arrow.down", action: saveAllCards)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .frame(maxWidth: .infinity)
+            Button("Save all \(unsavedGeneratedCards.count) cards", action: saveAllCards)
+                .buttonStyle(PrimaryButtonStyle())
         }
     }
 
@@ -837,85 +815,108 @@ struct ActiveStudySessionView: View {
 
     private var examPanel: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 20) {
                 examToolbar
                     .disabled(isGradingExam)
                 if let examGenerationError {
-                    Label(examGenerationError, systemImage: "exclamationmark.triangle")
-                        .font(.callout)
-                        .foregroundStyle(IBColors.danger)
-                        .textSelection(.enabled)
-                    Button("Use an offline practice template", action: useOfflineExam)
-                        .buttonStyle(.bordered)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(examGenerationError)
+                            .font(IBTypography.body13)
+                            .foregroundStyle(IBColors.danger)
+                            .textSelection(.enabled)
+                        HStack(spacing: 8) {
+                            Button("Try again", action: generateExam)
+                                .buttonStyle(SecondaryButtonStyle())
+                            Button("Use the offline paper", action: useOfflineExam)
+                                .buttonStyle(SecondaryButtonStyle())
+                        }
                         .disabled(isGeneratingExam)
+                    }
                 }
                 examContent
             }
-            .padding(.horizontal, 20)
+            .frame(maxWidth: 760, alignment: .leading)
+            .padding(.horizontal, 24)
             .padding(.top, 10)
             .padding(.bottom, 60)
+            .frame(maxWidth: .infinity)
         }
     }
 
     private var examToolbar: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Practice Exam")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Text("Generate a scoped paper, write your answer, and save it to the Library.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                Text("Practice exam")
+                    .font(IBTypography.sectionTitle)
+                Text(examMarkdown.isEmpty
+                     ? "A paper written for exactly this session's topics."
+                     : "\(examMaximumMarks) marks")
+                    .font(IBTypography.caption)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
             Spacer()
-            if isGeneratingExam {
-                ProgressView().controlSize(.small)
-                Button("Cancel") { examGenerationTask?.cancel() }
-            } else if examMarkdown.isEmpty {
-                Button("Generate Exam", systemImage: "sparkles", action: generateExam)
-                    .buttonStyle(.borderedProminent)
+            if !examMarkdown.isEmpty && !isGeneratingExam {
+                Button(isSavingTest ? "Saving…" : "Save to Library") { savePracticeTest() }
                     .controlSize(.small)
-            } else {
-                Button(isSavingTest ? "Saving…" : "Save test to Library", systemImage: "square.and.arrow.down") { savePracticeTest() }
-                    .buttonStyle(.bordered).controlSize(.small)
                     .disabled(isSavingTest)
-                Button("New Exam", systemImage: "arrow.clockwise") {
-                    clearExamWorkspace()
-                    generateExam()
+                Menu("More") {
+                    Button("New paper") {
+                        clearExamWorkspace()
+                        generateExam()
+                    }
+                    Button("Discard paper", role: .destructive, action: clearExamWorkspace)
                 }
-                .buttonStyle(.bordered)
+                .menuStyle(.button)
                 .controlSize(.small)
-                Button("Discard", systemImage: "trash", role: .destructive, action: clearExamWorkspace)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                .fixedSize()
             }
         }
-        .padding(.vertical, 14)
+        .padding(.top, 10)
     }
 
     @ViewBuilder
     private var examContent: some View {
-        if examMarkdown.isEmpty && !isGeneratingExam {
-            ContentUnavailableView(
-                "No practice exam",
-                systemImage: "pencil.and.outline",
-                description: Text("Generate a scoped paper, write your response, then grade it with IB-aligned criteria.")
-            )
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
-        } else if !examMarkdown.isEmpty {
-            VStack(alignment: .leading, spacing: 16) {
-                if let testSaveStatus { Text(testSaveStatus).font(.caption).foregroundStyle(.secondary) }
+        if isGeneratingExam {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text("Writing your paper. This can take a few minutes.")
+                    .font(IBTypography.body13)
+                    .foregroundStyle(IBColors.inkSecondary)
+                Spacer()
+                Button("Cancel") { examGenerationTask?.cancel() }
+                    .controlSize(.small)
+            }
+        } else if examMarkdown.isEmpty {
+            if examGenerationError == nil {
+                HStack(spacing: 8) {
+                    Button("Generate paper", action: generateExam)
+                        .buttonStyle(PrimaryButtonStyle())
+                    Button("Use the offline paper", action: useOfflineExam)
+                        .buttonStyle(SecondaryButtonStyle())
+                        .help("A simple paper built from your selected topics, with no AI needed")
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 24) {
+                if let testSaveStatus {
+                    Text(testSaveStatus).font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
+                }
                 examPaper
-                DisclosureGroup("Response guidance") { examRubricOverview }
                 examResponseEditor
                 examGradingResult
+                DisclosureGroup("How this is marked") { examRubricOverview }
+                    .font(IBTypography.body13)
+                    .foregroundStyle(IBColors.inkSecondary)
             }
         }
     }
 
     private var examPaper: some View {
         FormattedMessageContent(text: examMarkdown)
+            .textSelection(.enabled)
+            .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .surfaceCard()
     }
 
     private var examRubricOverview: some View {
@@ -953,70 +954,80 @@ struct ActiveStudySessionView: View {
 
     private var examResponseEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Your response", systemImage: "square.and.pencil")
-                    .font(.headline)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Your answer")
+                    .font(IBTypography.sectionTitle)
                 Spacer()
                 Text("\(examResponse.split(whereSeparator: \.isWhitespace).count) words")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(IBTypography.caption.monospacedDigit())
+                    .foregroundStyle(IBColors.inkTertiary)
             }
             TextEditor(text: $examResponse)
-                .font(.body)
+                .font(.system(size: 13))
+                .lineSpacing(3)
                 .scrollContentBackground(.hidden)
-                .frame(minHeight: 240)
+                .frame(minHeight: 260)
                 .padding(12)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.035)))
+                .background(RoundedRectangle(cornerRadius: IBRadius.card).fill(IBColors.surface))
                 .disabled(isGradingExam)
+                .accessibilityLabel("Your exam answer")
                 .onChange(of: examResponse) { _, _ in
                     examGradingMarkdown = ""
                     testSaveStatus = nil
                 }
-            DisclosureGroup("Mark scheme (hidden while answering)") {
+            DisclosureGroup(examMarkScheme.isEmpty ? "Add a mark scheme" : "Mark scheme") {
                 TextEditor(text: $examMarkScheme)
-                    .frame(minHeight: 120).padding(10)
+                    .font(.system(size: 12))
+                    .frame(minHeight: 120)
+                    .padding(10)
                     .scrollContentBackground(.hidden)
-                    .background(IBColors.canvas)
+                    .background(RoundedRectangle(cornerRadius: IBRadius.md).fill(IBColors.surfaceRaised))
                     .accessibilityLabel("Practice exam mark scheme")
                     .disabled(isGradingExam)
+                    .padding(.top, 8)
                     .onChange(of: examMarkScheme) { _, _ in
                         examGradingMarkdown = ""
                         testSaveStatus = nil
                     }
             }
+            .font(IBTypography.body13)
+            .foregroundStyle(IBColors.inkSecondary)
             HStack {
-                Text(examMarkScheme.isEmpty ? "Practice estimate · No mark scheme" : "Against your supplied scheme")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(examMarkScheme.isEmpty ? "Marked as a practice estimate" : "Marked against the scheme")
+                    .font(IBTypography.caption)
+                    .foregroundStyle(IBColors.inkTertiary)
                 Spacer()
                 if isGradingExam {
                     ProgressView().controlSize(.small)
                     Button("Cancel") { markingTask?.cancel() }
+                        .controlSize(.small)
                 }
-                Button("Mark my answer", systemImage: "checkmark.seal", action: gradeExamResponse)
-                    .buttonStyle(.borderedProminent)
+                Button("Mark my answer", action: gradeExamResponse)
+                    .buttonStyle(PrimaryButtonStyle())
                     .disabled(examResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isGradingExam)
             }
         }
-        .padding(.vertical, 16)
     }
 
     @ViewBuilder
     private var examGradingResult: some View {
         if let examGradingError {
-            Label(examGradingError, systemImage: "exclamationmark.triangle.fill")
-                .font(.callout)
+            Text(examGradingError)
+                .font(IBTypography.body13)
                 .foregroundStyle(IBColors.danger)
+                .textSelection(.enabled)
         }
         if !examGradingMarkdown.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Label("Practice feedback", systemImage: "checkmark.seal.fill")
-                    .font(.headline)
-                    .foregroundStyle(IBColors.success)
+                Text("Feedback")
+                    .font(IBTypography.sectionTitle)
                 FormattedMessageContent(text: examGradingMarkdown)
+                    .textSelection(.enabled)
             }
-            .padding(16)
-            .background(RoundedRectangle(cornerRadius: 8).fill(IBColors.success.opacity(0.055)))
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surfaceCard()
+            .transition(.opacity)
         }
     }
 
@@ -1026,7 +1037,7 @@ struct ActiveStudySessionView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("SESSION NOTES")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .tracking(0.5)
                 Spacer()
@@ -1089,66 +1100,32 @@ struct ActiveStudySessionView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 12) {
-            // Session status
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(IBColors.success)
-                    .frame(width: 7, height: 7)
-                Text("Session active")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-
-            if !generatedCards.isEmpty {
-                Text("·")
-                    .foregroundStyle(.tertiary)
-                Text("\(generatedCards.count) generated · \(reviewedCardCount) reviewed")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-            }
-
-            if !plan.planTasks.isEmpty {
-                Text("·")
-                    .foregroundStyle(.tertiary)
-                Text("\(completedTaskCount)/\(plan.planTasks.count) steps")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(completedTaskCount == plan.planTasks.count ? IBColors.success : .secondary)
-            }
+            Text(bottomBarStatus)
+                .font(IBTypography.caption.monospacedDigit())
+                .foregroundStyle(IBColors.inkTertiary)
+                .lineLimit(1)
 
             Spacer()
 
             if let nextTask {
-                Button {
-                    startTask(nextTask)
-                } label: {
-                    Label("Next: \(nextTask.title)", systemImage: "arrow.right.circle")
-                        .lineLimit(1)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help(nextTask.instructions)
+                Button("Next: \(nextTask.title)") { startTask(nextTask) }
+                    .lineLimit(1)
+                    .controlSize(.small)
+                    .help(nextTask.instructions)
             }
 
-            Button {
+            Button(isCompletingSession ? "Saving…" : "Complete session") {
                 prepareCompletionCheckIn()
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 13))
-                    Text("Complete Session")
-                        .font(.system(size: 13, weight: .semibold))
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .foregroundStyle(Color.white)
-                .background(
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(isCompletingSession ? IBColors.inkSecondary : IBColors.success)
-                )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PrimaryButtonStyle())
             .disabled(isCompletingSession)
         }
+    }
+
+    private var bottomBarStatus: String {
+        var parts: [String] = []
+        if !generatedCards.isEmpty { parts.append("\(reviewedCardCount) of \(generatedCards.count) cards reviewed") }
+        return parts.isEmpty ? "Session in progress" : parts.joined(separator: " · ")
     }
 
     private var completionCheckIn: some View {
@@ -1191,14 +1168,7 @@ struct ActiveStudySessionView: View {
                             .pickerStyle(.segmented)
                         }
                         .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(IBColors.surface)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(IBColors.border, lineWidth: 1)
-                                )
-                        )
+                        .surfaceCard()
                     }
 
                     HStack {
@@ -1224,21 +1194,9 @@ struct ActiveStudySessionView: View {
                     Button("Keep Studying") { showCompletionCheckIn = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        completeSession()
-                    } label: {
-                        Text("Complete Session")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(hasCompleteCheckIn && !isCompletingSession ? IBColors.success : IBColors.inkSecondary)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasCompleteCheckIn || isCompletingSession)
+                    Button("Complete session") { completeSession() }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(!hasCompleteCheckIn || isCompletingSession)
                 }
             }
         }
@@ -1262,17 +1220,14 @@ struct ActiveStudySessionView: View {
             sendMessage()
         } label: {
             Text(text)
-                .font(.system(size: 11))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule()
-                        .fill(IBColors.accent.opacity(0.06))
-                        .overlay(Capsule().strokeBorder(IBColors.accent.opacity(0.12), lineWidth: 0.5))
-                )
+                .font(.system(size: 13))
                 .foregroundStyle(IBColors.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+                .hoverHighlight()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IBPressStyle())
     }
 
     // MARK: - Completion View
@@ -1316,14 +1271,14 @@ struct ActiveStudySessionView: View {
                 Image(systemName: "checkmark.seal.fill").font(.system(size: 36)).foregroundStyle(IBColors.success)
             }
             .glow(color: IBColors.success, radius: 20)
-            Text("Session Complete!").font(.system(size: 22, weight: .bold, design: .rounded))
+            Text("Session Complete!").font(.system(size: 22, weight: .bold))
             HStack(spacing: 8) {
                 Image(systemName: "bolt.fill")
                     .font(.title2)
                     .foregroundStyle(IBColors.inkTertiary)
                     .symbolEffect(.bounce, value: showRewardPulse)
                 Text("+").font(.title2.bold())
-                AnimatedCounter(value: xpAwarded, font: .system(size: 30, weight: .black, design: .rounded), color: IBColors.inkTertiary)
+                AnimatedCounter(value: xpAwarded, font: .system(size: 30, weight: .black), color: IBColors.inkTertiary)
                 Text("XP").font(.headline).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 18)
@@ -1343,7 +1298,7 @@ struct ActiveStudySessionView: View {
             Divider().frame(height: 44)
             StatCard(value: "\(reviewedCardCount)", label: "Reviewed", color: IBColors.accent, icon: "rectangle.on.rectangle")
             Divider().frame(height: 44)
-            StatCard(value: "+\(xpAwarded)xp", label: "Earned", color: .purple, icon: "star.fill")
+            StatCard(value: "+\(xpAwarded)xp", label: "Earned", color: IBColors.plum, icon: "star.fill")
         }
         .padding(.vertical, 12)
         .glassCard(cornerRadius: IBRadius.md)
@@ -1388,7 +1343,7 @@ struct ActiveStudySessionView: View {
     @ViewBuilder
     private var completionReviewSchedule: some View {
         Label(
-            "Saved cards now return through the daily recall queue, capped at \(ReviewDailyLimitPolicy.maximumCards) cards.",
+            "Saved cards now come back through your review queue when they are due.",
             systemImage: "rectangle.stack.badge.play"
         )
         .font(.caption.weight(.semibold))
@@ -1598,13 +1553,15 @@ struct ActiveStudySessionView: View {
                 - Keep answers and hints OUT of the question field. Put a complete question-by-question mark scheme in markScheme.
                 - Ensure layout uses Markdown headings, numbered questions, bullets, and blockquotes effectively.
                 - Avoid Markdown tables.
+                - In the JSON, escape every LaTeX backslash as a double backslash, for example \\\\frac.
                 Return ONLY JSON with these keys:
                 {"question":"Markdown paper with [N marks] after each question","markScheme":"Markdown scheme","maximumMarks":24}
                 """
 
                 let response = try await AIProviderService.generateContent(
                     messages: [GeminiMessage(role: "user", text: prompt)],
-                    systemInstruction: "You write original practice exams tailored to the supplied IB subject, level and curriculum scope. Return the requested JSON object with separate question and markScheme fields. Use valid LaTeX for equations."
+                    systemInstruction: "You write original practice exams tailored to the supplied IB subject, level and curriculum scope. Return the requested JSON object with separate question and markScheme fields. Use valid LaTeX for equations.",
+                    timeout: PracticeExamPaper.generationTimeout
                 )
                 try Task.checkCancellation()
                 let paper = try PracticeExamPaper.parse(response)
@@ -1755,10 +1712,12 @@ struct ActiveStudySessionView: View {
 
     private var xpAwarded: Int {
         let intensity = profiles.first?.studyIntensity ?? .average
+        let bonus = earnedCompletionBonus
+            ? XPCalculator.completionBonus(forStudyMinutes: dedicatedMinutesDouble, intensity: intensity) : 0
         return XPCalculator.xp(
             forStudyMinutes: dedicatedMinutesDouble,
             intensity: intensity
-        ) + XPCalculator.xp(forQualities: Array(cardRatings.values), intensity: intensity)
+        ) + XPCalculator.xp(forQualities: Array(cardRatings.values), intensity: intensity) + bonus
     }
 
     private func completeSession() {
@@ -1787,6 +1746,7 @@ struct ActiveStudySessionView: View {
         // below (and on the completion screen) must use this single snapshot,
         // not a still-running clock.
         completedElapsed = max(0, IBLocalClock.now.timeIntervalSince(sessionStartDate))
+        earnedCompletionBonus = markPlanComplete
         plan.isCompleted = markPlanComplete
         plan.notes = sessionNotes
 
@@ -1881,6 +1841,7 @@ struct ActiveStudySessionView: View {
             // contexts, so there is no unrelated pending change to lose.
             context.rollback()
             completedElapsed = 0
+            earnedCompletionBonus = false
             isCompletingSession = false
             let message = "Could not save the session: \(error.localizedDescription). Your work is still here so you can retry."
             completionError = message
@@ -1946,22 +1907,58 @@ nonisolated struct PracticeExamPaper: Codable, Equatable, Sendable {
     let markScheme: String
     let maximumMarks: Int
 
+    /// A whole paper is long work: Codex was measured taking over 200 seconds at
+    /// default effort, so the 120 second default made generation fail outright.
+    static let generationTimeout: TimeInterval = 420
+
     enum GenerationError: LocalizedError {
         case invalidPaper
-        var errorDescription: String? { "The provider returned an incomplete paper or inconsistent marks. Try generating it again." }
+        var errorDescription: String? { "The provider returned no usable questions. Try generating it again." }
     }
 
+    /// Accepts what providers really return. A paper with one miscounted mark is
+    /// still a paper the student can sit, so only a paper with no questions is
+    /// rejected. The total printed on the questions wins over the declared one,
+    /// because that is what the student reads and what gets marked.
     static func parse(_ response: String) throws -> PracticeExamPaper {
-        guard let start = response.firstIndex(of: "{"), let end = response.lastIndex(of: "}"), start <= end,
-              let paper = try? JSONDecoder().decode(Self.self, from: Data(response[start...end].utf8)),
-              !paper.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !paper.markScheme.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              paper.question.count <= 20_000, paper.markScheme.count <= 30_000,
-              (1...100).contains(paper.maximumMarks),
-              IBExamRubric.questionMarks(in: paper.question) == paper.maximumMarks else {
+        let object = ProviderJSON.object(in: response) ?? [:]
+        var question = ProviderJSON.firstString(in: object, keys: ["question", "paper", "questions", "exam"]) ?? ""
+        var markScheme = ProviderJSON.firstString(in: object, keys: ["markScheme", "mark_scheme", "markscheme", "scheme"]) ?? ""
+        if question.isEmpty, object.isEmpty {
+            // No JSON at all: the provider wrote the paper as plain Markdown.
+            let parts = splitPlainPaper(response)
+            question = parts.question
+            markScheme = parts.scheme
+        }
+        let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuestion.isEmpty, question.count <= 20_000, markScheme.count <= 30_000 else {
             throw GenerationError.invalidPaper
         }
-        return paper
+        let printed = IBExamRubric.questionMarks(in: question)
+        let declared = ProviderJSON.int(object["maximumMarks"]) ?? ProviderJSON.int(object["totalMarks"])
+        guard let marks = resolvedMarks(printed: printed, declared: declared) else {
+            throw GenerationError.invalidPaper
+        }
+        return PracticeExamPaper(question: question, markScheme: markScheme, maximumMarks: marks)
+    }
+
+    private static func resolvedMarks(printed: Int?, declared: Int?) -> Int? {
+        let valid = 1...100
+        if let printed, let declared, valid.contains(declared), printed == declared * 2 {
+            // The paper total was printed in the same style as a question.
+            return declared
+        }
+        if let printed, valid.contains(printed) { return printed }
+        if let declared, valid.contains(declared) { return declared }
+        return nil
+    }
+
+    private static func splitPlainPaper(_ response: String) -> (question: String, scheme: String) {
+        let text = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let range = text.range(of: #"(?im)^\s*(#+\s*|\*\*)?mark\s*scheme"#, options: .regularExpression) else {
+            return (text, "")
+        }
+        return (String(text[..<range.lowerBound]), String(text[range.lowerBound...]))
     }
 }
 
@@ -2067,16 +2064,19 @@ nonisolated enum IBExamRubric: Sendable {
     }
 
     static func questionMarks(in paper: String) -> Int? {
-        let pattern = #"\[(\d+)\s*(?:marks?)?\]"#
+        // Counts "[4 marks]", "(4 marks)" and "[4]", ignoring LaTeX so that an
+        // array index or matrix like $[2]$ is never read as a mark.
+        let prose = paper.replacingOccurrences(of: #"\$\$[\s\S]*?\$\$|\$[^$\n]*\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)"#, with: " ", options: .regularExpression)
+        let pattern = #"\[(\d+)\s*(?:marks?)?\]|\((\d+)\s*marks?\)"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
-        let range = NSRange(paper.startIndex..<paper.endIndex, in: paper)
-        let matches = regex.matches(in: paper, range: range)
+        let range = NSRange(prose.startIndex..<prose.endIndex, in: prose)
+        let matches = regex.matches(in: prose, range: range)
         guard !matches.isEmpty else { return nil }
         var total = 0
         for match in matches {
-            guard match.numberOfRanges > 1,
-                  let markRange = Range(match.range(at: 1), in: paper),
-                  let marks = Int(paper[markRange]), (1...100).contains(marks),
+            let group = match.range(at: 1).location == NSNotFound ? 2 : 1
+            guard let markRange = Range(match.range(at: group), in: prose),
+                  let marks = Int(prose[markRange]), (1...100).contains(marks),
                   total <= 100 - marks else { return nil }
             total += marks
         }
@@ -2265,61 +2265,75 @@ nonisolated enum PracticeExamFallback: Sendable {
 // parent, the whole workspace (including the chat / flashcard / exam panels)
 // would reconstruct once per tick and FormattedMessageContent would re-parse
 // every message, card and exam block every second.
-private struct SessionTimerView: View {
+private struct SessionClockView: View {
     let startDate: Date
     let durationMinutes: Int
 
-    @State private var elapsed: TimeInterval = 0
-
-    private var timeFormatted: String {
-        let mins = Int(elapsed) / 60
-        let secs = Int(elapsed) % 60
-        return String(format: "%02d:%02d", mins, secs)
+    var body: some View {
+        TimelineView(.periodic(from: startDate, by: 1)) { context in
+            let elapsed = max(0, context.date.timeIntervalSince(startDate))
+            let isOver = elapsed > Double(durationMinutes * 60)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(String(format: "%02d:%02d", Int(elapsed) / 60, Int(elapsed) % 60))
+                    .font(.system(size: 15, weight: .medium).monospacedDigit())
+                    .foregroundStyle(isOver ? IBColors.warning : IBColors.ink)
+                Text("of \(durationMinutes) min")
+                    .font(IBTypography.caption)
+                    .foregroundStyle(IBColors.inkTertiary)
+            }
+            .fixedSize()
+        }
     }
+}
 
-    private var timerColor: Color {
-        let target = Double(durationMinutes * 60)
-        if elapsed > target { return IBColors.danger }
-        if elapsed > target * 0.8 { return IBColors.warning }
-        return IBColors.accent
-    }
+/// Elapsed time as one quiet line under the header, in place of a ring and pill.
+private struct SessionTimeLine: View {
+    let startDate: Date
+    let durationMinutes: Int
 
     var body: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 5) {
-                Image(systemName: elapsed > Double(durationMinutes * 60) ? "exclamationmark.triangle.fill" : "timer")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(timerColor)
-                Text(timeFormatted)
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                    .foregroundStyle(timerColor)
-                Text("/ \(durationMinutes)m")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+        TimelineView(.periodic(from: startDate, by: 5)) { context in
+            let target = max(Double(durationMinutes * 60), 1)
+            let fraction = min(max(context.date.timeIntervalSince(startDate) / target, 0), 1)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(IBColors.border)
+                    Rectangle()
+                        .fill(fraction >= 1 ? IBColors.warning : IBColors.accent)
+                        .frame(width: geometry.size.width * fraction)
+                }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(timerColor.opacity(0.06))
-                    .overlay(Capsule().strokeBorder(timerColor.opacity(0.15), lineWidth: 0.5))
-            )
-
-            ProgressRing(
-                progress: min(elapsed / Double(durationMinutes * 60), 1.0),
-                lineWidth: 4,
-                size: 38,
-                color: timerColor
-            )
+            .frame(height: 2)
+            .accessibilityHidden(true)
         }
-        // Async loop is MainActor-isolated and cancels on disappear, so it is
-        // Swift-6-safe (no Timer @Sendable closure mutating @State) and keeps
-        // the ticking clock out of the parent body.
-        .task {
-            elapsed = max(0, IBLocalClock.now.timeIntervalSince(startDate))
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                elapsed = max(0, IBLocalClock.now.timeIntervalSince(startDate))
+    }
+}
+
+/// Appears once the planned time is up so extending is one click, with nothing
+/// reset. The session never ends by itself.
+private struct SessionOvertimePrompt: View {
+    let startDate: Date
+    let durationMinutes: Int
+    let isBusy: Bool
+    let onExtend: (Int) -> Void
+    let onFinish: () -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: startDate, by: 5)) { context in
+            if context.date.timeIntervalSince(startDate) > Double(durationMinutes * 60) {
+                HStack(spacing: 8) {
+                    Text("Your planned time is up. Your progress is safe; keep going for as long as you like.")
+                        .font(IBTypography.caption)
+                        .foregroundStyle(IBColors.inkSecondary)
+                    Spacer()
+                    Button("+15 min") { onExtend(15) }.controlSize(.small)
+                    Button("+30 min") { onExtend(30) }.controlSize(.small)
+                    Button("Finish", action: onFinish).controlSize(.small)
+                }
+                .disabled(isBusy)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .background(IBColors.warning.opacity(0.10))
             }
         }
     }
@@ -2333,9 +2347,7 @@ private struct FocusRhythmView: View {
         case focus
         case breakTime
 
-        var title: String { self == .focus ? "Focus 45" : "Break 15" }
-        var icon: String { self == .focus ? "brain.head.profile" : "figure.walk" }
-        var tint: Color { self == .focus ? IBColors.accent : IBColors.inkTertiary }
+        var title: String { self == .focus ? "Focus" : "Break" }
         var duration: Int { self == .focus ? 45 * 60 : 15 * 60 }
     }
 
@@ -2345,45 +2357,44 @@ private struct FocusRhythmView: View {
     @State private var cycle = 1
 
     var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: phase.icon)
-                .foregroundStyle(phase.tint)
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(phase.title)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(phase.tint)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(IBColors.inkTertiary)
                 Text(format(remaining))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13).monospacedDigit())
+                    .foregroundStyle(isRunning ? IBColors.ink : IBColors.inkSecondary)
             }
-
+            Spacer(minLength: 0)
             Button {
                 isRunning.toggle()
             } label: {
                 Image(systemName: isRunning ? "pause.fill" : "play.fill")
-                    .frame(width: 20, height: 20)
+                    .font(.system(size: 10))
+                    .foregroundStyle(IBColors.inkSecondary)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+                    .hoverHighlight()
             }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+            .buttonStyle(IBPressStyle())
             .help(isRunning ? "Pause focus rhythm" : "Start focus rhythm")
+            .accessibilityLabel(isRunning ? "Pause focus rhythm" : "Start focus rhythm")
 
             Button {
                 advance()
             } label: {
                 Image(systemName: "forward.end.fill")
-                    .frame(width: 20, height: 20)
+                    .font(.system(size: 10))
+                    .foregroundStyle(IBColors.inkSecondary)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+                    .hoverHighlight()
             }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+            .buttonStyle(IBPressStyle())
             .help("Skip to the next focus or break phase")
+            .accessibilityLabel("Skip to the next phase")
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(
-            Capsule()
-                .fill(phase.tint.opacity(0.07))
-                .overlay(Capsule().strokeBorder(phase.tint.opacity(0.16), lineWidth: 0.5))
-        )
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -2395,8 +2406,6 @@ private struct FocusRhythmView: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(phase.title), \(format(remaining)), cycle \(cycle)")
     }
 
     private func advance() {
@@ -2555,7 +2564,7 @@ private struct PlanPanelView: View {
                 } else if plan.planMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Session Ready")
-                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .font(.system(size: 18, weight: .bold))
                         Text("This session does not have a generated plan yet. You can still use ARIA, take notes, and generate flashcards for \(plan.selectionSummary).")
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)

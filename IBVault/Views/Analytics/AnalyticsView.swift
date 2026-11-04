@@ -8,6 +8,9 @@ struct AnalyticsView: View {
     @Query private var assessments: [AcademicAssessment]
     @Query private var mappings: [AcademicAssessmentMapping]
     @Query private var reports: [AcademicReportSnapshot]
+    @Query(sort: \StudyActivity.date, order: .reverse) private var activities: [StudyActivity]
+    @Query private var profiles: [UserProfile]
+    @Query private var tracks: [SubjectTrack]
     @State private var selectedRange: AnalyticsRange = .sevenDays
 
     private enum AnalyticsRange: String, CaseIterable, Identifiable {
@@ -106,7 +109,7 @@ struct AnalyticsView: View {
                     StudioPageHeader(
                         eyebrow: "Learning intelligence",
                         title: "Progress",
-                        subtitle: "Measure consistency, retrieval quality, and the subjects that need a different plan.",
+                        subtitle: "How consistently you study, how well you recall, and where to focus.",
                         symbol: "chart.xyaxis.line",
                         tint: IBColors.inkTertiary
                     ) {
@@ -116,15 +119,18 @@ struct AnalyticsView: View {
                             }
                         }
                         .pickerStyle(.segmented)
+                        .labelsHidden()
                         .frame(width: 250)
                     }
 
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
                         StudioMetricTile(value: "\(rangeCards)", label: "Cards reviewed", symbol: "square.stack.fill", tint: IBColors.accent, detail: selectedRange.rawValue)
                         StudioMetricTile(value: "\(rangeXP)", label: "XP earned", symbol: "bolt.fill", tint: IBColors.inkTertiary, detail: "Completed sessions")
                         StudioMetricTile(value: "\(rangeMinutes)m", label: "Study time", symbol: "clock.fill", tint: IBColors.inkTertiary, detail: "Completed sessions")
                         StudioMetricTile(value: rangeRetention.map { "\($0)%" } ?? "—", label: "Retention", symbol: "brain.head.profile", tint: IBColors.englishColor, detail: rangeRetention == nil ? "No rated reviews" : "Across rated cards")
                     }
+
+                    consistencyCard
 
                     activityCard
 
@@ -136,6 +142,10 @@ struct AnalyticsView: View {
                         subjectBreakdownCard
                         retentionCard
                     }
+
+                    rankCard
+
+                    masteryGuideCard
                 }
                 .frame(maxWidth: 1240, alignment: .leading)
                 .padding(.horizontal, 28)
@@ -147,14 +157,49 @@ struct AnalyticsView: View {
         }
     }
 
+    // MARK: - Consistency
+    private var consistencyCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Consistency")
+                .font(IBTypography.sectionTitle)
+            HeatmapView(activities: activities)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard()
+    }
+
+    private var rankCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Rank")
+                .font(IBTypography.sectionTitle)
+            RankLadderView(
+                achieved: profiles.first?.achievedStep ?? RankStep(ordinal: 0),
+                liveMastery: RankLadderView.liveMastery(subjects: subjects, tracks: tracks)
+            )
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard()
+    }
+
+    private var masteryGuideCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Mastery levels")
+                .font(IBTypography.sectionTitle)
+            MasteryLevelsGuideView(counts: Dictionary(grouping: subjects.flatMap(\.cards), by: \.proficiency).mapValues(\.count))
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard()
+    }
+
     // MARK: - Activity
     private var activityCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: "chart.bar.fill")
-                    .foregroundStyle(.tint)
-                Text("Daily Activity")
-                    .font(.headline)
+                Text("Daily activity")
+                    .font(IBTypography.sectionTitle)
                 Spacer()
                 Text(selectedRange.rawValue)
                     .font(.caption)
@@ -189,21 +234,17 @@ struct AnalyticsView: View {
                             color: IBColors.accent
                         )
 
-                        HStack(spacing: 10) {
-                            Label("\(row.cards)", systemImage: "square.stack")
-                            Label("+\(row.xp)", systemImage: "star.fill")
-                            Label("\(row.minutes)m", systemImage: "clock")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 200, alignment: .trailing)
+                        Text("\(row.cards) \(row.cards == 1 ? "card" : "cards") · \(row.minutes) min · +\(row.xp) XP")
+                            .font(IBTypography.caption.monospacedDigit())
+                            .foregroundStyle(IBColors.inkTertiary)
+                            .frame(width: 180, alignment: .trailing)
                     }
                     .padding(.vertical, 2)
                 }
             }
         }
-        .padding(16)
-        .glassCard()
+        .padding(20)
+        .surfaceCard()
     }
 
     // MARK: - Subject Breakdown
@@ -211,10 +252,8 @@ struct AnalyticsView: View {
         let rows = subjectBreakdownRows
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: "books.vertical.fill")
-                    .foregroundStyle(.tint)
                 Text("Subjects")
-                    .font(.headline)
+                    .font(IBTypography.sectionTitle)
             }
 
             if rows.isEmpty {
@@ -257,18 +296,16 @@ struct AnalyticsView: View {
                 }
             }
         }
-        .padding(16)
-        .glassCard()
+        .padding(20)
+        .surfaceCard()
     }
 
     // MARK: - Retention
     private var retentionCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: "brain.head.profile")
-                    .foregroundStyle(.tint)
-                Text("Daily Retention")
-                    .font(.headline)
+                Text("Daily retention")
+                    .font(IBTypography.sectionTitle)
             }
 
             if retentionRows.isEmpty {
@@ -302,8 +339,8 @@ struct AnalyticsView: View {
                 }
             }
         }
-        .padding(16)
-        .glassCard()
+        .padding(20)
+        .surfaceCard()
     }
 
     private func retentionColor(_ rate: Double) -> Color {

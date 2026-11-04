@@ -123,10 +123,7 @@ struct TopicBrowserView: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(IBColors.canvas)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(IBColors.border, lineWidth: 1)
-                    )
+                    
             )
 
             Link(destination: metadata.sourceURL) {
@@ -265,7 +262,7 @@ struct TopicBrowserView: View {
                         .foregroundStyle(accent)
                 } else {
                     Text("\(index + 1)")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(IBColors.inkSecondary)
                 }
             }

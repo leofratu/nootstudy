@@ -119,7 +119,7 @@ struct EffectivenessView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(activeDays)")
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .font(.system(size: 36, weight: .bold))
                     .foregroundStyle(IBColors.accent)
                 Text("active days")
                     .font(.caption)

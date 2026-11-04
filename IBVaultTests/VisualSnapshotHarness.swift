@@ -6,6 +6,9 @@ import Testing
 
 @Suite
 struct VisualSnapshotHarness {
+    /// Views can run startup tasks after their test returns, so stores used for
+    /// rendering stay alive for the rest of the process.
+    @MainActor private static var retainedContainers: [ModelContainer] = []
 
     @MainActor
     @Test
@@ -14,6 +17,7 @@ struct VisualSnapshotHarness {
         let directory = URL(fileURLWithPath: path, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let container = try makeSeededContainer()
+        Self.retainedContainers.append(container)
         let plan = StudyPlan(subjectName: "Biology", topicName: "D1.2 Protein synthesis",
                              scheduledDate: Date(), durationMinutes: 60)
         container.mainContext.insert(plan)
@@ -24,6 +28,23 @@ struct VisualSnapshotHarness {
                        size: CGSize(width: 780, height: 580), name: "session-\(suffix)", directory: directory, scheme: scheme)
             try render(ProfileView().modelContainer(container), size: CGSize(width: 1080, height: 1500),
                        name: "profile-\(suffix)", directory: directory, scheme: scheme)
+            try render(ActiveStudySessionView(plan: plan, initialTab: .exam).modelContainer(container).environment(ProgressionEventCenter()),
+                       size: CGSize(width: 900, height: 620), name: "session-exam-empty-\(suffix)", directory: directory, scheme: scheme)
+            try render(ActiveStudySessionView(plan: plan, initialTab: .exam, startsWithOfflinePaper: true).modelContainer(container).environment(ProgressionEventCenter()),
+                       size: CGSize(width: 900, height: 900), name: "session-exam-paper-\(suffix)", directory: directory, scheme: scheme)
+            try render(ActiveStudySessionView(plan: plan, initialTab: .flashcards).modelContainer(container).environment(ProgressionEventCenter()),
+                       size: CGSize(width: 900, height: 800), name: "session-recall-\(suffix)", directory: directory, scheme: scheme)
+            try render(ActiveStudySessionView(plan: plan, initialTab: .chat).modelContainer(container).environment(ProgressionEventCenter()),
+                       size: CGSize(width: 900, height: 620), name: "session-coach-\(suffix)", directory: directory, scheme: scheme)
+            // The side panel keeps the coach narrow, so check it at that width.
+            try render(ARIAChatView().modelContainer(container), size: CGSize(width: 420, height: 720),
+                       name: "coach-panel-\(suffix)", directory: directory, scheme: scheme)
+            try render(AnalyticsView().modelContainer(container), size: CGSize(width: 1000, height: 2300),
+                       name: "progress-\(suffix)", directory: directory, scheme: scheme)
+            // The native sidebar column is not captured in the full shell, so
+            // render its content on its own.
+            try render(ContentView().sidebarList.modelContainer(container), size: CGSize(width: 220, height: 640),
+                       name: "sidebar-\(suffix)", directory: directory, scheme: scheme)
         }
     }
 
@@ -43,7 +64,7 @@ struct VisualSnapshotHarness {
         defaults.set("high", forKey: "ariaReasoningEffort")
         for scheme in [ColorScheme.light, .dark] {
             let suffix = scheme == .light ? "light" : "dark"
-            for section in [SettingsView.SettingsSection.general, .assistant, .study, .subjects, .data, .about] {
+            for section in [SettingsView.SettingsSection.general, .assistant, .flashcards, .study, .data, .about] {
                 try render(SettingsView(initialSection: section, loadsExternalState: false)
                     .defaultAppStorage(defaults).modelContainer(container),
                     size: CGSize(width: 1000, height: 1040),
