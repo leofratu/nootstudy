@@ -162,9 +162,7 @@ nonisolated enum CurriculumProgressService: Sendable {
             guard topicMatches else { return false }
 
             let sessionSubtopics = StudyScope.parseList(session.subtopicsCovered ?? "")
-            return sessionSubtopics.isEmpty || sessionSubtopics.contains {
-                $0.caseInsensitiveCompare(subtopicName) == .orderedSame
-            }
+            return sessionSubtopics.isEmpty || StudyScope.list(sessionSubtopics, containsSubtopic: subtopicName)
         }
     }
 

@@ -35,10 +35,6 @@ struct RankLadderView: View {
                 }
             }
             .frame(maxWidth: 620)
-            Text("Rank follows your overall mastery, weighted across subjects by teaching hours. Once earned, a rank is kept even if mastery fades. XP rewards effort separately.")
-                .font(IBTypography.caption)
-                .foregroundStyle(IBColors.inkTertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

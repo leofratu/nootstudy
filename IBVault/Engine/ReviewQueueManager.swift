@@ -7,12 +7,40 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
     /// learners see is their daily goal, which only caps reviews if they opt in.
     static let maximumCards = 1000
     static let enforceLimitKey = "enforceDailyCardLimit"
+    static let prioritySubjectKey = "reviewPrioritySubject"
+    static let reviewOrderKey = "reviewOrder"
 
     /// Lets tests pin enforcement without touching shared user defaults.
     @TaskLocal static var enforcementOverride: Bool?
+    /// Lets tests pin the priority subject without touching shared user defaults.
+    @TaskLocal static var prioritySubjectOverride: String?
+    /// Lets tests pin the review order without touching shared user defaults.
+    @TaskLocal static var reviewOrderOverride: String?
 
     static var isLimitEnforced: Bool {
         enforcementOverride ?? UserDefaults.standard.bool(forKey: enforceLimitKey)
+    }
+
+    // The test host shares the learner's defaults, so their choices stay out of tests.
+    static var prioritySubject: String {
+        if let prioritySubjectOverride { return prioritySubjectOverride }
+        return AppEnvironment.isRunningTests ? "" : UserDefaults.standard.string(forKey: prioritySubjectKey) ?? ""
+    }
+
+    static var weakestFirst: Bool {
+        if let reviewOrderOverride { return reviewOrderOverride == "weakest" }
+        return !AppEnvironment.isRunningTests && UserDefaults.standard.string(forKey: reviewOrderKey) == "weakest"
+    }
+
+    /// Moves one subject's cards to the front, keeping the order within each group.
+    static func prioritized(_ cards: [StudyCard], subject: String) -> [StudyCard] {
+        guard !subject.isEmpty else { return cards }
+        var first: [StudyCard] = []
+        var rest: [StudyCard] = []
+        for card in cards {
+            if card.subject?.name == subject { first.append(card) } else { rest.append(card) }
+        }
+        return first + rest
     }
 
     static func maximumCards(for intensity: StudyIntensity) -> Int {
@@ -49,23 +77,30 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
         let now: Date
         /// The learner's daily target. Equals `maximum` only when enforced.
         var goal: Int = ReviewDailyLimitPolicy.maximumCards
+        /// Applied to the backlog, so a daily limit fills with this subject first.
+        var prioritySubject = ""
+        /// Applied to the backlog, so a daily limit keeps the weakest cards.
+        var weakestFirst = false
 
         var isEnforced: Bool { maximum < ReviewDailyLimitPolicy.maximumCards && maximum == goal }
 
         var remaining: Int { allowance(reviewedCardIDs: reviewedIDs, maximum: maximum) }
 
         var backlog: [StudyCard] {
-            library.cards.compactMap { card -> (card: StudyCard, due: Date, ease: Double, id: String)? in
+            let due = library.cards.compactMap { card -> (card: StudyCard, due: Date, ease: Double, id: String, level: Int)? in
                 let due = card.nextReviewDate
                 guard due <= now else { return nil }
                 let id = card.id
                 guard !reviewedCanonicalIDs.contains(id) else { return nil }
-                return (card, due, card.easeFactor, id.uuidString)
+                return (card, due, card.easeFactor, id.uuidString, weakestFirst ? card.proficiency.sortOrder : 0)
             }.sorted {
+                if $0.level != $1.level { return $0.level < $1.level }
+                if weakestFirst && $0.ease != $1.ease { return $0.ease < $1.ease }
                 if $0.due != $1.due { return $0.due < $1.due }
                 if $0.ease != $1.ease { return $0.ease < $1.ease }
                 return $0.id < $1.id
             }.map(\.card)
+            return ReviewDailyLimitPolicy.prioritized(due, subject: prioritySubject)
         }
 
         func limited(_ candidates: [StudyCard]) -> [StudyCard] {
@@ -102,7 +137,8 @@ nonisolated enum ReviewDailyLimitPolicy: Sendable {
         let goal = profile.map { maximumCards(for: $0.studyIntensity, dailyGoal: $0.dailyGoal) } ?? StudyIntensity.average.dailyCardSuggestion
         return Day(library: library, reviewedIDs: reviewedIDs,
                    reviewedCanonicalIDs: Set(reviewedIDs.map { library.canonicalIDs[$0] ?? $0 }),
-                   maximum: isLimitEnforced ? goal : maximumCards, now: now, goal: goal)
+                   maximum: isLimitEnforced ? goal : maximumCards, now: now, goal: goal,
+                   prioritySubject: prioritySubject, weakestFirst: weakestFirst)
     }
 }
 
@@ -123,6 +159,8 @@ final class ReviewQueueManager {
     private(set) var remainingDailyAllowance = ReviewDailyLimitPolicy.maximumCards
     private(set) var duplicateCardCount = 0
     private(set) var dueCountCache: [String: Int] = [:]
+    /// Per-subject backlog, so a daily limit cannot hide what is waiting.
+    private(set) var backlogCountCache: [String: Int] = [:]
     private(set) var eligibleCardCount = 0
     private(set) var newCardCount = 0
     private(set) var lastRefreshError: String?
@@ -171,6 +209,7 @@ final class ReviewQueueManager {
             dueCards = []
             totalDueCount = 0
             dueCountCache = [:]
+            backlogCountCache = [:]
             remainingDailyAllowance = 0
             lastRefreshError = "Could not load today's review allowance: \(error.localizedDescription)"
             hasLoaded = false
@@ -186,7 +225,8 @@ final class ReviewQueueManager {
         var canonical = day.reviewedCanonicalIDs
         canonical.insert(day.library.canonicalIDs[card.id] ?? card.id)
         apply(.init(library: day.library, reviewedIDs: reviewed, reviewedCanonicalIDs: canonical,
-                    maximum: day.maximum, now: day.now, goal: day.goal))
+                    maximum: day.maximum, now: day.now, goal: day.goal,
+                    prioritySubject: day.prioritySubject, weakestFirst: day.weakestFirst))
     }
 
     private func apply(_ day: ReviewDailyLimitPolicy.Day) {
@@ -210,6 +250,11 @@ final class ReviewQueueManager {
             if let id = card.subject?.id.uuidString { cache[id, default: 0] += 1 }
         }
         dueCountCache = cache
+        var backlogCache: [String: Int] = [:]
+        for card in backlog {
+            if let id = card.subject?.id.uuidString { backlogCache[id, default: 0] += 1 }
+        }
+        backlogCountCache = backlogCache
         lastRefreshError = nil
         hasLoaded = true
     }
@@ -223,6 +268,7 @@ final class ReviewQueueManager {
     }
 
     func dueCount(for subject: Subject) -> Int { dueCountCache[subject.id.uuidString] ?? 0 }
+    func backlogCount(for subject: Subject) -> Int { backlogCountCache[subject.id.uuidString] ?? 0 }
 
     func dueCardsForSubject(_ subject: Subject, context: ModelContext) -> [StudyCard] {
         do {

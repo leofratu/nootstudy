@@ -173,6 +173,9 @@ nonisolated enum ProficiencyTracker {
 
     /// Give successful early recalls credit between proficiency milestones.
     /// Legacy imports without counters retain their explicitly stored level.
+    /// Each level's score tops out where the next begins, so moving up a level
+    /// never lowers a card's score. Accuracy caps the result, so a stored label
+    /// cannot hide poor recall.
     static func masteryValue(for card: StudyCard) -> Double {
         guard card.totalReviewCount > 0 else { return masteryValue(for: card.proficiency) }
         let accuracy = min(max(card.effectivenessRate, 0), 1)
@@ -182,9 +185,9 @@ nonisolated enum ProficiencyTracker {
         case .novice:
             return 0.33 * min(correct / 2, 1) * accuracy
         case .developing:
-            return (0.33 + 0.33 * min(min(correct / 3, interval / 7), 1)) * accuracy
+            return min(accuracy, 0.33 + 0.33 * min(min(correct / 3, interval / 7), 1))
         case .proficient:
-            return (0.66 + 0.34 * min(min(correct / 4, interval / 21), 1)) * accuracy
+            return min(accuracy, 0.66 + 0.18 * min(min(correct / 4, interval / 21), 1))
         case .mastered:
             return accuracy
         }

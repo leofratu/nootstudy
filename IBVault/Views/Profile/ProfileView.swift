@@ -55,7 +55,7 @@ struct ProfileView: View {
 
     private var studyHeatmap: some View {
         VStack(alignment: .leading, spacing: 14) {
-            StudioSectionHeader("Consistency", subtitle: "Your last year of reviews and study time.", symbol: "") { EmptyView() }
+            StudioSectionHeader("Consistency", symbol: "") { EmptyView() }
             HeatmapView(activities: activities)
         }
         .padding(20)
@@ -66,7 +66,7 @@ struct ProfileView: View {
     private var statsGrid: some View {
         HStack(spacing: 16) {
             StudioMetricTile(value: "\(profile?.totalXP ?? 0)", label: "Total XP", symbol: "")
-            StudioMetricTile(value: "\(profile?.currentStreak ?? 0)", label: "Current streak", symbol: "")
+            StudioMetricTile(value: "\(profile?.activeStreak() ?? 0)", label: "Current streak", symbol: "")
             StudioMetricTile(value: "\(profile?.longestStreak ?? 0)", label: "Best streak", symbol: "")
             StudioMetricTile(value: "\(profile?.streakFreezes ?? 0)", label: "Streak freezes", symbol: "")
         }

@@ -74,7 +74,6 @@ struct CardLibraryView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Library").font(IBTypography.largeTitle)
-                    Text("Find it. Practise it again.").font(IBTypography.body).foregroundStyle(IBColors.inkSecondary)
                 }
                 Spacer()
                 Picker("Content", selection: $showingTests) {
@@ -253,8 +252,6 @@ struct CardPracticeView: View {
                 ReviewSessionView(practiceCards: cards)
                     .safeAreaInset(edge: .bottom) {
                         HStack {
-                            Text("Rate each answer to update mastery.")
-                                .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                             Spacer()
                             Button("Switch to free practice") { usesFreePractice = true }
                                 .buttonStyle(.borderless)
@@ -302,9 +299,6 @@ private struct FreeCardPracticeView: View {
                         Button(revealed ? (index + 1 == cards.count ? "Finish" : "Next card") : "Reveal answer") {
                             if revealed { index += 1; revealed = false } else { revealed = true }
                         }.buttonStyle(PrimaryButtonStyle()).keyboardShortcut(.space, modifiers: [])
-                    } else {
-                        Text("Choose an option, then check your answer.")
-                            .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                     }
                 } else {
                     ContentUnavailableView(isQuiz ? "Quiz complete" : "Set complete", systemImage: "checkmark.circle",

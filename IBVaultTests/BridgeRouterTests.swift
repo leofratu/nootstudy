@@ -221,4 +221,122 @@ struct BridgeRouterTests {
         #expect(subjects.map(\.name).contains("Biology"))
         #expect(subjects.map(\.name).contains("Chemistry"))
     }
+
+    @Test("A retried review upload is acknowledged but not applied or paid twice")
+    func duplicateReviewUpload() throws {
+        let container = try makeContainer()
+        let ctx = ModelContext(container)
+        let profile = UserProfile()
+        ctx.insert(profile)
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")
+        ctx.insert(subject)
+        let card = StudyCard(topicName: "Cells", front: "Q", back: "A", subject: subject)
+        ctx.insert(card)
+        try ctx.save()
+
+        let router = BridgeRouter(container: container)
+        let review: [String: Any] = ["cardID": card.id.uuidString, "quality": 3, "timestamp": "2026-01-02T10:00:00Z"]
+        let body = try JSONSerialization.data(withJSONObject: ["reviews": [review, review]])
+        func upload() throws -> [[String: Any]] {
+            let response = router.handle(makeRequest(method: "POST", path: "/v1/reviews", headers: authHeaders(), body: body))
+            #expect(response.statusCode == 200)
+            let json = try JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+            return json?["accepted"] as? [[String: Any]] ?? []
+        }
+        #expect(try upload().count == 2)
+        let paid = try ModelContext(container).fetch(FetchDescriptor<UserProfile>()).first?.totalXP ?? 0
+        #expect(paid > 0)
+
+        let retried = try upload()
+        #expect(retried.allSatisfy { $0["duplicate"] as? Bool == true })
+
+        let check = ModelContext(container)
+        #expect(try check.fetch(FetchDescriptor<ReviewSession>()).count == 1)
+        #expect(try check.fetch(FetchDescriptor<StudyCard>()).first?.totalReviewCount == 1)
+        #expect(try check.fetch(FetchDescriptor<UserProfile>()).first?.totalXP == paid)
+    }
+
+    @Test("A retried session upload returns the first copy")
+    func duplicateSessionUpload() throws {
+        let container = try makeContainer()
+        let router = BridgeRouter(container: container)
+        let session: [String: Any] = ["subjectName": "Biology", "startDate": "2026-01-02T10:00:00Z", "endDate": "2026-01-02T10:30:00Z",
+                                      "cardsReviewed": 3, "correctCount": 2]
+        let body = try JSONSerialization.data(withJSONObject: ["sessions": [session]])
+        func upload() throws -> String? {
+            let response = router.handle(makeRequest(method: "POST", path: "/v1/sessions", headers: authHeaders(), body: body))
+            let json = try JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+            return (json?["accepted"] as? [[String: String]])?.first?["id"]
+        }
+        let first = try upload()
+        #expect(first != nil)
+        #expect(try upload() == first)
+        #expect(try ModelContext(container).fetch(FetchDescriptor<StudySession>()).count == 1)
+    }
+
+    @Test("Bridge reviews respect an enforced daily limit, except backdated imports")
+    func bridgeDailyLimit() throws {
+        let container = try makeContainer()
+        let ctx = ModelContext(container)
+        let profile = UserProfile()
+        profile.dailyGoal = 1
+        ctx.insert(profile)
+        let subject = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")
+        ctx.insert(subject)
+        let first = StudyCard(topicName: "Cells", front: "First", back: "A", subject: subject)
+        let second = StudyCard(topicName: "Cells", front: "Second", back: "A", subject: subject)
+        ctx.insert(first)
+        ctx.insert(second)
+        try ctx.save()
+
+        let router = BridgeRouter(container: container)
+        let reviews: [[String: Any]] = [
+            ["cardID": first.id.uuidString, "quality": 3],
+            ["cardID": second.id.uuidString, "quality": 3],
+            ["cardID": second.id.uuidString, "quality": 3, "timestamp": "2026-01-02T10:00:00Z"]
+        ]
+        let body = try JSONSerialization.data(withJSONObject: ["reviews": reviews])
+        let response = ReviewDailyLimitPolicy.$enforcementOverride.withValue(true) {
+            router.handle(makeRequest(method: "POST", path: "/v1/reviews", headers: authHeaders(), body: body))
+        }
+        let json = try JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+        #expect((json?["accepted"] as? [[String: Any]])?.count == 2)
+        let rejected = json?["rejected"] as? [[String: Any]]
+        #expect(rejected?.count == 1)
+        #expect(rejected?.first?["reason"] as? String == "daily limit reached")
+    }
+
+    @Test("Stopping the bridge during startup closes the listener and stays stopped")
+    @MainActor
+    func stopDuringStartup() async throws {
+        let wasEnabled = BridgeAuthService.isEnabled
+        let savedPort = UserDefaults.standard.object(forKey: "BridgeActualPort")
+        defer {
+            BridgeAuthService.isEnabled = wasEnabled
+            UserDefaults.standard.set(savedPort, forKey: "BridgeActualPort")
+        }
+        BridgeAuthService.isEnabled = true
+        let controller = IntegrationBridgeController(container: try makeContainer())
+
+        controller.start()
+        controller.stop()
+        // Long enough for the abandoned start to bind and be closed.
+        try await Task.sleep(for: .milliseconds(400))
+        guard case .stopped = controller.state else {
+            Issue.record("Expected stopped, got \(controller.state)")
+            return
+        }
+
+        // A later start is not blocked by the abandoned one.
+        controller.start()
+        for _ in 0..<40 {
+            if case .running = controller.state { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard case .running = controller.state else {
+            Issue.record("Expected running, got \(controller.state)")
+            return
+        }
+        controller.stop()
+    }
 }

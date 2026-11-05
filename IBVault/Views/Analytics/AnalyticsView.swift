@@ -109,7 +109,6 @@ struct AnalyticsView: View {
                     StudioPageHeader(
                         eyebrow: "Learning intelligence",
                         title: "Progress",
-                        subtitle: "How consistently you study, how well you recall, and where to focus.",
                         symbol: "chart.xyaxis.line",
                         tint: IBColors.inkTertiary
                     ) {

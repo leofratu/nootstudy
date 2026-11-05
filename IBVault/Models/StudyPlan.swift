@@ -50,7 +50,16 @@ nonisolated struct StudyScope: Equatable, Sendable {
             return false
         }
 
-        return subtopicNames.contains(normalizedCardSubtopic)
+        return Self.list(subtopicNames, containsSubtopic: normalizedCardSubtopic)
+    }
+
+    /// Scopes are stored comma-separated, so a curriculum subtopic that contains
+    /// commas comes back as fragments. It matches when all its fragments do.
+    static func list(_ parsed: [String], containsSubtopic subtopic: String) -> Bool {
+        let fragments = parseList(subtopic)
+        return !fragments.isEmpty && fragments.allSatisfy { fragment in
+            parsed.contains { $0.caseInsensitiveCompare(fragment) == .orderedSame }
+        }
     }
 
     static func parseList(_ rawValue: String) -> [String] {

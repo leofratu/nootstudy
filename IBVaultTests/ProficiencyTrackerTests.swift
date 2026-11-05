@@ -286,4 +286,21 @@ struct ProficiencyTrackerTests {
         
         return score / Double(cards.count)
     }
+
+    @Test("A mastered card never scores below a proficient one")
+    func higherLevelsScoreHigher() {
+        let proficient = createTestCard(proficiency: .proficient)
+        proficient.totalReviewCount = 6
+        proficient.successfulReviewCount = 6
+        proficient.consecutiveCorrect = 6
+        proficient.interval = 30
+
+        let mastered = createTestCard(proficiency: .mastered)
+        mastered.totalReviewCount = 20
+        mastered.successfulReviewCount = 17
+        mastered.consecutiveCorrect = 6
+        mastered.interval = 30
+
+        #expect(ProficiencyTracker.masteryValue(for: mastered) >= ProficiencyTracker.masteryValue(for: proficient))
+    }
 }

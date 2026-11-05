@@ -42,6 +42,8 @@ struct ActiveStudySessionView: View {
     @State private var cardStudioOptions = CardGenerationOptions.preferred
     @State private var completedTaskIDs: Set<UUID> = []
     @State private var showRewardPulse = false
+    /// XP already paid to the profile for rated cards, so finishing doesn't pay it twice.
+    @State private var recordedRatingXP = 0
     @State private var previousStreak = 0
     @State private var completedStreak = 0
     @State private var revealedCards: Set<Int> = []
@@ -275,7 +277,7 @@ struct ActiveStudySessionView: View {
             Button("Leave without logging", role: .destructive) { dismiss() }
             Button("Keep studying", role: .cancel) {}
         } message: {
-            Text("Saving logs your time, XP and practice answer. Either way the plan stays open to study again, and cards you already rated keep their schedule.")
+            Text("Saving logs your time and practice answer. Either way the plan stays open, and cards you already rated keep their schedule, XP and streak credit.")
         }
         .sheet(isPresented: $showCompletionCheckIn) {
             completionCheckIn
@@ -639,9 +641,6 @@ struct ActiveStudySessionView: View {
             Text("Ask your coach")
                 .font(IBTypography.sectionTitle)
                 .foregroundStyle(IBColors.ink)
-            Text("It already knows this session's topics, your grades and your study history.")
-                .font(IBTypography.body13)
-                .foregroundStyle(IBColors.inkSecondary)
 
             VStack(alignment: .leading, spacing: 2) {
                 quickPrompt("Explain \(plan.studyScope.title) simply")
@@ -686,9 +685,6 @@ struct ActiveStudySessionView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Session flashcards")
                     .font(IBTypography.sectionTitle)
-                Text("Generate a batch, review it, then add more without leaving the session.")
-                    .font(IBTypography.caption)
-                    .foregroundStyle(IBColors.inkSecondary)
             }
             Spacer()
             if isGeneratingCards {
@@ -782,11 +778,8 @@ struct ActiveStudySessionView: View {
                     }
                 }
             }
-        } else if card.style == .multipleChoice,
-                  CardGeneratorService.validatedChoices(back: card.back, choices: card.choices) != nil {
-            Text("Choose an option, then check your answer.")
-                .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
-        } else {
+        } else if !(card.style == .multipleChoice &&
+                    CardGeneratorService.validatedChoices(back: card.back, choices: card.choices) != nil) {
             Button("Reveal answer") {
                 _ = withAnimation(IBAnimation.snappy) { revealedCards.insert(index) }
                 IBHaptics.light()
@@ -1135,7 +1128,6 @@ struct ActiveStudySessionView: View {
                     StudioPageHeader(
                         eyebrow: "Session evidence",
                         title: "Check your recall",
-                        subtitle: "Rate what you can explain without notes. Each answer updates only its matching topic or subunit.",
                         symbol: "checkmark.seal",
                         tint: IBColors.inkTertiary
                     ) {
@@ -1699,7 +1691,20 @@ struct ActiveStudySessionView: View {
             )
             FSRSScheduler.configure(review, quality: quality)
             context.insert(review)
+            // A rated card counts today however the session ends, including
+            // leaving without logging or revisiting a completed plan.
+            var ratingXP = recordedRatingXP
+            if let profile = profiles.first {
+                if cardRatings.isEmpty { previousStreak = profile.currentStreak }
+                profile.checkAndUpdateStreak()
+                NotificationService.refreshStreakWarning(for: profile)
+                completedStreak = profile.currentStreak
+                // Priced from the running total so rounding matches xpAwarded.
+                ratingXP = XPCalculator.xp(forQualities: Array(cardRatings.values) + [quality], intensity: profile.studyIntensity)
+                profile.recordXP(ratingXP - recordedRatingXP)
+            }
             try context.save()
+            recordedRatingXP = ratingXP
             cardRatings[generatedCard.id] = quality
             IBHaptics.medium()
         } catch {
@@ -1788,9 +1793,11 @@ struct ActiveStudySessionView: View {
 
         // Award XP
         if let profile = profiles.first {
-            previousStreak = profile.currentStreak
-            profile.recordXP(xpAwarded)
+            // Ratings already moved the streak and kept the starting value.
+            if cardRatings.isEmpty { previousStreak = profile.currentStreak }
+            profile.recordXP(xpAwarded - recordedRatingXP)
             profile.checkAndUpdateStreak()
+            NotificationService.refreshStreakWarning(for: profile)
             completedStreak = profile.currentStreak
         }
 

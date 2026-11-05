@@ -53,6 +53,7 @@ nonisolated struct SyllabusSeeder {
             }
         }
         migratePersonalCurriculum(context: context)
+        migrateRetiredTopics(context: context)
         return synchronizeCurriculum(context: context)
     }
 
@@ -305,6 +306,145 @@ nonisolated struct SyllabusSeeder {
         for plan in plans where plan.isFollowUpReview && !plan.isCompleted {
             context.delete(plan)
         }
+    }
+
+    // MARK: - Retired Topics
+
+    private nonisolated struct RetiredTopic: Sendable {
+        /// Where cards go when their subtopic does not name a better home.
+        let fallback: String
+        let subtopics: [String: (topic: String, subtopic: String)]
+
+        func target(forSubtopic subtopic: String) -> (topic: String, subtopic: String) {
+            subtopics[subtopic] ?? (fallback, subtopic)
+        }
+
+        /// Every topic this one split into, so a saved scope still covers its cards.
+        var topics: [String] {
+            var result = [fallback]
+            for topic in subtopics.values.map(\.topic).sorted() where !result.contains(topic) {
+                result.append(topic)
+            }
+            return result
+        }
+    }
+
+    /// Topics the curriculum rework renamed or split. A card keeps its schedule
+    /// and history; only where it is filed changes.
+    private static let retiredTopics: [String: [String: RetiredTopic]] = [
+        "Biology": [
+            "Ecosystems": .init(fallback: "C4.1 Populations and communities", subtopics: [
+                "Biotic and abiotic factors": ("B4.1 Adaptation to environment", "Abiotic factors, distribution and adaptations"),
+                "Habitat and ecological niches": ("B4.2 Ecological niches", "Nutrition, resource use and ecological niches"),
+                "Trophic levels and food webs": ("C4.2 Transfers of energy and matter", "Food webs, trophic levels and ecological energy flow")
+            ]),
+            "Energy Flow in Ecosystems": .init(fallback: "C4.2 Transfers of energy and matter", subtopics: [
+                "Energy flow through trophic levels": ("C4.2 Transfers of energy and matter", "Food webs, trophic levels and ecological energy flow"),
+                "Energy pyramids": ("C4.2 Transfers of energy and matter", "Food webs, trophic levels and ecological energy flow"),
+                "Photosynthesis — light-dependent and light-independent reactions": ("C1.3 Photosynthesis", "Photosynthetic pigments and limiting factors")
+            ]),
+            "Genetics": .init(fallback: "D3.2 Inheritance", subtopics: [
+                "Chromosomes and karyotypes": ("A3.1 Diversity of organisms", "Chromosomes, karyograms and genome diversity"),
+                "DNA profiling and biotechnology": ("D1.1 DNA replication", "PCR and DNA profiling"),
+                "Gene mutations": ("D1.3 Mutation and gene editing", "Gene mutations, causes and consequences"),
+                "Genes, alleles and the genome": ("D3.2 Inheritance", "Genes, alleles, Mendelian inheritance and Punnett squares")
+            ]),
+            "Inheritance": .init(fallback: "D3.2 Inheritance", subtopics: [
+                "Codominance and multiple alleles": ("D3.2 Inheritance", "Codominance, sex linkage and pedigree analysis"),
+                "Mendel's laws of inheritance": ("D3.2 Inheritance", "Genes, alleles, Mendelian inheritance and Punnett squares"),
+                "Monohybrid crosses and Punnett squares": ("D3.2 Inheritance", "Genes, alleles, Mendelian inheritance and Punnett squares"),
+                "Sex-linked inheritance": ("D3.2 Inheritance", "Codominance, sex linkage and pedigree analysis")
+            ]),
+            "Population Biology": .init(fallback: "C4.1 Populations and communities", subtopics: [
+                "Carrying capacity and limiting factors": ("C4.1 Populations and communities", "Population growth and limiting factors"),
+                "Population growth curves (S and J curves)": ("C4.1 Populations and communities", "Population growth and limiting factors"),
+                "Predator-prey relationships": ("C4.1 Populations and communities", "Sampling, species interactions and community ecology"),
+                "Sampling techniques for populations": ("C4.1 Populations and communities", "Sampling, species interactions and community ecology")
+            ]),
+            "Sustainability": .init(fallback: "D4.2 Stability and change", subtopics: [
+                "Carbon cycling and climate change": ("D4.3 Climate change", "Greenhouse gases, evidence and biological consequences"),
+                "Human impact on ecosystems": ("D4.2 Stability and change", "Ecosystem stability, resilience and human impacts"),
+                "Nitrogen cycling": ("C4.2 Transfers of energy and matter", "Carbon cycling, biomass and productivity"),
+                "Sustainable development and resource management": ("A4.2 Conservation of biodiversity", "Conservation strategies and evaluating their success")
+            ]),
+            "Water and Biomolecules": .init(fallback: "A1.1 Water", subtopics: [
+                "Hydrogen bonding in water": ("A1.1 Water", "Polarity, hydrogen bonding, cohesion and adhesion")
+            ])
+        ],
+        "Mathematics AA": [
+            "Differentiation": .init(fallback: "5.6 Differentiation rules", subtopics: [
+                "Chain rule": ("5.6 Differentiation rules", "Chain, product and quotient rules"),
+                "Derivatives of exponential and logarithmic functions": ("5.6 Differentiation rules", "Derivatives of powers, trigonometric, exponential and logarithmic functions"),
+                "Derivatives of trigonometric functions": ("5.6 Differentiation rules", "Derivatives of powers, trigonometric, exponential and logarithmic functions"),
+                "First principles of differentiation": ("5.1 Limits and derivatives", "Limits and the gradient of a curve"),
+                "Power rule": ("5.3 Polynomial differentiation", "Power rule"),
+                "Product and quotient rules": ("5.6 Differentiation rules", "Chain, product and quotient rules")
+            ])
+        ]
+    ]
+
+    /// Runs every launch so a restored backup gets the same treatment; it finds
+    /// nothing to do once the names are current.
+    private static func migrateRetiredTopics(context: ModelContext) {
+        var topicByCard: [UUID: String] = [:]
+        for card in (try? context.fetch(FetchDescriptor<StudyCard>())) ?? [] {
+            guard let retired = card.subject.flatMap({ retiredTopics[$0.name]?[card.topicName] }) else { continue }
+            let target = retired.target(forSubtopic: card.subtopic)
+            card.topicName = target.topic
+            card.subtopic = target.subtopic
+            topicByCard[card.id] = target.topic
+        }
+        for review in (try? context.fetch(FetchDescriptor<ReviewSession>())) ?? [] {
+            guard let retired = retiredTopics[review.subjectName]?[review.topicName] else { continue }
+            review.topicName = topicByCard[review.cardID] ?? retired.fallback
+        }
+        for plan in (try? context.fetch(FetchDescriptor<StudyPlan>())) ?? [] {
+            guard let retired = retiredTopics[plan.subjectName] else { continue }
+            if let topics = migratedTopics(plan.topicName, retired: retired) {
+                plan.topicName = topics
+                // Old subtopics no longer name any card; the topics still cover them.
+                plan.subtopicName = ""
+            }
+            let tasks = plan.planTasks
+            if tasks.contains(where: { retired[$0.topicName] != nil }) {
+                plan.planTasks = tasks.map { task in
+                    guard let target = retired[task.topicName]?.target(forSubtopic: task.subtopicName) else { return task }
+                    return StudyPlanTask(
+                        id: task.id, title: task.title, minutes: task.minutes, activityType: task.activityType,
+                        topicName: target.topic, subtopicName: target.subtopic, instructions: task.instructions,
+                        successCriterion: task.successCriterion, flashcardTarget: task.flashcardTarget
+                    )
+                }
+            }
+        }
+        for session in (try? context.fetch(FetchDescriptor<StudySession>())) ?? [] {
+            guard let retired = retiredTopics[session.subjectName] else { continue }
+            if let topics = migratedTopics(session.topicsCovered, retired: retired) {
+                session.topicsCovered = topics
+                session.subtopicsCovered = nil
+            }
+            let evidence = session.subunitEvidence
+            if evidence.contains(where: { retired[$0.topicName] != nil }) {
+                session.subunitEvidence = evidence.map { entry in
+                    guard let target = retired[entry.topicName]?.target(forSubtopic: entry.subtopicName) else { return entry }
+                    return StudySessionSubunitEvidence(
+                        topicName: target.topic, subtopicName: target.subtopic, minutes: entry.minutes,
+                        confidenceRating: entry.confidenceRating, cardsReviewed: entry.cardsReviewed,
+                        correctCount: entry.correctCount
+                    )
+                }
+            }
+        }
+    }
+
+    private static func migratedTopics(_ topics: String, retired: [String: RetiredTopic]) -> String? {
+        let current = StudyScope.parseList(topics)
+        guard current.contains(where: { retired[$0] != nil }) else { return nil }
+        var result: [String] = []
+        for topic in current.flatMap({ retired[$0]?.topics ?? [$0] }) where !result.contains(topic) {
+            result.append(topic)
+        }
+        return result.joined(separator: ", ")
     }
 
     static func unitName(for subjectName: String, level: String? = nil, topicName: String) -> String? {

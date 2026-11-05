@@ -398,4 +398,90 @@ struct DailyAllowanceRegressionTests {
         #expect(day.limited([first, copy]).isEmpty)
         #expect(try context.fetchCount(FetchDescriptor<StudyCard>()) == 2)
     }
+
+    @MainActor
+    @Test("A priority subject fills a limited day first and keeps due order")
+    func prioritySubjectFillsLimitedDay() throws {
+        let container = try ModelContainer(
+            for: StudyCard.self, Subject.self, StudySession.self, ReviewSession.self, UserProfile.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        let profile = UserProfile()
+        profile.dailyGoal = 2
+        context.insert(profile)
+        let biology = Subject(name: "Biology", level: "HL", accentColorHex: "#00FF00")
+        let economics = Subject(name: "Economics", level: "HL", accentColorHex: "#0000FF")
+        context.insert(biology)
+        context.insert(economics)
+        let now = Date()
+        func add(_ front: String, _ subject: Subject, daysAgo: Int) -> StudyCard {
+            let card = StudyCard(topicName: "T", front: front, back: "A", subject: subject)
+            card.nextReviewDate = now.addingTimeInterval(Double(-daysAgo) * 86_400)
+            context.insert(card)
+            return card
+        }
+        let oldEconomics = add("Old economics", economics, daysAgo: 9)
+        let olderBiology = add("Older biology", biology, daysAgo: 5)
+        let newerBiology = add("Newer biology", biology, daysAgo: 1)
+        try context.save()
+
+        let manager = ReviewQueueManager()
+        ReviewDailyLimitPolicy.$prioritySubjectOverride.withValue("") {
+            manager.refreshDueCardsSynchronously(context: context)
+            #expect(manager.dueCards.first?.id == oldEconomics.id)
+        }
+        ReviewDailyLimitPolicy.$prioritySubjectOverride.withValue("Biology") {
+            manager.refreshDueCardsSynchronously(context: context)
+            #expect(manager.dueCards.map(\.id) == [olderBiology.id, newerBiology.id])
+            #expect(manager.backlogCount(for: economics) == 1)
+            #expect(manager.dueCount(for: economics) == 0)
+        }
+    }
+
+    @MainActor
+    @Test("Prioritizing nothing or an unknown subject leaves the order alone")
+    func priorityWithoutMatchKeepsOrder() {
+        let cards = [StudyCard(topicName: "A", front: "1", back: "A"), StudyCard(topicName: "B", front: "2", back: "A")]
+        #expect(ReviewDailyLimitPolicy.prioritized(cards, subject: "").map(\.id) == cards.map(\.id))
+        #expect(ReviewDailyLimitPolicy.prioritized(cards, subject: "Missing").map(\.id) == cards.map(\.id))
+    }
+
+    @Test("Weakest first keeps the weakest cards when a daily limit applies")
+    func weakestFirstSurvivesLimit() throws {
+        let container = try ModelContainer(
+            for: StudyCard.self, Subject.self, StudySession.self, ReviewSession.self, UserProfile.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        let profile = UserProfile()
+        profile.dailyGoal = 1
+        context.insert(profile)
+        let subject = Subject(name: "Biology", level: "HL", accentColorHex: "#00FF00")
+        context.insert(subject)
+        let now = Date()
+        let oldStrong = StudyCard(topicName: "T", front: "Oldest but mastered", back: "A", subject: subject)
+        oldStrong.proficiency = .mastered
+        oldStrong.nextReviewDate = now.addingTimeInterval(-9 * 86_400)
+        let newWeak = StudyCard(topicName: "T", front: "Recent and new", back: "A", subject: subject)
+        newWeak.proficiency = .novice
+        newWeak.nextReviewDate = now.addingTimeInterval(-86_400)
+        context.insert(oldStrong)
+        context.insert(newWeak)
+        try context.save()
+
+        let manager = ReviewQueueManager()
+        ReviewDailyLimitPolicy.$enforcementOverride.withValue(true) {
+            ReviewDailyLimitPolicy.$prioritySubjectOverride.withValue("") {
+                ReviewDailyLimitPolicy.$reviewOrderOverride.withValue("spaced") {
+                    manager.refreshDueCards(context: context)
+                    #expect(manager.dueCards.map(\.id) == [oldStrong.id])
+                }
+                ReviewDailyLimitPolicy.$reviewOrderOverride.withValue("weakest") {
+                    manager.refreshDueCards(context: context)
+                    #expect(manager.dueCards.map(\.id) == [newWeak.id])
+                }
+            }
+        }
+    }
 }

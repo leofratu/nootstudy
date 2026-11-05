@@ -29,7 +29,7 @@ struct GlassCard<Content: View>: View {
 struct StudioPageHeader<Trailing: View>: View {
     let eyebrow: String
     let title: String
-    let subtitle: String
+    let subtitle: String?
     let symbol: String
     let tint: Color
     let trailing: Trailing
@@ -37,7 +37,7 @@ struct StudioPageHeader<Trailing: View>: View {
     init(
         eyebrow: String,
         title: String,
-        subtitle: String,
+        subtitle: String? = nil,
         symbol: String,
         tint: Color = IBColors.inkTertiary,
         @ViewBuilder trailing: () -> Trailing
@@ -57,10 +57,12 @@ struct StudioPageHeader<Trailing: View>: View {
                     .font(IBTypography.pageTitle)
                     .foregroundStyle(IBColors.ink)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(subtitle)
-                    .font(IBTypography.body13)
-                    .foregroundStyle(IBColors.inkSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(IBTypography.body13)
+                        .foregroundStyle(IBColors.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer(minLength: 16)
             trailing

@@ -290,7 +290,7 @@ struct RootView: View {
         .onDisappear {
             bridgeController?.stop()
         }
-        .overlay(alignment: .topLeading) {
+        .safeAreaInset(edge: .top, spacing: 0) {
             CalendarSyncCoordinator()
         }
         .alert(
@@ -365,6 +365,19 @@ struct RootView: View {
         }
     }
 
+    /// Runs once, after the launch backup. Later builds pay XP as each card is
+    /// rated, so anything still unlogged after this was already paid.
+    private func creditUnpaidReviewsIfNeeded() {
+        let key = "IBVaultUnpaidReviewsCredited.v1"
+        guard !AppEnvironment.isRunningTests, !UserDefaults.standard.bool(forKey: key) else { return }
+        do {
+            try UnpaidReviewRepair.run(context: context)
+            UserDefaults.standard.set(true, forKey: key)
+        } catch {
+            context.rollback()
+        }
+    }
+
     private func reconcileAchievementsIfNeeded() {
         guard !hasReconciledAchievements else { return }
         hasReconciledAchievements = true
@@ -388,8 +401,11 @@ struct RootView: View {
         synchronizeCurriculumIfNeeded()
         migrateFSRSIfNeeded()
         normalizeLegacySessionsIfNeeded()
+        creditUnpaidReviewsIfNeeded()
         reconcileAchievementsIfNeeded()
         recomputeProgressionIfNeeded()
+        // Replaces the old repeating request and re-arms it past a skipped day.
+        if let primaryProfile { NotificationService.refreshStreakWarning(for: primaryProfile) }
     }
 
     private func mergeHistoricalEvidenceIfNeeded() {
@@ -420,6 +436,8 @@ struct RootView: View {
     private func triggerAutomaticBackupIfNeeded() -> Bool {
         guard !hasAttemptedAutomaticBackup else { return launchError == nil }
         hasAttemptedAutomaticBackup = true
+        // The test host's in-memory store must not land among the learner's backups.
+        guard !AppEnvironment.isRunningTests else { return true }
 
         do {
             try BackupService.autoBackupIfNeeded(context: context)

@@ -34,8 +34,7 @@ struct CardStudioView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    StudioPageHeader(eyebrow: "Practice / Create", title: "Card studio",
-                                     subtitle: "Turn a topic into short questions you can actually recall.", symbol: "rectangle.stack.badge.plus", tint: IBColors.accent) {
+                    StudioPageHeader(eyebrow: "Practice / Create", title: "Card studio", symbol: "rectangle.stack.badge.plus", tint: IBColors.accent) {
                         Button { showLibrary = true } label: {
                             Label("Your cards", systemImage: "rectangle.stack")
                         }.buttonStyle(SecondaryButtonStyle())
@@ -165,8 +164,6 @@ struct CardStudioView: View {
                 Text(options.tone.summary)
                     .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                 CardCountControl(count: $options.count)
-                Text("Your count and answer style are saved for the next set.")
-                    .font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text("Card formats").font(IBTypography.headline)
@@ -198,7 +195,6 @@ struct CardStudioView: View {
             Divider()
             VStack(alignment: .leading, spacing: 12) {
                 Toggle("Reuse saved cards first", isOn: $reuseExisting).toggleStyle(.checkbox)
-                Text("Only missing cards need generation.").font(IBTypography.caption).foregroundStyle(IBColors.inkSecondary)
                 Text("\(options.count) cards · \(selection.count) \(selection.count == 1 ? "topic" : "topics") · \(formats.count) \(formats.count == 1 ? "format" : "formats")")
                     .font(IBTypography.headline)
                 if selection.isEmpty {

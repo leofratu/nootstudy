@@ -217,7 +217,7 @@ struct DashboardView: View {
                 symbol: "sparkles"
             )
             StudioMetricTile(
-                value: "\(profile?.currentStreak ?? 0)",
+                value: "\(profile?.activeStreak() ?? 0)",
                 label: "Day streak",
                 symbol: "flame"
             )

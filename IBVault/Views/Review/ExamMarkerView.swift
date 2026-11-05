@@ -29,8 +29,7 @@ struct ExamMarkerView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    StudioPageHeader(eyebrow: "Practice / Feedback", title: "Exam marker",
-                                     subtitle: "Find the marks you're missing.", symbol: "checkmark.bubble", tint: IBColors.coral) {
+                    StudioPageHeader(eyebrow: "Practice / Feedback", title: "Exam marker", symbol: "checkmark.bubble", tint: IBColors.coral) {
                         Button { showHistory = true } label: {
                             Label("Saved feedback", systemImage: "clock.arrow.circlepath")
                         }.buttonStyle(SecondaryButtonStyle())

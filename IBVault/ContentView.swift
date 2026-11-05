@@ -257,7 +257,11 @@ struct ContentView: View {
             case .recommendations: SmartRecommendationsView()
             case .predictions: PredictiveGradeView()
             case .profile: ProfileView()
-            case .settings: SettingsView()
+            case .settings:
+                // The calendar banner sends the learner here to reconnect.
+                NavigationStack {
+                    SettingsView(initialSection: UserDefaults.standard.bool(forKey: CalendarSyncPreferences.needsAttentionKey) ? .study : .general)
+                }
             case .none:
                 ContentUnavailableView("Select a Section", systemImage: "sidebar.left", description: Text("Choose a section from the sidebar to get started."))
             }
@@ -294,7 +298,17 @@ struct ReviewLaunchView: View {
     @Environment(ReviewQueueManager.self) private var queueManager
     @State private var showReview = false
     @State private var showGuide = false
+    @AppStorage(ReviewDailyLimitPolicy.prioritySubjectKey) private var prioritySubject = ""
+    @AppStorage("reviewOrder") private var reviewOrder = "spaced"
     @Query(sort: \StudySession.endDate, order: .reverse) private var studySessions: [StudySession]
+    @Query(sort: \Subject.name) private var subjects: [Subject]
+
+    private var dueSubjects: [(subject: Subject, due: Int)] {
+        subjects
+            .map { (subject: $0, due: queueManager.backlogCount(for: $0)) }
+            .filter { $0.due > 0 || $0.subject.name == prioritySubject }
+            .sorted { $0.due > $1.due }
+    }
 
     private var eligibleCount: Int {
         queueManager.eligibleCardsCount()
@@ -349,14 +363,11 @@ struct ReviewLaunchView: View {
                                 .foregroundStyle(IBColors.inkSecondary)
                         }
                         MasteryBar(progress: Double(queueManager.reviewedTodayCount) / Double(max(queueManager.dailyGoal, 1)), height: 6)
-                        Text(queueManager.isLimitEnforced
-                             ? "Reviews stop at your goal. You can change this in Settings under Flashcards."
-                             : "A target, not a cap. Keep reviewing past it for as long as it's useful.")
-                            .font(IBTypography.caption)
-                            .foregroundStyle(IBColors.inkTertiary)
                     }
                     .padding(20)
                     .surfaceCard()
+
+                    queueCard
                 }
                 .frame(maxWidth: 960, alignment: .leading)
                 .padding(.horizontal, 28)
@@ -372,14 +383,87 @@ struct ReviewLaunchView: View {
             .task {
                 queueManager.ensureLoaded(context: context)
             }
+            .onChange(of: prioritySubject) { _, _ in
+                queueManager.refreshDueCards(context: context)
+            }
         }
     }
 
-    private var reviewSubtitle: String {
+    private var queueCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Prioritize a subject")
+                    .font(IBTypography.sectionTitle)
+                    .foregroundStyle(IBColors.ink)
+                Spacer()
+                Picker("Order", selection: $reviewOrder) {
+                    Text("Due first").tag("spaced")
+                    Text("Weakest first").tag("weakest")
+                    Text("Shuffled").tag("random")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 300)
+                .accessibilityLabel("Review order")
+            }
+            if dueSubjects.isEmpty {
+                Text("No cards are due.")
+                    .font(IBTypography.body13)
+                    .foregroundStyle(IBColors.inkSecondary)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(dueSubjects, id: \.subject.id) { entry in
+                        subjectRow(entry.subject, due: entry.due)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .surfaceCard()
+    }
+
+    private func subjectRow(_ subject: Subject, due: Int) -> some View {
+        let isPriority = subject.name == prioritySubject
+        return Button {
+            IBHaptics.light()
+            prioritySubject = isPriority ? "" : subject.name
+        } label: {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(Color(hex: subject.accentColorHex))
+                    .frame(width: 8, height: 8)
+                Text("\(subject.name) \(subject.level)")
+                    .font(.system(size: 13, weight: isPriority ? .medium : .regular))
+                    .foregroundStyle(IBColors.ink)
+                    .lineLimit(1)
+                Spacer()
+                if isPriority {
+                    Label("First", systemImage: "pin.fill")
+                        .font(IBTypography.caption)
+                        .foregroundStyle(IBColors.accent)
+                }
+                Text("\(due) due")
+                    .font(IBTypography.caption.monospacedDigit())
+                    .foregroundStyle(IBColors.inkSecondary)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 32)
+            .background(isPriority ? IBColors.ink.opacity(0.07) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: IBRadius.sm))
+            .contentShape(Rectangle())
+            .hoverHighlight()
+        }
+        .buttonStyle(IBPressStyle())
+        .accessibilityAddTraits(isPriority ? .isSelected : [])
+    }
+
+    /// Only shown when something is wrong or the day's limit has been reached;
+    /// the tiles below already show how many cards are ready.
+    private var reviewSubtitle: String? {
         if let error = queueManager.lastRefreshError { return error }
         if queueManager.remainingDailyAllowance == 0 {
-            return "You've hit your daily limit. The remaining cards will wait until tomorrow."
+            return "Daily limit reached. Remaining cards wait until tomorrow."
         }
-        return dueCardsCount == 0 ? "You're caught up." : "\(dueCardsCount) cards are ready."
+        return nil
     }
 }

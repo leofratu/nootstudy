@@ -29,6 +29,8 @@ struct ReviewSessionView: View {
     @State private var awaitingNextCard = false
     @State private var sessionComplete = false
     @State private var sessionXP = 0
+    /// XP already paid to the profile for rated cards, so finishing doesn't pay it twice.
+    @State private var recordedRatingXP = 0
     @State private var sessionQualities: [RecallQuality] = []
     @State private var sessionCorrect = 0
     @State private var sessionStartTime = Date()
@@ -116,18 +118,12 @@ struct ReviewSessionView: View {
             loadCards()
         }
         .onDisappear {
-            // Closing the sheet mid-session must commit the reviewed cards'
-            // FSRS reschedule together with their ReviewSession logs, or the
-            // cards would be pushed into the future while the analytics engine
-            // (which reads ReviewSession) never saw the reviews.
+            // Closing the sheet mid-session still logs the cards already rated.
+            // Otherwise they are rescheduled, but their time, XP and session
+            // never reach analytics or the study history.
             if !sessionComplete && !sessionQualities.isEmpty {
-                do {
-                    try context.save()
-                } catch {
-                    // The sheet is already dismissing, so there is nowhere to
-                    // surface the error. The pending reschedules stay in the
-                    // context and are flushed by a later save or autosave.
-                }
+                cards = Array(cards.prefix(sessionQualities.count))
+                completeSession(closedEarly: true)
             }
         }
         .sheet(isPresented: $showStudyGuide) {
@@ -181,52 +177,53 @@ struct ReviewSessionView: View {
                     .frame(maxWidth: .infinity)
             }
 
-            // Action bar
-            HStack(spacing: 12) {
-                if awaitingNextCard {
-                    Text("Rating saved")
-                        .font(IBTypography.body13)
-                        .foregroundStyle(IBColors.inkSecondary)
-                    Spacer()
-                    Button("Next card") { advanceCard() }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .keyboardShortcut(.space, modifiers: [])
-                } else if isFlipped {
-                    let previews = fsrsPreviews
-                    Text("How well did you recall it?")
-                        .font(IBTypography.body13)
-                        .foregroundStyle(IBColors.inkSecondary)
-                    Spacer()
-                    QualityButton(label: "Again", color: IBColors.danger, detail: previews[.again]?.intervalLabel) { rateCard(.again) }
-                        .keyboardShortcut("1", modifiers: [])
-                    QualityButton(label: "Hard", color: IBColors.warning, detail: previews[.hard]?.intervalLabel) { rateCard(.hard) }
-                        .keyboardShortcut("2", modifiers: [])
-                    QualityButton(label: "Good", color: IBColors.ink, detail: previews[.good]?.intervalLabel) { rateCard(.good) }
-                        .keyboardShortcut("3", modifiers: [])
-                    QualityButton(label: "Easy", color: IBColors.accent, detail: previews[.easy]?.intervalLabel) { rateCard(.easy) }
-                        .keyboardShortcut("4", modifiers: [])
-                } else if card.cardStyle == .multipleChoice,
-                          CardGeneratorService.validatedChoices(back: card.back, choices: card.choices) != nil {
-                    Text("Choose an option above, then check your answer.")
-                        .font(.callout).foregroundStyle(IBColors.inkSecondary)
-                    Spacer()
-                } else {
-                    Spacer()
-                    Button {
-                        if reduceMotion { isFlipped = true } else { withAnimation(IBAnimation.snappy) { isFlipped = true } }
-                        IBHaptics.light()
-                    } label: {
-                        Text("Show answer").frame(minWidth: 160)
-                    }
+            // Action bar. An unanswered multiple-choice card has its own Check
+            // answer button, so there is nothing to show here yet.
+            if awaitingNextCard || isFlipped || !hasValidChoices(card) {
+                actionBar
+            }
+        }
+    }
+
+    private func hasValidChoices(_ card: StudyCard) -> Bool {
+        card.cardStyle == .multipleChoice &&
+            CardGeneratorService.validatedChoices(back: card.back, choices: card.choices) != nil
+    }
+
+    private var actionBar: some View {
+        HStack(spacing: 12) {
+            if awaitingNextCard {
+                Spacer()
+                Button("Next card") { advanceCard() }
                     .buttonStyle(PrimaryButtonStyle())
                     .keyboardShortcut(.space, modifiers: [])
-                    Spacer()
+            } else if isFlipped {
+                let previews = fsrsPreviews
+                Spacer()
+                QualityButton(label: "Again", color: IBColors.danger, detail: previews[.again]?.intervalLabel) { rateCard(.again) }
+                    .keyboardShortcut("1", modifiers: [])
+                QualityButton(label: "Hard", color: IBColors.warning, detail: previews[.hard]?.intervalLabel) { rateCard(.hard) }
+                    .keyboardShortcut("2", modifiers: [])
+                QualityButton(label: "Good", color: IBColors.ink, detail: previews[.good]?.intervalLabel) { rateCard(.good) }
+                    .keyboardShortcut("3", modifiers: [])
+                QualityButton(label: "Easy", color: IBColors.accent, detail: previews[.easy]?.intervalLabel) { rateCard(.easy) }
+                    .keyboardShortcut("4", modifiers: [])
+            } else {
+                Spacer()
+                Button {
+                    if reduceMotion { isFlipped = true } else { withAnimation(IBAnimation.snappy) { isFlipped = true } }
+                    IBHaptics.light()
+                } label: {
+                    Text("Show answer").frame(minWidth: 160)
                 }
+                .buttonStyle(PrimaryButtonStyle())
+                .keyboardShortcut(.space, modifiers: [])
+                Spacer()
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
-            .background(IBColors.surface)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .background(IBColors.surface)
     }
 
     // MARK: - Logic
@@ -304,18 +301,20 @@ struct ReviewSessionView: View {
     }
 
     private func orderedForReview(_ candidates: [StudyCard]) -> [StudyCard] {
+        let ordered: [StudyCard]
         switch reviewOrder {
-        case "random": return candidates.shuffled()
+        case "random": ordered = candidates.shuffled()
         case "weakest":
-            return candidates.sorted {
+            ordered = candidates.sorted {
                 if $0.proficiency.sortOrder != $1.proficiency.sortOrder {
                     return $0.proficiency.sortOrder < $1.proficiency.sortOrder
                 }
                 if $0.easeFactor != $1.easeFactor { return $0.easeFactor < $1.easeFactor }
                 return $0.nextReviewDate < $1.nextReviewDate
             }
-        default: return candidates
+        default: ordered = candidates
         }
+        return ReviewDailyLimitPolicy.prioritized(ordered, subject: ReviewDailyLimitPolicy.prioritySubject)
     }
 
     private func advanceCard() {
@@ -371,6 +370,14 @@ struct ReviewSessionView: View {
         )
         FSRSScheduler.configure(review, quality: quality)
         context.insert(review)
+        if let p = profiles.first {
+            // Safe to repeat: only the first review of the day moves the streak.
+            p.checkAndUpdateStreak()
+            NotificationService.refreshStreakWarning(for: p)
+            let earned = XPCalculator.xp(forQualities: sessionQualities, intensity: p.studyIntensity)
+            p.recordXP(earned - recordedRatingXP)
+            recordedRatingXP = earned
+        }
         queueManager.recordReview(of: card, checkedDay: day)
         switch quality { case .again: IBHaptics.warning(); case .hard: IBHaptics.light(); case .good: IBHaptics.medium(); case .easy: IBHaptics.success() }
         if day.remaining <= 1 || currentIndex + 1 >= cards.count {
@@ -383,17 +390,17 @@ struct ReviewSessionView: View {
         }
     }
 
-    private func completeSession() {
+    private func completeSession(closedEarly: Bool = false) {
         if let p = profiles.first {
             sessionXP = XPCalculator.xp(forQualities: sessionQualities, intensity: p.studyIntensity)
-            p.recordXP(sessionXP)
-            p.checkAndUpdateStreak()
+            p.recordXP(sessionXP - recordedRatingXP)
+            recordedRatingXP = sessionXP
         }
         // Snapshot before the cards are rescheduled on save so the completion
         // screen shows the real numbers, not the emptied due queue.
         completedCardCount = cards.count
         completedRetentionPercent = cards.isEmpty ? 0 : sessionCorrect * 100 / cards.count
-        filterPlan?.isCompleted = true
+        if !closedEarly { filterPlan?.isCompleted = true }
         let today = Calendar.current.startOfDay(for: Date())
         let pred = #Predicate<StudyActivity> { $0.date == today }
         if let a = try? context.fetch(FetchDescriptor(predicate: pred)).first {
@@ -471,6 +478,7 @@ struct ReviewSessionView: View {
             // the completion screen (the reviewed card stays on the last card
             // and can be re-rated to retry).
             context.rollback()
+            recordedRatingXP = 0
             generationError = "Could not save your review session: \(error.localizedDescription)"
             return
         }
@@ -480,7 +488,9 @@ struct ReviewSessionView: View {
         progressionEvents.enqueue(ProgressionService.recompute(context: context))
         queueManager.refreshDueCardsSynchronously(context: context)
 
-        withAnimation(IBAnimation.smooth) { sessionComplete = true }; IBHaptics.success()
+        if !closedEarly {
+            withAnimation(IBAnimation.smooth) { sessionComplete = true }; IBHaptics.success()
+        }
 
         // Schedule due card reminders
         NotificationService.scheduleDueCardReminders(context: context)
@@ -591,7 +601,7 @@ struct ReviewSessionView: View {
         if let scopeSummary {
             return "No saved flashcards match \(scopeSummary) yet. Study that scope first and useful cards will be added automatically."
         }
-        return "No studied flashcards are due for review right now. Come back after your next study session or when those cards become due."
+        return "No cards are due."
     }
 
     private func proficiencyDotColor(_ p: ProficiencyLevel) -> Color {

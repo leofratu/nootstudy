@@ -5,11 +5,29 @@ import Foundation
 @Suite("Rank Ladder Tests")
 struct RankLadderTests {
 
-    @Test("The ladder has fifteen ranks and forty-five steps")
+    @Test("The ladder has twenty ranks and sixty steps")
     func ladderShape() {
-        #expect(Rank.allCases.count == 15)
+        #expect(Rank.allCases.count == 20)
         #expect(RankTier.allCases.count == 3)
-        #expect(RankStep.maxOrdinal == 44)
+        #expect(RankStep.maxOrdinal == 59)
+    }
+
+    @Test("Stored raw values still restore the same rank after the ladder grew")
+    func storedRanksKeepTheirIdentity() {
+        #expect(Rank(rawValue: 0) == .electron)
+        #expect(Rank(rawValue: 1) == .atom)
+        #expect(Rank(rawValue: 9) == .supernova)
+        #expect(Rank(rawValue: 14) == .universe)
+        #expect(Set(Rank.allCases.map(\.rawValue)).count == Rank.allCases.count)
+    }
+
+    @Test("New ranks sit between existing ones and every ordinal round-trips")
+    func newRanksAreInterleaved() {
+        #expect(Rank.electron < .nucleus && Rank.nucleus < .atom)
+        #expect(Rank.supernova < .blackHole && Rank.blackHole < .nebula)
+        for ordinal in 0...RankStep.maxOrdinal {
+            #expect(RankStep(ordinal: ordinal).ordinal == ordinal)
+        }
     }
 
     @Test("Zero mastery is Electron III")
@@ -30,36 +48,36 @@ struct RankLadderTests {
         let atBoundary = RankStep(forMastery: 1.0)
         #expect(atBoundary.rank == .universe)
         #expect(atBoundary.tier == .one)
-        #expect(atBoundary.ordinal == 44)
+        #expect(atBoundary.ordinal == 59)
 
-        let justBelow = RankStep(ordinal: 43)
+        let justBelow = RankStep(ordinal: 58)
         #expect(justBelow.rank == .universe)
         #expect(justBelow.tier == .two)
 
-        let cosmicWebTop = RankStep(ordinal: 41)
+        let cosmicWebTop = RankStep(ordinal: 56)
         #expect(cosmicWebTop.rank == .cosmicWeb)
         #expect(cosmicWebTop.tier == .one)
     }
 
     @Test("Mastery above the top of the ladder stays at Universe I")
     func aboveTopClamps() {
-        #expect(RankStep(forMastery: 1.0).ordinal == 44)
-        #expect(RankStep(forMastery: 99).ordinal == 44)
+        #expect(RankStep(forMastery: 1.0).ordinal == 59)
+        #expect(RankStep(forMastery: 99).ordinal == 59)
     }
 
     @Test("Tiers ascend III to II to I within a rank")
     func tiersAscendWithinRank() {
-        #expect(RankStep(ordinal: 3).rank == .atom)
+        #expect(RankStep(ordinal: 3).rank == .nucleus)
         #expect(RankStep(ordinal: 3).tier == .three)
         #expect(RankStep(ordinal: 4).tier == .two)
         #expect(RankStep(ordinal: 5).tier == .one)
-        #expect(RankStep(ordinal: 6).rank == .molecule)
+        #expect(RankStep(ordinal: 6).rank == .atom)
     }
 
     @Test("Steps order by ordinal")
     func stepsAreComparable() {
         #expect(RankStep(forMastery: 0.10) < RankStep(forMastery: 0.50))
-        #expect(max(RankStep(forMastery: 0.10), RankStep(forMastery: 0.50)).ordinal == 22)
+        #expect(max(RankStep(forMastery: 0.10), RankStep(forMastery: 0.50)).ordinal == 29)
     }
 
     @Test("Display name combines rank and tier numeral")
