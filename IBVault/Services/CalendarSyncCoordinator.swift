@@ -5,6 +5,8 @@ struct CalendarSyncCoordinator: View {
     @Query(sort: \StudyPlan.scheduledDate, order: .forward) private var plans: [StudyPlan]
     @AppStorage(CalendarSyncPreferences.isEnabledKey) private var isEnabled = false
     @AppStorage(CalendarSyncPreferences.calendarIdentifierKey) private var calendarIdentifier = ""
+    @AppStorage(CalendarSyncPreferences.needsAttentionKey) private var needsAttention = false
+    @AppStorage(CalendarSyncPreferences.lastErrorKey) private var lastError = ""
 
     private var syncFingerprint: String {
         let planValues = plans.map {
@@ -22,9 +24,30 @@ struct CalendarSyncCoordinator: View {
     }
 
     var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .accessibilityHidden(true)
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: 0)
+                .accessibilityHidden(true)
+            if needsAttention, isEnabled {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(IBColors.warning)
+                    Text("Calendar sync stopped. \(lastError)")
+                        .font(.callout)
+                        .lineLimit(2)
+                    Spacer()
+                    Button("Open Settings") {
+                        NotificationCenter.default.post(
+                            name: .ibVaultAppCommand,
+                            object: IBVaultAppCommand.showSettings.notificationPayload
+                        )
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.bar)
+            }
+        }
             .task(id: syncFingerprint) {
                 await synchronize()
             }
@@ -34,7 +57,8 @@ struct CalendarSyncCoordinator: View {
     }
 
     private func synchronize() async {
-        guard isEnabled, !calendarIdentifier.isEmpty else { return }
+        // An enabled sync with no calendar is reported by the service, not skipped.
+        guard isEnabled else { return }
         do {
             try await CalendarSyncService.shared.sync(plans: plans)
         } catch {

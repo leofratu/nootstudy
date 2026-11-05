@@ -51,7 +51,6 @@ struct SubjectsGridView: View {
                     StudioPageHeader(
                         eyebrow: "Knowledge library",
                         title: "Subjects",
-                        subtitle: "Mastery reflects your recall and imported assessment results.",
                         symbol: "books.vertical.fill",
                         tint: IBColors.englishColor
                     ) {

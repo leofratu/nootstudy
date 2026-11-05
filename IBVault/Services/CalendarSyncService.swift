@@ -20,6 +20,8 @@ enum CalendarSyncPreferences {
     static let calendarEventIdentifiersKey = "googleCalendarSyncEventsByCalendar"
     static let lastSyncDateKey = "calendarSyncLastDate"
     static let lastErrorKey = "calendarSyncLastError"
+    /// Set when sync cannot resume without the learner, unlike a network blip.
+    static let needsAttentionKey = "calendarSyncNeedsAttention"
 
     static var isEnabled: Bool {
         UserDefaults.standard.bool(forKey: isEnabledKey)
@@ -49,13 +51,17 @@ enum CalendarSyncPreferences {
         defaults.set(calendars, forKey: calendarEventIdentifiersKey)
     }
 
-    static func recordSuccess(at date: Date = Date()) {
-        UserDefaults.standard.set(date, forKey: lastSyncDateKey)
-        UserDefaults.standard.removeObject(forKey: lastErrorKey)
+    static func recordSuccess(at date: Date = Date(), defaults: UserDefaults = .standard) {
+        defaults.set(date, forKey: lastSyncDateKey)
+        defaults.removeObject(forKey: lastErrorKey)
+        defaults.removeObject(forKey: needsAttentionKey)
     }
 
-    static func recordFailure(_ error: any Error) {
-        UserDefaults.standard.set(error.localizedDescription, forKey: lastErrorKey)
+    static func recordFailure(_ error: any Error, defaults: UserDefaults = .standard) {
+        defaults.set(error.localizedDescription, forKey: lastErrorKey)
+        if let error = error as? CalendarSyncError, error.needsAttention {
+            defaults.set(true, forKey: needsAttentionKey)
+        }
     }
 }
 
@@ -128,6 +134,13 @@ nonisolated enum CalendarSyncError: LocalizedError {
     case calendarUnavailable
     case serverError(String)
     case callbackFailed
+
+    var needsAttention: Bool {
+        switch self {
+        case .configurationMissing, .tokenMissing, .calendarUnavailable: return true
+        default: return false
+        }
+    }
 
     var errorDescription: String? {
         switch self {
@@ -242,12 +255,14 @@ final class CalendarSyncService {
         guard KeychainService.saveGoogleOAuthToken(token) else {
             throw CalendarSyncError.serverError("Noot could not securely save the Google connection.")
         }
+        defaults.removeObject(forKey: CalendarSyncPreferences.needsAttentionKey)
     }
 
     func disconnect() {
         refreshTask?.cancel()
         _ = KeychainService.deleteGoogleOAuthToken()
         defaults.set(false, forKey: CalendarSyncPreferences.isEnabledKey)
+        defaults.removeObject(forKey: CalendarSyncPreferences.needsAttentionKey)
     }
 
     func writableCalendars() async throws -> [CalendarSyncOption] {
@@ -306,34 +321,46 @@ final class CalendarSyncService {
             CalendarSyncPreferences.setEventIdentifiers(mappings, for: calendarID, defaults: defaults)
         }
 
+        var failures: [String] = []
         for plan in plans {
             guard isCurrentCalendar() else { return }
             let planID = plan.id.uuidString
             let body = eventBody(for: plan)
-            if let eventID = mappings[planID] {
-                do {
-                    try await updateEvent(eventID, calendarID: calendarID, body: body)
-                    continue
-                } catch GoogleHTTPError.notFound {
-                    mappings.removeValue(forKey: planID)
+            do {
+                if let eventID = mappings[planID] {
+                    do {
+                        try await updateEvent(eventID, calendarID: calendarID, body: body)
+                        continue
+                    } catch GoogleHTTPError.notFound {
+                        mappings.removeValue(forKey: planID)
+                    }
                 }
-            }
-            // Recover a previous insert whose response was lost before the ID
-            // could be persisted, including after disconnect/reconnect.
-            if let existingID = try await existingEventID(planID: planID, calendarID: calendarID) {
-                guard isCurrentCalendar() else { return }
-                try await updateEvent(existingID, calendarID: calendarID, body: body)
-                mappings[planID] = existingID
-            } else {
-                guard isCurrentCalendar() else { return }
-                mappings[planID] = try await createEvent(calendarID: calendarID, body: body)
+                // Recover a previous insert whose response was lost before the ID
+                // could be persisted, including after disconnect/reconnect.
+                if let existingID = try await existingEventID(planID: planID, calendarID: calendarID) {
+                    guard isCurrentCalendar() else { return }
+                    try await updateEvent(existingID, calendarID: calendarID, body: body)
+                    mappings[planID] = existingID
+                } else {
+                    guard isCurrentCalendar() else { return }
+                    mappings[planID] = try await createEvent(calendarID: calendarID, body: body)
+                }
+            } catch CalendarSyncError.serverError(let detail) {
+                // Google rejected this event only. Sign-in, a missing calendar
+                // and network errors still end the pass: they would fail every plan.
+                failures.append(detail)
+                continue
             }
             CalendarSyncPreferences.setEventIdentifiers(mappings, for: calendarID, defaults: defaults)
         }
 
         CalendarSyncPreferences.setEventIdentifiers(mappings, for: calendarID, defaults: defaults)
-        defaults.set(Date(), forKey: CalendarSyncPreferences.lastSyncDateKey)
-        defaults.removeObject(forKey: CalendarSyncPreferences.lastErrorKey)
+        if let first = failures.first {
+            throw CalendarSyncError.serverError(
+                "\(failures.count) of \(plans.count) study sessions could not sync: \(first)"
+            )
+        }
+        CalendarSyncPreferences.recordSuccess(defaults: defaults)
     }
 
     private func authorizationURL(

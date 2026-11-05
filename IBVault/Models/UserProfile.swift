@@ -209,6 +209,20 @@ nonisolated final class UserProfile {
         return advanced
     }
 
+    /// The streak as it stands today. `currentStreak` only changes on study, so
+    /// after missed days it still holds the number from before the gap.
+    func activeStreak(now: Date = Date(), calendar: Calendar = .current) -> Int {
+        guard let last = lastStudyDate else { return 0 }
+        let days = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: last),
+            to: calendar.startOfDay(for: now)
+        ).day ?? 0
+        // Mirrors checkAndUpdateStreak: one missed day survives with a freeze.
+        if days <= 1 || (days == 2 && streakFreezes > 0) { return currentStreak }
+        return 0
+    }
+
     func checkAndUpdateStreak() {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())

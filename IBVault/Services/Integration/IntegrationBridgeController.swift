@@ -13,30 +13,46 @@ final class IntegrationBridgeController {
     private(set) var state: BridgeState = .stopped
     let container: ModelContainer
     private var server: LocalBridgeServer?
+    private var isStarting = false
 
     init(container: ModelContainer) {
         self.container = container
     }
 
+    /// Starts the listener without blocking the main actor. Binds on a
+    /// background continuation and publishes the result when ready, so launch
+    /// never freezes on port probing.
     func start() {
-        guard case .stopped = state else { return }
+        guard !isStarting, case .stopped = state else { return }
         guard BridgeAuthService.isEnabled else {
             state = .stopped
             return
         }
+        isStarting = true
         let server = LocalBridgeServer(container: container)
-        do {
-            let port = try server.start()
-            self.server = server
-            state = .running(port: port)
-        } catch {
-            state = .failed(error.localizedDescription)
+        self.server = server
+        Task { [weak self] in
+            let result: Result<Int, any Error>
+            do { result = .success(try await server.start()) }
+            catch { result = .failure(error) }
+            // A stop during startup already reset state. Close what just bound
+            // rather than reporting a server nothing holds any more.
+            guard let self, self.server === server else {
+                server.stop()
+                return
+            }
+            self.isStarting = false
+            switch result {
+            case .success(let port): self.state = .running(port: port)
+            case .failure(let error): self.state = .failed(error.localizedDescription)
+            }
         }
     }
 
     func stop() {
         server?.stop()
         server = nil
+        isStarting = false
         state = .stopped
     }
 

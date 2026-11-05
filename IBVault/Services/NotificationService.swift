@@ -42,6 +42,12 @@ enum NotificationService {
         }
     }
     
+    static func requestPermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            requestPermission { granted, _ in continuation.resume(returning: granted) }
+        }
+    }
+
     static func checkPermissionStatus() async -> UNAuthorizationStatus {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         return settings.authorizationStatus
@@ -57,7 +63,7 @@ enum NotificationService {
         center.removePendingNotificationRequests(withIdentifiers: [config.dailyReminderID])
         
         let content = UNMutableNotificationContent()
-        content.title = "IB Vault — Time to Study!"
+        content.title = "Time to study"
         content.body = dueCount > 0
             ? "You have \(dueCount) cards due today. Keep your streak alive!"
             : "Review your knowledge and stay ahead of the forgetting curve."
@@ -82,33 +88,44 @@ enum NotificationService {
         center.add(request)
     }
     
-    static func scheduleStreakWarning(config: NotificationConfig = .default) {
+    static let streakWarningEnabledKey = "streakWarningEnabled"
+
+    /// The next 9 PM with a streak at risk: today if nothing is logged yet,
+    /// otherwise tomorrow. Nil with no streak to lose.
+    nonisolated static func nextStreakWarning(
+        streak: Int,
+        lastStudyDate: Date?,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date? {
+        guard streak > 0, let lastStudyDate else { return nil }
+        let today = calendar.startOfDay(for: now)
+        guard let tonight = calendar.date(bySettingHour: 21, minute: 0, second: 0, of: today) else { return nil }
+        if !calendar.isDate(lastStudyDate, inSameDayAs: now), now < tonight { return tonight }
+        return calendar.date(byAdding: .day, value: 1, to: tonight)
+    }
+
+    /// One-shot rather than repeating, so a day already studied stays quiet.
+    /// Called on launch and on every rating, which moves it past today.
+    static func refreshStreakWarning(for profile: UserProfile, config: NotificationConfig = .default) {
+        guard !AppEnvironment.isRunningTests else { return }
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [config.streakWarningID])
-        
+        guard UserDefaults.standard.bool(forKey: streakWarningEnabledKey),
+              let fireDate = nextStreakWarning(streak: profile.activeStreak(), lastStudyDate: profile.lastStudyDate) else { return }
+
         let content = UNMutableNotificationContent()
         content.title = "Streak at Risk!"
         content.body = "Study before midnight to keep your streak alive."
         content.sound = .default
-        
-        var dateComponents = DateComponents()
-        dateComponents.hour = 21
-        dateComponents.minute = 0
-        
+
         let trigger = UNCalendarNotificationTrigger(
-            dateMatching: dateComponents,
-            repeats: true
+            dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate),
+            repeats: false
         )
-        
-        let request = UNNotificationRequest(
-            identifier: config.streakWarningID,
-            content: content,
-            trigger: trigger
-        )
-        
-        center.add(request)
+        center.add(UNNotificationRequest(identifier: config.streakWarningID, content: content, trigger: trigger))
     }
-    
+
     static func sendMilestoneNotification(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title

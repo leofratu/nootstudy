@@ -59,6 +59,9 @@ struct SettingsView: View {
     @AppStorage(ReviewDailyLimitPolicy.enforceLimitKey) private var enforceDailyCardLimit = false
     @Environment(ReviewQueueManager.self) private var reviewQueue: ReviewQueueManager?
     @AppStorage("showDueCountBadge") private var showDueCountBadge = true
+    @AppStorage("dailyReminderEnabled") private var dailyReminderEnabled = false
+    @AppStorage(NotificationService.streakWarningEnabledKey) private var streakWarningEnabled = false
+    @State private var notificationsBlocked = false
     @AppStorage("reviewOrder") private var reviewOrder = "spaced"
     @AppStorage("cardDefaultCount") private var cardDefaultCount = 6
     @AppStorage("cardDefaultTone") private var cardDefaultTone = "balanced"
@@ -130,18 +133,6 @@ struct SettingsView: View {
         let query = settingsSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         return SettingsSection.allCases.filter {
             query.isEmpty || "\($0.rawValue) \($0.searchTerms)".localizedCaseInsensitiveContains(query)
-        }
-    }
-
-    private var sectionSummary: String {
-        switch selectedSection {
-        case .general: return "You, your subjects and how the app looks"
-        case .assistant: return "Which AI powers your coach and generated cards"
-        case .flashcards: return "New card defaults and your daily review"
-        case .study: return "Calendar, focus and reminders"
-        case .integrations: return "Local bridge, external work, and NotebookLM pack"
-        case .data: return "Backups, recovery, and reset controls"
-        case .about: return "Installed app and assistant details"
         }
     }
 
@@ -277,10 +268,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            if !compact {
-                Text("Changes save automatically")
-                    .font(.caption).foregroundStyle(IBColors.inkTertiary)
-            }
         }
         .padding(12)
         .frame(maxHeight: compact ? nil : .infinity, alignment: .topLeading)
@@ -309,7 +296,6 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(selectedSection.rawValue).font(IBTypography.pageTitle)
-                        Text(sectionSummary).font(.callout).foregroundStyle(IBColors.inkSecondary)
                     }
                     .id("settings-top")
                     if let settingsSaveError {
@@ -345,6 +331,9 @@ struct SettingsView: View {
         case .study:
             adhdMedSettings = ADHDMedicationSettings.loadFromDefaults()
             refreshGoogleCalendarState()
+            if !isGoogleConnected, let lastError = UserDefaults.standard.string(forKey: CalendarSyncPreferences.lastErrorKey) {
+                calendarSyncStatus = isGoogleConfigured ? lastError : "\(lastError) Choose your OAuth file, then connect."
+            }
             if isGoogleConnected {
                 do {
                     try await loadCalendarOptions(keepProgressVisible: false)
@@ -829,13 +818,7 @@ struct SettingsView: View {
                     .labelsHidden()
                 }
 
-                SettingsToggle(
-                    "Stop reviews at my goal",
-                    detail: enforceDailyCardLimit
-                        ? "Reviews stop after \(p.dailyGoal) cards a day. Remaining cards wait until tomorrow."
-                        : "Off: \(p.dailyGoal) cards is a target, and you can keep reviewing past it.",
-                    isOn: $enforceDailyCardLimit
-                )
+                SettingsToggle("Stop reviews at my goal", isOn: $enforceDailyCardLimit)
                 .onChange(of: enforceDailyCardLimit) { _, _ in reviewQueue?.refreshDueCards(context: context) }
             }
 
@@ -850,11 +833,11 @@ struct SettingsView: View {
                 })
             }
 
-            SettingsToggle("Auto-advance cards", detail: "Show the next card after rating", isOn: $autoPlayNext)
+            SettingsToggle("Auto-advance cards", isOn: $autoPlayNext)
 
             SettingsToggle("Show mastery on cards", isOn: $showMasteryPercent)
 
-            SettingsToggle("Show due-card count", detail: "In the sidebar", isOn: $showDueCountBadge)
+            SettingsToggle("Show due-card count in sidebar", isOn: $showDueCountBadge)
         } header: {
             Label("Daily review", systemImage: "book.fill")
         }
@@ -868,11 +851,6 @@ struct SettingsView: View {
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isGoogleConnected ? "Google Calendar connected" : "Connect Google Calendar")
-                    Text(isGoogleConnected
-                         ? "Noot can keep your planned study sessions up to date"
-                         : "Sign in directly from Noot. No macOS account setup required.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if isConfiguringCalendar {
@@ -1008,13 +986,23 @@ struct SettingsView: View {
             if !calendarOptions.contains(where: { $0.id == selectedCalendarIdentifier }) {
                 selectedCalendarIdentifier = calendarOptions[0].id
             }
-            calendarSyncEnabled = true
+        } catch {
+            refreshGoogleCalendarState()
+            calendarSyncEnabled = false
+            CalendarSyncPreferences.recordFailure(error)
+            calendarSyncStatus = error.localizedDescription
+            return
+        }
+
+        // Connected from here on: a failed first pass stays on and retries with
+        // the next plan change or Sync Now.
+        calendarSyncEnabled = true
+        do {
             try await syncCurrentStudyPlans()
             calendarSyncStatus = syncSuccessMessage()
             NotificationCenter.default.post(name: .calendarSyncRequested, object: nil)
         } catch {
             refreshGoogleCalendarState()
-            calendarSyncEnabled = false
             CalendarSyncPreferences.recordFailure(error)
             calendarSyncStatus = error.localizedDescription
         }
@@ -1055,8 +1043,10 @@ struct SettingsView: View {
     private func refreshGoogleCalendarState() {
         isGoogleConfigured = CalendarSyncService.shared.isConfigured
         isGoogleConnected = CalendarSyncService.shared.isConnected
+        // Sync stays on, so reconnecting resumes it, and the app-wide banner
+        // says why nothing is reaching the calendar.
         if !isGoogleConnected, calendarSyncEnabled {
-            calendarSyncEnabled = false
+            UserDefaults.standard.set(true, forKey: CalendarSyncPreferences.needsAttentionKey)
         }
     }
 
@@ -1130,10 +1120,6 @@ struct SettingsView: View {
                             Text("\(adhdMedSettings.medicationType.displayName) \(adhdMedSettings.doseMg)mg • \(adhdMedSettings.dailyDoses)× daily")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                        } else {
-                            Text("Configure medication for focus window predictions")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
@@ -1150,9 +1136,6 @@ struct SettingsView: View {
                         .foregroundStyle(.tint)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Focus Window Timeline")
-                        Text("Interactive plasma level visualization")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -1323,24 +1306,75 @@ struct SettingsView: View {
     }
 
     // MARK: - Notifications
+    /// Scheduling does nothing until macOS grants permission, so a toggle only
+    /// turns on once it has been granted.
+    private func notificationToggle(
+        _ flag: Binding<Bool>,
+        enable: @escaping @MainActor () -> Void,
+        disable: @escaping @MainActor () -> Void
+    ) -> Binding<Bool> {
+        Binding(
+            get: { flag.wrappedValue },
+            set: { isOn in
+                guard isOn else {
+                    flag.wrappedValue = false
+                    disable()
+                    return
+                }
+                Task { @MainActor in
+                    let granted = await NotificationService.requestPermission()
+                    notificationsBlocked = !granted
+                    guard granted else { return }
+                    flag.wrappedValue = true
+                    enable()
+                }
+            }
+        )
+    }
+
     private var notificationSection: some View {
         SettingsGroup {
             if let p = profile {
-                DatePicker("Daily Reminder", selection: Binding(
-                    get: {
-                        var comps = DateComponents(); comps.hour = p.notificationHour; comps.minute = p.notificationMinute
-                        return Calendar.current.date(from: comps) ?? Date()
-                    },
-                    set: { date in
-                        p.notificationHour = Calendar.current.component(.hour, from: date)
-                        p.notificationMinute = Calendar.current.component(.minute, from: date)
-                        persistChanges()
-                        NotificationService.scheduleDailyReminder(hour: p.notificationHour, minute: p.notificationMinute, dueCount: 0)
-                    }
-                ), displayedComponents: .hourAndMinute)
+                SettingsToggle("Daily reminder", isOn: notificationToggle($dailyReminderEnabled, enable: {
+                    NotificationService.scheduleDailyReminder(hour: p.notificationHour, minute: p.notificationMinute, dueCount: 0)
+                }, disable: {
+                    NotificationService.cancelNotification(withIdentifier: NotificationConfig.default.dailyReminderID)
+                }))
 
-                Button("Enable Streak Warnings") {
-                    NotificationService.scheduleStreakWarning(); IBHaptics.light()
+                if dailyReminderEnabled {
+                    DatePicker("Time", selection: Binding(
+                        get: {
+                            var comps = DateComponents(); comps.hour = p.notificationHour; comps.minute = p.notificationMinute
+                            return Calendar.current.date(from: comps) ?? Date()
+                        },
+                        set: { date in
+                            p.notificationHour = Calendar.current.component(.hour, from: date)
+                            p.notificationMinute = Calendar.current.component(.minute, from: date)
+                            persistChanges()
+                            NotificationService.scheduleDailyReminder(hour: p.notificationHour, minute: p.notificationMinute, dueCount: 0)
+                        }
+                    ), displayedComponents: .hourAndMinute)
+                }
+
+                SettingsToggle("Streak warning at 9 PM", isOn: notificationToggle($streakWarningEnabled, enable: {
+                    NotificationService.refreshStreakWarning(for: p)
+                }, disable: {
+                    NotificationService.cancelNotification(withIdentifier: NotificationConfig.default.streakWarningID)
+                }))
+
+                if notificationsBlocked {
+                    HStack {
+                        Text("Notifications are blocked for Noot Study.")
+                            .font(.caption)
+                            .foregroundStyle(IBColors.danger)
+                        Spacer()
+                        Button("Open System Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 }
             }
         } header: {

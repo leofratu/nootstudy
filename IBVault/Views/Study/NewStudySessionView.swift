@@ -165,9 +165,6 @@ struct NewStudySessionView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("What would you like to study?")
                 .font(.title3.bold())
-            Text("Pick a subject to focus on.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12)], spacing: 12) {
                 ForEach(subjects, id: \.id) { subject in
@@ -346,9 +343,6 @@ struct NewStudySessionView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("When do you want to study?")
                 .font(.title3.bold())
-            Text("Times use your Mac's current clock and time zone.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
@@ -408,9 +402,6 @@ struct NewStudySessionView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Label("Prepare flashcards when the session opens", systemImage: "rectangle.on.rectangle.angled")
                             .font(.subheadline.weight(.medium))
-                        Text("ARIA will open the scoped flashcard workspace for this session.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
                 .toggleStyle(.switch)
@@ -419,7 +410,6 @@ struct NewStudySessionView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Label("Flashcards-only session", systemImage: "rectangle.on.rectangle.fill")
                             .font(.subheadline.weight(.medium))
-                        Text("Open directly into recall practice.").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .toggleStyle(.switch)
@@ -436,8 +426,6 @@ struct NewStudySessionView: View {
                         .buttonStyle(.borderless).font(.caption)
                     Spacer()
                 }
-                Text("ARIA spreads this target across the selected sub-unit at the chosen IB level.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
             .padding(16)
             .glassCard()
@@ -464,8 +452,6 @@ struct NewStudySessionView: View {
                     Image(systemName: "sparkles")
                         .font(.system(size: 30))
                         .foregroundStyle(IBColors.accent)
-                    Text("Ready to generate your study plan!")
-                        .font(.callout)
                     Text("ARIA will create a personalised plan for \(selectedTopicSummary) based on your current mastery and IB exam requirements.")
                         .font(.caption)
                         .foregroundStyle(.secondary)

@@ -100,6 +100,7 @@ final class ReviewScheduler {
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
         // Same for every subject, so compute once instead of per schedule row.
         let nextOptimal = findNextOptimalSlot(from: now, config: config)
+        let masteryBySubject = ProgressEvidenceService.masteryBySubject(subjects: subjects, context: context)
         
         schedules = subjects.compactMap { subject -> SubjectReviewSchedule? in
             let reviewableCards = dailyCards.filter { $0.subject?.id == subject.id }
@@ -116,7 +117,7 @@ final class ReviewScheduler {
                 for: ReviewRankingInput(
                     dueCount: dueCards,
                     overdueCount: overdueCards,
-                    mastery: ProficiencyTracker.masteryPercentage(for: subject),
+                    mastery: masteryBySubject[subject.id] ?? 0,
                     examDate: subject.examDate
                 ),
                 now: now,

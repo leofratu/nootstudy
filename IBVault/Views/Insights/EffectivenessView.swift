@@ -108,8 +108,8 @@ struct EffectivenessView: View {
                 Text(consistencyLabel)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                if let profile, profile.currentStreak > 0 {
-                    Label("\(profile.currentStreak)-day current streak", systemImage: "flame.fill")
+                if let streak = profile?.activeStreak(), streak > 0 {
+                    Label("\(streak)-day current streak", systemImage: "flame.fill")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(IBColors.warning)
                 }

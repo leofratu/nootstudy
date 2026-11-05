@@ -13,7 +13,7 @@ struct StudyLibraryTests {
 
     @Test func findsUnitSubtopicAnswerAndReferenceWithoutExactQuestionWording() {
         let subject = Subject(name: "Biology", level: "SL", accentColorHex: "34533B")
-        let card = StudyCard(topicName: "Cells and Cell Structure", subtopic: "Organelles", front: "Where is ATP produced?",
+        let card = StudyCard(topicName: "B2.2 Organelles and compartmentalization", subtopic: "Organelles", front: "Where is ATP produced?",
             back: "Mitochondria supply usable energy.", subject: subject, syllabusReference: "B2.2")
         #expect(!StudyLibraryService.unit(for: card).isEmpty)
         #expect(StudyLibraryService.matches(StudyLibraryService.unit(for: card), card: card))

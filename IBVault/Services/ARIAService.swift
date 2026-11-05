@@ -285,7 +285,7 @@ class ARIAService {
         
         // Get user profile
         if let profile = try? context.fetch(FetchDescriptor<UserProfile>()).first {
-            let streak = profile.currentStreak
+            let streak = profile.activeStreak()
             let target = profile.targetIBScore
             
             if streak == 0 {
@@ -2945,7 +2945,7 @@ class ARIAService {
             )
             let studentName = profile.studentName.isEmpty ? "Student" : profile.studentName
             lines.append("- Student: \(studentName), \(profile.ibYear.shortLabel), target \(profile.targetIBScore)/45, intensity \(profile.studyIntensity.rawValue)")
-            lines.append("- Momentum: streak \(profile.currentStreak), total XP \(profile.totalXP), rank \(profile.achievedStep.displayName), daily goal \(profile.dailyGoal) cards")
+            lines.append("- Momentum: streak \(profile.activeStreak()), total XP \(profile.totalXP), rank \(profile.achievedStep.displayName), daily goal \(profile.dailyGoal) cards")
         }
 
         let duePredicate = #Predicate<StudyCard> { $0.nextReviewDate <= now }
@@ -3389,7 +3389,11 @@ class ARIAService {
     }
 
     private func subjectSummaryLines(subject: Subject, sessions: [ReviewSession], queryProfile: QueryProfile, now: Date) -> [String] {
-        let masteryPercent = Int(ProficiencyTracker.masteryPercentage(for: subject) * 100)
+        // What ARIA quotes must match what Subjects shows.
+        let mastery = subject.modelContext
+            .flatMap { ProgressEvidenceService.masteryBySubject(subjects: [subject], context: $0)[subject.id] }
+            ?? ProficiencyTracker.masteryPercentage(for: subject)
+        let masteryPercent = Int(mastery * 100)
         let weakTopics = uniqueWeakTopicNames(for: subject).prefix(4)
         let mentionedTopics = matchedTopics(for: subject, keywords: queryProfile.keywords).prefix(3)
         let recentGrades = subject.grades.sorted { $0.date > $1.date }.prefix(3)

@@ -160,6 +160,91 @@ struct GoogleCalendarSyncTests {
         #expect(!service.isConnected)
     }
 
+    @Test("One event Google rejects does not stop the sessions after it")
+    func rejectedEventDoesNotStopSync() async throws {
+        let suite = "CalendarSyncTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: CalendarSyncPreferences.isEnabledKey)
+        defaults.set("calendar", forKey: CalendarSyncPreferences.calendarIdentifierKey)
+        let configuration = GoogleOAuthConfiguration(clientID: "test.apps.googleusercontent.com", clientSecret: "test",
+            authorizationEndpoint: URL(string: "https://accounts.google.com/o/oauth2/auth")!,
+            tokenEndpoint: URL(string: "https://oauth2.googleapis.com/token")!)
+        #expect(KeychainService.saveGoogleOAuthConfiguration(configuration))
+        #expect(KeychainService.saveGoogleOAuthToken(.init(accessToken: "valid", refreshToken: "refresh", expiresAt: Date().addingTimeInterval(3_600))))
+        defer { _ = KeychainService.deleteGoogleOAuthToken() }
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [RejectingCalendarProtocol.self]
+        let session = URLSession(configuration: sessionConfiguration)
+        defer { session.invalidateAndCancel() }
+        let service = CalendarSyncService(session: session, defaults: defaults)
+
+        let rejected = StudyPlan(subjectName: "Rejected", topicName: "Topic", scheduledDate: .now)
+        let accepted = StudyPlan(subjectName: "Accepted", topicName: "Topic", scheduledDate: .now)
+
+        do {
+            try await service.sync(plans: [rejected, accepted])
+            Issue.record("A partial sync must report the failure")
+        } catch {
+            #expect(error.localizedDescription.contains("1 of 2"))
+        }
+        let mappings = CalendarSyncPreferences.eventIdentifiers(for: "calendar", defaults: defaults)
+        #expect(mappings[accepted.id.uuidString] == "created")
+        #expect(mappings[rejected.id.uuidString] == nil)
+    }
+
+    @Test("Only failures the learner must fix raise the attention flag")
+    func attentionFlag() throws {
+        let suite = "CalendarSyncTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = CalendarSyncPreferences.needsAttentionKey
+
+        CalendarSyncPreferences.recordFailure(CalendarSyncError.serverError("Busy"), defaults: defaults)
+        CalendarSyncPreferences.recordFailure(URLError(.notConnectedToInternet), defaults: defaults)
+        #expect(!defaults.bool(forKey: key))
+
+        CalendarSyncPreferences.recordFailure(CalendarSyncError.tokenMissing, defaults: defaults)
+        #expect(defaults.bool(forKey: key))
+
+        CalendarSyncPreferences.recordSuccess(defaults: defaults)
+        #expect(!defaults.bool(forKey: key))
+        #expect(defaults.string(forKey: CalendarSyncPreferences.lastErrorKey) == nil)
+    }
+}
+
+nonisolated private final class RejectingCalendarProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        var status = 200
+        var body = #"{"items":[]}"#
+        if request.httpMethod == "POST" {
+            // URLProtocol receives uploads as a stream, so read it back.
+            var data = Data()
+            if let stream = request.httpBodyStream {
+                stream.open()
+                defer { stream.close() }
+                var buffer = [UInt8](repeating: 0, count: 4_096)
+                while stream.hasBytesAvailable {
+                    let count = stream.read(&buffer, maxLength: buffer.count)
+                    guard count > 0 else { break }
+                    data.append(buffer, count: count)
+                }
+            }
+            if String(data: data, encoding: .utf8)?.contains("Rejected") == true {
+                status = 400
+                body = #"{"error":{"code":400,"message":"Bad event"}}"#
+            } else {
+                body = #"{"id":"created"}"#
+            }
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }
 
 nonisolated private final class RevokedTokenProtocol: URLProtocol, @unchecked Sendable {

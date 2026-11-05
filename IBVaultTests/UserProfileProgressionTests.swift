@@ -166,4 +166,49 @@ struct UserProfileProgressionTests {
         #expect(profile.longestStreak == 5)
         #expect(profile.streakFreezes == 0)
     }
+
+    @Test("The shown streak drops to zero once a gap breaks it")
+    func activeStreakFollowsGaps() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let profile = UserProfile()
+        #expect(profile.activeStreak(now: now, calendar: calendar) == 0)
+        profile.currentStreak = 5
+        func studied(daysAgo: Int) { profile.lastStudyDate = calendar.date(byAdding: .day, value: -daysAgo, to: now) }
+
+        studied(daysAgo: 0)
+        #expect(profile.activeStreak(now: now, calendar: calendar) == 5)
+        studied(daysAgo: 1)
+        #expect(profile.activeStreak(now: now, calendar: calendar) == 5)
+        studied(daysAgo: 2)
+        #expect(profile.activeStreak(now: now, calendar: calendar) == 0)
+        profile.streakFreezes = 1
+        #expect(profile.activeStreak(now: now, calendar: calendar) == 5)
+        studied(daysAgo: 3)
+        #expect(profile.activeStreak(now: now, calendar: calendar) == 0)
+        // The stored value is untouched until the next study day decides it.
+        #expect(profile.currentStreak == 5)
+    }
+
+    @Test("The streak warning skips a day already studied")
+    func streakWarningTiming() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        func at(_ day: Int, _ hour: Int) throws -> Date {
+            try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour)))
+        }
+        func warning(streak: Int = 3, last: Date?, now: Date) -> Date? {
+            NotificationService.nextStreakWarning(streak: streak, lastStudyDate: last, now: now, calendar: calendar)
+        }
+
+        // Not studied yet today: warn tonight.
+        #expect(warning(last: try at(4, 10), now: try at(5, 9)) == (try at(5, 21)))
+        // Studied today: stay quiet until tomorrow night.
+        #expect(warning(last: try at(5, 8), now: try at(5, 9)) == (try at(6, 21)))
+        // Tonight's warning has passed.
+        #expect(warning(last: try at(4, 10), now: try at(5, 22)) == (try at(6, 21)))
+        // No streak to protect.
+        #expect(warning(streak: 0, last: try at(4, 10), now: try at(5, 9)) == nil)
+        #expect(warning(last: nil, now: try at(5, 9)) == nil)
+    }
 }

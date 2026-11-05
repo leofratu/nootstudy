@@ -141,7 +141,8 @@ enum ProgressionService: Sendable {
                 assessments: assessments,
                 mappings: mappings,
                 reports: reports,
-                workSessions: studySessions
+                workSessions: studySessions,
+                now: now
             ).blendedMastery ?? MasteryCalculator.mastery(for: snapshot, now: now)
             masteryBySubject[subject.name] = mastery
             let track = tracks.first { $0.subjectName == snapshot.name }
@@ -206,5 +207,154 @@ enum ProgressionService: Sendable {
             return []
         }
         return events
+    }
+}
+
+/// Review sittings closed before their last card used to reschedule the cards
+/// without paying XP or logging a session. Rebuilds both from the review history,
+/// then pays logged sessions that never reached the XP total and restores
+/// streak days those reviews should have earned.
+enum UnpaidReviewRepair: Sendable {
+    /// A sitting left open overnight must not count as a day of study.
+    private static let maximumMinutesPerSitting = 180.0
+
+    /// Returns the XP credited. Reviews whose session already exists are skipped.
+    @discardableResult
+    static func run(context: ModelContext, now: Date = IBLocalClock.now, calendar: Calendar = IBLocalClock.calendar) throws -> Int {
+        guard let profile = try context.fetch(FetchDescriptor<UserProfile>()).first else { return 0 }
+        let logged = try context.fetch(FetchDescriptor<StudySession>())
+        let loggedIDs = Set(logged.map(\.id))
+        let unpaid = try context.fetch(FetchDescriptor<ReviewSession>()).filter {
+            guard let id = $0.studySessionID else { return false }
+            return !loggedIDs.contains(id)
+        }
+        let sittings = Dictionary(grouping: unpaid) { $0.studySessionID ?? UUID() }
+        // Keyed by local day: rows written under another time zone or clock are
+        // not stored at exactly this calendar's midnight.
+        var activities = Dictionary(
+            try context.fetch(FetchDescriptor<StudyActivity>()).map { (calendar.startOfDay(for: $0.date), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        // Read before sittings below add days of their own.
+        let unpaidSessions = logged.filter { session in
+            guard session.xpEarned > 0 else { return false }
+            let day = calendar.startOfDay(for: session.startDate)
+            // Activity can sit a day either side when a session crossed midnight
+            // or was logged in another time zone; that session was still paid.
+            return (-1...1).allSatisfy { offset in
+                calendar.date(byAdding: .day, value: offset, to: day).map { activities[$0] == nil } ?? true
+            }
+        }
+
+        var totalXP = 0
+        for (id, reviews) in sittings {
+            let start = reviews.map(\.timestamp).min() ?? Date()
+            let end = reviews.map(\.timestamp).max() ?? start
+            let minutes = min(end.timeIntervalSince(start) / 60, maximumMinutesPerSitting)
+            let qualities = reviews.map { quality(forStoredRating: $0.qualityRating) }
+            let xp = XPCalculator.xp(forQualities: qualities, intensity: profile.studyIntensity)
+            let subjects = Set(reviews.map(\.subjectName))
+            let evidence = Dictionary(grouping: reviews, by: \.topicName).map { topic, entries in
+                StudySessionSubunitEvidence(
+                    topicName: topic,
+                    subtopicName: "",
+                    minutes: minutes * Double(entries.count) / Double(reviews.count),
+                    confidenceRating: confidence(for: entries),
+                    cardsReviewed: entries.count,
+                    correctCount: entries.filter(\.wasCorrect).count
+                )
+            }
+            context.insert(StudySession(
+                id: id,
+                subjectName: subjects.count == 1 ? subjects.first ?? "Mixed" : "Mixed",
+                topicsCovered: Set(reviews.map(\.topicName)).sorted().joined(separator: ", "),
+                startDate: start,
+                endDate: end,
+                cardsReviewed: reviews.count,
+                correctCount: reviews.filter(\.wasCorrect).count,
+                xpEarned: xp,
+                subunitEvidence: evidence,
+                reviewedCardIDs: reviews.map(\.cardID)
+            ))
+
+            let day = calendar.startOfDay(for: end)
+            if let activity = activities[day] {
+                activity.cardsReviewed += reviews.count
+                activity.minutesStudied += minutes
+                activity.xpEarned += xp
+            } else {
+                let activity = StudyActivity(date: day, cardsReviewed: reviews.count, minutesStudied: minutes, xpEarned: xp)
+                context.insert(activity)
+                activities[day] = activity
+            }
+            totalXP += xp
+        }
+        for session in unpaidSessions {
+            let day = calendar.startOfDay(for: session.startDate)
+            if let activity = activities[day] {
+                activity.cardsReviewed += session.cardsReviewed
+                activity.minutesStudied += min(session.duration / 60, maximumMinutesPerSitting)
+                activity.xpEarned += session.xpEarned
+            } else {
+                let activity = StudyActivity(
+                    date: day,
+                    cardsReviewed: session.cardsReviewed,
+                    minutesStudied: min(session.duration / 60, maximumMinutesPerSitting),
+                    xpEarned: session.xpEarned
+                )
+                context.insert(activity)
+                activities[day] = activity
+            }
+            totalXP += session.xpEarned
+        }
+        profile.recordXP(totalXP)
+        let studied = try context.fetch(FetchDescriptor<ReviewSession>()).map(\.timestamp) + logged.map(\.startDate)
+        restoreStreak(for: profile, studied: studied, now: now, calendar: calendar)
+        try context.save()
+        return totalXP
+    }
+
+    /// Only raises: freezes can legitimately hold a streak above what the
+    /// history alone shows, and past achievements must not be taken back.
+    private static func restoreStreak(for profile: UserProfile, studied: [Date], now: Date, calendar: Calendar) {
+        let days = Set(studied.filter { $0 <= now }.map { calendar.startOfDay(for: $0) }).sorted()
+        guard let latest = days.last else { return }
+        var longest = 1
+        var run = 1
+        for (previous, day) in zip(days, days.dropFirst()) {
+            let isNextDay = calendar.date(byAdding: .day, value: 1, to: previous) == day
+            run = isNextDay ? run + 1 : 1
+            longest = max(longest, run)
+        }
+        profile.longestStreak = max(profile.longestStreak, longest)
+        let daysSince = calendar.dateComponents([.day], from: latest, to: calendar.startOfDay(for: now)).day ?? 0
+        if daysSince <= 1 {
+            profile.currentStreak = max(profile.currentStreak, run)
+        }
+        if profile.lastStudyDate.map({ $0 < latest }) ?? true {
+            profile.lastStudyDate = latest
+        }
+    }
+
+    private static func quality(forStoredRating rating: Int) -> RecallQuality {
+        switch rating {
+        case ..<1: return .again
+        case 1...2: return .hard
+        case 3...4: return .good
+        default: return .easy
+        }
+    }
+
+    /// Same scale the review sheet uses when it logs a finished sitting.
+    private static func confidence(for reviews: [ReviewSession]) -> Int {
+        let total = reviews.reduce(0.0) { sum, review in
+            switch quality(forStoredRating: review.qualityRating) {
+            case .again: return sum + 1
+            case .hard: return sum + 2
+            case .good: return sum + 4
+            case .easy: return sum + 5
+            }
+        }
+        return Int((total / Double(max(reviews.count, 1))).rounded())
     }
 }

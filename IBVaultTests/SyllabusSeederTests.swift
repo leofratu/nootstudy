@@ -274,4 +274,82 @@ struct SyllabusSeederTests {
             [unit.name] + unit.topics.flatMap { topic in [topic.name] + topic.subtopics }
         }
     }
+
+    @Test("Retired topics move to the current curriculum and keep their schedule")
+    func retiredTopicsMigrate() throws {
+        let container = try ModelContainer(
+            for: Subject.self, StudyCard.self, Grade.self, CurriculumNode.self, ReviewSession.self, StudyPlan.self, StudySession.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = container.mainContext
+        let biology = Subject(name: "Biology", level: "SL", accentColorHex: "10B981")
+        context.insert(biology)
+        let due = Date(timeIntervalSince1970: 1_800_000_000)
+        func card(_ topic: String, _ subtopic: String) -> StudyCard {
+            let card = StudyCard(topicName: topic, subtopic: subtopic, front: "\(topic) \(subtopic)", back: "A", subject: biology)
+            card.nextReviewDate = due
+            context.insert(card)
+            return card
+        }
+        let mapped = card("Genetics", "Gene mutations")
+        let blank = card("Sustainability", "")
+        let custom = card("Inheritance", "My own notes")
+        let current = card("A1.1 Water", "Water as a solvent and an aquatic habitat")
+        let review = ReviewSession(cardID: mapped.id, subjectName: "Biology", topicName: "Genetics", qualityRating: 3, sessionDuration: 1)
+        context.insert(review)
+        let orphanReview = ReviewSession(cardID: UUID(), subjectName: "Biology", topicName: "Genetics", qualityRating: 3, sessionDuration: 1)
+        context.insert(orphanReview)
+        let plan = StudyPlan(subjectName: "Biology", topicName: "Genetics, A1.1 Water", subtopicName: "Gene mutations", scheduledDate: due)
+        context.insert(plan)
+        let session = StudySession(
+            subjectName: "Biology", topicsCovered: "Inheritance", subtopicsCovered: "Sex-linked inheritance", startDate: due, endDate: due,
+            cardsReviewed: 1, correctCount: 1, xpEarned: 1,
+            subunitEvidence: [.init(topicName: "Inheritance", subtopicName: "Sex-linked inheritance", minutes: 5, confidenceRating: 4, cardsReviewed: 1, correctCount: 1)]
+        )
+        context.insert(session)
+        // Same names in another subject are that subject's own business.
+        let economics = Subject(name: "Economics", level: "HL", accentColorHex: "0000FF")
+        context.insert(economics)
+        let other = StudyCard(topicName: "Sustainability", front: "Other", back: "A", subject: economics)
+        context.insert(other)
+        try context.save()
+
+        #expect(SyllabusSeeder.seedIfNeeded(context: context))
+
+        #expect(mapped.topicName == "D1.3 Mutation and gene editing")
+        #expect(mapped.subtopic == "Gene mutations, causes and consequences")
+        #expect(mapped.nextReviewDate == due)
+        #expect(blank.topicName == "D4.2 Stability and change" && blank.subtopic.isEmpty)
+        #expect(custom.topicName == "D3.2 Inheritance" && custom.subtopic == "My own notes")
+        #expect(current.topicName == "A1.1 Water")
+        #expect(other.topicName == "Sustainability")
+        #expect(review.topicName == mapped.topicName)
+        #expect(orphanReview.topicName == "D3.2 Inheritance")
+        #expect(plan.selectedTopicNames.contains("D1.3 Mutation and gene editing"))
+        #expect(plan.selectedTopicNames.contains("A1.1 Water"))
+        #expect(plan.subtopicName.isEmpty)
+        #expect(plan.studyScope.matches(mapped))
+        #expect(session.selectedTopicNames == ["D3.2 Inheritance"])
+        #expect(session.subunitEvidence.first?.subtopicName == "Codominance, sex linkage and pedigree analysis")
+
+        // Every target exists at this subject's level.
+        for moved in [mapped, blank] {
+            #expect(SyllabusSeeder.unitName(for: "Biology", level: "SL", topicName: moved.topicName) != nil)
+        }
+
+        // A second launch finds nothing to change.
+        let settled = plan.topicName
+        #expect(SyllabusSeeder.seedIfNeeded(context: context))
+        #expect(plan.topicName == settled && mapped.topicName == "D1.3 Mutation and gene editing")
+    }
+
+    @Test("Scopes match a curriculum subtopic that contains commas")
+    func scopeMatchesCommaSubtopics() {
+        let name = "Polarity, hydrogen bonding, cohesion and adhesion"
+        let scope = StudyScope(subjectName: "Biology", unitNames: [], topicNames: ["A1.1 Water"], subtopicNames: StudyScope.parseList(name))
+        func card(_ subtopic: String) -> StudyCard { StudyCard(topicName: "A1.1 Water", subtopic: subtopic, front: "Q", back: "A") }
+        #expect(scope.matches(card(name)))
+        #expect(!scope.matches(card("Water as a solvent and an aquatic habitat")))
+        #expect(!scope.matches(card("Polarity, unrelated")))
+    }
 }

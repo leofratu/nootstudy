@@ -365,11 +365,6 @@ struct ARIAChatView: View {
             VStack(spacing: 6) {
                 Text("Choose a starting point")
                     .font(.title2.bold())
-                Text("Your current curriculum and review history are ready.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 400)
             }
 
             VStack(spacing: 8) {

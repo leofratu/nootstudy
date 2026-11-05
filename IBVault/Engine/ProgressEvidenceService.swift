@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 nonisolated enum ProgressEvidenceService: Sendable {
     /// Case-insensitive subject+level key used to bucket shared evidence once.
@@ -51,6 +52,17 @@ nonisolated enum ProgressEvidenceService: Sendable {
         return result
     }
 
+    /// The one subject mastery value: what Subjects, Dashboard and rank all show.
+    static func masteryBySubject(subjects: [Subject], context: ModelContext) -> [UUID: Double] {
+        scoreBySubject(
+            subjects: subjects,
+            assessments: (try? context.fetch(FetchDescriptor<AcademicAssessment>())) ?? [],
+            mappings: (try? context.fetch(FetchDescriptor<AcademicAssessmentMapping>())) ?? [],
+            reports: (try? context.fetch(FetchDescriptor<AcademicReportSnapshot>())) ?? [],
+            workSessions: (try? context.fetch(FetchDescriptor<StudySession>())) ?? []
+        ).mapValues { $0.blendedMastery ?? 0 }
+    }
+
     static func score(
         subjectName: String,
         courseLevel: String,
@@ -60,7 +72,8 @@ nonisolated enum ProgressEvidenceService: Sendable {
         assessments: [AcademicAssessment],
         mappings: [AcademicAssessmentMapping],
         reports: [AcademicReportSnapshot] = [],
-        workSessions: [StudySession] = []
+        workSessions: [StudySession] = [],
+        now: Date = Date()
     ) -> ProgressEvidence {
         let scopedCards = cards.filter { card in
             guard let topicName else { return true }
@@ -75,7 +88,14 @@ nonisolated enum ProgressEvidenceService: Sendable {
         let reviewedCards = scopedCards.filter {
             $0.totalReviewCount > 0 || $0.proficiency != .novice
         }
-        let recall = reviewedCards.isEmpty ? nil : ProficiencyTracker.masteryPercentage(for: reviewedCards)
+        // Neglect fades recall. Imported cards with no review date stay at face value.
+        let recallFreshness = reviewedCards.compactMap(\.lastReviewedDate).max().map {
+            MasterySignals.freshness(lastReviewDate: $0, now: now)
+        } ?? 1
+        let recall = reviewedCards.isEmpty
+            ? nil
+            : ProficiencyTracker.masteryPercentage(for: reviewedCards) * recallFreshness
+        let coverage = scopedCards.isEmpty ? 0 : Double(reviewedCards.count) / Double(scopedCards.count)
         let dueCount = scopedCards.filter(\.isDue).count
 
         // Duplicate ids must not trap; keep the first record of each id instead.
@@ -122,20 +142,29 @@ nonisolated enum ProgressEvidenceService: Sendable {
             }) else { return false }
             guard let subtopicName, !subtopicName.isEmpty else { return true }
             let subtopics = StudyScope.parseList(session.subtopicsCovered ?? "")
-            return subtopics.isEmpty || subtopics.contains {
-                $0.caseInsensitiveCompare(subtopicName) == .orderedSame
-            }
+            return subtopics.isEmpty || StudyScope.list(subtopics, containsSubtopic: subtopicName)
         }
         let sessionSignals = sessionSignals(
             for: scopedWorkSessions,
             topicName: topicName,
             subtopicName: subtopicName
         )
+        // A few strong cards must not stand in for a whole unreviewed deck. With
+        // a real grade, unreviewed cards shift weight toward that grade; without
+        // one, they count against recall directly.
+        let recallSignal: (value: Double?, weight: Double) = evidence == nil
+            ? (recall.map { $0 * coverage }, 0.45)
+            : (recall, 0.45 * coverage)
+        // Time tops out at 0.35, so averaging it with real results would make
+        // extra study lower mastery. It joins the average only when nothing
+        // better exists; otherwise it closes part of the remaining gap below.
+        let hasResults = recall != nil || evidence != nil
+        let timeSignal = hasResults ? nil : sessionSignals.time
         let weightedSignals: [(value: Double?, weight: Double)] = [
-            (recall, 0.45),
+            recallSignal,
             (evidence, 0.25),
             (sessionSignals.checkIn, 0.20),
-            (sessionSignals.time, 0.10)
+            (timeSignal, 0.10)
         ]
         let available = weightedSignals.compactMap { signal -> (Double, Double)? in
             guard let value = signal.value else { return nil }
@@ -147,6 +176,9 @@ nonisolated enum ProgressEvidenceService: Sendable {
             : nil
         if recall == nil, evidence == nil, let value = blended {
             blended = min(value, 0.65)
+        }
+        if hasResults, let value = blended, let time = sessionSignals.time {
+            blended = value + (1 - value) * 0.10 * (time / 0.35)
         }
         let lastDate = (scopedAssessments.compactMap(\.assessmentDate) + scopedReports.compactMap(\.reportDate)).max()
 

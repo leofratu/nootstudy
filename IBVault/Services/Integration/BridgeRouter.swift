@@ -106,9 +106,9 @@ nonisolated struct BridgeRouter: Sendable {
         }
 
         let subjects = ((try? context.fetch(FetchDescriptor<Subject>())) ?? []).filter { _ in true }
+        let masteryBySubject = ProgressEvidenceService.masteryBySubject(subjects: subjects, context: context)
         let subjectDTOs = subjects.map { subject in
-            let mastery = subject.masteryProgress
-            return BridgeDTOFactory.subjectDTO(from: subject, mastery: mastery)
+            BridgeDTOFactory.subjectDTO(from: subject, mastery: masteryBySubject[subject.id] ?? 0)
         }
         let cards = ((try? context.fetch(FetchDescriptor<StudyCard>())) ?? []).filter { isAfterSince($0.createdDate) }
         let cardDTOs = cards.map(BridgeDTOFactory.cardDTO)
@@ -302,10 +302,41 @@ nonisolated struct BridgeRouter: Sendable {
         let allowedQualities: Set<Int> = [0, 2, 3, 5]
         var accepted: [[String: Any]] = []
         var rejected: [[String: Any]] = []
+        var acceptedQualities: [RecallQuality] = []
+        var reviewedToday = false
+        let profile = (try? context.fetch(FetchDescriptor<UserProfile>()))?.first
+        // The app stops at the goal when the learner opts in; so does the bridge.
+        // Backdated imports don't spend today's allowance.
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: Date())
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? Date()
+        var cardsToday = Set(((try? context.fetch(FetchDescriptor<ReviewSession>(
+            predicate: #Predicate { $0.timestamp >= dayStart && $0.timestamp < dayEnd }
+        ))) ?? []).map(\.cardID))
+        let dailyLimit: Int? = ReviewDailyLimitPolicy.isLimitEnforced ? profile.map {
+            ReviewDailyLimitPolicy.maximumCards(for: $0.studyIntensity, dailyGoal: $0.dailyGoal)
+        } : nil
 
         for incoming in payload.reviews {
             guard allowedQualities.contains(incoming.quality) else {
                 rejected.append(["cardID": incoming.cardID.uuidString, "reason": "invalid quality \(incoming.quality)"])
+                continue
+            }
+            // A retried upload carries the same timestamp. Acknowledge it so the
+            // client stops retrying, without rescheduling or paying again.
+            if let timestamp = incoming.timestamp {
+                let cardID = incoming.cardID
+                let existing = FetchDescriptor<ReviewSession>(
+                    predicate: #Predicate { $0.cardID == cardID && $0.timestamp == timestamp }
+                )
+                if ((try? context.fetchCount(existing)) ?? 0) > 0 {
+                    accepted.append(["cardID": cardID.uuidString, "duplicate": true])
+                    continue
+                }
+            }
+            let isToday = incoming.timestamp.map { $0 >= dayStart && $0 < dayEnd } ?? true
+            if isToday, let dailyLimit, !cardsToday.contains(incoming.cardID), cardsToday.count >= dailyLimit {
+                rejected.append(["cardID": incoming.cardID.uuidString, "reason": "daily limit reached"])
                 continue
             }
             // Fetch card
@@ -332,20 +363,28 @@ nonisolated struct BridgeRouter: Sendable {
                 session.timestamp = now
                 FSRSScheduler.configureSync(session, quality: quality)
                 context.insert(session)
+                acceptedQualities.append(quality)
+                if calendar.isDateInToday(now) {
+                    reviewedToday = true
+                    cardsToday.insert(card.id)
+                }
                 accepted.append(["cardID": card.id.uuidString, "nextReviewDate": ISO8601DateFormatter().string(from: card.nextReviewDate)])
             case .failure(let error):
                 rejected.append(["cardID": incoming.cardID.uuidString, "reason": error.localizedDescription])
             }
         }
-        if !accepted.isEmpty {
+        if !acceptedQualities.isEmpty {
+            if let profile {
+                profile.recordXP(XPCalculator.xp(forQualities: acceptedQualities, intensity: profile.studyIntensity))
+                // A backdated import earns XP but cannot claim today's streak.
+                if reviewedToday { profile.checkAndUpdateStreak() }
+            }
             try? context.save()
             // Recompute progression on MainActor (best effort, non-blocking)
-            if !accepted.isEmpty {
-                let containerCopy = container
-                Task { @MainActor in
-                    let ctx = ModelContext(containerCopy)
-                    _ = ProgressionService.recompute(context: ctx)
-                }
+            let containerCopy = container
+            Task { @MainActor in
+                let ctx = ModelContext(containerCopy)
+                _ = ProgressionService.recompute(context: ctx)
             }
         }
         let out: [String: Any] = ["accepted": accepted, "rejected": rejected]
@@ -391,6 +430,17 @@ nonisolated struct BridgeRouter: Sendable {
         let context = ModelContext(container)
         var accepted: [[String: String]] = []
         for incoming in payload.sessions {
+            // A retried upload names the same sitting; hand back the first copy.
+            let subject = incoming.subjectName
+            let start = incoming.startDate
+            let end = incoming.endDate
+            let existing = FetchDescriptor<StudySession>(
+                predicate: #Predicate { $0.subjectName == subject && $0.startDate == start && $0.endDate == end }
+            )
+            if let duplicate = (try? context.fetch(existing))?.first {
+                accepted.append(["id": duplicate.id.uuidString, "duplicate": "true"])
+                continue
+            }
             let topics: String
             if let arr = incoming.topicsCoveredArray, !arr.isEmpty {
                 topics = arr.joined(separator: ",")
@@ -419,7 +469,8 @@ nonisolated struct BridgeRouter: Sendable {
     private func handleGetSubjects() -> BridgeResponse {
         let context = ModelContext(container)
         let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
-        let dtos = subjects.map { BridgeDTOFactory.subjectDTO(from: $0, mastery: $0.masteryProgress) }
+        let masteryBySubject = ProgressEvidenceService.masteryBySubject(subjects: subjects, context: context)
+        let dtos = subjects.map { BridgeDTOFactory.subjectDTO(from: $0, mastery: masteryBySubject[$0.id] ?? 0) }
         return .json(["subjects": dtos.map(dtoToDict)], status: 200)
     }
 
@@ -428,17 +479,15 @@ nonisolated struct BridgeRouter: Sendable {
         let profiles = (try? context.fetch(FetchDescriptor<UserProfile>())) ?? []
         let profile = profiles.first
         let subjects = (try? context.fetch(FetchDescriptor<Subject>())) ?? []
-        let reviews = (try? context.fetch(FetchDescriptor<ReviewSession>())) ?? []
         let totalXP = profile?.totalXP ?? 0
-        let streak = profile?.currentStreak ?? 0
+        let streak = profile?.activeStreak() ?? 0
         let longest = profile?.longestStreak ?? 0
-        // Compute mastery as global blended
-        let snapshots = SnapshotBuilder.snapshots(for: subjects, reviews: reviews)
-        let now = Date()
-        let globalMastery: Double = {
-            guard !snapshots.isEmpty else { return 0 }
-            return snapshots.reduce(0) { $0 + MasteryCalculator.mastery(for: $1, now: now) } / Double(snapshots.count)
-        }()
+        // Same weighted value the global rank advances on.
+        let masteryBySubject = ProgressEvidenceService.masteryBySubject(subjects: subjects, context: context)
+        let totalWeight = subjects.reduce(0.0) { $0 + SubjectLevel(rawLevel: $1.level).masteryWeight }
+        let globalMastery = totalWeight > 0
+            ? subjects.reduce(0.0) { $0 + (masteryBySubject[$1.id] ?? 0) * SubjectLevel(rawLevel: $1.level).masteryWeight } / totalWeight
+            : 0
         let rank = profile?.achievedStep.rank.displayName ?? Rank.electron.displayName
         let tier = profile?.achievedStep.tier.rawValue ?? 3
         let achievements = (try? context.fetch(FetchDescriptor<Achievement>())) ?? []

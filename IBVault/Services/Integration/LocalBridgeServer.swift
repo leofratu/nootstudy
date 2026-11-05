@@ -3,6 +3,47 @@
 import Network
 import SwiftData
 
+nonisolated enum LocalBridgeServerError: Error, LocalizedError {
+    case invalidPort(Int)
+    case startTimedOut(Int)
+    case cancelled
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPort(let port): return "Invalid bridge port \(port)."
+        case .startTimedOut(let port): return "Bridge listener timed out on port \(port)."
+        case .cancelled: return "Bridge listener was cancelled."
+        }
+    }
+}
+
+/// One-shot continuation holder: a listener may transition state more than once,
+/// so guard against resuming the continuation twice.
+nonisolated private final class ListenerStartBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Int, any Error>?
+
+    init(_ continuation: CheckedContinuation<Int, any Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning value: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let continuation else { return }
+        self.continuation = nil
+        continuation.resume(returning: value)
+    }
+
+    func resume(throwing error: any Error) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let continuation else { return }
+        self.continuation = nil
+        continuation.resume(throwing: error)
+    }
+}
+
 /// Minimal HTTP/1.1 server for the local bridge. Bound to 127.0.0.1 only.
 /// Preferred port 42827 with fallback up to 42837 then ephemeral; persists actual port.
 /// Parses request line, headers, Content-Length body with 1 MiB cap and 10 s timeout.
@@ -32,12 +73,12 @@ nonisolated final class LocalBridgeServer: @unchecked Sendable {
         return runningPort
     }
 
-    func start() throws -> Int {
+    func start() async throws -> Int {
         let preferredRange = 42827...42837
         var lastError: (any Error)?
         for port in preferredRange {
             do {
-                let actual = try startListener(on: port)
+                let actual = try await startListener(on: port)
                 persistPort(actual)
                 runningPort = actual
                 return actual
@@ -47,7 +88,7 @@ nonisolated final class LocalBridgeServer: @unchecked Sendable {
             }
         }
         do {
-            let actual = try startListener(on: 0)
+            let actual = try await startListener(on: 0)
             persistPort(actual)
             runningPort = actual
             return actual
@@ -72,30 +113,56 @@ nonisolated final class LocalBridgeServer: @unchecked Sendable {
         UserDefaults.standard.set(port, forKey: "BridgeActualPort")
     }
 
-    private func startListener(on port: Int) throws -> Int {
+    private func startListener(on port: Int) async throws -> Int {
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
         params.includePeerToPeer = false
-        let nwPort: NWEndpoint.Port = port == 0 ? .any : NWEndpoint.Port(rawValue: UInt16(port))!
+        let nwPort: NWEndpoint.Port
+        if port == 0 {
+            nwPort = .any
+        } else if let resolved = NWEndpoint.Port(rawValue: UInt16(clamping: port)) {
+            nwPort = resolved
+        } else {
+            throw LocalBridgeServerError.invalidPort(port)
+        }
         let listener = try NWListener(using: params, on: nwPort)
         listener.newConnectionHandler = { [weak self] connection in
             self?.handleConnection(connection)
         }
-        listener.stateUpdateHandler = { state in
-            if case .failed(let err) = state {
-                debugPrint("[Bridge] listener failed: \(err.localizedDescription)")
+
+        // Await readiness from the state handler. The previous implementation
+        // parked a thread on a DispatchSemaphore for 200ms per candidate port,
+        // and because the controller started on the main actor it froze launch
+        // for up to ~2.2s (and hung headless render hosts). Continuations keep
+        // the caller suspended without blocking any thread.
+        let resolvedPort: Int
+        do {
+            resolvedPort = try await withCheckedThrowingContinuation { continuation in
+                let box = ListenerStartBox(continuation)
+                listener.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready:
+                        box.resume(returning: port == 0 ? Int(listener.port?.rawValue ?? 0) : port)
+                    case .failed(let err):
+                        box.resume(throwing: err)
+                    case .cancelled:
+                        box.resume(throwing: LocalBridgeServerError.cancelled)
+                    default:
+                        break
+                    }
+                }
+                listener.start(queue: queue)
+                queue.asyncAfter(deadline: .now() + 2) {
+                    box.resume(throwing: LocalBridgeServerError.startTimedOut(port))
+                }
             }
+        } catch {
+            // A timed-out listener can still reach ready later and hold the port.
+            listener.cancel()
+            throw error
         }
-        let sem = DispatchSemaphore(value: 0)
-        listener.start(queue: queue)
-        queue.asyncAfter(deadline: .now() + 0.2) { sem.signal() }
-        sem.wait()
-        if case .failed(let err) = listener.state {
-            throw err
-        }
-        let actualPort: Int = port == 0 ? Int(listener.port?.rawValue ?? 0) : port
         self.listener = listener
-        return actualPort
+        return resolvedPort
     }
 
     private func handleConnection(_ connection: NWConnection) {

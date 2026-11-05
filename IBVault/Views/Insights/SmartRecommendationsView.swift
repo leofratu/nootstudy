@@ -6,6 +6,9 @@ struct SmartRecommendationsView: View {
     @Query private var profiles: [UserProfile]
     @Query(sort: \StudySession.startDate, order: .reverse) private var sessions: [StudySession]
     @Query(sort: \StudyCard.nextReviewDate) private var allCards: [StudyCard]
+    @Query private var assessments: [AcademicAssessment]
+    @Query private var mappings: [AcademicAssessmentMapping]
+    @Query private var reports: [AcademicReportSnapshot]
     
     @State private var selectedRecommendation: StudyRecommendation?
 
@@ -24,8 +27,14 @@ struct SmartRecommendationsView: View {
         generateRecommendations(dueCards: dueCards)
     }
 
+    private var masteryBySubject: [UUID: Double] {
+        ProgressEvidenceService.scoreBySubject(
+            subjects: subjects, assessments: assessments, mappings: mappings, reports: reports, workSessions: sessions
+        ).mapValues { $0.blendedMastery ?? 0 }
+    }
+
     private var weakSubjectCount: Int {
-        subjects.filter { $0.masteryProgress < 0.4 }.count
+        masteryBySubject.values.filter { $0 < 0.4 }.count
     }
     
     var body: some View {
@@ -36,7 +45,6 @@ struct SmartRecommendationsView: View {
                 StudioPageHeader(
                     eyebrow: "Decision support",
                     title: "What to study",
-                    subtitle: "A practical sequence based on due cards, current mastery, and the work most likely to move you forward.",
                     symbol: "lightbulb.fill",
                     tint: IBColors.inkTertiary
                 ) {
@@ -80,7 +88,7 @@ struct SmartRecommendationsView: View {
             Text("All caught up!")
                 .font(.headline)
             
-            Text("No specific recommendations right now. Keep up the good work!")
+            Text("No recommendations right now.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -216,9 +224,10 @@ struct SmartRecommendationsView: View {
                     .font(.headline)
             }
             
+            let mastery = masteryBySubject
             let weakSubjects = subjects
                 .map { subject -> (subject: Subject, mastery: Double) in
-                    (subject: subject, mastery: subject.masteryProgress)
+                    (subject: subject, mastery: mastery[subject.id] ?? 0)
                 }
                 .filter { $0.mastery < 0.5 }
                 .sorted { $0.mastery < $1.mastery }
@@ -307,8 +316,9 @@ struct SmartRecommendationsView: View {
             ))
         }
         
+        let mastery = masteryBySubject
         let weakSubjects = subjects
-            .map { ($0, $0.masteryProgress) }
+            .map { ($0, mastery[$0.id] ?? 0) }
             .filter { $0.1 < 0.4 }
             .sorted { $0.1 < $1.1 }
         
@@ -342,11 +352,11 @@ struct SmartRecommendationsView: View {
             }
         }
         
-        if let profile = profile, profile.currentStreak < 3 {
+        if let streak = profile?.activeStreak(), streak < 3 {
             recs.append(StudyRecommendation(
                 id: "streak.build",
                 title: "Build your streak",
-                description: "You're on a \(profile.currentStreak)-day streak. Keep it going for bonus XP and better retention!",
+                description: "You're on a \(streak)-day streak. Keep it going for bonus XP and better retention!",
                 priority: .medium,
                 type: .streak,
                 icon: "flame",

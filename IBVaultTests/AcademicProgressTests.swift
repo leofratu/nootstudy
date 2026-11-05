@@ -324,4 +324,98 @@ struct AcademicProgressTests {
             #expect(batch[subject.id] == expected)
         }
     }
+
+    private func reviewedCard(accuracy: Int = 5, lastReviewed: Date = Date()) -> StudyCard {
+        let card = StudyCard(topicName: "Cells", subtopic: "Theory", front: "Q", back: "A")
+        card.proficiency = .mastered
+        card.totalReviewCount = 5
+        card.successfulReviewCount = accuracy
+        card.consecutiveCorrect = accuracy
+        card.lastReviewedDate = lastReviewed
+        return card
+    }
+
+    private func loggedSession(minutes: Double) -> StudySession {
+        StudySession(
+            subjectName: "Biology",
+            topicsCovered: "Cells",
+            startDate: Date().addingTimeInterval(-minutes * 60),
+            endDate: Date(),
+            cardsReviewed: 0,
+            correctCount: 0,
+            xpEarned: 0
+        )
+    }
+
+    @Test("Logged sessions raise mastery on top of cards and never lower it")
+    func studyTimeRaisesMastery() {
+        let cards = [reviewedCard(accuracy: 4)]
+        let before = ProgressEvidenceService.score(
+            subjectName: "Biology", courseLevel: "HL", cards: cards, assessments: [], mappings: []
+        )
+        let after = ProgressEvidenceService.score(
+            subjectName: "Biology", courseLevel: "HL", cards: cards, assessments: [], mappings: [],
+            workSessions: [loggedSession(minutes: 240)]
+        )
+        #expect(abs((before.blendedMastery ?? 0) - 0.8) < 0.000_001)
+        #expect(abs((after.blendedMastery ?? 0) - 0.82) < 0.000_001)
+    }
+
+    @Test("Prior grades and logged sessions both count with no cards reviewed")
+    func gradesAndSessionsCountWithoutCards() {
+        let report = AcademicReportSnapshot(
+            sourceFileName: "report.pdf",
+            reportDate: nil,
+            subjectName: "Biology",
+            courseLevel: "HL",
+            gradeRaw: "5"
+        )
+        let gradeOnly = ProgressEvidenceService.score(
+            subjectName: "Biology", courseLevel: "HL", cards: [], assessments: [], mappings: [], reports: [report]
+        )
+        let withSession = ProgressEvidenceService.score(
+            subjectName: "Biology", courseLevel: "HL", cards: [], assessments: [], mappings: [], reports: [report],
+            workSessions: [loggedSession(minutes: 60)]
+        )
+        #expect(abs((gradeOnly.blendedMastery ?? 0) - 5.0 / 7.0) < 0.000_001)
+        #expect((withSession.blendedMastery ?? 0) > (gradeOnly.blendedMastery ?? 0))
+    }
+
+    @Test("One strong card does not stand in for a whole unreviewed deck")
+    func unreviewedCardsLimitRecall() {
+        let unreviewed = (0..<9).map { _ in StudyCard(topicName: "Cells", front: "Q", back: "A") }
+        let evidence = ProgressEvidenceService.score(
+            subjectName: "Biology", courseLevel: "HL", cards: [reviewedCard()] + unreviewed,
+            assessments: [], mappings: []
+        )
+        #expect(abs((evidence.blendedMastery ?? 0) - 0.1) < 0.000_001)
+    }
+
+    @Test("Unreviewed cards leave a real grade in charge instead of zeroing it")
+    func unreviewedCardsDeferToGrade() {
+        let report = AcademicReportSnapshot(
+            sourceFileName: "report.pdf",
+            reportDate: nil,
+            subjectName: "Biology",
+            courseLevel: "HL",
+            gradeRaw: "7"
+        )
+        let unreviewed = (0..<9).map { _ in StudyCard(topicName: "Cells", front: "Q", back: "A") }
+        let evidence = ProgressEvidenceService.score(
+            subjectName: "Biology", courseLevel: "HL", cards: unreviewed,
+            assessments: [], mappings: [], reports: [report]
+        )
+        #expect(evidence.blendedMastery == 1)
+    }
+
+    @Test("Recall fades when a subject is neglected")
+    func neglectFadesRecall() {
+        let now = Date()
+        let evidence = ProgressEvidenceService.score(
+            subjectName: "Biology", courseLevel: "HL",
+            cards: [reviewedCard(lastReviewed: now.addingTimeInterval(-90 * 86_400))],
+            assessments: [], mappings: [], now: now
+        )
+        #expect(abs((evidence.blendedMastery ?? 0) - MasterySignals.freshnessFloor) < 0.000_001)
+    }
 }
